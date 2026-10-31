@@ -5,7 +5,7 @@
     const commentPath = document.getElementById('post-comment').dataset.commentPath || location.pathname.replace(/\/page\/\d$/, "");
     const init = () => {
         if (!page.isConnected) return;
-        twikoo.init(Object.assign({
+        return twikoo.init(Object.assign({
             el: '#twikoo-wrap',
             envId: GLOBAL_CONFIG.source.twikoo.twikooUrl,
             region: '',
@@ -45,17 +45,18 @@
         });
     }
 
-    const runFn = () => {
-        init()
-        true && getCount()
-    }
-
-    const loadTwikoo = () => {
-        if (typeof twikoo === 'object') {
-            setTimeout(runFn, 0)
-            return
+    const loadTwikoo = async () => {
+        try {
+            if (typeof twikoo !== 'object') await getScript(GLOBAL_CONFIG.source.twikoo.js);
+            if (!page.isConnected) return;
+            await init();
+            if (page.isConnected) getCount();
+        } catch {
+            if (!page.isConnected) return;
+            container.textContent = document.documentElement.lang.startsWith('zh')
+                ? '暂时无法加载评论' : 'Comments are temporarily unavailable';
+            container.setAttribute('role', 'status');
         }
-        getScript(GLOBAL_CONFIG.source.twikoo.js).then(runFn)
     }
 
     if ('Twikoo' === 'Twikoo' || !GLOBAL_CONFIG.source.comments.lazyload) {
