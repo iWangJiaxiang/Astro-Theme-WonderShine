@@ -1,0 +1,66 @@
+---
+import ResponsiveImage from '../ResponsiveImage.astro';
+import ProfileCard from '../shell/ProfileCard.astro';
+import {articles,cover,taxonomyName,taxonomyDocuments,taxonomySlug} from '../../lib/queries';
+import {localizeConfig,localizeUrl,t} from '../../lib/locale';
+import {routes} from '../../lib/routes';
+import type {Site,Document} from '../../lib/types';
+interface Props {site:Site;lang:string;document?:Document;kind?:string;widgets?:Array<{widget:string}>;}
+const {site,lang,document,kind='indexWidget'}=Astro.props;
+const config=localizeConfig(site,lang),sidebar=config.extra.sidebar,extra=config.extra;
+const widgets=Astro.props.widgets||sidebar.widgets[kind]||[];
+const posts=articles(site,lang),url=(path:string)=>localizeUrl(path,lang,site),tr=(key:string)=>t(key,lang,site);
+const terms=(name:string)=>{
+  const documents=taxonomyDocuments(site,lang,name);
+  return [...new Set(documents.flatMap(post=>post.taxonomies[name]||[]))].sort().map(term=>({
+    term,name:taxonomyName(site,name,term,lang),url:url(`/${name}/${taxonomySlug(site,term)}/`),count:documents.filter(post=>post.taxonomies[name]?.includes(term)).length
+  }));
+};
+const tags=terms('tags'),categories=terms('categories');
+const wechat=sidebar.wechat||{},music=sidebar.music||{};
+const years=[...new Set(posts.map(post=>post.date?.slice(0,4)).filter(Boolean))];
+const custom=(widget:string)=>extra.aside?.[`card_${widget.replace('-','_')}`];
+const commentUrl=sidebar.newcomment?.newcommentUrl?url(sidebar.newcomment.newcommentUrl):'';
+const commentPath=commentUrl.split(/[?#]/)[0].replace(/\/?$/,'/');
+const commentLink=/^https?:\/\//.test(commentUrl)||routes(site).some(route=>route.path===commentPath)?commentUrl:'';
+---
+<Fragment>
+  {widgets.map(({widget}:any)=> <>
+    {widget==='profile'&&<ProfileCard site={site} lang={lang}/>}
+    {widget==='wechat'&&<a class="card-widget wjx-right-widget" id="card-wechat" href={url(wechat.url||'/subscribe/')} aria-label={tr('wechat')} style={{background:wechat.color,'--wechat-cover':`url(${wechat.wechatImg})`}}>
+      <div id="flip-wrapper"><div id="flip-content"><div class="face" style={{background:`url(${wechat.wechatImgFace}) center center / 100% no-repeat`}}/><div class="back face" style={{background:`url(${wechat.wechatImgBack}) center center / 100% no-repeat`}}/></div></div>
+    </a>}
+    {widget==='toc'&&config.extra.other.toc_enable&&document&&<div class="card-widget" id="card-toc"><div class="item-headline"><i class="icon-bars"/><span>{tr('toc_title')}</span><span class="toc-percentage"/></div><div class="toc-content"/></div>}
+    {widget==='comments'&&<div class="card-widget card-recent-post">
+      {commentLink&&<a class="card-more-btn" href={commentLink} title={tr('more')} draggable="false"><i class="icon-chevron-right"/></a>}
+      <div class="item-headline"><i class="icon-chat--fill" style="font-size:19px"/><span>{tr('latest_comments')}</span></div><div class="aside-list" id="newcomm"/>
+    </div>}
+    {widget==='recent-posts'&&<div class="card-widget card-recent-post"><div class="item-headline"><i class="icon-eicon_map-2-line1"/><span>{tr('recent_published')}</span></div><div class="aside-list">
+      {posts.slice(0,sidebar.recent_posts_count||4).map(post=><div class="aside-list-item"><a class="thumbnail" href={post.url} title={post.title}><ResponsiveImage site={site} class="post_bg" src={cover(post,site)} alt={post.title} width={160} sizes="80px"/></a><div class="content"><a class="title" href={post.url} title={post.title}>{post.title}</a></div></div>)}
+    </div></div>}
+    {widget==='categories'&&<div class="card-widget card-categories"><div class="item-headline"><i class="icon-folder-open"/><span>{tr('categories')}</span></div><div class="aside-list"><ul class="card-category-list">
+      {categories.map(term=><li class="card-category-list-item"><a class="card-category-list-link" href={term.url} rel="tag"><span class="card-category-list-name">{term.name}</span><span class="card-category-list-count">{term.count}</span></a></li>)}
+    </ul></div></div>}
+    {widget==='tags'&&<div class="card-widget card-tags"><div class="item-headline"><i class="icon-tags"/><span>{tr('tags')}</span></div><div class="item-headline"/><div class="card-tag-cloud">
+      {tags.map(term=><a class="tag-item" style="font-size:1em" href={term.url} rel="tag" title={term.name}>{term.name}<sup>{term.count}</sup></a>)}
+    </div></div>}
+    {widget==='archives'&&<div class="card-widget card-archives"><div class="item-headline"><i class="icon-archive"/><span>{tr('archive_title')}</span></div><div class="archives-content"><ul>{years.map(year=><li><a href={url(`/archives/#${year}`)}>{year}</a></li>)}</ul></div></div>}
+    {widget==='tags-stat'&&<div class="card-widget card-tags-stat"><div class="item-headline"><i class="icon-tags"/><span>{tr('tag_stats')}</span></div><div class="tags-stat-content"><ul>{tags.map(term=><li><a href={term.url}>{term.name} ({term.count})</a></li>)}</ul></div></div>}
+    {widget==='stat'&&<div class="card-widget card-stat"><div class="item-headline"><i class="icon-chart-bar"/><span>{tr('stats')}</span></div><div class="stat-content"><p>{tr('articles')}：{posts.length}</p><p>{tr('categories')}：{categories.length}</p><p>{tr('tags')}：{tags.length}</p></div></div>}
+    {widget==='music'&&<div class="card-widget card-music"><div class="item-headline"><i class="icon-music"/><span>{tr('music_title')}</span></div><a class="music-content" href={url(music.musicUrl||'/music/')}><div id="flip-wrapper-card"><div id="flip-music"><div class="msimg" style={{'--music-light':`url(${music.lightMsimg})`,'--music-dark':`url(${music.darkMsimg})`}}/><div class="back msimg" style={{'--music-light':`url(${music.lightBackMsimg})`,'--music-dark':`url(${music.darkBackMsimg})`}}/></div></div></a></div>}
+    {widget==='visit-posts'&&<div class="card-widget card-visit-posts"><div class="item-headline"><i class="icon-eye"/><span>{tr('most_visited')}</span></div><div class="visit-posts-content"><p>{tr('visited_empty')}</p></div></div>}
+    {widget==='steam'&&<div class="card-widget card-steam"><div class="item-headline"><i class="icon-steam"/><span>{tr('ui_steam_games')}</span></div><div class="steam-content"><a href={url(sidebar.steam?.steamUrl||'/')}><img src={sidebar.steam?.cardSteam} alt="Steam" loading="lazy"/></a></div></div>}
+    {['custom_html','adbox','power'].includes(widget)&&custom(widget)?.enable&&<div class={`card-widget card-${widget.replace('_','-')}`}><div class="item-headline"><i class={widget==='power'?'icon-bolt':widget==='adbox'?'icon-ad':'icon-code'}/><span>{custom(widget).title}</span></div><div class={`${widget.replace('_','-')}-content`} set:html={custom(widget).content}/></div>}
+    {widget==='friend-link'&&custom(widget)?.enable&&<div class="card-widget card-friend-link"><div class="item-headline"><i class="icon-link"/><span>{custom(widget).title}</span></div><div class="friend-link-content"><ul>{(custom(widget).list||[]).map((item:any)=><li><a href={item.url} target="_blank" rel="noopener nofollow">{item.name}</a></li>)}</ul></div></div>}
+  </>)}
+</Fragment>
+{extra.other.tag_random_color_enable&&<script is:inline>window.isTagsRandomColor=true;</script>}
+<style is:global>
+#aside-content .aside-list .thumbnail .responsive-image img{width:100%;height:100%;object-fit:cover;transition:all .6s ease}
+#aside-content .aside-list .thumbnail .responsive-image img:hover{transform:scale(1.1)}
+#aside-content .aside-list>.aside-list-item:hover .thumbnail .responsive-image img{transform:scale(1)}
+#aside-content .card-widget#card-wechat::before {position:absolute;width:100%;height:90%;left:0;top:0;background:var(--wechat-cover) center center / cover no-repeat;content:'';transition:.2s cubic-bezier(.45,.04,.43,1.21)}
+#aside-content .card-widget#card-wechat:hover::before {top:100%;opacity:0;transition:.3s ease-out}
+#aside-content #flip-music .msimg {background:var(--music-light) center center / 100% no-repeat}
+[data-theme=dark] #aside-content #flip-music .msimg {background-image:var(--music-dark)}
+</style>

@@ -1,0 +1,24 @@
+---
+import {t, localeHome, localizeConfig} from '../../lib/locale';
+import type {Site} from '../../lib/types';
+import './search.css';
+interface Props {site: Site; lang: string}
+const {site, lang} = Astro.props;
+const tr = (key: string) => t(key, lang, site);
+const config = localizeConfig(site, lang);
+const labels = Object.fromEntries(['loading','search_ready','search_error','search_error_detail','search_no_results','search_no_results_detail','search_matches','search_page'].map(key => [key,tr(key)]));
+---
+<dialog id="site-search" class="site-search-dialog" data-state="initial" aria-labelledby="search-title" data-labels={JSON.stringify(labels)} data-site-url={config.base_url}>
+  <header class="search-heading"><span id="search-title">{tr('search')}</span><button type="button" class="search-dismiss" aria-label={tr('close')}><i class="icon-xmark" aria-hidden="true"/></button></header>
+  <form class="search-form" role="search">
+    <input id="search-query" type="search" placeholder={tr('search_input')} autocomplete="off" spellcheck="false" maxlength="512" aria-label={tr('search')} aria-controls="search-results" autofocus/>
+    <button type="button" class="search-clear" hidden aria-label={tr('search_clear')}><i class="icon-xmark" aria-hidden="true"/></button>
+  </form>
+  <hr class="search-divider" aria-hidden="true"/>
+  <div class="search-body">
+    <section class="search-feedback" hidden><span class="search-state-icon" aria-hidden="true">⌕</span><h2 class="search-state-title"/><p class="search-state-detail"/><button type="button" class="search-retry" hidden>{tr('search_retry')}</button><a class="search-browse" href={`${localeHome(lang,site)}archives/`} hidden>{tr('search_browse')}</a></section>
+    <ol id="search-results" aria-label={tr('search_results')} hidden/>
+  </div>
+  <footer class="search-footer"><span class="search-status" role="status" aria-live="polite">{tr('search_ready')}</span><nav class="search-pager" aria-label={tr('search_pages')} hidden><button type="button" class="search-prev" aria-label={tr('search_previous')}>←</button><span class="search-page"/><button type="button" class="search-next" aria-label={tr('search_next')}>→</button></nav><span class="search-key-hint"><kbd>↑</kbd><kbd>↓</kbd> {tr('search_navigate')} <kbd>↵</kbd> {tr('search_open')}</span></footer>
+</dialog>
+<script>import '../../scripts/search';</script>

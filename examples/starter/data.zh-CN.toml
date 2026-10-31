@@ -1,0 +1,19 @@
+[[menu.nav_menu]]
+name = "文章"
+href = "/zh-CN/articles/"
+icon = "icon-book"
+
+[[menu.nav_menu]]
+name = "系列"
+href = "/zh-CN/collections/"
+icon = "icon-folder"
+
+[[menu.nav_menu]]
+name = "话题"
+href = "/zh-CN/topics/"
+icon = "icon-hashtag"
+
+[[menu.nav_menu]]
+name = "关于"
+href = "/zh-CN/about/"
+icon = "icon-user"

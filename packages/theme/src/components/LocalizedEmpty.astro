@@ -1,0 +1,10 @@
+---
+import {t} from '../lib/locale';
+import {isPublic} from '../lib/queries';
+const {site,lang,document}=Astro.props;
+const original=document?.translations?.find((version:any)=>version.lang===site.defaultLanguage&&isPublic(version,site));
+---
+<div class="localized-empty" role="status">
+  <p>{t('empty_language_content',lang,site)}</p>
+  {lang!==site.defaultLanguage&&original&&<a href={original.url} lang={original.lang}>{t('view_original_content',lang,site)} ↗</a>}
+</div>

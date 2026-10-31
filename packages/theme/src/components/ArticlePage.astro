@@ -1,0 +1,29 @@
+---
+import ResponsiveImage from './ResponsiveImage.astro';
+import Sidebar from './Sidebar.astro';
+import Comments from './Comments.astro';
+import TopicLinks from './TopicLinks.astro';
+import ArticleCopyright from './article/ArticleCopyright.astro';
+import {articles,cover,taxonomyDocuments} from '../lib/queries';
+import {t,localizeConfig} from '../lib/locale';
+import type {Site,Document} from '../lib/types';
+interface Props {site:Site;document:Document;lang:string}
+const {site,document:doc,lang}=Astro.props;
+const config=localizeConfig(site,lang),tr=(key:string)=>t(key,lang,site);
+const posts=articles(site,lang),index=posts.findIndex(p=>p.id===doc.id),older=posts[index+1],newer=posts[index-1];
+const category=doc.taxonomies.categories?.[0],quantity=config.extra.post.recommendQuantity;
+const related=category&&['two','six'].includes(quantity)?taxonomyDocuments(site,lang,'categories').filter(p=>p.id!==doc.id&&p.kind!=='note'&&p.taxonomies.categories.includes(category)).slice(0,quantity==='two'?2:6):[];
+const abstract=config.extra.post.abstract;
+const summary=doc.extra.abstract||doc.description||(lang.startsWith('zh')?'本文章还没有摘要哦~':'No summary has been added yet.');
+const structuredData={'@context':'https://schema.org','@type':'Article',headline:doc.title,author:{'@type':'Person',name:config.author,url:new URL('/about/',config.base_url).href},publisher:{'@type':'Organization',name:config.title,logo:{'@type':'ImageObject',url:new URL(config.extra.site.logo,config.base_url).href}},mainEntityOfPage:new URL(doc.url,config.base_url).href,image:new URL(cover(doc,site),config.base_url).href,datePublished:doc.date,dateModified:doc.updated||doc.date,description:doc.description};
+---
+<script type="application/ld+json" set:html={JSON.stringify(structuredData).replace(/</g,'\\u003c')}/>
+<main class={`layout ${config.extra.sidebar.location}`} id="content-inner"><div id="post">
+  {abstract?.enable&&<div id="abstract-container"><div class="abstract-title"><i class="icon-bilibili"></i><div class="abstract-title-text">{lang.startsWith('zh')?(abstract.mode==='local'?'文章摘要':'AI-摘要'):(abstract.mode==='local'?'Article summary':'AI summary')}</div>{abstract.switch_btn&&<div id="abstract-toggle">{tr('ui_switch')}</div>}{abstract.mode==='tianli'&&<i class="icon-arrow-rotate-right"></i>}<div id="abstract-tag">{abstract.mode==='tianli'?'Tianli GPT':abstract.gpt_name}</div></div><div id="abstract-content" style="display:block" set:html={summary}/><div class="abstract-btn-box">{[['intro','ui_introduce_yourself'],['generate','ui_summarize_this_article'],['recommend','ui_suggest_related_articles'],['home','ui_visit_homepage'],['hide','ui_hide_summary']].map(([id,key])=><div class="abstract-btn-item" id={`abstract-${id}`} style={id==='hide'?'margin-left:auto':undefined}>{tr(key)}</div>)}</div></div>}
+  <div class="note simple warning" id="passage-tip" data-tip-enable={doc.extra.update_tip_enable&&config.extra.post.passage_tip?.enable||undefined} data-update-date={(doc.updated||doc.date)?.slice(0,10)}></div>
+  <article class:list={['post-content',{'line-numbers':config.extra.code.enable_line}]} id="article-container" data-pagefind-body><Fragment set:html={doc.html}/><TopicLinks site={site} document={doc} lang={lang}/></article>
+  <ArticleCopyright site={site} document={doc} lang={lang}/>
+  <nav class="pagination-post needEndHide" id="pagination">{newer&&<div class={`prev-post ${older?'pull-left':'pull-full'}`}><a href={newer.url}><div class="pagination-info"><div class="label">{tr('previous_post')}</div><div class="prev_info">{newer.title}</div></div></a></div>}{older&&<div class={`next-post ${newer?'pull-right':'pull-full'}`}><a href={older.url}><div class="pagination-info"><div class="label">{tr('next_post')}</div><div class="next_info">{older.title}</div></div></a></div>}</nav>
+  {related.length>0&&<><div class="relatedPosts"><div class="headline"><i class="icon-cainixihuan" style="font-size:1.1rem"></i><span>{tr('related')}</span></div><div class="relatedPosts-list">{related.map(post=><div><a href={post.url} title={post.title}><ResponsiveImage site={site} src={cover(post,site)} alt="" pictureClass="cover progressive-picture" pictureStyle="" class="progressive-content loaded" sizes="(min-width:1200px) 340px, 50vw"/><div class="content is-center"><div class="date"><i class="far fa-calendar-alt fa-fw"></i>{post.date?.slice(0,10)}</div><div class="title">{post.title}</div></div></a></div>)}</div></div><link rel="stylesheet" href={`/css/related-posts-${quantity}.css`}/></>}
+  <hr/><Comments site={site} document={doc} lang={lang}/>
+</div><Sidebar site={site} lang={lang} document={doc} kind="postWidget"/></main>

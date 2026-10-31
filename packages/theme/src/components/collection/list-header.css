@@ -1,0 +1,129 @@
+.collection-list-header {
+    margin: 20px auto 0;
+    width: 100%;
+    border-radius: 24px;
+    background: var(--wjx-card-bg);
+    border: var(--style-border-always);
+    box-shadow: var(--wjx-shadow-border);
+    position: relative;
+    overflow: hidden;
+    user-select: none;
+}
+
+.collection-list-header .shapes {
+    position: relative;
+    height: 215px;
+    width: 100%;
+    background: #2128bd;
+    overflow: hidden;
+}
+
+.collection-list-header .shape {
+    will-change: transform;
+    position: absolute;
+    border-radius: 50%;
+}
+
+.collection-list-header .shape.shape-1 {
+    background: #005ffe;
+    width: 650px;
+    height: 650px;
+    margin: -325px 0 0 -325px;
+}
+
+.collection-list-header .shape.shape-2 {
+    background: #ffe5e3;
+    width: 440px;
+    height: 440px;
+    margin: -220px 0 0 -220px;
+    display: none;
+}
+
+.collection-list-header .shape.shape-3 {
+    background: #ffcc57;
+    width: 270px;
+    height: 270px;
+    margin: -135px 0 0 -135px;
+    display: none;
+}
+
+.collection-list-header .content {
+    top: 0;
+    left: 0;
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    height: 215px;
+    width: 100%;
+    background: #fff;
+    mix-blend-mode: screen;
+}
+
+[data-theme="dark"] .collection-list-header .content {
+    background: transparent;
+}
+
+[data-theme="dark"] .collection-list-header h1 {
+    color: var(--wjx-white);
+}
+
+[data-theme="dark"] .collection-list-header h2 {
+    color: var(--wjx-white);
+}
+
+.collection-list-header h1,
+.collection-list-header h2 {
+    color: #000;
+    margin: 0;
+    text-align: center;
+    font: inherit;
+    vertical-align: baseline;
+    line-height: 1.5;
+    font-size: 2rem;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.collection-list-header h2 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+@media (min-width: 419px) {
+    .collection-list-header h1 {
+        font-size: 4rem;
+    }
+
+    .collection-list-header h2 {
+        font-size: 1.5rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .collection-list-header {
+        margin:20px 0 auto
+    }
+}
+
+.collection-list-header .cursor {
+    position: absolute;
+    background: #2128bd;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border-radius: 50%;
+    will-change: transform;
+    user-select: none;
+    pointer-events: none;
+    z-index: 3;
+    display: none;
+}
+
+.collection-list-header ::selection {
+    color: #fff;
+    background: #2128bd;
+}

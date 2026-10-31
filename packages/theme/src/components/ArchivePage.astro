@@ -1,0 +1,24 @@
+---
+import LocalizedEmpty from './LocalizedEmpty.astro';
+import ResponsiveImage from './ResponsiveImage.astro';
+import {articles,taxonomyName,taxonomySlug,cover} from '../lib/queries';
+import {localizeUrl,localizeConfig,t} from '../lib/locale';
+import Sidebar from './Sidebar.astro';
+import Pagination from './Pagination.astro';
+import PostCards from './PostCards.astro';
+import ContentBar from './home/ContentBar.astro';
+import {taxonomyTerms} from './home/data';
+import type {Site} from '../lib/types';
+import type {Route} from '../lib/routes';
+interface Props {site:Site;route:Route;}
+const {site,route}=Astro.props,{lang,type}=route;
+const config=localizeConfig(site,lang),all=articles(site,lang),items=route.items||all,url=(path:string)=>localizeUrl(path,lang,site);
+const years=[...new Set(items.map(doc=>doc.date?.slice(0,4)||''))].filter(Boolean).sort().reverse();
+const terms=taxonomyTerms(site,lang,route.taxonomy||'tags',true);
+const taxonomyList=type==='taxonomy-list',taxonomy=type==='taxonomy',tr=(key:string)=>t(key,lang,site);
+---
+<main class={`layout ${taxonomyList?'hide-aside':config.extra.sidebar.location}`} id="content-inner"><div id={taxonomyList?'page':taxonomy?'category':'archive'}>
+  {taxonomyList?<><h1 class="page-title" style="display:inline">{tr(route.taxonomy||'tags')}</h1><div class="category-lists"><div class="tag-cloud-list is-center">{terms.map(term=><a style="font-size:1em" href={term.url} id={term.term}><span style="font-size:22px" class="tags-punctuation">{term.name}</span><span class="tagsPageCount">{term.count}</span></a>)}</div></div></>:
+  taxonomy?<><ContentBar site={site} lang={lang} taxonomy={route.taxonomy} current={route.term}/><div class="recent-posts" id="recent-posts"><PostCards site={site} items={items} lang={lang}/><Pagination {...route} site={site}/></div></>:
+  <><div class="article-sort-title">{tr('articles')}<sup>{all.length}</sup></div>{years.map(year=><div class="article-sort"><div class="article-sort-item year" id={year}>{year}</div>{items.filter(post=>post.date?.startsWith(year)).map(post=><div class="article-sort-item"><a class="article-sort-item-img" href={post.url} title={post.title}><ResponsiveImage site={site} src={cover(post,site)} alt={post.title} width={320} sizes="160px"/></a><div class="article-sort-item-info"><a class="article-sort-item-title" href={post.url} title={post.title}>{post.title}</a><div class="article-sort-item-tags">{(post.taxonomies.tags||[]).map(term=><a class="article-meta__tags" href={url(`/tags/${taxonomySlug(site,term)}/`)}><span class="tags-punctuation">{taxonomyName(site,'tags',term,lang)}</span></a>)}<span class="article-meta__link">•</span></div></div></div>)}</div>)}{!items.length&&<LocalizedEmpty site={site} lang={lang} document={route.document}/>}<Pagination {...route} site={site}/></>}
+</div>{!taxonomyList&&config.extra.sidebar.location!=='hide-aside'&&<Sidebar site={site} lang={lang} kind={taxonomy?'taxonomyWidget':'indexWidget'}/>}</main>

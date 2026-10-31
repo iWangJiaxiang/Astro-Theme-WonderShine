@@ -1,0 +1,119 @@
+---
+import ResponsiveImage from '../ResponsiveImage.astro';
+import { localizeUrl, t } from '../../lib/locale';
+import SkillIcon from './SkillIcon.astro';
+import Reward from './Reward.astro';
+import type { AboutSettings, Skill } from './types';
+const { site, config, data, lang, document: doc } = Astro.props;
+const about: AboutSettings = config.extra.about || {}, author = config.extra.site.author || {};
+const tr = (key:string) => t(key,lang,site);
+const skills: Skill[] = data.skill?.items || [];
+const skillPairs = Array.from({length:Math.ceil(skills.length/2)},(_,index)=>skills.slice(index*2,index*2+2));
+const mbti = String(author.mbti || '').toLowerCase();
+const personalities: Record<string,string> = {infp:'mediator',intj:'architect',intp:'logician',entj:'commander',entp:'debater',enfj:'protagonist',enfp:'campaigner',estj:'executive',estp:'entrepreneur',esfj:'consul',esfp:'entertainer',infj:'advocate',istj:'logistician',istp:'virtuoso',isfj:'defender',isfp:'adventurer'};
+const personality = personalities[mbti];
+const mbtiColor = ['intj','intp','entj','entp'].includes(mbti)?'#88619a':['infp','infj','enfj','enfp'].includes(mbti)?'#33a474':['istj','isfj','estj','esfj'].includes(mbti)?'#4298b4':'#e4ae3a';
+const background = (src?:string) => src ? {backgroundImage:`url(${JSON.stringify(src)})`,backgroundPosition:'top',backgroundSize:'cover',backgroundRepeat:'no-repeat'} : {};
+const statsLabels = lang.startsWith('zh') ? {today_uv:'今日人数',today_pv:'今日访问',yesterday_uv:'昨日人数',yesterday_pv:'昨日访问',last_month_pv:'本月访问',last_year_pv:'今年访问'} : {today_uv:'Visitors today',today_pv:'Views today',yesterday_uv:'Visitors yesterday',yesterday_pv:'Views yesterday',last_month_pv:'Views this month',last_year_pv:'Views this year'};
+const structuredData={'@context':'https://schema.org','@type':'ProfilePage',dateCreated:doc?.date,dateModified:doc?.updated,mainEntity:{'@type':'Person',name:config.author,description:config.description,image:new URL(author.avatar||config.extra.site.logo,config.base_url).href,sameAs:[new URL(doc?.url||localizeUrl('/about/',lang,site),config.base_url).href]}};
+---
+<script id="ld-json" type="application/ld+json" set:html={JSON.stringify(structuredData).replace(/</g,'\\u003c')}/>
+<main class="layout hide-aside" id="content-inner"><div id="page"><div id="about-page">
+  <div class="author-info">
+    {(about.author_info_left_tags || []).length>0&&<div class="author-tag-left">{(about.author_info_left_tags || []).map(tag=><span class="author-tag">{tag}</span>)}</div>}
+    <div class="author-img"><ResponsiveImage site={site} pictureClass="progressive-picture" pictureStyle="" class="progressive-content loaded" src={author.avatar || config.extra.site.logo} alt={config.author || ''} decoding="async"  sizes="800px"/></div>
+    {(about.author_info_right_tags || []).length>0&&<div class="author-tag-right">{(about.author_info_right_tags || []).map(tag=><span class="author-tag">{tag}</span>)}</div>}
+  </div>
+  <div class="author-title">{config.author}</div>
+  {(about.widget_list || []).map(widget => <>
+    {widget==='content-idea'&&<div class="author-content"><div class="author-content-item myInfoAndSayHello" set:html={about.content || ''}/><div class="aboutsiteTips author-content-item" set:html={about.idea || ''}/></div>}
+    {widget==='hello-about'&&<div class="hello-about"><div class="cursor"></div><div class="shapes"><div class="shape shape-1"></div><div class="shape shape-2"></div><div class="shape shape-3"></div></div><div class="content"><h1>{about.hello}</h1></div></div>}
+    {widget==='author-career'&&<div class="author-content">
+      <div class="author-content-item skills"><div class="card-content"><div class="author-content-item-tips">{tr('ui_skills')}</div><span class="author-content-item-title">{tr('ui_productivity_and_creativity')}</span><div class="skills-style-group">
+        <div class="tags-group-all"><div class="tags-group-wrapper">{skillPairs.map(pair=><div class="tags-group-icon-pair">{pair.map(item=><div class="tags-group-icon" style={{background:item.bg_color}}><SkillIcon item={item} sprite={data.skill?.svg_sprite}/></div>)}</div>)}</div></div>
+        <div class="skills-list">{skills.map(item=><div class="skill-info"><div class="skill-icon" style={{background:item.bg_color}}><SkillIcon item={item} sprite={data.skill?.svg_sprite}/></div><div class="skill-name"><span>{item.name}</span></div></div>)}</div>
+      </div></div></div>
+      <div class="author-content-item careers"><div class="card-content"><div class="author-content-item-tips">{tr('ui_career')}</div><span class="author-content-item-title">{about.careers?.title}</span><div class="careers-group">{(about.careers?.tags||[]).map(tag=><div class="careers-item"><div class="circle" style={{background:tag.background}}></div><div class="name">{tag.occupation}</div></div>)}</div>{about.careers?.bg&&<ResponsiveImage site={site} pictureClass="author-content-img progressive-picture" pictureStyle="" class="progressive-content loaded" src={about.careers.bg} alt={tr('ui_career')} loading="lazy" sizes="800px"/>}</div></div>
+    </div>}
+    {widget==='personalities-photo'&&<div class="author-content"><div class="author-content-item personalities"><div class="author-content-item-tips">{tr('ui_personality')}</div>{personality&&<><span class="author-content-item-title">{tr('ui_'+personality)}</span><div class="title2" style={{color:mbtiColor}}>{mbti.toUpperCase()}</div><div class="image"><img src={`/img/mbti/${mbti}.svg`} style="transform:rotateY(180deg)" alt={mbti.toUpperCase()} loading="lazy"/></div><div class="post-tips">{tr('ui_on')} <a href="https://www.16personalities.com/" rel="noopener nofollow" target="_blank">16personalities</a> {tr('ui_learn_more_about')} <a rel="noopener external nofollow" target="_blank" href={`https://www.16personalities.com/${lang.startsWith('zh')?'ch/':''}${mbti.toUpperCase()}${lang.startsWith('zh')?'-%E4%BA%BA%E6%A0%BC':''}`}>{tr('ui_'+personality)}</a></div></>}</div><div class="author-content-item myphoto"><ResponsiveImage site={site} pictureClass="progressive-picture" pictureStyle="" class="progressive-content loaded" src={author.about_image || about.photos?.[0]?.url || author.avatar} alt={about.photos?.[0]?.description || ''} loading="lazy" sizes="800px"/></div></div>}
+    {widget==='textarea'&&about.textarea_left?.tittle&&about.textarea_right?.tittle&&<div class="author-content"><div class="author-content-item maxim"><div class="author-content-item-tips">{about.textarea_left.tittle}</div><span class="maxim-title"><span style="opacity:.6;margin-bottom:8px">{about.textarea_left.textarea_up}</span><span>{about.textarea_left.textarea_down}</span></span></div><div class="author-content-item buff"><div class="card-content"><div class="author-content-item-tips">{about.textarea_right.tittle}</div><span class="buff-title"><span style="opacity:.6;margin-bottom:8px">{about.textarea_right.textarea_up}</span><span>{about.textarea_right.textarea_down}</span></span></div></div></div>}
+    {widget==='hobby'&&<div class="author-content">{(about.hobbies||[]).map(hobby=><div class={`author-content-item ${hobby.class||''}`} style={background(hobby.bg_url)}><div class="card-content"><div class="author-content-item-tips">{hobby.tips}</div><span class="author-content-item-title">{hobby.title}</span><div class="content-bottom"><div class="icon-group"><div class="loading-bar" role="presentation" aria-hidden="true" style={about.hobby?.loading_bar?{'--hobby-image':`url(${JSON.stringify(about.hobby.loading_bar)})`}:undefined}></div></div><div class="tips">{hobby.uid}</div></div>{hobby.url&&<div class="banner-button-group"><a class="banner-button" href={hobby.url} target="_blank" rel="noopener nofollow"><i class="icon-circle-arrow-up-right-1"></i><span class="banner-button-text">{tr('ui_more_information')}</span></a></div>}</div></div>)}</div>}
+    {widget==='like-music'&&<><div class="author-content"><div class="author-content-item like-technology" style={background(about.like?.bg)}><div class="card-content"><div class="author-content-item-tips">{about.like?.tips}</div><span class="author-content-item-title">{about.like?.title}</span><div class="content-bottom"><div class="tips">{about.like?.bottom}</div></div></div></div><div class="author-content-item like-music" style={background(about.music?.bg)}><div class="card-content"><div class="author-content-item-tips">{about.music?.tips}</div><span class="author-content-item-title">{about.music?.title}</span><div class="content-bottom"><div class="tips">{lang.startsWith('zh')?`跟 ${config.title} 一起欣赏更多音乐`:`Enjoy more music with ${config.title}`}</div></div></div></div></div>{about.music?.link&&<div class="banner-button-group"><a class="banner-button" href={about.music.link} target="_blank" rel="noopener nofollow external"><i class="icon-circle-arrow-up-right-1"></i><span class="banner-button-text">{tr('ui_more_recommendations')}</span></a></div>}</>}
+    {widget==='statistics-map'&&<div class="author-content"><div class="about-statistic author-content-item" style="background-color:#D9AFD9;background-image:linear-gradient(0deg,#D9AFD9 0%,#97D9E1 100%);"><div class="card-content"><div class="author-content-item-tips">{tr('ui_data')}</div><span class="author-content-item-title">{tr('ui_visitor_statistics')}</span><div id="statistic" data-stat-api={config.extra.site.analytics?.stat_api} data-stat-labels={JSON.stringify(statsLabels)}></div><div class="post-tips">{tr('ui_updated_every_10_minutes_data_from')} <a href="https://umami.is/" rel="noopener nofollow external" target="_blank">Umami</a></div><div class="banner-button-group"><a class="banner-button" href={localizeUrl('/archives/',lang,site)}><i class="icon-circle-arrow-up-right-1"></i><span class="banner-button-text">{tr('ui_article_archive')}</span></a></div></div></div>
+      <div class="author-content-item-group column mapAndInfo"><div class="author-content-item map single"><span class="map-title">{tr('ui_based_in')} <b>{about.map?.StrengthenTitle}</b></span>{about.map?.background&&<picture class="map-img progressive-picture"><img class="progressive-content loaded" src={about.map.background} alt="" data-light-map={about.map.background} data-dark-map={about.map.backgroundDark || about.map.background} loading="lazy" /></picture>}</div>{about.map?.authorInfo&&<div class="author-content-item selfInfo single">{about.map.authorInfo.map(info=><div><span class="selfInfo-title">{info.authorInfoTitle}</span><span class="selfInfo-content" style={{color:info.authorInfoColor}}>{info.authorInfoContent}</span></div>)}</div>}</div>
+    </div>}
+    {widget==='about-reward'&&<Reward site={site} config={config} lang={lang}/>}
+  </>)}
+  <div class="author-content" id="about-content"><div class="create-site-post author-content-item single" set:html={doc?.html || ''}/></div>
+  {!(about.widget_list||[]).includes('about-reward')&&<Reward site={site} config={config} lang={lang}/>}
+</div></div></main>
+<script is:inline data-astro-rerun>
+(() => {
+  (() => {
+    const intro = document.querySelector('.aboutsiteTips .mask');
+    let interval;
+    if (intro?.children.length) interval = setInterval(() => {
+      const show = intro.querySelector('[data-show]') || intro.firstElementChild;
+      const next = show.nextElementSibling || intro.firstElementChild;
+      intro.querySelector('[data-up]')?.removeAttribute('data-up');
+      show.removeAttribute('data-show'); show.setAttribute('data-up',''); next.setAttribute('data-show','');
+    }, 2000);
+    document.addEventListener('pjax:send', () => clearInterval(interval), {once:true});
+    const hello = document.querySelector('.hello-about');
+    hello?.addEventListener('pointermove', event => {
+      const rect = hello.getBoundingClientRect(), x = event.clientX-rect.left, y = event.clientY-rect.top;
+      hello.querySelectorAll('.shape,.cursor').forEach(element => {element.style.transform=`translate(${x}px,${y}px)`;});
+    });
+    const statistic = document.getElementById('statistic');
+    if (statistic?.dataset.statApi) fetch(statistic.dataset.statApi).then(response => {
+      if (!response.ok) throw new Error('Statistics unavailable'); return response.json();
+    }).then(values => {
+      if (!statistic.isConnected) return;
+      const labels=JSON.parse(statistic.dataset.statLabels || '{}');
+      const counters=[];
+      Object.entries(labels).forEach(([key,label]) => {
+        const value=Number(values[key]); if (!Number.isFinite(value)) return;
+        const row=document.createElement('div'),heading=document.createElement('span'),number=document.createElement('span');
+        heading.textContent=label;number.textContent=value.toLocaleString();row.append(heading,number);statistic.append(row);
+        counters.push({element:number,value});
+      });
+      const animateStatistics=()=>{
+        if (!statistic.isConnected || typeof window.CountUp!=='function' || matchMedia('(prefers-reduced-motion:reduce)').matches) return;
+        const start=()=>counters.forEach(({element,value})=>new window.CountUp(element,0,value,0,2,{useEasing:true,useGrouping:true,separator:',',decimal:'.'}).start());
+        if (!('IntersectionObserver' in window)) {start();return;}
+        const countsObserver=new IntersectionObserver(entries=>{
+          if(entries.some(entry=>entry.isIntersecting)){start();countsObserver.disconnect();}
+        });
+        countsObserver.observe(statistic);
+        document.addEventListener('pjax:send',()=>countsObserver.disconnect(),{once:true});
+      };
+      if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',animateStatistics,{once:true});
+      else animateStatistics();
+    }).catch(() => { statistic.dataset.unavailable='true'; });
+    const map = document.querySelector('[data-dark-map]');
+    const updateMap = () => {if (map) map.src=document.documentElement.dataset.theme==='dark'?map.dataset.darkMap:map.dataset.lightMap;};
+    updateMap();
+    const observer = new MutationObserver(updateMap); observer.observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+    document.addEventListener('pjax:send',()=>observer.disconnect(),{once:true});
+  })();
+})();
+</script>
+<style is:global>
+  #about-page .progressive-content.loaded{opacity:1;position:static;width:100%;height:100%;object-fit:cover}
+  .hello-about{margin:20px auto 0;width:100%;border-radius:24px;background:var(--wjx-card-bg);border:var(--style-border-always);box-shadow:var(--wjx-shadow-border);position:relative;overflow:hidden;user-select:none}
+  .hello-about .shapes{position:relative;height:315px;width:100%;background:#2128bd;overflow:hidden}
+  .hello-about .shape{will-change:transform;position:absolute;border-radius:50%;transform:translate(721px,180px);transition:transform .35s ease-out}
+  .hello-about .shape-1{background:#005ffe;width:650px;height:650px;margin:-325px 0 0 -325px}
+  .hello-about .shape-2{background:#ffe5e3;width:440px;height:440px;margin:-220px 0 0 -220px;transition-duration:.25s}
+  .hello-about .shape-3{background:#ffcc57;width:270px;height:270px;margin:-135px 0 0 -135px;transition-duration:.15s}
+  .hello-about .content{inset:0;position:absolute;display:flex;justify-content:center;align-items:center;height:315px;width:100%;background:#fff;mix-blend-mode:screen}
+  [data-theme=dark] .hello-about .content{background:transparent}[data-theme=dark] .hello-about h1{color:var(--wjx-white)}
+  .hello-about h1{color:#000;margin:0;text-align:center;line-height:1;font-size:calc(9.89119683vw + 58.5558852621px);width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+  .hello-about .cursor{position:absolute;background:#2128bd;width:20px;height:20px;margin:-10px 0 0 -10px;border-radius:50%;pointer-events:none;z-index:3;transform:translate(721px,180px)}
+  .author-content-item.map{min-height:160px;max-height:400px;position:relative;overflow:hidden;margin-bottom:.5rem;height:60%;background-size:100%;transition:1s ease-in-out}
+  .author-content-item.map .map-title{position:absolute;bottom:0;left:0;width:100%;background:var(--wjx-maskbg);padding:.5rem 2rem;backdrop-filter:saturate(180%) blur(20px);transition:1s ease-in-out;font-size:20px;border-radius:0 0 1rem 1rem;z-index:1}
+  .author-content-item.map:hover .map-title{bottom:-100%}.author-content-item.map .map-title b{color:var(--wjx-fontcolor)}
+  .map-img{position:absolute;width:100%;height:100%;top:0;left:0;object-fit:cover;z-index:0}.map-img:hover{width:120%;height:120%;transition:4s ease-in-out}
+  .loading-bar[style]::after{content:"";position:absolute;top:500px;left:0;filter:drop-shadow(0 -500px 0 #ece5d8);width:500px;height:62.5px;background:var(--hobby-image) no-repeat left 100%;background-size:500px 62.5px;background-position-x:0}
+  @media(prefers-reduced-motion:reduce){.hello-about .shape{transition:none}}
+</style>

@@ -1,0 +1,43 @@
+{
+  "name": "wondershine-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "examples/*"
+  ],
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "scripts": {
+    "build:theme": "node scripts/build-theme.mjs",
+    "build": "npm run build:theme && npm run build -w @wondershine/demo",
+    "build:starter": "npm run build:theme && npm run build -w @wondershine/starter",
+    "dev": "npm run build:theme && npm run dev -w @wondershine/demo",
+    "check": "astro check && npm run typecheck -w @wondershine/studio",
+    "test": "tsx --test packages/theme/tests/*.test.ts && npm run test -w @wondershine/studio && tsx --test tests/*.test.ts",
+    "test:integration": "npm run test:site -w @wondershine/studio",
+    "test:package": "node scripts/test-package.mjs",
+    "audit:distribution": "node scripts/audit-distribution.mjs",
+    "studio:dev": "npm run dev -w @wondershine/studio",
+    "studio:build": "npm run build -w @wondershine/studio",
+    "migrate:site": "tsx scripts/migrate-site.ts",
+    "test:browser": "node scripts/test-browser.mjs"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.0",
+    "@types/markdown-it": "^14.1.2",
+    "@types/markdown-it-emoji": "^3.0.1",
+    "@types/markdown-it-footnote": "^3.0.4",
+    "@types/node": "^24.0.0",
+    "parse5": "^8.0.1",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3",
+    "@tailwindcss/cli": "4.3.1",
+    "tailwindcss": "4.3.1",
+    "esbuild": "0.28.2"
+  }
+}

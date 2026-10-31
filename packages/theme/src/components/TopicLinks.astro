@@ -1,0 +1,6 @@
+---
+import {topics} from '../lib/queries';
+const {site,document,lang}=Astro.props;
+const items=topics(site,lang).filter(d=>document.extra.topics?.includes(d.extra.id));
+---
+{items.length>0&&<nav class="content-topics">{items.map(d=><a href={d.url}>#{d.title}</a>)}</nav>}

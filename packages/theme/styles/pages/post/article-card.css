@@ -1,0 +1,13 @@
+/* 隐藏时间 */
+.article-sort-item-time {
+    display: none;
+}
+/* 不显示标签分割点 */
+.article-meta__link {
+    display: none;
+}
+
+.article-meta__tags {
+    padding: 0.2rem;
+    border-radius: 8px;
+}

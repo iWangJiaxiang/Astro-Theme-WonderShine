@@ -1,0 +1,7 @@
+---
+import {collectionAncestors} from './data';
+import {localizeUrl,t} from '../../lib/locale';
+const {site,document:doc,lang}=Astro.props;
+const ancestors=collectionAncestors(site,doc);
+---
+<div class="collection-breadcrumb"><a href={localizeUrl('/collections/',lang,site)}>{t('collections',lang,site)}</a>{ancestors.map(section=><><span class="separator">/</span><a href={section.url}>{section.title}</a></>)}</div>

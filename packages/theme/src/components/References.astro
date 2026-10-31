@@ -1,0 +1,14 @@
+---
+import ResponsiveImage from './ResponsiveImage.astro';
+import {internalReference,cover} from '../lib/queries';
+import {t,languageName} from '../lib/locale';
+const {site,lang,document}=Astro.props;
+const references=(document.extra.references||[]).slice(0,12).map((r:any)=>({...r,chosen:r.kind==='internal'?internalReference(site,r.path,lang):undefined}));
+const external=(url:string)=>{try{const u=new URL(url);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password;}catch{return false;}};
+---
+{references.length>0 && <div class="article-references" aria-label={t('references',lang,site)}>
+{references.map((r:any)=>r.chosen?<a class="article-reference" href={r.chosen.url} data-reference-kind="internal" hreflang={r.chosen.lang}>
+  {cover(r.chosen,site,false)&&<span class="reference-cover"><ResponsiveImage site={site} src={cover(r.chosen,site,false)} alt="" loading="lazy" sizes="160px"/></span>}
+  <span class="reference-copy"><span class="reference-type">{t('internal_article',lang,site)}{r.chosen.lang!==lang&&` · ${languageName(r.chosen.lang,site)}`}</span><strong>{r.chosen.title}</strong>{r.chosen.description&&<span class="reference-description">{r.chosen.description}</span>}<span class="reference-action">{t('read_article',lang,site)} ↗</span></span>
+</a>:r.kind==='external'&&external(r.url)?<a class="article-reference" href={r.url} target="_blank" rel="noopener noreferrer external" data-reference-kind="external"><span class="reference-type">{t('external_article',lang,site)}</span><strong>{r.title||r.url}</strong><span class="reference-description">{r.url}</span><span class="reference-action">{t('open_external',lang,site)} ↗</span></a>:null)}
+</div>}

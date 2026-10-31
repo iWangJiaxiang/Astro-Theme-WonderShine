@@ -1,0 +1,27 @@
+[[menu.nav_menu]]
+name = "Articles"
+href = "/articles/"
+icon = "icon-book"
+
+[[menu.nav_menu]]
+name = "Series"
+href = "/collections/"
+icon = "icon-folder"
+
+[[menu.nav_menu]]
+name = "Topics"
+href = "/topics/"
+icon = "icon-hashtag"
+
+[[menu.nav_menu]]
+name = "About"
+href = "/about/"
+icon = "icon-user"
+
+[[post.tags]]
+id = "design"
+name = "Design"
+
+[[post.categories]]
+id = "journal"
+name = "Journal"

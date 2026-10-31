@@ -1,0 +1,13 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "include": [
+    "packages/theme/src/**/*",
+    "packages/theme/scripts/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "temp",
+    "apps",
+    "examples"
+  ]
+}

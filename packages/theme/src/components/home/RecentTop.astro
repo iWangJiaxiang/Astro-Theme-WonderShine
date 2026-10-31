@@ -1,0 +1,41 @@
+---
+import ResponsiveImage from '../ResponsiveImage.astro';
+import {articles,cover} from '../../lib/queries';
+import {localizeConfig,localizeData,localizeUrl,t} from '../../lib/locale';
+import {featuredDocument} from './data';
+const {site,lang,page=1}=Astro.props,config=localizeConfig(site,lang),data=localizeData(site,lang),top=config.extra.top;
+const groups=top.banner_left?.category_groups||[],skills=data.skill?.items||[];
+const pairs=Array.from({length:Math.ceil(skills.length/2)},(_,index)=>skills.slice(index*2,index*2+2));
+const selected=top.banner_right.recommend_post.type==='latest'?articles(site,lang):(data.post?.recommend_posts||[]).map((source:string)=>featuredDocument(site,source,lang)).filter(Boolean);
+const posts=selected.slice(0,Math.min(6,top.banner_right.recommend_post.max_posts||6));
+const today=data.post?.today_recommend||{},featured=featuredDocument(site,today.post_path,lang);
+const daily=featured?{url:featured.url,title:featured.title,cover:cover(featured,site)}:!today.post_path?today:null;
+const url=(path:string)=>localizeUrl(path,lang,site),tr=(key:string)=>t(key,lang,site);
+const colorStyle=(group:any)=>({'--group-light-one':group.colors?.light_one,'--group-light-two':group.colors?.light_two,'--group-dark-one':group.colors?.dark_one,'--group-dark-two':group.colors?.dark_two});
+---
+{top.recent_top&&<div class:list={['recent-top-post-group',{'more-page':page!==1}]} id="recent-top-post-group"><div class="recent-post-top" id="recent-post-top">
+  <div id="bannerGroup"><div id="banners"><div class="tags-group-all"><div class="tags-group-wrapper">{pairs.map(pair=><div class="tags-group-icon-pair">{pair.map((tech:any)=><div class="tags-group-icon" style={{background:tech.bg_color}}>{tech.logo?<img src={tech.logo} title={tech.name} alt={tech.name} loading="lazy" decoding="async"/>:tech.icon?<i class={tech.icon}/>:tech.svg_symbol_id&&<svg><use href={`${tech.svg_sprite||data.skill.svg_sprite}#${tech.svg_symbol_id}`}/></svg>}</div>)}</div>)}</div></div>
+    <div class="banners-title"><Fragment set:html={top.banner_left.title_big}/>{top.banner_left.title_small&&<div class="banners-title-small" set:html={top.banner_left.title_small}/>}</div>
+    <div class="banners-link">{groups.slice(0,2).map((group:any,index:number)=><a class={`banners-link-btn ${index?'blb-top':'blb-hot'}`} href={url(group.url)} style={colorStyle(group)}>{/^https?:|^\//.test(group.icon)?<img src={group.icon} alt="" loading="lazy"/>:<i class={group.icon}/>}<div class="banners-link-title">{group.title}</div></a>)}</div>
+  </div><div class="categoryGroup">{groups.slice(0,2).map((group:any,index:number)=><div class="categoryItem"><a class={`categoryButton ${index?'remen':'CB1 bikan'}`} href={url(group.url)} style={colorStyle(group)}><span class="categoryButtonText">{group.title}</span>{/^https?:|^\//.test(group.icon)?<img src={group.icon} alt="" loading="lazy"/>:<i class={group.icon}/>}</a></div>)}</div></div>
+  <div class="topGroup" id="topGroup"><div class="recent-post-group">{posts.map((post:any,index:number)=><div class="recent-post-item"><div class={`post_cover ${index%2?'right_radius':'left_radius'}`}><a href={post.url} title={post.title}><span class="recent-post-top-text">{tr('ui_featured')}</span><ResponsiveImage site={site} class="post_bg" src={cover(post,site)} alt={post.title} width={480} sizes="240px"/></a></div><div class="recent-post-info"><a class="article-title" href={post.url} title={post.title}>{post.title}</a></div></div>)}</div>
+    {top.banner_right.today_recommend.enable&&daily?.url&&<div class="todayCard" id="todayCard" data-today-url={url(daily.url)}><div class="todayCard-info"><div class="todayCard-tips">{today.small_title}</div><div class="todayCard-title"><a href={url(daily.url)}>{daily.title}</a></div></div><ResponsiveImage site={site} class="todayCard-cover" src={daily.cover} alt={daily.title} width={1200} sizes="(min-width:1200px) 700px, 100vw"/><div class="banner-button-group"><button type="button" class="banner-button" data-hide-today><i class="icon-circle-plus"/><span class="banner-button-text">{tr('ui_more_recommendations')}</span></button></div></div>}
+  </div>
+</div></div>}
+<script>
+  import {navigate} from 'astro:transitions/client';
+  let initializedBody: HTMLElement | undefined;
+  document.addEventListener('astro:page-load', () => {
+  if (initializedBody === document.body) return;
+  initializedBody = document.body;
+  document.querySelector<HTMLElement>('[data-today-url]')?.addEventListener('click',event=>{
+    const target=event.target as Element;if(target.closest('[data-hide-today]')){document.getElementById('topGroup')?.classList.add('hideCard');return}
+    if(!target.closest('a'))void navigate((event.currentTarget as HTMLElement).dataset.todayUrl!);
+  });
+  });
+</script>
+<style is:global>
+.categoryButton.bikan,.categoryButton.remen,.banners-link-btn.blb-hot,.banners-link-btn.blb-top{background:linear-gradient(to right,var(--group-light-one),var(--group-light-two));background-size:200%}
+[data-theme=dark] .categoryButton.bikan,[data-theme=dark] .categoryButton.remen{background:linear-gradient(to right,var(--group-dark-one),var(--group-dark-two));background-size:200%}
+.banners-link-btn.blb-hot:hover,.banners-link-btn.blb-top:hover{background-position:100% 0;cursor:pointer;background-color:var(--wjx-white)}
+</style>

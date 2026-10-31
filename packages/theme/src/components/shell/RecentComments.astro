@@ -1,0 +1,75 @@
+---
+import {localizeConfig,t} from '../../lib/locale';
+const {site,lang}=Astro.props;
+const config=localizeConfig(site,lang);
+const comments=config.extra.comments;
+const configuredCount=Number(config.extra.sidebar.newcomment?.newcommentnumber);
+const settings={enabled:comments.enable,system:comments.system,count:configuredCount>0?Math.floor(configuredCount):5,
+  site:config.base_url,lang,empty:lang.startsWith('zh')?'暂无评论':'No comments yet',error:lang.startsWith('zh')?'暂时无法加载评论':'Comments are temporarily unavailable',
+  labels:lang.startsWith('zh')?{image:'[图片]',link:'[链接]',code:'[代码]'}:{image:'[Image]',link:'[Link]',code:'[Code]'},
+  dates:{just:t('just',lang,site),minute:t('min_ago',lang,site),hour:t('hour_ago',lang,site),day:t('days_ago',lang,site)}};
+---
+{settings.enabled&&<script is:inline data-astro-rerun define:vars={{settings}}>
+document.addEventListener('astro:page-load',async()=>{
+  const containers=[document.querySelector('#card-newest-comments .aside-list'),document.getElementById('newcomm')].filter(Boolean);
+  if(!containers.length)return;
+  const safeURL=value=>{if(typeof value!=='string'||!value.trim())return '';try{const url=new URL(value,settings.site);return ['https:','http:'].includes(url.protocol)?url.href:''}catch{return ''}};
+  const plain=value=>{
+    const body=new DOMParser().parseFromString(typeof value==='string'?value:'','text/html').body;
+    body.querySelectorAll('script,style,iframe,object').forEach(node=>node.remove());
+    // Preserve the theme's compact media placeholders without interpreting remote HTML.
+    for(const [selector,label] of [['pre',settings.labels.code],['a[href]',settings.labels.link],['img',settings.labels.image]]){
+      body.querySelectorAll(selector).forEach(node=>node.replaceWith(document.createTextNode(label)));
+    }
+    const content=(body.textContent||'').trim();
+    return content.length>150?content.slice(0,150)+'...':content;
+  };
+  const relativeDate=date=>{
+    const elapsed=Math.max(0,Date.now()-date.getTime());
+    const days=elapsed/86400000;
+    if(days>=7)return new Intl.DateTimeFormat(settings.lang,days>360?{year:'numeric',month:'numeric',day:'numeric'}:{month:'numeric',day:'numeric'}).format(date);
+    const join=(count,suffix)=>count+(settings.lang.startsWith('zh')?'':' ')+suffix.trim();
+    if(days>=1)return join(Math.floor(days),settings.dates.day);
+    if(elapsed>=3600000)return join(Math.floor(elapsed/3600000),settings.dates.hour);
+    if(elapsed>=60000)return join(Math.floor(elapsed/60000),settings.dates.minute);
+    return settings.dates.just;
+  };
+  const render=items=>containers.forEach(container=>{
+    container.replaceChildren();
+    if(!items.length){container.textContent=settings.empty;return}
+    const sidebar=container.id==='newcomm';
+    items.slice(0,sidebar?settings.count:6).forEach(item=>{
+      const url=safeURL(item.url);if(!url)return;
+      const row=document.createElement('div');row.className='aside-list-item';
+      const thumb=document.createElement('a');thumb.className='thumbnail';thumb.href=url;
+      const avatar=item.avatar&&safeURL(item.avatar);if(avatar){const image=document.createElement('img');image.src=avatar;image.alt=item.nick||'';image.loading='lazy';image.decoding='async';thumb.append(image)}
+      const name=document.createElement('div');name.className='name';const nick=document.createElement('span');nick.textContent=(item.nick||'')+(sidebar?' / ':'');name.append(nick);
+      const content=document.createElement('div');content.className='content';const link=document.createElement('a');link.href=url;link.className='comment';link.textContent=plain(item.content);link.title=link.textContent;content.append(link);
+      const time=document.createElement('time');const date=new Date(item.date);if(Number.isFinite(date.getTime())){time.dateTime=date.toISOString();time.textContent=relativeDate(date)}
+      // Sidebar CSS intentionally hides direct content > time for article widgets.
+      // Comment attribution therefore belongs inside .content > .name, as in the theme.
+      if(sidebar){name.append(time);content.append(name)}else{thumb.append(name);content.append(time)}
+      row.append(thumb,content);container.append(row);
+    });
+  });
+  try{
+    const key=settings.system+'-newest-comments';const cached=saveToLocal.get(key);if(cached){render(JSON.parse(cached));return}
+    let items=[];
+    if(settings.system==='twikoo'&&GLOBAL_CONFIG.source.twikoo.twikooUrl){
+      if(!window.twikoo)await getScript(GLOBAL_CONFIG.source.twikoo.js);
+      const rows=await twikoo.getRecentComments({envId:GLOBAL_CONFIG.source.twikoo.twikooUrl,region:'',pageSize:20,includeReply:true});
+      items=rows.map(item=>({content:item.comment,avatar:item.avatar,nick:item.nick,url:item.url+'#'+item.id,date:item.created}));
+    }else if(settings.system==='waline'&&GLOBAL_CONFIG.source.waline.serverURL){
+      if(!window.Waline)await getScript(GLOBAL_CONFIG.source.waline.js);
+      const result=await Waline.RecentComments({serverURL:GLOBAL_CONFIG.source.waline.serverURL,count:20});
+      items=result.comments.map(item=>({content:item.comment,avatar:item.avatar,nick:item.nick,url:item.url+'#'+item.objectId,date:item.insertedAt}));
+    }else if(settings.system==='artalk'&&GLOBAL_CONFIG.source.artalk.artalkUrl){
+      const source=GLOBAL_CONFIG.source.artalk;
+      const response=await fetch(source.artalkUrl.replace(/\/$/,'')+'/api/v2/stats/latest_comments?'+new URLSearchParams({site_name:source.siteName||'',limit:'20'}));
+      if(!response.ok)throw new Error('Comments unavailable');
+      const result=await response.json();items=(result.data||[]).map(item=>({content:item.content_marked,avatar:item.avatar||'',nick:item.nick,url:item.page_url+'#atk-comment-'+item.id,date:item.date}));
+    }
+    saveToLocal.set(key,JSON.stringify(items),10/(60*24));render(items);
+  }catch{containers.forEach(container=>{container.textContent=settings.error})}
+},{once:true});
+</script>}

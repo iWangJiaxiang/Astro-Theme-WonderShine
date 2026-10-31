@@ -1,0 +1,34 @@
+---
+import {loadSite} from '../lib/content';
+import {routes} from '../lib/routes';
+import SiteLayout from '../layouts/SiteLayout.astro';
+import HomePage from '../components/HomePage.astro';
+import ActivityPage from '../components/ActivityPage.astro';
+import ArticlePage from '../components/ArticlePage.astro';
+import ArticleHeader from '../components/article/ArticleHeader.astro';
+import CollectionHeader from '../components/collection/CollectionHeader.astro';
+import Navigation from '../components/shell/Navigation.astro';
+import HomeHeader from '../components/home/HomeHeader.astro';
+import {t} from '../lib/locale';
+import {plain} from '../lib/queries';
+import ArchivePage from '../components/ArchivePage.astro';
+import CollectionPage from '../components/CollectionPage.astro';
+import SpecialPage from '../components/SpecialPage.astro';
+export async function getStaticPaths(){
+  const site=await loadSite();
+  return routes(site).filter(route=>!route.path.endsWith('.html')).map(route=>({params:{path:route.path.replace(/^\/+|\/+$/g,'')||undefined},props:{site,route}}));
+}
+const {site,route}=Astro.props;
+const {type,lang,document:doc}=route;
+const title=route.title||(type==='note'?t('notes',lang,site,'activity'):site.config.title);
+const description=doc?.description||(type==='note'&&doc?plain(doc.html).slice(0,150):undefined);
+---
+{route.redirect?<html lang={lang}><head><meta charset="utf-8"/><meta http-equiv="refresh" content={`0;url=${route.redirect}`}/><link rel="canonical" href={new URL(route.redirect,site.config.base_url).href}/><meta name="robots" content="noindex"/><title>{title}</title></head><body><a href={route.redirect}>{title||route.redirect}</a></body></html>:
+<SiteLayout site={site} lang={lang} title={title} description={description} canonical={route.path} document={doc} pageType={type==='index'?'index':['post','collection-detail'].includes(type)?'post':type==='friends'?'links':type}>
+<Fragment slot="header">{type==='index'?<HomeHeader site={site} document={doc} lang={lang}/>:type==='post'&&doc?<ArticleHeader site={site} document={doc} lang={lang}/>:type==='collection-detail'&&doc?<CollectionHeader site={site} document={doc} lang={lang}/>:<header class="not-top-img" id="page-header"><Navigation site={site} lang={lang} title={title} document={doc}/></header>}</Fragment>
+{type==='index'?<HomePage site={site} route={route}/>:
+['notes','note','timeline','topics','topic'].includes(type)?<ActivityPage site={site} route={route}/>:
+type==='post'&&doc?<ArticlePage site={site} document={doc} lang={lang}/>:
+['archives','taxonomy','taxonomy-list'].includes(type)?<ArchivePage site={site} route={route}/>:
+type.startsWith('collection-')?<CollectionPage site={site} route={route}/>:<SpecialPage site={site} route={route}/>}
+</SiteLayout>}

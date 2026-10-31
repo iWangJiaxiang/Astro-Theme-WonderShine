@@ -1,0 +1,35 @@
+---
+import ResponsiveImage from '../ResponsiveImage.astro';
+import Navigation from '../shell/Navigation.astro';
+import Wave from '../shell/Wave.astro';
+import {cover,taxonomyName,taxonomySlug} from '../../lib/queries';
+import {t,localizeConfig,localizeUrl} from '../../lib/locale';
+import type {Site,Document} from '../../lib/types';
+interface Props {site:Site;document:Document;lang:string}
+const {site,document:doc,lang}=Astro.props;
+const config=localizeConfig(site,lang),tr=(key:string)=>t(key,lang,site),url=(path:string)=>localizeUrl(path,lang,site);
+const original=!doc.extra.reprint_url,commentSystem=config.extra.comments.system;
+const taxonomyURL=(kind:string,term:string)=>url(`/${kind}/${taxonomySlug(site,term)}/`);
+---
+<header class="post-bg" id="page-header">
+  <Navigation site={site} lang={lang} title={doc.title} document={doc}/>
+  <div class="coverdiv loaded" id="coverdiv"><ResponsiveImage site={site} alt="" class="nolazyload" id="post-cover" src={cover(doc,site)} decoding="async" loading="eager" fetchpriority="high" sizes="100vw"/></div>
+  <div id="post-info">
+    <div id="post-firstinfo"><div class="meta-firstline">
+      {config.extra.post.copyrights.enable&&<a class="post-meta-original" title={tr(original?'original_license':'reprint_license')} href={doc.extra.copyright_url||url('/copyright/')}>{tr(original?'original':'reprint')}</a>}
+      {(doc.taxonomies.categories||[]).map(term=><span class="post-meta-categories"><a href={taxonomyURL('categories',term)} title={taxonomyName(site,'categories',term,lang)}>{taxonomyName(site,'categories',term,lang)}</a></span>)}
+      {!!doc.taxonomies.tags?.length&&<div class="tag_share"><div class="post-meta__tag-list">{doc.taxonomies.tags.map(term=><a class="post-meta__tags" href={taxonomyURL('tags',term)} title={taxonomyName(site,'tags',term,lang)}><span class="tags-name tags-punctuation">{taxonomyName(site,'tags',term,lang)}</span></a>)}</div></div>}
+    </div></div>
+    <h1 class="post-title">{doc.title}</h1>{doc.extra.ai_translation&&<span class="ai-translation-label">{t('ai_translation',lang,site,'activity')}</span>}
+    <div id="post-meta"><div class="meta-secondline">
+      {original&&<span class="post-meta-author" title={tr('author')}><i class="icon-zuozhe post-meta-icon"></i>{config.author}</span>}
+      <span class="post-meta-wordcount"><i class="icon-file-word post-meta-icon" title={tr('word_count')}></i><span class="post-meta-label">{tr('word_count_label')}</span><span class="word-count">{doc.wordCount}</span><span class="post-meta-separator"></span><i class="icon-clock post-meta-icon" title={tr('reading_time')}></i><span class="post-meta-label">{tr('reading_time_label')}</span><span>{lang==='zh'?Math.round(doc.readingTime/1.88):doc.readingTime} {tr('minutes')}</span></span>
+      <span class="post-meta-date"><i class="icon-calendar-days post-meta-icon"></i><time datetime={doc.date?.slice(0,10)} title={doc.date}>{doc.date?.slice(0,10).replaceAll('-','/')}</time></span>
+      {config.extra.post.update_time&&doc.updated&&<span class="post-meta-date"><i class="icon-pencil post-meta-icon" title={tr('updated')}></i><time datetime={doc.updated.slice(0,10)} title={doc.updated}>{doc.updated.slice(0,10).replaceAll('-','/')}</time></span>}
+      {doc.extra.wechat_url?<a class="post-meta-pv" href={doc.extra.wechat_url} title={tr('wechat_article')} target="_blank" rel="noopener noreferrer"><i class="icon-weixin1 post-meta-icon"></i>{tr('wechat_sync')}</a>:<span class="post-meta-wechat" title={tr('blog_first')}><i class="icon-rss post-meta-icon"></i>{tr('blog_exclusive')}</span>}
+      <span class="post-meta-pv" title={tr('views')}><i class="icon-fire post-meta-icon"></i><span class="post-meta-label">{tr('views_label')}</span>{doc.frontmatter.visit?<span id="visit">{doc.frontmatter.visit}</span>:<span id="twikoo_visitors"><i class="icon-spinner fa-spin"></i></span>}</span>
+      {config.extra.comments.enable&&!doc.extra.disable_comment&&['twikoo','artalk'].includes(commentSystem)&&<a class="post-meta-commentcount" title={tr('comment_count')} href="#post-comment"><i class="icon-chat--fill post-meta-icon" style="font-size:17px"></i><span class="post-meta-label">{tr('comments_label')}</span><span id={commentSystem==='twikoo'?'twikoo-count':'ArtalkCount'}><i class="icon-spinner fa-spin"></i></span></a>}
+    </div></div>
+  </div>
+  <Wave/>
+</header>

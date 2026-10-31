@@ -1,0 +1,14 @@
+---
+import type {Site,Document} from '../../lib/types';
+import {childSections,sectionPages} from './data';
+interface Props {site:Site;section:Document;current:Document;}
+const {site,section,current}=Astro.props;
+const folders=childSections(site,section),pages=sectionPages(site,section);
+---
+<ul class="nav-tree">
+  {folders.map(folder=>{
+    const expanded=current.relativePath===folder.relativePath||current.ancestors.includes(folder.relativePath);
+    return <li class:list={['tree-item','tree-folder',{expanded}]}><button type="button" class:list={['tree-folder-header',{expanded}]} aria-expanded={expanded} data-collection-folder><i class:list={['tree-icon','icon','icon-folder-open',{expanded}]}/><span class="nav-title">{folder.title}</span></button><div class:list={['tree-folder-content',{expanded}]}><Astro.self site={site} section={folder} current={current}/></div></li>;
+  })}
+  {pages.map(page=><li class:list={['tree-item','nav-page',{current:current.relativePath===page.relativePath}]}><a href={page.url} class="tree-link" aria-current={current.relativePath===page.relativePath?'page':undefined}><i class="tree-icon icon icon-book"/><span class="nav-title">{page.title}</span></a></li>)}
+</ul>

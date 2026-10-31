@@ -1,0 +1,40 @@
+---
+import { localizeConfig, localizeData, t } from '../lib/locale';
+import AboutPage from './special/AboutPage.astro';
+import FriendsPage from './special/FriendsPage.astro';
+import EquipmentPage from './special/EquipmentPage.astro';
+const { site, route } = Astro.props;
+const { lang, type, document: doc, title } = route;
+const config = localizeConfig(site, lang), data = localizeData(site, lang);
+const wechat = config.extra.wechat || {};
+const music = config.extra.tool.nav_music || {};
+const name = wechat.name || config.author || config.title;
+const avatar = wechat.avatar || config.extra.site.logo;
+const qr = wechat.qrcode || '';
+const chinese = lang.startsWith('zh');
+---
+{type === 'about' ? <AboutPage site={site} config={config} data={data} lang={lang} document={doc} /> :
+type === 'equipment' ? <EquipmentPage site={site} config={config} data={data} lang={lang} document={doc} /> :
+type === 'friends' ? <FriendsPage site={site} config={config} data={data} lang={lang} document={doc} /> :
+type === 'wechat' ? <>
+  <main class="wechatOA" style="margin-top:10%;" id="content-inner">
+    <div class="wechat"><div class="wechat-card">
+      {qr && <picture class="qrcode progressive-picture"><img class="progressive-content loaded" src={qr} alt={chinese ? '公众号二维码' : 'WeChat QR code'} decoding="async" /></picture>}
+      <div class="tips">{wechat.tips ?? (qr ? (chinese ? '扫描二维码关注公众号' : 'Scan to follow on WeChat') : (chinese ? '尚未设置公众号二维码' : 'No WeChat QR code configured'))}</div>
+      <div class="wechatOA-card"><img class="wechatOA-head" src={avatar} alt="" decoding="async" /><div class="wechatOA-info"><div class="wechatOA-name">{name}</div><div class="wechatOA-description">{wechat.description ?? (chinese ? '跨界 无极限' : 'Across disciplines, without limits')}</div></div></div>
+    </div></div>
+    <a class="footer-item" rel="noopener noreferrer external" target="_blank" href={wechat.help_url || 'https://kf.qq.com/touch/wxappfaq/1208117b2mai141113jaqAnU.html?platform=14'} title={t('ui_help', lang, site)}>{wechat.help_text ?? (chinese ? '不会扫码？' : 'Need help scanning?')}</a>
+  </main>
+</> : type === 'music' ? <>
+  <main class="layout hide-aside" id="content-inner"><div id="page"><div class="music-mask"></div><h1 class="page-title">{title}</h1><div id="anMusic-page"><div id="anMusic-page-meting">
+    {music.enable && <meting-js id={music.id} server={music.server || 'tencent'} type="playlist" mutex="true" preload="auto" theme="var(--wjx-main)" order="list" list-max-height="calc(100vh - 169px)!important" />}
+  </div></div></div></main>
+</> : <main class={`layout ${config.extra.sidebar.location || ''}`} id="content-inner" style="flex-direction:column;">
+  <h1 id="page-title" style="letter-spacing:6px;margin:0 auto;font-size:2rem;font-weight:bold">{title}</h1>
+  <article class:list={['post-content', {'line-numbers': config.extra.code.enable_line}]} id="article-container" set:html={doc?.html || ''} />
+</main>}
+<style is:global>
+  .wechatOA .progressive-content.loaded{opacity:1;position:static}
+  .wechatOA picture.qrcode{display:block}
+  .wechatOA img.wechatOA-head{object-fit:cover;display:block}
+</style>

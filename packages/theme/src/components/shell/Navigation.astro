@@ -1,0 +1,41 @@
+---
+import MenuTree from './MenuTree.astro';
+import LeftMenu from './LeftMenu.astro';
+import { t, localizeConfig, localizeData, localizeUrl, localeHome, languageDestinations } from '../../lib/locale';
+const { site, lang, title, document: doc } = Astro.props;
+const config = localizeConfig(site,lang), data = localizeData(site,lang), nav = config.extra.nav || {};
+const tr = (key: string) => t(key,lang,site);
+const secondaryPaths = new Set(nav.compact_paths || ['/friends','/about']);
+const isSecondary = (menu: any) => secondaryPaths.has((menu.href || menu.menus?.[0]?.href || '').replace(/\/$/,''));
+const secondaryMenus = (data.menu?.nav_menu || []).filter(isSecondary);
+---
+<nav class="show" id="nav"><div id="nav-group">
+  <div id="blog_name">
+    {nav.phone_left_menu !== false && nav.pc_left_menu !== false && <div class="back-home-button" tabindex="0"><i class="nav-icon back-home-button-icon icon-apps-fill" style="font-size:1rem" aria-hidden="true" /><LeftMenu site={site} lang={lang} data={data} /></div>}
+    <a href={localeHome(lang,site)} id="site-name" class="nav-item icon-home" title={tr('home')}><span>{config.title}</span></a>
+  </div>
+  <div id="page-name-mask"><div id="page-name"><button id="page-name-text" class="nav-item" type="button" onclick="btf.scrollToDest(0,500)">{title || config.title}</button></div></div>
+  <div id="menus"><div class="menus_items">
+    {(data.menu?.nav_menu || []).map((menu: any,index: number) => <>
+      <div class:list={['menus_item',{'compact-secondary':isSecondary(menu)}]}>
+        {menu.href ? <a class="site-page nav-item" href={localizeUrl(menu.href,lang,site)} target={menu.target} rel={menu.rel}><span>{menu.name}</span></a> : <button class="site-page nav-item"><span>{menu.name}</span></button>}
+        <MenuTree menu={menu} site={site} lang={lang}/>
+      </div>
+      {index === 0 && config.extra.activity?.enable && <><div class="menus_item"><a class="site-page nav-item" href={`${localeHome(lang,site)}notes/`}>{t('notes',lang,site,'activity')}</a></div><div class="menus_item"><a class="site-page nav-item" href={`${localeHome(lang,site)}timeline/`}>{t('timeline',lang,site,'activity')}</a></div></>}
+    </>)}
+    {secondaryMenus.length > 0 && <details class="compact-more"><summary>{tr('ui_more')} <span aria-hidden="true">⌄</span></summary><div class="compact-more-panel">{secondaryMenus.map((menu:any)=>menu.menus?.length?<details><summary>{menu.name}</summary><MenuTree menu={menu} site={site} lang={lang}/></details>:<a class="site-page nav-item" href={localizeUrl(menu.href,lang,site)} target={menu.target} rel={menu.rel}>{menu.name}</a>)}</div></details>}
+  </div></div>
+  <div id="nav-right">
+    {site.languages.length > 1 && <details class="nav-button nav-language-switch"><summary class="site-page nav-item" aria-label={tr('language')} title={tr('language')}><svg class="language-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h12M9 3v2M12 5c-1 6-4 9-8 11M5 8c1 3 4 6 7 8M14 21l4-10 4 10M15.5 17h5"/></svg></summary><section class="nav-language-menu" role="navigation" aria-label={tr('language')}>
+      <p class="language-menu-label">{lang.startsWith('zh')?'语言 / Language':'Language / 语言'}</p>
+      {languageDestinations(site,lang,doc).map(item => item.current ? <span class="nav-language-current" aria-current="page"><span>{item.name}</span><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m4 10 4 4 8-8"/></svg></span> : <a class="site-page nav-language-option" href={item.url} hreflang={item.code} lang={item.code} data-language-switch data-language-target={item.translated ? 'page' : 'home'} data-no-instant><span>{item.name}{!item.translated&&<small>{tr('language_home_fallback')}</small>}</span><span aria-hidden="true">›</span></a>)}
+    </section></details>}
+    {nav.right?.travelling && <div class="nav-button only-home" id="travellings_button"><a class="site-page nav-item" href="https://www.travellings.cn/go.html" rel="external nofollow" title={tr('travel')}><i class="nav-icon icon-eicon_train-line" /></a></div>}
+    {nav.right?.article && <div class="nav-button" id="randomPost_button"><button class="site-page nav-item" onclick="toRandomPost()" title={tr('random_article')}><i class="nav-icon icon-dice" /></button></div>}
+    {nav.right?.dark_mode && <div class="nav-button" id="darkmode_button"><button class="site-page console_switchbutton nav-item" onclick="navFn.switchDarkMode()" title={tr('dark_toggle')}><i class="nav-icon icon-moon-clear-fill" style="font-size:1rem" /></button></div>}
+    {nav.right?.search && <div class="nav-button" id="search-button"><button class="site-page social-icon search nav-item" accesskey="s" title={tr('search_icon')}><i class="nav-icon icon-search--line" /></button></div>}
+    {nav.right?.console_enable && <div class="nav-button" id="nav-console"><button class="site-page console_switchbutton nav-item" onclick="wjx.showConsole()" title={tr('console')}><i class="nav-icon icon-dashboard" /></button></div>}
+    <div class="nav-button" id="nav-totop"><button class="totopbtn nav-item" onclick="btf.scrollToDest(0,500)" title={tr('back_top')}><i class="nav-icon icon-arrow-up" /><span id="percent">0</span></button></div>
+    <div id="toggle-menu"><button class="site-page nav-item" aria-label={tr('navigation')} aria-haspopup="dialog" aria-controls="sidebar-menus" aria-expanded="false"><i class="nav-icon icon-bars" /></button></div>
+  </div>
+</div></nav>

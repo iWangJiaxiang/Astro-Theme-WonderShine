@@ -1,0 +1,58 @@
+---
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import Comments from '../Comments.astro';
+import { t } from '../../lib/locale';
+import type { Friend, FriendGroup } from './types';
+const { site, config, data, lang, document: doc } = Astro.props;
+const options = config.extra.friend || {};
+let groups: FriendGroup[] = data.friend?.groups || [];
+if (options.dynamic_render) {
+  const localized = resolve(site.root, `static/data/friends.${lang}.json`);
+  const file = existsSync(localized) ? localized : resolve(site.root, 'static/data/friends.json');
+  const source = existsSync(resolve(site.root, `public/data/friends.${lang}.json`)) ? resolve(site.root, `public/data/friends.${lang}.json`) : existsSync(resolve(site.root, 'public/data/friends.json')) ? resolve(site.root, 'public/data/friends.json') : file;
+  if (existsSync(source)) groups = (JSON.parse(readFileSync(source, 'utf8')).groups || []).map((group: FriendGroup) => ({...group,items:group.links || [],display_style:group.display_style || 'beautify'}));
+}
+const all = groups.flatMap(group => group.items || []);
+const pairs = Array.from({length:Math.ceil(all.length / 2)},(_,index)=>all.slice(index*2,index*2+2));
+const logo = (item: Friend) => options.prefer_local_logo ? (item.local_logo || item.logo) : (item.logo || item.local_logo);
+---
+<main class="layout hide-aside" id="content-inner"><div id="page">
+  <div class="flink" id="banners"><div class="banners-title"><div class="banners-title-small">{options.small_title}</div><div class="banners-title-big">{options.big_title}</div></div>
+    <div class="banner-button-group"><button type="button" class="banner-button secondary" data-random-friend><i class="icon-paper-plane1"></i><span class="banner-button-text">{t('random_visit',lang,site)}</span></button><a class="banner-button" href="#post-comment"><i class="icon-link"></i><span class="banner-button-text">{t('request_link',lang,site)}</span></a></div>
+    <div class="tags-group-all nowrapMove"><div class="tags-group-wrapper" id="tags-group-wrapper">{pairs.map(pair => <div class="tags-group-icon-pair">{pair.map(item => <a class="tags-group-icon" target="_blank" rel="noopener noreferrer" href={item.url} title={item.display_name}><img src={logo(item)} alt={item.display_name || ''} loading="lazy" decoding="async" /></a>)}</div>)}</div></div>
+  </div>
+  <div class="flink" id="friend-container"><div id="friend-groups">{groups.map((group,index) => <>
+    {group.display_name && <h2 id={`friend-group-${index}`}><a class="headerlink" href={`#friend-group-${index}`} title={group.display_name}></a>{group.display_name} ({(group.items || []).length})</h2>}
+    {group.description && <div class="flink-desc">{group.description}</div>}
+    {group.display_style !== 'deprecated' && <div class={group.display_style === 'default' ? 'flink-list' : 'site-card-group'}>{(group.items || []).map(item => group.display_style === 'default' ?
+      <div class="flink-list-item">{item.label && <span style={{backgroundColor:item.label_color}} class="site-card-tag">{item.label}</span>}<a class="cf-friends-link friend-link" rel="external nofollow noopener noreferrer" target="_blank" href={item.url} title={item.display_name}><img class="flink-avatar cf-friends-avatar" src={logo(item)} alt={item.display_name || ''} loading="lazy"/><div class="flink-item-info no-lightbox"><span class="flink-item-name cf-friends-name">{item.display_name}</span><span class="flink-item-desc" title={item.description}>{item.description}</span><img src={logo(item)} alt="" loading="lazy"/></div></a></div> :
+      <div class="site-card">{item.label && <span style={{backgroundColor:item.label_color}} class="site-card-tag">{item.label}</span>}<a class="img" target="_blank" href={item.url} title={item.display_name} rel="external nofollow noopener noreferrer"><img class="flink-avatar" style="pointer-events:none" src={item.siteshot || logo(item)} alt={item.display_name || ''} loading="lazy" /></a><a class="info cf-friends-link" target="_blank" href={item.url} title={item.display_name} rel="external nofollow noopener noreferrer"><div class="site-card-avatar no-lightbox"><img class="flink-avatar cf-friends-avatar" src={logo(item)} alt={item.display_name || ''} loading="lazy" /></div><div class="site-card-text"><span class="title cf-friends-name">{item.display_name}</span><span class="desc" title={item.description}>{item.description}</span></div></a></div>
+    )}</div>}
+  </>)}</div></div>
+  <div id="article-container" set:html={doc?.html || ''} />
+  {options.enable_comment !== false && <Comments site={site} lang={lang} document={doc} />}
+</div></main>
+<script is:inline data-astro-rerun>
+(() => {
+  const checklist=[...document.querySelectorAll('#article-container input[type="checkbox"]')];
+  const updateChecklist=()=>{window.UNCHECKED_INPUT=checklist.filter(input=>!input.checked).length};
+  checklist.forEach(input=>{input.disabled=false;input.addEventListener('change',updateChecklist)});
+  updateChecklist();
+  document.querySelector('[data-random-friend]')?.addEventListener('click', () => {
+    const links = [...document.querySelectorAll('#friend-container a.cf-friends-link')];
+    if (!links.length) return;
+    const link=links[Math.floor(Math.random()*links.length)];
+    const visit=()=>window.open(link.href,'_blank','noopener,noreferrer');
+    if(!window.Snackbar?.show){visit();return;}
+    const chinese=document.documentElement.lang.startsWith('zh');
+    const name=link.title.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('\"','&quot;').replaceAll("'",'&#39;');
+    window.Snackbar.show({
+      text:chinese?`本次随机到的友链：「${name}」`:`Your random discovery: ${name}`,
+      duration:8000,pos:'top-center',actionText:chinese?'前往':'Visit',
+      onActionClick:element=>{element.style.opacity='0';visit();}
+    });
+  });
+})();
+</script>
+<style is:global>.flink .banner-button.secondary{font:inherit;cursor:pointer;border:0}.tk-submit{overflow:inherit!important}</style>

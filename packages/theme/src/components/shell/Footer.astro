@@ -1,0 +1,40 @@
+---
+import ResponsiveImage from '../ResponsiveImage.astro';
+import { t,localizeConfig,localizeData,localizeUrl,localeHome } from '../../lib/locale';
+const {site,lang} = Astro.props;
+const config = localizeConfig(site,lang), data=localizeData(site,lang), footer=config.extra.footer || {}, social=footer.social_media || {};
+const tr=(key:string)=>t(key,lang,site);
+const year=new Date().getFullYear(), start=Number(config.extra.site.start_year || year);
+---
+<footer id="footer">
+  {footer.footer_bar?.enable && <div id="wjx-footer-bar"><div class="footer-logo">{config.author}</div><div class="footer-bar-description">{config.description}</div><a class="footer-bar-link" href={localizeUrl('/about/',lang,site)}>{tr('learn_more')}</a></div>}
+  <div id="footer_deal">
+    {(social.left || []).map((link:any)=><a class={link.option_social_data==='custom'?'custom_socials':'deal_link'} href={link.url} title={link.name} target="_blank" rel="external nofollow noopener noreferrer">{link.option_social_data==='custom'?<Fragment set:html={link.icon}/>:<i class={link.icon}/>}</a>)}
+    {social.img_enable && <ResponsiveImage site={site} pictureClass="footer_mini_logo" pictureStyle="border-radius:500px;overflow:hidden;flex-shrink:0" src={config.extra.site.logo} alt={tr('back_top')} width={50} height={50} sizes="50px" loading="lazy" style="border-radius:500px" onclick="btf.scrollToDest(0,500)"/>}
+    {(social.right || []).map((link:any)=><a class={link.option_social_data==='custom'?'custom_socials':'deal_link'} href={link.url} title={link.name} target="_blank" rel="external nofollow noopener noreferrer">{link.option_social_data==='custom'?<Fragment set:html={link.icon}/>:<i class={link.icon}/>}</a>)}
+  </div>
+  {data.menu?.footer_menu && <div id="wjx-footer">
+    {data.menu.footer_menu.map((group:any)=><div class="footer-group"><h3 class="footer-title">{group.name}</h3><div class="footer-links">{(group.menus || []).map((link:any)=><a class="footer-item" href={localizeUrl(link.href,lang,site)} target={link.target || '_blank'} rel={link.rel || (link.target!=='_self'?'noopener':undefined)}>{link.name}</a>)}</div></div>)}
+    {footer.footer_group?.enable && <div class="footer-group"><div class="footer-title-group"><h3 class="footer-title">{tr('friends')}</h3><button class="random-friends-btn" id="footer-random-friends-btn" onclick="wjx.addFriendLinksInFooter()" title={tr('refresh_friends')}><i class="icon-arrow-rotate-right" style="font-size:16px"/></button></div><div class="footer-links" id="friend-links-in-footer"/></div>}
+  </div>}
+  {footer.enable && <div id="footer-bar" style={`padding:${footer.footer_banner_padding || 0}rem`}><div class="footer-bar-links">
+    <div class="footer-bar-left"><div id="footer-bar-tips">
+      <div class="copyright-group">© <span class="inline-word" id="copyright-info">{start===year?year:`${start} - ${year}`}</span>&nbsp;By&nbsp;<a class="footer-bar-link" href={localeHome(lang,site)}><img src={config.extra.site.logo} alt="" id="copyright-logo" loading="lazy"/>{config.title}</a></div>
+      <div class="compliance-group">
+        {config.extra.site.compliance_security && footer.gongwangan && <a class="footer-bar-link" href={config.extra.site.compliance_security_link} target="_blank" rel="noopener external nofollow noreferrer">{config.extra.site.compliance_icon && <img src={config.extra.site.compliance_icon} alt="" id="beian-icon" loading="lazy"/>}<span>{config.extra.site.compliance_security}</span></a>}
+        {config.extra.site.compliance_icp && footer.icp_icon && <a class="footer-bar-link" href="https://beian.miit.gov.cn/#/Integrated/index" target="_blank" rel="noopener external nofollow noreferrer">{config.extra.site.compliance_icp}</a>}
+        <a class="footer-bar-link" href="https://github.com/iWangJiaxiang/Astro-Theme-WonderShine"><div class="status-light"/><span>{tr('built_with')}</span></a>
+      </div>
+    </div></div>
+    <div class="footer-bar-right">
+      <a class="footer-bar-link" href={localizeUrl('/subscribe/',lang,site)}>{tr('subscribe')}</a>
+      {footer.theme && <a class="footer-bar-link" href="https://github.com/iWangJiaxiang/Astro-Theme-WonderShine" target="_blank" rel="noopener">{tr('theme')}</a>}
+      {footer.about && <a class="footer-bar-link" href={localizeUrl('/about/',lang,site)}>{tr('about')}</a>}
+      {footer.feedback && <a class="footer-bar-link" href={footer.feedback_url} target="_blank" rel="noopener">{tr('feedback')}</a>}
+      {footer.copyright && <a class="footer-bar-link cc" href={localizeUrl('/copyright/',lang,site)} title={tr('license')} rel="license"><i class="icon-copyright-line"/><i class="icon-creative-commons-by-line"/><i class="icon-creative-commons-nc-line"/><i class="icon-creative-commons-nd-line"/></a>}
+    </div>
+  </div></div>}
+  {config.extra.tool.snackbar?.switch && <div class="needEndHide" id="cookies-window"><div class="cookies-window-title">{config.extra.tool.snackbar.introduction_title}</div><div class="cookies-window-content"><span class="cookies-tip">{config.extra.tool.snackbar.introduction_tip}</span><a class="cookies-link" href={localizeUrl(config.extra.tool.snackbar.introduction_url,lang,site)} title={config.extra.tool.snackbar.introduction_name}><i class="bber-gotobb icon-circle-arrow-right"/></a></div></div>}
+  <div id="quit-box" onclick="typeof RemoveRewardMask === 'function' && RemoveRewardMask()"/>
+  <div class="comment-barrage needEndHide" style="display:none"/>
+</footer>

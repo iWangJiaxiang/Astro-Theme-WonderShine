@@ -1,0 +1,43 @@
+.article-references { display: grid; gap: .6rem; margin: 1rem 0; min-width: 0; }
+.article-reference { display: flex; flex-direction: column; align-items: flex-start; gap: .35rem; padding: .85rem 1rem; border: 1px solid var(--wjx-card-border); border-radius: .75rem; background: var(--wjx-card-bg); color: var(--wjx-fontcolor); text-decoration: none; overflow-wrap: anywhere; }
+.article-reference:hover { border-color: var(--wjx-theme); }
+.article-reference:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: 3px; }
+.article-reference strong { font-size: 1rem; line-height: 1.5; }
+.reference-type,.reference-description { font-size: .78rem; line-height: 1.5; color: var(--wjx-secondtext); }
+.reference-action { font-size: .75rem; color: var(--wjx-theme); }
+.reference-description { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* The trigger inherits the existing nav-item colors in light and dark themes. */
+.nav-language-switch { position: relative; }
+.nav-language-switch > summary { list-style: none; cursor: pointer; }
+.nav-language-switch > summary::-webkit-details-marker { display: none; }
+.nav-language-switch > summary:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.nav-language-menu { position: absolute; top: calc(100% + .6rem); right: 0; z-index: 102; min-width: 210px; padding: .4rem; border: var(--style-border); border-radius: 12px; background: var(--wjx-card-bg); box-shadow: var(--wjx-shadow-border); color: var(--wjx-fontcolor); }
+.nav-language-option,.nav-language-current { display: flex; flex-direction: column; gap: .12rem; padding: .55rem .7rem; border-radius: 8px; line-height: 1.5; white-space: nowrap; }
+#nav .nav-language-option { color: var(--wjx-fontcolor); }
+#nav .nav-language-option:hover,#nav .nav-language-option:focus-visible { color: var(--wjx-white); background: var(--wjx-theme); }
+.nav-language-current { color: var(--wjx-theme); }
+.nav-language-menu small { font-size: .72rem; opacity: .7; }
+
+.localized-empty { width: 100%; padding: 2rem; border: var(--style-border); border-radius: 12px; background: var(--wjx-card-bg); color: var(--wjx-secondtext); }
+.localized-empty p { margin: 0 0 .65rem; }
+.localized-empty a { color: var(--wjx-theme); }
+.equipment-introduction { margin: 1.5rem 0; }
+
+/* Keep the navigation disclosure independent of article details styling. */
+#nav #nav-right .nav-language-switch { display: block; width: 35px; height: 35px; min-height: 0; flex: 0 0 35px; padding: 0; margin: 0 0 0 .5rem; border: 0; border-radius: 8px; background: transparent; overflow: visible; }
+#nav #nav-right .nav-language-switch > summary { position: static; display: flex; width: 35px; height: 35px; min-height: 0; align-items: center; justify-content: center; padding: .3rem .4rem 0; margin: 0; border: 0; background: transparent; box-shadow: none; line-height: 1; overflow: visible; }
+#nav #nav-right .nav-language-switch > summary:hover { background: var(--wjx-white-op); }
+#page-header.not-top-img #nav #nav-right .nav-language-switch > summary:hover,#page-header.nav-fixed #nav #nav-right .nav-language-switch > summary:hover { background: var(--wjx-lighttext); color: var(--wjx-card-bg); }
+#nav #nav-right .nav-language-switch > summary:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+#nav #nav-right .nav-language-switch > summary::before,#nav #nav-right .nav-language-switch > summary::after { display: none; }
+#nav #nav-right .nav-language-switch > .nav-language-menu { position: absolute; margin-top: 0 !important; }
+html:not(:lang(zh)) #menus > div.menus_items .nav-item { letter-spacing: .015em; font-size: 15px; padding-left: .65rem; padding-right: .65rem; }
+html:not(:lang(zh)) #nav .menus_items > .menus_item { padding-left: .2rem; padding-right: .2rem; }
+
+/* Optional article artwork; text-only references retain their compact layout. */
+.article-reference:has(.reference-cover) { display: grid; grid-template-columns: 136px minmax(0,1fr); align-items: stretch; gap: 16px; }
+.reference-copy { display: flex; flex-direction: column; align-items: flex-start; gap: .35rem; min-width: 0; }
+.reference-cover { display: block; min-width: 0; border-radius: 8px; overflow: hidden; aspect-ratio: 4/3; align-self: center; }
+.reference-cover picture,.reference-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+@media(max-width:600px) { .article-reference:has(.reference-cover) { grid-template-columns: 84px minmax(0,1fr); gap: 12px; } }

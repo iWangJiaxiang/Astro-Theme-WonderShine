@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.astro/
+.astro-assets/
+.env
+.env.*
+!.env.example
+.state/
+.studio-history/
+.studio-write-lock/
+*.log
+*.tgz
+.DS_Store
+/temp/
+/test-results/

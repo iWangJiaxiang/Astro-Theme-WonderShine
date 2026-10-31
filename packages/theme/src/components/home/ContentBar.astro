@@ -1,0 +1,21 @@
+---
+import {localizeConfig,localizeUrl,t} from '../../lib/locale';
+import {taxonomyTerms} from './data';
+const {site,lang,taxonomy,current}=Astro.props,config=localizeConfig(site,lang),settings=config.extra.layout.navs;
+const mode=taxonomy||settings.nav||'category';
+const kind=taxonomy||(['tag','custom-tag'].includes(mode)?'tags':'categories');
+let terms=taxonomyTerms(site,lang,kind,!mode.startsWith('custom-'));
+const currentTerm=current?taxonomyTerms(site,lang,kind).find(item=>item.term===current):undefined;
+if(mode==='custom-category')terms=terms.filter(item=>(settings.nav_category||[]).includes(item.term));
+if(mode==='custom-tag')terms=terms.filter(item=>(settings.nav_tag||settings.navTag||[]).includes(item.term));
+const url=(path:string)=>localizeUrl(path,lang,site),tr=(key:string)=>t(key,lang,site);
+const more=taxonomy||settings.nav_more||settings.navMore||kind;
+const moreKind=more==='tags'?'tags':'categories';
+const moreUrl=more==='customUrl'?(settings.nav_more_custom_url||settings.navMoreCustomUrl):more==='hide'?'':taxonomyTerms(site,lang,moreKind).length?url(`/${moreKind}/`):'';
+const visible=taxonomy||['category','tag','custom-category','custom-tag','custom-url'].includes(mode);
+---
+{visible&&<div id="category-bar"><div class="category-bar-items" id="category-bar-items">
+  {currentTerm&&<div class="category-bar-item select" id={currentTerm.term}><a href={currentTerm.url}>{currentTerm.name}</a></div>}
+  <div class:list={['category-bar-item',{select:!current}]} id="category-bar-home"><a href={url('/')}>{tr('ui_home')}</a></div>
+  {mode==='custom-url'?(settings.nav_custom_url||[]).map((item:any)=><div class="category-bar-item"><a href={url(item.url)}>{item.title}</a></div>):terms.filter(item=>item.term!==current).map(item=><div class="category-bar-item" id={item.term}><a href={item.url}>{item.name}</a></div>)}
+</div>{moreUrl&&<a class="category-bar-more" href={moreUrl}>{tr('ui_more')}</a>}</div>}

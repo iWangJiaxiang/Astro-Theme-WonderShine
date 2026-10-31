@@ -1,0 +1,30 @@
+---
+import {pageNumbers} from './home/data';
+import {t,localizeConfig} from '../lib/locale';
+const {page=1,pages=1,base='/',path='',document,lang='zh-CN',site,taxonomy,type}=Astro.props;
+const taxonomies=lang===site?.defaultLanguage?site?.config.taxonomies:site?.config.languages?.[lang]?.taxonomies;
+const suffix=document?.frontmatter.paginate_path||taxonomies?.find((item:any)=>item.name===taxonomy)?.paginate_path||(page>1?path.slice(base.length).split('/')[0]:'page');
+const above=site?localizeConfig(site,lang).extra.top.above:{};
+const anchor=type==='index'&&(above.enable_above??above.enable)?'#recent-posts':'';
+const href=(number:number)=>(number===1?base:`${base}${suffix}/${number}/`)+anchor;
+const tr=(key:string)=>t(key,lang,site);
+---
+{pages>1&&<nav id="pagination" aria-label={tr('jump_page')}><div class="pagination">
+  {pageNumbers(page,pages).map(number=>number==='…'?<span class="space">…</span>:number===page?<span class="page-number current" aria-current="page">{number}</span>:<a class="page-number" href={href(number)}>{number}</a>)}
+  {page>1&&<a class="extend prev" href={href(page-1)} rel="prev"><i class="icon-chevron-left fa-fw"/><div class="pagination_tips_prev">{tr('previous')}</div></a>}
+  {page<pages&&<a class="extend next" href={href(page+1)} rel="next"><div class="pagination_tips_next">{tr('next')}</div><i class="icon-chevron-right fa-fw"/></a>}
+  <form class="toPageGroup" data-page-jump data-base={base} data-suffix={suffix} data-pages={pages} data-anchor={anchor}><input id="toPageText" name="page" type="number" min="1" max={pages} inputmode="numeric" aria-label={tr('jump_page')} title={tr('jump_page')}/><button type="submit" id="toPageButton" aria-label={tr('jump_page')}><i class="icon-angles-right"/></button></form>
+</div></nav>}
+<script>
+  import {navigate} from 'astro:transitions/client';
+  let initializedBody: HTMLElement | undefined;
+  document.addEventListener('astro:page-load', () => {
+  if (initializedBody === document.body) return;
+  initializedBody = document.body;
+  document.querySelectorAll<HTMLFormElement>('[data-page-jump]').forEach(form=>form.addEventListener('submit',event=>{
+    event.preventDefault();const value=Number(new FormData(form).get('page')),maximum=Number(form.dataset.pages);
+    if(!Number.isInteger(value)||value<1||value>maximum)return;
+    void navigate((value===1?form.dataset.base!:`${form.dataset.base}${form.dataset.suffix}/${value}/`)+(form.dataset.anchor||''));
+  }));
+  });
+</script>

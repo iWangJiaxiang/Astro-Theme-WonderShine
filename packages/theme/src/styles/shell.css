@@ -1,0 +1,31 @@
+/* Keep the legacy theme's DOM contracts; only framework-independent fixes live here. */
+/* The ClientRouter swaps the document content; keep its crossfade short. */
+::view-transition-group(root),
+::view-transition-old(root),
+::view-transition-new(root) { animation-duration:160ms; animation-timing-function:ease-out; }
+@media(prefers-reduced-motion:reduce) {
+  ::view-transition-group(root), ::view-transition-old(root), ::view-transition-new(root) { animation-duration:0s; }
+}
+
+#body-wrap #page-header.not-top-img { margin-bottom:0; }
+.menus_item:focus-within > .menus_item_child,.recursion_menus_item:focus-within > .menus_item_child { display:flex; opacity:1; visibility:visible; }
+.back-home-button:focus-within .back-menu-list-groups { display:flex; opacity:1; visibility:visible; }
+#page-header.not-top-img #nav .back-home-button { color:var(--wjx-fontcolor); }
+#page-header.not-top-img #nav .back-home-button:hover { color:var(--wjx-white); }
+#loading-box { position:fixed; inset:0; z-index:1999; pointer-events:none; user-select:none; }
+#loading-box .loading-bg { position:absolute; inset:0; display:flex; background:var(--wjx-card-bg); opacity:1; visibility:visible; pointer-events:auto; transition:opacity .2s ease,visibility 0s; }
+#loading-box.loaded .loading-bg { opacity:0; visibility:hidden; pointer-events:none; transition:opacity .2s ease,visibility 0s .2s; }
+#loading-box .loading-img { width:100px; height:100px; border-radius:50%; margin:auto; object-fit:cover; }
+#loading-box:not(.loaded) .loading-img { animation:loadingAction .2s infinite alternate; }
+#loading-box .loading-image-dot { width:30px; height:30px; background:#6bdf8f; position:absolute; border-radius:50%; border:6px solid #fff; top:50%; left:50%; transform:translate(18px,24px); }
+@keyframes loadingAction { from { opacity:1; } to { opacity:.6; } }
+@media(prefers-reduced-motion:reduce) {
+  #loading-box .loading-bg,#loading-box.loaded .loading-bg { transition:none; }
+  #loading-box:not(.loaded) .loading-img { animation:none; }
+}
+#web_bg .img,#web_bg .index-video { position:fixed; inset:0; width:100%; height:100%; object-fit:cover; z-index:-1; }
+#sidebar-menus .menus_item_child { display:block; opacity:1; visibility:visible; position:static; }
+#sidebar-menus .menus_item_child .menus_item_child { padding-left:12px; }
+#console button.close-btn { background:transparent; border:0; }
+#article-container .code-toolbar pre.close { overflow:hidden; height:var(--code-max-height,300px); }
+@media(max-width:768px) { #web_bg .img { display:none; } }

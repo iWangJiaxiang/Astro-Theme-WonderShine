@@ -1,0 +1,131 @@
+/* A single writing surface with supporting actions around the content. */
+.note-composer {
+  border-radius: 16px;
+  background: var(--studio-card);
+  box-shadow: 0 3px 14px #00000003;
+}
+.note-composer .composer-heading { border: 0; padding: 19px 24px 8px; gap: 12px; }
+.note-composer .composer-heading > div:first-child { align-items: center; gap: 10px; }
+.note-composer .composer-heading h2 { font-size: 16px; font-weight: 650; letter-spacing: -.2px; }
+.composer-mark { display: grid; place-items: center; width: 32px; height: 32px; color: var(--wjx-theme); background: color-mix(in srgb,var(--wjx-theme) 7%,var(--studio-card)); border-radius: 10px; }
+.note-composer .composer-initial-language { display: flex; align-items: center; gap: 5px; color: var(--studio-muted); }
+.note-composer .composer-initial-language select { width: auto; min-height: 30px; padding: 4px 5px; border: 0; background: transparent; font-size: 12px; cursor: pointer; }
+.note-composer .embedded-editor { background: var(--studio-card); }
+.note-composer .writing-card { background: var(--studio-card); }
+.note-composer .composer-mode-tabs { padding: 5px 24px 0; gap: 3px; border: 0; background: transparent; }
+.note-composer .composer-mode-tabs button { padding: 5px 8px; font-size: 11px; font-weight: 450; color: var(--studio-muted); border-radius: 5px; }
+.note-composer .composer-mode-tabs button.active { color: var(--wjx-fontcolor); background: var(--form-surface); box-shadow: none; }
+.note-composer .composer-mode-tabs button:hover:not(:disabled) { color: var(--wjx-theme); }
+.note-composer .composer-mode-tabs > .muted { font-size: 10px; font-variant-numeric: tabular-nums; }
+.note-composer .markdown-source {
+  display: block; min-height: 142px; height: 142px; max-height: 50vh;
+  padding: 19px 26px 20px; border: 0; border-radius: 0; outline: 0;
+  background: transparent; color: var(--wjx-fontcolor); font-family: inherit;
+  font-size: 16px; line-height: 1.85; box-shadow: none;
+}
+.note-composer .markdown-source::placeholder { color: var(--studio-muted); opacity: .8; }
+.note-composer .markdown-source:focus { box-shadow: inset 3px 0 color-mix(in srgb,var(--wjx-theme) 36%,transparent); }
+.note-composer .markdown-preview { padding: 18px 26px; min-height: 142px; }
+.note-composer .composer-recovery { margin: 6px 24px; padding: 8px 11px; border: 0; border-radius: 6px; gap: 12px; font-size: 11px; color: var(--studio-muted); background: var(--form-surface); }
+.note-composer .composer-recovery::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--wjx-theme); }
+.note-composer .composer-recovery .text-button { font-size: 11px; padding: 1px 3px; }
+.note-composer .composer-recovery .text-button:last-child { color: var(--studio-muted); margin-left: auto; }
+.note-composer .language-versions { padding: 5px 24px 8px; background: transparent; }
+.note-composer .language-version-tabs button { padding: 5px 9px; }
+.note-composer .language-version-bar { gap: 7px; }
+.note-composer .language-version-bar > .small { font-size: 11px; }
+.note-composer .language-version-bar > .text-button { font-size: 11px; }
+.note-composer .composer-unsaved { padding: 8px 24px; border: 0; font-size: 11px; color: var(--studio-muted); }
+.note-composer .composer-footer {
+  display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px 16px;
+  align-items: center; margin: 0 24px; padding: 15px 0 18px;
+  border-top: 1px solid var(--form-rule); background: transparent;
+}
+.composer-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
+.note-composer .composer-tool,
+.note-composer .choice-compact .choice-trigger,
+.note-composer .reference-compact .reference-heading > button {
+  display: inline-flex; align-items: center; justify-content: flex-start; gap: 6px;
+  padding: 7px 8px; min-height: 32px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--studio-muted); font-size: 12px; font-weight: 450;
+  box-shadow: none; white-space: nowrap;
+}
+.note-composer .composer-tool:hover:not(:disabled),
+.note-composer .choice-compact .choice-trigger:hover:not(:disabled),
+.note-composer .reference-compact .reference-heading > button:hover:not(:disabled),
+.note-composer .composer-tool[aria-expanded=true] { color: var(--wjx-theme); background: color-mix(in srgb,var(--wjx-theme) 6%,var(--studio-card)); }
+.note-composer .choice-compact { display: block; margin: 0; max-width: 220px; }
+.note-composer .choice-compact .choice-trigger > span:not(.choice-count) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.choice-count { font-size: 10px; min-width: 17px; height: 17px; padding: 0 4px; display: grid; place-items: center; background: color-mix(in srgb,var(--wjx-theme) 10%,var(--studio-card)); color: var(--wjx-theme); border-radius: 5px; }
+.note-composer .reference-compact { display: flex; padding: 0; gap: 4px; max-width: 100%; }
+.note-composer .reference-compact .reference-heading { gap: 2px; }
+.note-composer .reference-compact .reference-heading > .small { font-size: 10px; }
+.note-composer .reference-compact .reference-chips { max-width: 250px; max-height: 70px; }
+.note-composer .reference-compact .reference-chips li { border: 0; background: var(--form-surface); padding: 3px 6px; }
+.composer-publish { display: flex; align-items: center; gap: 13px; }
+.note-composer .composer-save { padding: 8px 3px; font-size: 12px; color: var(--studio-muted); white-space: nowrap; }
+.note-composer .composer-publish .primary { min-height: 37px; padding: 9px 15px; font-size: 12px; border-radius: 8px; box-shadow: none; white-space: nowrap; }
+.note-composer .metadata-card { margin: 0 24px 12px; padding: 16px; border: 0; border-radius: 9px; background: var(--form-surface); }
+.note-composer .composer-secondary-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; padding: 0 24px 16px; }
+.note-composer .composer-secondary-actions .text-button { font-size: 11px; }
+.note-composer .composer-secondary-actions > .small { font-size: 10px; margin-right: auto; }
+.note-composer .composer-file { padding: 0; flex-basis: 100%; }
+.note-composer .composer-file summary { cursor: pointer; }
+@media(min-width:1600px) {
+  .note-composer .markdown-source { min-height: 160px; height: 160px; }
+  .note-composer .composer-heading { padding-top: 22px; }
+}
+@media(max-height:700px) and (min-width:1000px) {
+  .note-composer .composer-heading { padding-top: 13px; }
+  .note-composer .markdown-source { min-height: 102px; height: 102px; }
+  .note-composer .composer-footer { padding-block: 11px 13px; }
+}
+@media(max-width:1100px) {
+  .note-composer .composer-footer { grid-template-columns: 1fr; }
+  .composer-publish { justify-content: flex-end; }
+}
+
+/* Publication controls are explicit actions, separate from the writing surface. */
+.note-composer .note-properties-panel { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; border: 1px solid var(--form-rule); background: var(--studio-card); border-radius: 10px; }
+.note-properties-heading { display: flex; align-items: center; gap: 10px; }
+.note-properties-heading h3 { margin: 0; font-size: 13px; font-weight: 650; }
+.note-properties-heading > .text-button { display: flex; align-items: center; gap: 7px; margin-left: auto; padding: 4px 0 4px 8px; font-size: 11px; color: var(--studio-muted); }
+.note-properties-state { display: inline-flex; align-items: center; gap: 5px; color: var(--studio-muted); font-size: 10px; }
+.note-properties-state i { width: 5px; height: 5px; border-radius: 50%; background: #319b72; }
+.note-properties-state.draft i { background: #b88b38; }
+.note-properties-fields, .note-properties-switches { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px; }
+.note-properties-panel .note-title-field { grid-template-columns: 52px minmax(0, 1fr); gap: 10px; align-items: center; }
+.note-composer .note-properties-panel .field.note-title-field input, .note-date-trigger { min-height: 38px; border: 1px solid var(--studio-line); border-radius: 7px; background: var(--form-surface); box-shadow: none; }
+.note-properties-panel .note-title-field input { padding: 8px 11px; font-size: 12px; }
+.note-composer .note-properties-panel .field.note-title-field input:focus { border-color: var(--wjx-theme); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wjx-theme) 10%, transparent); }
+.note-properties-panel .note-property-toggle { min-height: 40px; padding: 0 11px; border: 1px solid var(--studio-line); border-radius: 7px; cursor: pointer; }
+.note-property-toggle > span { display: flex; align-items: center; gap: 12px; }
+.note-property-toggle em { font-size: 11px; font-style: normal; font-weight: 400; color: var(--studio-muted); }
+.note-property-toggle em.enabled { color: var(--wjx-theme); }
+.note-property-toggle:hover { background: var(--form-surface); }
+.note-date-field { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; min-width: 0; font-size: 12px; }
+.note-date-trigger { display: flex; align-items: center; justify-content: space-between; min-width: 0; gap: 12px; padding: 8px 11px; font-size: 12px; color: var(--wjx-fontcolor); text-align: left; }
+.note-date-trigger:hover:not(:disabled) { border-color: var(--wjx-theme); }
+.note-date-trigger:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: 2px; }
+.note-date-value { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 10px; font-variant-numeric: tabular-nums; }
+.note-date-value small { font-size: 11px; color: var(--studio-muted); }
+.note-date-value small > span { font-size: 10px; }
+.note-date-edit { display: inline-flex; align-items: center; gap: 5px; color: var(--wjx-theme); white-space: nowrap; font-size: 11px; }
+.date-missing { color: var(--wjx-theme); }
+.publication-date-dialog { padding: 0; width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; color: var(--wjx-fontcolor); background: var(--studio-card); border: 1px solid var(--studio-line); border-radius: 14px; box-shadow: 0 20px 80px #10162a33; }
+.publication-date-dialog::backdrop { background: #10162a70; backdrop-filter: blur(3px); }
+.publication-date-dialog .card-heading { padding: 18px 22px; }
+.publication-date-dialog h2 { font-size: 15px; }
+.publication-date-fields { display: grid; gap: 16px; padding: 22px; }
+.publication-date-fields > .field { grid-template-columns: 48px minmax(0, 1fr); gap: 14px; margin: 0; }
+.publication-date-dialog .publication-date-fields .field input[type] { min-height: 40px; padding: 8px 11px; border: 1px solid var(--studio-line); border-radius: 7px; box-shadow: none; }
+.publication-date-dialog .publication-date-fields .field input[type]:focus { border-color: var(--wjx-theme); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wjx-theme) 10%, transparent); }
+.publication-date-help { color: var(--studio-muted); font-size: 11px; }
+.publication-date-help summary { cursor: pointer; }
+.publication-date-help summary span { float: right; font-variant-numeric: tabular-nums; }
+.publication-date-help p { margin: 10px 0 0; line-height: 1.7; }
+.publication-date-dialog .selection-footer { justify-content: flex-end; padding: 14px 22px; }
+.publication-date-dialog .primary { padding: 9px 16px; font-size: 12px; }
+@media(max-width:1000px) {
+  .note-properties-fields, .note-properties-switches { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+}

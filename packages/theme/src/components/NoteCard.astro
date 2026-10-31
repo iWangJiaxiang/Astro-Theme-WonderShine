@@ -1,0 +1,45 @@
+---
+import ResponsiveImage from './ResponsiveImage.astro';
+import References from './References.astro';
+import TopicLinks from './TopicLinks.astro';
+import {formatDate} from '../lib/queries';
+import {t,localizeConfig} from '../lib/locale';
+const {site,document:note,lang,detail=false,listing=false}=Astro.props;
+const config=localizeConfig(site,lang);
+const tr=(key:string)=>t(key,lang,site,'activity');
+---
+<article class:list={['note-card',{'note-card--listing':listing}]} data-note-id={note.extra.id}>
+<header class="note-author"><ResponsiveImage site={site} src={config.extra.site.author.avatar} alt="" width="36" height="36" sizes="36px" pictureStyle={listing?'display:block':undefined}/><strong>{config.author}</strong>{listing&&<span class="note-kind">{tr('note')}</span>}<time datetime={note.date}>{formatDate(note.date,lang)}</time></header>
+{note.title&&<h2 class="note-title"><a href={note.url}>{note.title}</a></h2>}
+{note.extra.ai_translation&&<span class="ai-translation-label">{tr('ai_translation')}</span>}
+<div class="note-body" set:html={note.html}/>
+<References site={site} document={note} lang={lang}/><TopicLinks site={site} document={note} lang={lang}/>
+{!detail&&<footer><a href={note.url}>{tr('read_note')} →</a>{config.extra.comments.enable&&!note.extra.disable_comment&&<a href={`${note.url}#post-comment`}>{tr('comments')}</a>}</footer>}
+</article>
+<style is:global>
+/* Taxonomies share the note component while keeping a compact list presentation. */
+#recent-posts > .note-card--listing { --activity-line:var(--wjx-card-border); --activity-muted:var(--wjx-secondtext); flex:0 0 100%; width:100%; min-width:0; padding:20px 24px; margin:0 0 20px; border:var(--style-border); border-radius:12px; }
+.note-card--listing .note-author { display:grid; grid-template-columns:36px auto 1fr auto; gap:10px; align-items:center; margin-bottom:12px; }
+.note-card--listing .note-author > picture { width:36px; height:36px; }
+.note-card--listing .note-author img { width:36px; height:36px; min-width:36px; max-width:36px; margin:0; border-radius:50%; object-fit:cover; }
+.note-card--listing .note-author > strong { color:var(--wjx-fontcolor); }
+.note-card--listing .note-kind { justify-self:start; padding:2px 8px; border-radius:6px; background:var(--wjx-theme-op); color:var(--wjx-theme); font-size:12px; line-height:20px; }
+.note-card--listing .note-title { margin:0 0 8px; font-size:18px; line-height:1.5; }
+.note-card--listing .note-body { max-height:9rem; overflow:hidden; font-size:15px; line-height:1.75; }
+.note-card--listing .article-references { gap:8px; margin:14px 0 0; }
+.note-card--listing .article-reference { padding:12px; gap:6px; background:var(--wjx-background); }
+.note-card--listing .article-reference:has(.reference-cover) { grid-template-columns:92px minmax(0,1fr); gap:14px; }
+.note-card--listing .reference-copy { justify-content:center; gap:4px; }
+.note-card--listing .article-reference strong { font-size:15px; line-height:1.5; }
+.note-card--listing .reference-description,.note-card--listing .reference-action { display:none; }
+.note-card--listing .content-topics { margin:12px 0 0; }
+.note-card--listing footer { margin-top:14px; padding-top:10px; gap:20px; }
+.note-card--listing footer a:focus-visible { outline:2px solid var(--wjx-theme); outline-offset:3px; }
+@media(max-width:600px) {
+  #recent-posts > .note-card--listing { padding:16px; }
+  .note-card--listing .note-author { grid-template-columns:36px auto 1fr; gap:2px 10px; }
+  .note-card--listing .note-author > picture { grid-row:1 / 3; }
+  .note-card--listing .note-author > time { grid-column:2 / -1; margin:0; justify-self:start; }
+  .note-card--listing .article-reference:has(.reference-cover) { grid-template-columns:72px minmax(0,1fr); gap:10px; }
+}
+</style>

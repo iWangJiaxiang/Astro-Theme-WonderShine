@@ -1,0 +1,29 @@
+---
+import {localizeConfig,localizeUrl,t} from '../../lib/locale';
+const {site,lang}=Astro.props;
+const config=localizeConfig(site,lang),profile=config.extra.sidebar.profile;
+const one=profile.profile_style==='one';
+const social=profile.socialMedia||[];
+const tr=(key:string)=>t(key,lang,site);
+import profileStyles from './profile-default.css?raw';
+import oneStyles from './profile-one.css?raw';
+---
+<div class="card-widget card-info">
+  {one ? <div class="card-content">
+    <div class="card-info-avatar is-center"><div class="author-info__top-group"><div class="author-info__sayhi" id="author-info__sayhi" onclick="wjx.changeSayHelloText()">{tr('welcome_back')}</div></div></div>
+    <div class="avatar-img-group"><img src={config.extra.site.logo} class="avatar-img" alt={config.author}/></div>
+    <div class="author-info__description_group" set:html={profile.profile_desc}/>
+    <div class="author-info__bottom-group">
+      {config.author&&<a class="author-info__bottom-group-left" href={localizeUrl('/about/',lang,site)}><div class="author-info__name">{config.author}</div><div class="author-info__desc">{config.description}</div></a>}
+      <div class="card-info-social-icons is-center">{social.map((item:any)=><a class="social-icon" href={item.url} title={item.name} target="_blank" rel="external nofollow noopener"><i class={item.icon}/></a>)}</div>
+    </div>
+  </div> : <>
+    <div class="card-content" style={{backgroundImage:`url(${profile.background_img})`}}><div class="card-info-avatar is-center">
+      <div class="author-info__top-group"><div class="author-info__sayhi" id="author-info__sayhi" onclick="wjx.changeSayHelloText()">{tr('welcome_back')}</div><img src={config.extra.site.author?.avatar||config.extra.site.logo} class="avatar-img" alt={config.author}/></div>
+      <div class="author-info__name">{config.author||config.title}</div><div class="author-info__description" set:html={profile.profile_desc}/>
+    </div></div>
+    <div class="banner-button-group"><a class="banner-button" href={localizeUrl('/about/',lang,site)}><i class="icon-circle-arrow-right"/><span class="banner-button-text">{tr('learn_more')}</span></a></div>
+    <div class="card-info-social-icons is-center">{social.map((item:any)=><a class="social-icon" href={item.url} title={item.name} target="_blank" rel="external nofollow noopener"><i class={item.icon}/></a>)}</div>
+  </>}
+</div>
+<style is:inline set:html={one?oneStyles:profileStyles}/>

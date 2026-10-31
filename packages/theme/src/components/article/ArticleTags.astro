@@ -1,0 +1,9 @@
+---
+import {taxonomyName,taxonomySlug,taxonomyDocuments} from '../../lib/queries';
+import {localizeUrl} from '../../lib/locale';
+import type {Site,Document} from '../../lib/types';
+interface Props {site:Site;document:Document;lang:string}
+const {site,document:doc,lang}=Astro.props;
+const tagged=taxonomyDocuments(site,lang,'tags');
+---
+{!!doc.taxonomies.tags?.length&&<div class="post-tools-right"><div class="tag_share"><div class="post-meta__tag-list">{doc.taxonomies.tags.map(term=><a class="post-meta__tags" href={localizeUrl(`/tags/${taxonomySlug(site,term)}/`,lang,site)}><span class="tags-punctuation">{taxonomyName(site,'tags',term,lang)}</span><span class="tagsPageCount">{tagged.filter(item=>item.taxonomies.tags.includes(term)).length}</span></a>)}</div></div></div>}

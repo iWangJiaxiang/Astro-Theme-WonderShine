@@ -1,0 +1,77 @@
+---
+import LocalizedEmpty from './LocalizedEmpty.astro';
+import ResponsiveImage from './ResponsiveImage.astro';
+import {descendants,cover} from '../lib/queries';
+import {localizeConfig,t} from '../lib/locale';
+import Comments from './Comments.astro';
+import Sidebar from './Sidebar.astro';
+import ArticleCopyright from './article/ArticleCopyright.astro';
+import Wave from './shell/Wave.astro';
+import CollectionTree from './collection/CollectionTree.astro';
+import CollectionBreadcrumb from './collection/CollectionBreadcrumb.astro';
+import CollectionListHeader from './collection/CollectionListHeader.astro';
+import {childSections,ownerCollection} from './collection/data';
+import categoryStyles from './collection/category.css?raw';
+const {site,route}=Astro.props,{document:doc,lang,type}=route;
+const config=localizeConfig(site,lang),tr=(key:string)=>t(key,lang,site);
+const listing=['collection-list','collection-category'].includes(type),category=type==='collection-category',content=type==='collection-content';
+const children=childSections(site,doc,true),collection=ownerCollection(site,doc),comments=config.extra.comments;
+const canonical=new URL(doc.url,config.base_url).href;
+const schema={'@context':'https://schema.org','@type':content?'Article':'CollectionPage',headline:doc.title,description:doc.description||doc.title,url:canonical,author:{'@type':'Person',name:config.author},image:cover(doc,site),datePublished:doc.date,dateModified:doc.updated};
+---
+{!listing&&<><script is:inline type="application/ld+json" set:html={JSON.stringify(schema).replace(/</g,'\\u003c')}/></>}
+{listing ? <main class="layout hide-aside" id="content-inner"><div id="page">
+  {!category&&<CollectionListHeader title={doc.title} description={doc.description}/>}
+  <div class="page-content">
+    {doc.html&&<article class="post-content" id="article-container" set:html={doc.html}/>}
+    {!children.length&&<LocalizedEmpty site={site} lang={lang} document={doc}/>}
+    <div class="collections-grid">{children.map(child=><a href={child.url} style={category?'padding:1rem':undefined}><div class="collection-card">
+      {!category&&<div class="collection-header">{cover(child,site,false)?<ResponsiveImage site={site} class="collection-cover" src={cover(child,site,false)} alt={child.title} width={800} sizes="(min-width:1200px) 500px, 100vw"/>:<div class="collection-cover-placeholder"><i class="icon-book"/></div>}</div>}
+      <div class="collection-body"><h3 class="collection-title">{child.title}</h3>{child.description&&<p class="collection-description">{child.description}</p>}{!category&&<><div class="collection-meta"><span class="collection-count"><i class="icon icon-book"/>{descendants(site,child).length}</span></div><div class="collection-tags">{child.extra.tags?.map((tag:string)=><span class="tag">{tag}</span>)}</div></>}</div>
+      {category&&<Wave/>}
+    </div></a>)}</div>
+  </div>
+  {category&&<style is:inline set:html={categoryStyles}/>}
+</div></main> : <main class="layout right-aside collection-layout" id="content-inner">
+  <div id="post" style="order:0">
+    {content&&<><CollectionBreadcrumb site={site} document={doc} lang={lang}/><h1 class="post-title" id="post-title">{doc.title}</h1><div class="post-meta"><span class="collection-meta-items">
+      {doc.date&&<span class="post-meta-date"><i class="icon-calendar-days post-meta-icon"/><time datetime={doc.date}>{doc.date.slice(0,10).replaceAll('-','/')}</time></span>}
+      {(doc.updated||doc.date)&&<span class="post-meta-date"><i class="icon-pencil post-meta-icon" title={tr('updated')}/><time datetime={doc.updated||doc.date}>{(doc.updated||doc.date).slice(0,10).replaceAll('-','/')}</time></span>}
+      <span class="collection-meta-item"><i class="icon-file-word post-meta-icon" title={tr('word_count')}/><span class="word-count">{doc.wordCount}</span></span><span class="collection-meta-item"><i class="icon-clock post-meta-icon" title={tr('reading_time')}/><span>{doc.readingTime} {tr('minutes')}</span></span><span class="post-meta-pv" title={tr('views')}><i class="icon-fire post-meta-icon"/><span id="twikoo_visitors">{doc.extra.visit||'—'}</span></span>
+      {comments.enable&&!doc.extra.disable_comment&&['twikoo','artalk'].includes(comments.system)&&<a class="post-meta-commentcount" href="#post-comment" title={tr('comment_count')}><i class="icon-chat--fill post-meta-icon"/><span id={comments.system==='twikoo'?'twikoo-count':'ArtalkCount'}>—</span></a>}
+    </span></div></>}
+    <div class="page-content"><article class:list={['post-content',{'line-numbers':config.extra.code.enable_line}]} id="article-container" data-pagefind-body set:html={doc.html}/>
+      {!content&&<><hr style="display:block"/><div class="collection-tree"><CollectionTree site={site} section={collection} current={doc}/></div></>}
+      <ArticleCopyright site={site} document={doc} lang={lang}/><hr/><Comments site={site} document={doc} lang={lang}/>
+    </div>
+  </div>
+  <aside class="aside-content left-content" id="collection-aside" style="order:-1"><div class="sticky_layout"><div class="card-widget wjx-right-widget card-collection-tree" id="card-collection-tree"><div class="card-content"><a href={collection.url}><div class="item-headline"><i class="icon-book-open"/><span>{collection.title}</span></div></a><div class="collection-tree"><CollectionTree site={site} section={collection} current={doc}/></div></div></div></div></aside>
+  <Sidebar site={site} document={doc} lang={lang} kind="collectionWidget"/>
+</main>}
+<script>
+  let initializedBody: HTMLElement | undefined;
+  document.addEventListener('astro:page-load', () => {
+  if (initializedBody === document.body) return;
+  initializedBody = document.body;
+  document.querySelectorAll<HTMLButtonElement>('[data-collection-folder]').forEach(folder=>{
+    folder.addEventListener('click',()=>{
+      const expanded=folder.getAttribute('aria-expanded')!=='true';
+      folder.setAttribute('aria-expanded',String(expanded));folder.classList.toggle('expanded',expanded);
+      folder.querySelector('.tree-icon')?.classList.toggle('expanded',expanded);folder.nextElementSibling?.classList.toggle('expanded',expanded);
+      folder.closest('.tree-folder')?.classList.toggle('expanded',expanded);
+    });
+  });
+  });
+</script>
+<style is:global>
+.collection-layout #post{min-width:0}
+.collection-layout .collection-meta-items{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .75rem;line-height:1.8}
+.collection-layout .collection-meta-items>span,.collection-layout .collection-meta-items>a{display:inline-flex;align-items:center;gap:.3rem;white-space:nowrap}
+.collection-layout .tree-folder-header{width:100%;text-align:left;font:inherit;background:transparent;border:0;color:inherit}
+.collection-layout #collection-aside{width:300px;padding:0 15px 0 0}
+.collection-layout #collection-aside .sticky_layout{position:sticky;top:80px}
+.collection-layout #collection-aside .card-widget{padding:1rem 1.2rem;background:var(--wjx-card-bg);border-radius:12px;border:var(--style-border);box-shadow:var(--wjx-shadow-border)}
+@media(min-width:1200px){.collection-layout .left-content{padding-right:15px!important;padding-left:0!important}}
+@media(min-width:1300px){.collection-layout .left-content{padding-right:1rem!important;padding-left:0!important}.collection-layout #collection-aside .sticky_layout{top:calc(60px + .5rem)}}
+@media(max-width:1200px){.collection-layout #collection-aside{display:none}}
+</style>

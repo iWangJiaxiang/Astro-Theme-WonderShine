@@ -1,0 +1,14 @@
+---
+import { localizeUrl } from '../../lib/locale';
+const { site, lang, data } = Astro.props;
+---
+<div class="back-menu-list-groups">
+  {(data.menu?.nav_left_menu || []).map((group: any) => <div class="back-menu-list-group">
+    <div class="back-menu-list-title">{group.name}</div><div class="back-menu-list">
+      {(group.menus || []).map((item: any) => <a class="back-menu-item nav-item" href={localizeUrl(item.href,lang,site)} target={item.target} rel={item.rel}>
+        {item.icon ? <i class={item.icon} style="font-size:.9em" aria-hidden="true" /> : item.icon_img && <img class="back-menu-item-icon" src={item.icon_img} loading="lazy" alt="" />}
+        <span class="back-menu-item-text">{item.name}</span>
+      </a>)}
+    </div>
+  </div>)}
+</div>

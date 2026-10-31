@@ -1,0 +1,20 @@
+---
+import styles from './list-header.css?raw';
+const {title,description}=Astro.props;
+---
+<div class="collection-list-header"><div class="cursor" style="transform:translate(721px,180px)"/><div class="shapes">{[1,2,3].map(number=><div class={`shape shape-${number}`} style="transform:translate(721px,180px)"/>)}</div><div class="content"><h1>{title}</h1><h2>{description}</h2></div></div>
+<style is:inline set:html={styles}/>
+<script>
+  let initializedBody: HTMLElement | undefined;
+  document.addEventListener('astro:page-load', () => {
+  if (initializedBody === document.body) return;
+  initializedBody = document.body;
+  document.querySelectorAll<HTMLElement>('.collection-list-header').forEach(header=>{
+    header.addEventListener('pointermove',event=>{
+      const rect=header.getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top;
+      header.querySelectorAll<HTMLElement>('.cursor,.shape').forEach(element=>{element.style.display='block';element.style.transform=`translate(${x}px,${y}px)`;});
+    });
+  });
+  });
+</script>
+<style>.shape{transition:transform .35s ease-out}.shape-2{transition-duration:.25s}.shape-3{transition-duration:.15s}@media(prefers-reduced-motion:reduce){.shape{transition:none}}</style>

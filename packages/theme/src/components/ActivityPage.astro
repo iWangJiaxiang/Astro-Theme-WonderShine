@@ -1,0 +1,36 @@
+---
+import ResponsiveImage from './ResponsiveImage.astro';
+import NoteCard from './NoteCard.astro';
+import TimelineEvent from './TimelineEvent.astro';
+import Comments from './Comments.astro';
+import Pagination from './Pagination.astro';
+import {events,topics,topicItems,timestamp,formatDate,plain,cover} from '../lib/queries';
+import {t,localizeConfig,localizeUrl,localeHome} from '../lib/locale';
+const {site,route}=Astro.props;
+const {lang,type,document}=route;
+const config=localizeConfig(site,lang);
+const tr=(key:string)=>t(key,lang,site,'activity');
+const url=(p:string)=>localizeUrl(p,lang,site);
+const isDetail=type==='note',isTopic=type==='topic',isTopics=type==='topics',isNotes=type==='notes';
+const items=isTopic?topicItems(site,document):events(site,lang);
+const lastActivity=(list:any[])=>Math.max(0,...list.map(d=>Math.max(timestamp(d.date),timestamp(d.updated)<=Date.now()/1000?timestamp(d.updated):0)));
+const title=isTopic?`#${document.title}`:tr(type);
+---
+{isDetail ? <main class="activity-detail" id="content-inner"><div class="activity-detail-top"><a href={url('/notes/')}>← {tr('notes')}</a></div><NoteCard site={site} document={document} lang={lang} detail/><Comments site={site} document={document} lang={lang}/></main> :
+<main class="activity-layout" id="content-inner">
+<div class="activity-main" data-activity-list={!isNotes||undefined} data-page-size="12" data-sort={isTopics?'active':'published'} data-topic-id={isTopic?document.extra.id:undefined}>
+{isTopic&&<div class="activity-detail-top"><a href={url('/topics/')}>← {tr('topics')}</a></div>}
+<header class="activity-heading"><div><p class="activity-eyebrow">{isTopic?tr('topic'):config.title}</p><h1>{title}</h1>{isTopic&&document.extra.ai_translation&&<span class="ai-translation-label">{tr('ai_translation')}</span>}<p>{isTopic?document.description:tr(`${type}_intro`)}</p></div></header>
+{isNotes ? <><nav class="activity-toolbar"><a class="is-active" aria-current="page" href={url('/notes/')}>{tr('notes')}</a><a href={url('/topics/')}>{tr('topics')}</a><a href={url('/timeline/')}>{tr('timeline')}</a><a class="activity-feed" href={`${localeHome(lang,site)}notes.xml`}>RSS ↗</a></nav>{route.items?.length?route.items.map((note:any)=><NoteCard site={site} document={note} lang={lang}/>):<div class="activity-empty">{tr('empty')}</div>}<Pagination {...route}/></> :
+isTopics ? <><div class="topic-grid" data-activity-items>{topics(site,lang).map(topic=>{
+const related=topicItems(site,topic),active=lastActivity(related);
+return <article class="topic-card" data-activity-item data-kind="topic" data-id={topic.extra.id} data-topic-id={topic.extra.id} data-active={active} data-published={timestamp(topic.date)} data-count={related.length} data-created={topic.date} data-updated={topic.updated||topic.date}><h2><a href={topic.url}>#{topic.title}</a></h2><p>{topic.description||plain(topic.html).slice(0,150)}</p><div class="topic-stats"><span>{related.length} {tr('entries')}</span><span>{active?`${tr('last_activity')} ${formatDate(new Date(active*1000).toISOString(),lang)}`:tr('no_activity')}</span></div><div class="topic-created">{tr('created')} {formatDate(topic.date,lang)}</div></article>;
+})}</div><div class="activity-empty" data-activity-empty hidden={topics(site,lang).length>0}>{tr('empty_topics')}</div></> :
+<>{isTopic&&<>{cover(document,site,false)&&<ResponsiveImage site={site} class="topic-cover" src={cover(document,site,false)} alt=""/>}<div class="note-body topic-intro" set:html={document.html}/></>}
+<nav class="activity-toolbar" hidden aria-label={tr('filter')}>{['all','article','note'].map(kind=><button type="button" data-activity-filter={kind} class:list={{'is-active':kind==='all'}} aria-pressed={kind==='all'}>{tr(kind)}</button>)}</nav>
+<div class="timeline-list" data-activity-items>{items.map(item=><TimelineEvent site={site} document={item} lang={lang}/>)}</div><div class="activity-empty" data-activity-empty hidden={items.length>0}>{tr('empty_timeline')}</div></>}
+{!isNotes&&<nav class="activity-pagination" data-activity-pagination aria-label={tr('pages')} hidden><button type="button" data-activity-previous>← {tr('previous')}</button><span data-activity-page aria-live="polite"></span><button type="button" data-activity-next>{tr('next')} →</button></nav>}
+</div>
+<aside class="activity-aside">{isNotes?<><ResponsiveImage site={site} class="activity-avatar" src={config.extra.site.author.avatar} alt={config.author}/><h2>{config.author}</h2><p>{config.description}</p></>:isTopic?<><h2>{tr('topic_record')}</h2><dl class="topic-dates"><dt>{tr('created')}</dt><dd>{formatDate(document.date,lang)}</dd><dt>{tr('metadata_updated')}</dt><dd>{formatDate(document.updated||document.date,lang)}</dd><dt>{tr('last_activity')}</dt><dd>{lastActivity(items)?formatDate(new Date(lastActivity(items)*1000).toISOString(),lang):tr('no_activity')}</dd></dl><p>{items.length} {tr('entries')}</p></>:<><h2>{title}</h2><p>{tr(isTopics?'topics_aside':'timeline_intro')}</p></>}
+<a href={url(isTopics?'/notes/':'/topics/')}>{isTopics?tr('notes'):`# ${tr('topics')}`} →</a>{!isNotes&&!isTopics&&!isTopic&&<><hr/><a href={`${localeHome(lang,site)}timeline.xml`}>RSS ↗</a></>}
+</aside></main>}

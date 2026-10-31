@@ -1,0 +1,21 @@
+---
+import type { HTMLAttributes } from 'astro/types';
+import type { Site } from '../lib/types';
+import { responsiveImage } from '../lib/image-assets';
+interface Props extends HTMLAttributes<'img'> {
+  site: Site;
+  src: string;
+  alt: string;
+  pictureClass?: string;
+  pictureStyle?: HTMLAttributes<'picture'>['style'];
+}
+const { site, src, alt, width, height, pictureClass = 'responsive-image', pictureStyle = 'display:contents', sizes = '(max-width: 768px) 100vw, 800px', loading = 'lazy', decoding = 'async', ...attributes } = Astro.props;
+const image = responsiveImage(site, src, Number(width) || 800);
+const intrinsicWidth = width || image.width;
+const intrinsicHeight = height || (width && image.width && image.height ? Math.round(Number(width) * image.height / image.width) : image.height);
+---
+<picture class={pictureClass} style={pictureStyle} data-original={src}>
+  {image.avifSrcset && <source type="image/avif" srcset={image.avifSrcset} sizes={sizes} />}
+  {image.webpSrcset && <source type="image/webp" srcset={image.webpSrcset} sizes={sizes} />}
+  <img {...attributes} src={image.src} alt={alt} width={intrinsicWidth} height={intrinsicHeight} srcset={image.webpSrcset} sizes={image.webpSrcset ? sizes : undefined} loading={loading} decoding={decoding} data-original={src} />
+</picture>

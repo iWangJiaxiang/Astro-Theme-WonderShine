@@ -1,0 +1,29 @@
+---
+import LocalizedEmpty from './LocalizedEmpty.astro';
+import ResponsiveImage from './ResponsiveImage.astro';
+import PostCards from './PostCards.astro';
+import Sidebar from './Sidebar.astro';
+import Pagination from './Pagination.astro';
+import RecentTop from './home/RecentTop.astro';
+import ContentBar from './home/ContentBar.astro';
+import {featuredDocument} from './home/data';
+import {cover,notes,plain,formatDate} from '../lib/queries';
+import {localizeData,localizeConfig,localizeUrl,t} from '../lib/locale';
+import type {Site} from '../lib/types';
+import type {Route} from '../lib/routes';
+interface Props {site:Site;route:Route;}
+const {site,route}=Astro.props;
+const {lang}=route,config=localizeConfig(site,lang),data=localizeData(site,lang);
+const featured=featuredDocument(site,data.post?.today_recommend?.post_path,lang);
+const activity=config.extra.activity?.enable,first=(route.page||1)===1,recent=notes(site,lang).slice(0,2);
+const tr=(key:string)=>t(key,lang,site,'activity'),url=(path:string)=>localizeUrl(path,lang,site);
+---
+<div id="home_top" class:list={{'activity-home':activity&&first}}>
+  {activity&&first?<><div class:list={['activity-home-hero',{'activity-home-hero--intro-only':!featured}]}><section class="home-intro"><p class="activity-eyebrow">{config.title} / {tr('welcome_small')}</p><h1>{tr('welcome_top')}<br/>{tr('welcome_bottom')}</h1><div class="home-intro-links"><a href={url('/archives/')}>{tr('featured')} ↗</a><a href={url('/about/')}>{tr('about')}</a></div></section>{featured&&<a class="home-featured" href={featured.url}><ResponsiveImage site={site} src={cover(featured,site)} alt={featured.title} width={1200} sizes="(min-width:1200px) 48vw, 100vw" loading="eager" fetchpriority="high"/><div><span>{tr('featured')}</span><h2>{featured.title}</h2></div></a>}</div><section class="home-notes"><a class="home-notes-label" href={url('/notes/')}><span class="activity-dot"/>{tr('recent')} <span>→</span></a><a class="home-notes-more" href={url('/notes/')}>{lang.startsWith('zh')?'全部动态':'View all'} →</a><div class="home-notes-items">{recent.length?recent.map(note=><a class="home-note" href={note.url}><time datetime={note.updated||note.date}>{formatDate(note.updated||note.date,lang)}</time><p>{plain(note.html).slice(0,88)}</p></a>):<p class="home-notes-empty">{tr('empty')}</p>}</div></section><div class="activity-legacy-hero"><RecentTop site={site} lang={lang} page={route.page}/></div></>:<RecentTop site={site} lang={lang} page={route.page}/>}
+</div>
+<main class={`layout ${config.extra.sidebar.location}`} id="content-inner"><div class="recent-posts" id="recent-posts"><ContentBar site={site} lang={lang}/>
+{route.items?.length?<PostCards site={site} items={route.items} lang={lang} compactHome={activity&&first}/>:<LocalizedEmpty site={site} lang={lang} document={route.document}/>}<Pagination {...route} site={site}/></div>{config.extra.sidebar.location!=='hide-aside'&&<Sidebar site={site} lang={lang}/>}</main>
+<style is:global>
+@media(min-width:1200px){.home-featured .responsive-image img{width:100%;height:100%;object-fit:cover;transition:transform .4s ease}}
+@media(prefers-reduced-motion:reduce){.home-featured .responsive-image img{transition:none}}
+</style>

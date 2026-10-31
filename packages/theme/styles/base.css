@@ -1,0 +1,13 @@
+/* 自动生成的 CSS 模块索引 */
+/* 自动生成的 CSS 模块索引 */
+@import "tailwindcss" source(none);
+@source "../src";
+@source "../assets/js";
+
+/* COMMON */
+@import "./components/common/index.css";
+
+/* COMPONENTS */
+@import "./components/sidebar/index.css";
+@import "./components/comment/index.css";
+@import "./components/music/index.css";

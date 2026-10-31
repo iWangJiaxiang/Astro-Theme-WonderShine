@@ -1,0 +1,12 @@
+---
+import { localizeUrl } from '../../lib/locale';
+const { menu, site, lang } = Astro.props;
+---
+{menu.menus?.length > 0 && <div class:list={['menus_item_child', {'vertical_nav': menu.is_vertical}]}>
+  {menu.menus.map((child: any) => <div class="recursion_menus_item">
+    <a class="site-page child nav-item" href={localizeUrl(child.href || '#',lang,site)} target={child.target} rel={child.rel}>
+      {child.icon && <i class={child.icon} style="font-size:.9em" aria-hidden="true" />}<span>{child.name}</span>
+    </a>
+    <Astro.self menu={child} site={site} lang={lang} />
+  </div>)}
+</div>}

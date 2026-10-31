@@ -1,0 +1,44 @@
+a.categoryButton.bikan {
+    background: linear-gradient(to right, #358bff, #15c6ff);
+    background-size: 200%;
+}
+
+a.categoryButton.remen {
+    background: linear-gradient(to right, #ff6655, #ffbf37);
+    background-size: 200%;
+}
+
+a.categoryButton.shiyong {
+    background: linear-gradient(to right, #18e7ae, #1eebeb);
+    background-size: 200%;
+}
+
+a.categoryButton.bannerItem4 {
+    background: linear-gradient(to right, #82a531, #e38969);
+    background-size: 200%;
+}
+
+[data-theme=dark] a.categoryButton.bikan {
+    background: linear-gradient(to right, #0653b8, #2fcbff);
+    background-size: 200%;
+}
+
+[data-theme=dark] a.categoryButton.remen {
+    background: linear-gradient(to right, #e22a16, #da980c);
+    background-size: 200%;
+}
+
+[data-theme=dark] a.categoryButton.shiyong {
+    background: linear-gradient(to right, #099e74, #0ea4a4);
+    background-size: 200%;
+}
+
+[data-theme=dark] a.categoryButton.bannerItem4 {
+    background: linear-gradient(to right, #82a531, #e38969);
+    background-size: 200%;
+}
+
+
+a.categoryButton:hover {
+    background-position: 100% 0;
+}

@@ -1,0 +1,34 @@
+---
+import ResponsiveImage from '../ResponsiveImage.astro';
+import Navigation from '../shell/Navigation.astro';
+import Wave from '../shell/Wave.astro';
+import CollectionBreadcrumb from './CollectionBreadcrumb.astro';
+import {descendants,cover} from '../../lib/queries';
+import {localizeConfig,localizeUrl,t} from '../../lib/locale';
+const {site,document:doc,lang}=Astro.props;
+const config=localizeConfig(site,lang),items=descendants(site,doc),tr=(key:string)=>t(key,lang,site),url=(path:string)=>localizeUrl(path,lang,site);
+const original=!doc.extra.reprint_url,comments=config.extra.comments;
+const wordCount=items.reduce((total,item)=>total+item.wordCount,0),readingTime=items.reduce((total,item)=>total+item.readingTime,0);
+---
+<header class="post-bg" id="page-header">
+  <Navigation site={site} lang={lang} title={doc.title} document={doc}/>
+  <div class="coverdiv loaded" id="coverdiv"><ResponsiveImage site={site} alt={doc.title} class="nolazyload" id="post-cover" src={cover(doc,site)||'/img/default-cover.svg'} width={1600} sizes="100vw" loading="eager" fetchpriority="high"/></div>
+  <div id="post-info">
+    <CollectionBreadcrumb site={site} document={doc} lang={lang}/>
+    <h1 class="post-title">{doc.title}</h1>
+    <div id="post-firstinfo"><div class="meta-firstline">
+      {config.extra.post.copyrights.enable&&<a class="post-meta-original" title={tr(original?'original_license':'reprint_license')} href={url(doc.extra.copyright_url||'/copyright/')}>{tr(original?'original':'reprint')}</a>}
+      {doc.extra.tags?.length>0&&<div class="tag_share"><div class="post-meta__tag-list">{doc.extra.tags.map((tag:string)=><span class="tags-name tags-punctuation">{tag}</span>)}</div></div>}
+    </div></div>
+    <div id="post-meta"><div class="meta-secondline">
+      {original&&<span class="post-meta-author" title={tr('collection_author')}><i class="icon-zuozhe post-meta-icon"/>{config.author}</span>}
+      <span class="post-meta-wordcount"><i class="icon-book post-meta-icon" title={tr('entry_count')}/><span class="post-meta-label">{tr('entry_count_label')}</span><span class="word-count">{items.length} {tr('entries')}</span><span class="post-meta-separator"/><i class="icon-file-word post-meta-icon" title={tr('word_count')}/><span class="post-meta-label">{tr('word_count_label')}</span><span class="word-count">{wordCount} {tr('words')}</span><span class="post-meta-separator"/><i class="icon-clock post-meta-icon" title={tr('reading_time')}/><span class="post-meta-label">{tr('reading_time_label')}</span><span>{readingTime} {tr('minutes')}</span></span>
+      {doc.date&&<span class="post-meta-date"><i class="icon-calendar-days post-meta-icon"/><time datetime={doc.date}>{doc.date.slice(0,10).replaceAll('-','/')}</time></span>}
+      {config.extra.post.update_time&&doc.updated&&<span class="post-meta-date"><i class="icon-pencil post-meta-icon" title={tr('updated')}/><time datetime={doc.updated}>{doc.updated.slice(0,10).replaceAll('-','/')}</time></span>}
+      {doc.extra.wechat_url?<a class="post-meta-pv" href={doc.extra.wechat_url} target="_blank" rel="noopener noreferrer"><i class="icon-weixin1 post-meta-icon"/>{tr('wechat_sync')}</a>:<span class="post-meta-wechat" title={tr('blog_first')}><i class="icon-rss post-meta-icon"/>{tr('blog_exclusive')}</span>}
+      <span class="post-meta-pv" title={tr('views')}><i class="icon-fire post-meta-icon"/><span class="post-meta-label">{tr('views_label')}</span>{doc.extra.visit?<span id="visit">{doc.extra.visit}</span>:<span id="twikoo_visitors">—</span>}</span>
+      {comments.enable&&!doc.extra.disable_comment&&['twikoo','artalk'].includes(comments.system)&&<a class="post-meta-commentcount" href="#post-comment" title={tr('comment_count')}><i class="icon-chat--fill post-meta-icon"/><span class="post-meta-label">{tr('comments_label')}</span><span id={comments.system==='twikoo'?'twikoo-count':'ArtalkCount'}>—</span></a>}
+    </div></div>
+  </div>
+  <Wave/>
+</header>

@@ -1,0 +1,428 @@
+[extra.site]
+seo = ""
+logo = "/img/logo.svg"
+favicon = "/img/logo.svg"
+default_cover = "/img/default-cover.svg"
+email = ""
+start_year = "2026"
+
+[extra.site.author]
+avatar = "/img/avatar.svg"
+about_image = "/img/default-cover.svg"
+
+[extra.site.analytics]
+[extra.lib]
+katex = true
+
+[extra.feed]
+full_content_in_feed = false
+
+[extra.feed.follow]
+[extra.nav]
+pc_left_menu = true
+phone_left_menu = true
+phone_menu = true
+
+[extra.nav.right]
+travelling = false
+article = true
+dark_mode = true
+console_enable = true
+search = false
+search_engine = "algolia"
+nav_music = false
+
+[extra.search.meilisearch]
+host = ""
+key = ""
+index_name = ""
+
+[extra.search.algolia]
+app_id = ""
+app_key = ""
+index_name = ""
+
+[extra.top]
+moment = false
+recent_top = true
+
+[extra.top.above]
+enable = false
+typed = []
+enable_typed_random = false
+enable_above_video = false
+index_video = ""
+index_img = ""
+phone_index_img = ""
+
+[extra.top.global_background]
+enable = false
+enable_above_video = false
+img = ""
+video = ""
+
+[extra.top.banner_left]
+title_big = "<div class=\"banners-title-big\">WonderShine</div>"
+title_small = "Ideas, stories, and everyday moments."
+
+[[extra.top.banner_left.category_groups]]
+title = "推荐"
+icon = "icon-book"
+url = "/tags/featured"
+
+[extra.top.banner_left.category_groups.colors]
+light_one = "#358bff"
+light_two = "#15c6ff"
+dark_one = "#0653b8"
+dark_two = "#2fcbff"
+
+[[extra.top.banner_left.category_groups]]
+title = "热门"
+icon = "icon-fire"
+url = "/tags/hot"
+
+[extra.top.banner_left.category_groups.colors]
+light_one = "#ff6655"
+light_two = "#ffbf37"
+dark_one = "#e22a16"
+dark_two = "#da980c"
+
+[extra.top.banner_right.today_recommend]
+enable = true
+
+[extra.top.banner_right.recommend_post]
+type = "custom"
+max_posts = 6
+
+[extra.layout.navs]
+nav = "category"
+nav_category = []
+nav_tag = []
+nav_custom_url = []
+nav_more = "categories"
+nav_more_custom_url = ""
+
+[extra.layout.post]
+columns = "col2"
+cover_position = "top"
+
+[extra.layout.card]
+polish_effect = false
+hover_animation = true
+shadow_effect = true
+
+[extra.sidebar]
+location = "right-aside"
+recent_posts_count = 4
+category_quantity = 0
+tag_quantity = 6
+archives_quantity = 0
+tags_switch = true
+archive_switch = false
+widget_list = []
+
+[[extra.sidebar.widgets.indexWidget]]
+widget = "profile"
+
+[[extra.sidebar.widgets.indexWidget]]
+widget = "recent-posts"
+
+[[extra.sidebar.widgets.indexWidget]]
+widget = "categories"
+
+[[extra.sidebar.widgets.indexWidget]]
+widget = "tags"
+
+[[extra.sidebar.widgets.postWidget]]
+widget = "profile"
+
+[[extra.sidebar.widgets.postWidget]]
+widget = "toc"
+
+[[extra.sidebar.widgets.postWidget]]
+widget = "recent-posts"
+
+[[extra.sidebar.widgets.postWidget]]
+widget = "categories"
+
+[[extra.sidebar.widgets.taxonomyWidget]]
+widget = "profile"
+
+[[extra.sidebar.widgets.taxonomyWidget]]
+widget = "recent-posts"
+
+[[extra.sidebar.widgets.taxonomyWidget]]
+widget = "categories"
+
+[[extra.sidebar.widgets.taxonomyWidget]]
+widget = "tags"
+
+[[extra.sidebar.widgets.collectionWidget]]
+widget = "toc"
+
+[[extra.sidebar.widgets.collectionWidget]]
+widget = "recent-posts"
+
+[extra.sidebar.profile]
+profile_style = "one"
+background_img = "/img/default-cover.svg"
+profile_desc = "A space for your ideas."
+
+[[extra.sidebar.profile.socialMedia]]
+icon = "icon-github"
+name = "GitHub"
+url = "https://github.com/iWangJiaxiang/Astro-Theme-WonderShine"
+
+[extra.sidebar.wechat]
+enable = false
+
+[extra.sidebar.power]
+powerLink = "/"
+showNum = 3
+
+[extra.sidebar.newcomment]
+newcommentUrl = "/newest"
+newcommentnumber = 5
+providerMirror = "https://cravatar.cn"
+enable = false
+
+[extra.footer]
+enable = true
+footer_banner_padding = 1
+dingyue = true
+theme = true
+about = true
+icp_icon = true
+gongwangan = true
+copyright = true
+feedback = true
+feedback_url = "mailto:mail@example.com"
+yunzhichi_list = ""
+yunzhichi_url = ""
+yunzhichi_url_link = ""
+icp = false
+
+[extra.footer.footer_bar]
+enable = true
+
+[extra.footer.social_media]
+img_enable = true
+
+[[extra.footer.social_media.left]]
+option_social_data = "icon"
+icon = "icon-envelope"
+name = "Mail"
+url = "mailto:mail@example.com"
+
+[[extra.footer.social_media.right]]
+option_social_data = "icon"
+icon = "icon-github"
+name = "Github"
+url = "https://github.com/iWangJiaxiang/Astro-Theme-WonderShine"
+
+[extra.footer.footer_group]
+enable = true
+num = 3
+
+[extra.post]
+dynamicBackground = true
+opacity = true
+recommendQuantity = "two"
+copyrightsStyle = "one"
+update_time = true
+
+[extra.post.abstract]
+enable = true
+gpt_name = "本地"
+mode = "local"
+switch_btn = false
+btn_link = ""
+random_num = 3
+basic_word_count = 1000
+key = "xxxx"
+referers = "https://xx.xx/"
+
+[extra.post.passage_tip]
+enable = true
+day = 60
+
+[extra.post.post_edit]
+enable_post_edit = false
+post_edit_url = "/rss"
+
+[extra.post.share_right]
+mobile_edit = true
+weibo_edit = false
+copyurl_edit = true
+
+[extra.post.copyrights]
+enable = true
+copy_info = false
+content = "Original content by the site author."
+reprintContent = "本文是转载文章，版权归原作者所有。建议访问原文，转载本文请联系原作者。\n"
+
+[extra.friend]
+small_title = "友情链接"
+big_title = "与各位博主一同进步"
+links_url = "/friends"
+enable_comment = true
+prefer_local_logo = true
+dynamic_render = true
+
+[extra.equipment]
+background_img = "/img/default-cover.svg"
+small_title = "好物"
+big_title = "实物装备推荐"
+detail = "跟我一起享受科技带来的乐趣"
+btn_title = "主页"
+btn_url = "/"
+
+[extra.about]
+hello = "Hello"
+content = "<div class=\"title1\">Welcome to WonderShine</div>"
+idea = "A place for your ideas."
+widget_list = []
+author_info_left_tags = []
+author_info_right_tags = []
+photos = []
+
+[extra.about_reward]
+enable = false
+title = "Support"
+content = ""
+
+[extra.about_reward.reward]
+[extra.comments]
+enable = false
+system = "twikoo"
+lazy_load = false
+use = "none"
+provider = "none"
+
+[extra.comments.artalk]
+[extra.comments.twikoo]
+[extra.comments.waline]
+[extra.comments.visitor_mail]
+enable = false
+mail = "visitor@xxx.com"
+
+[extra.comments.barrage]
+enable = false
+
+[extra.style]
+color_scheme = "system"
+theme_light_skin = "#425AEF"
+theme_dark_skin = "#f2b94b"
+universe = true
+font_family = "PingFang SC"
+package_type = "split"
+embed_critical = true
+
+[extra.style.translate]
+enable = true
+default_encoding = 2
+
+[extra.code]
+enable = true
+enable_title = true
+enable_hr = true
+enable_line = true
+enable_copy = true
+enable_expander = true
+enable_height_limit = false
+height_limit = 300
+theme_light = "one-dark"
+theme_dark = "one-dark"
+
+[extra.tool]
+keyboard = true
+
+[extra.tool.right_menu]
+enable = true
+right_side_enable = true
+readmode = true
+
+[extra.tool.nav_music]
+enable = false
+id = ""
+server = "tencent"
+all_playlist = ""
+meting_api = ""
+
+[extra.tool.snackbar]
+switch = false
+introduction_title = "协议提醒助手"
+introduction_tip = "查看本站为你的个人隐私做出的努力"
+introduction_url = "/privacy"
+introduction_name = "本站如何保护你的隐私"
+
+[extra.tool.rightside]
+enable = true
+readmode = true
+
+[extra.other]
+toc_enable = true
+bubble_enable = true
+scrollbar_linear_gradient_enable = false
+tag_random_color_enable = true
+avif_enable = true
+
+[extra.other.lazyload]
+enable = true
+error_img = "/img/404.svg"
+loading_img = "/img/lazyload.svg"
+
+[extra.other.loading_box]
+enable = true
+img = "/img/logo.svg"
+progress_bar = true
+
+[extra.other.error_404]
+subtitle = "请尝试站内搜索寻找文章"
+background = "/img/404.svg"
+
+[extra.other.greeting]
+enable = false
+
+[[extra.other.greeting.settings]]
+greeting = "晚安😴"
+start_time = 0
+end_time = 5
+
+[[extra.other.greeting.settings]]
+greeting = "早上好鸭👋, 祝你一天好心情！"
+start_time = 6
+end_time = 9
+
+[[extra.other.greeting.settings]]
+greeting = "上午好👋, 状态很好，鼓励一下"
+start_time = 10
+end_time = 10
+
+[[extra.other.greeting.settings]]
+greeting = "11点多啦, 在坚持一下就吃饭啦～"
+start_time = 11
+end_time = 11
+
+[[extra.other.greeting.settings]]
+greeting = "午安👋, 宝贝"
+start_time = 12
+end_time = 14
+
+[[extra.other.greeting.settings]]
+greeting = "🌈充实的一天辛苦啦！"
+start_time = 14
+end_time = 18
+
+[[extra.other.greeting.settings]]
+greeting = "19点喽, 奖励一顿丰盛的大餐吧🍔。"
+start_time = 19
+end_time = 19
+
+[[extra.other.greeting.settings]]
+greeting = "晚上好👋, 在属于自己的时间好好放松😌~"
+start_time = 20
+end_time = 24
+
+[extra.activity]
+enable = true

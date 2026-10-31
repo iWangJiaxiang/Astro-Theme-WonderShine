@@ -1,0 +1,40 @@
+---
+import {t,localizeConfig,localizeData,localizeUrl,localeHome} from '../../lib/locale';
+import MobileNavigation from './MobileNavigation.astro';
+import SearchDialog from '../search/SearchDialog.astro';
+import {isPublic,taxonomyDocuments,taxonomySlug} from '../../lib/queries';
+const {site,lang,pageType} = Astro.props;
+const config=localizeConfig(site,lang), data=localizeData(site,lang), e=config.extra;
+const tr=(key:string)=>t(key,lang,site);
+const tags=new Map<string,number>();
+site.documents.filter((doc:any)=>doc.lang===lang && isPublic(doc,site)).forEach((doc:any)=>(doc.taxonomies.tags||[]).forEach((tag:string)=>tags.set(tag,(tags.get(tag)||0)+1)));
+const tagList=[...tags].slice(0,e.sidebar.tag_quantity || 40);
+const tagName=(name:string)=>data.post?.tags?.find((tag:any)=>tag.id===name)?.name || name;
+const archive=new Map<string,number>();
+site.documents.filter((doc:any)=>doc.lang===lang&&doc.kind==='article'&&isPublic(doc,site)).forEach((doc:any)=>{const month=String(doc.date||'').slice(0,7);if(month)archive.set(month,(archive.get(month)||0)+1)});
+const menuItems=[
+ ['menu-copytext','icon-copy','ui_copy_selected_text'],['menu-pastetext','icon-paste','ui_paste_text'],['menu-commenttext','icon-comment-medical','ui_quote_in_a_comment'],
+ ['menu-newwindow','icon-window-restore','ui_open_in_a_new_window'],['menu-copylink','icon-link','ui_copy_link_address'],['menu-copyimg','icon-images','ui_copy_image'],
+ ['menu-downloadimg','icon-download','ui_download_image'],['menu-newwindowimg','icon-window-restore','ui_open_image_in_a_new_window'],['menu-search','icon-search--line','ui_search_this_site'],['menu-searchBaidu','icon-baidu','ui_search_baidu'],
+ ['menu-music-toggle','icon-play','play_music'],['menu-music-back','icon-backward','ui_previous_track'],['menu-music-forward','icon-forward','ui_next_track'],['menu-music-copyMusicName','icon-copy','ui_copy_track_name']
+];
+---
+<div id="sidebar"><div id="menu-mask" hidden/><MobileNavigation site={site} lang={lang}/></div>
+<div id="console">
+  <button class="close-btn" onclick="wjx.hideConsole()" aria-label={tr('close')}><i class="icon-circle-xmark"/></button>
+  <div class="console-card-group"><div class="console-card-group-left"><div class="console-card" id="card-newest-comments"><div class="card-content"><div class="author-content-item-tips">{tr('interaction')}</div><span class="author-content-item-title">{tr('recent_comments')}</span></div><div class="aside-list"><span>{tr('loading')}</span></div></div></div>
+    <div class="console-card-group-right"><div class="console-card tags" onclick="wjx.hideConsole()"><div class="card-content"><div class="author-content-item-tips">{tr('tags')}</div><span class="author-content-item-title">{tr('explore_tags')}</span></div><div class="card-tag-cloud">{tagList.map(([tag,count])=><a href={`${localeHome(lang,site)}tags/${taxonomySlug(site,tag)}/`} rel="tag" style="font-size:1em;color:#d3d3d3">{tagName(tag)}<sup>{count}</sup></a>)}</div></div>
+      <div class="console-card history" onclick="wjx.hideConsole()"><div class="item-headline"><i class="fas fa-archive"/><span>{tr('articles')}</span></div><ul class="card-archive-list">{[...archive].sort(([a],[b])=>b.localeCompare(a)).map(([month,count])=><li class="card-archive-list-item"><a class="card-archive-list-link" href={localizeUrl('/archives/',lang,site)}><span class="card-archive-list-date">{month}</span><div class="card-archive-list-count-group"><span class="card-archive-list-count">{count}</span><span class="card-archive-list-count-unit">{tr('entries')}</span></div></a></li>)}</ul></div>
+    </div>
+  </div>
+  {e.about_reward?.reward?.enable && <div class="console-card-group-reward"><ul class="reward-all console-card">{[['wxPay','wechat'],['alipay','alipay']].map(([key,label])=><li class="reward-item"><a href={e.about_reward.reward[key]} target="_blank" rel="noopener"><img src={e.about_reward.reward[key]} alt={tr(label)} loading="lazy"/></a><div class="post-qr-code-desc">{tr(label)}</div></li>)}</ul></div>}
+  <div class="button-group"><div class="console-btn-item"><button class="darkmode_switchbutton" onclick="navFn.switchDarkMode()" title={tr('display_toggle')}><i class="icon-moon-clear-fill"/></button></div><div class="console-btn-item" id="consoleHideAside"><button class="asideSwitch" onclick="wjx.hideAsideBtn()" title={tr('sidebar_toggle')}><i class="icon-arrows-left-right"/></button></div><div class="console-btn-item on" id="consoleCommentBarrage"><button class="commentBarrage" onclick="wjx.switchCommentBarrage()" title={tr('barrage_toggle')}><i class="icon-chat--fill"/></button></div>{e.tool.nav_music?.enable&&<div class="console-btn-item" id="consoleMusic"><button class="music-switch" onclick="wjx.musicToggle()" title={tr('music_toggle')}><i class="icon-disc-fill"/></button></div>}</div>
+  <div class="console-mask" onclick="wjx.hideConsole()"/>
+</div>
+{e.tool.rightside?.enable && <div id="rightside"><div id="rightside-config-hide">
+  {pageType==='post'&&e.tool.rightside.readmode&&<button id="readmode" title={tr('ui_reading_mode')}><i class="icon-book-open"/></button>}
+  {e.style.translate?.enable&&<button id="translateLink" title={tr('ui_switch_chinese_script')}>{tr('ui_chinese_script')}</button>}
+  <button id="darkmode" title={tr('ui_switch_light_and_dark_mode')}><i class="icon-circle-half-stroke"/></button><button id="hide-aside-btn" title={tr('ui_toggle_sidebar')}><i class="icon-arrows-left-right"/></button>
+</div><div id="rightside-config-show"><button id="rightside-config" title={tr('ui_settings')}><i class="icon-gear"/></button>{pageType==='post'&&<button class="close" id="mobile-toc-button" title={tr('toc')}><i class="icon-list-ul"/></button>}<a id="to_comment" href="#post-comment" title={tr('ui_go_to_comments')}><i class="icon-chat--fill"/></a><button id="go-up" title={tr('ui_back_to_top')}><i class="icon-arrow-up"/></button></div></div>}
+{e.tool.right_menu?.enable&&<div class="js-pjax"><div id="rightMenu"><div class="rightMenu-group rightMenu-small">{[['menu-backward','icon-arrow-left'],['menu-forward','icon-arrow-right'],['menu-refresh','icon-arrow-rotate-right'],['menu-top','icon-arrow-up']].map(([id,icon])=><div class="rightMenu-item" id={id}><i class={icon}/></div>)}</div><div class="rightMenu-group rightMenu-line rightMenuPlugin">{menuItems.map(([id,icon,label])=><div class="rightMenu-item" id={id}><i class={icon}/><span>{tr(label)}</span></div>)}<a class="rightMenu-item" id="menu-music-playlist" href={e.tool.nav_music?.all_playlist} target="_blank" rel="noopener"><i class="icon-radio"/><span>{tr('ui_all_tracks')}</span></a></div><div class="rightMenu-group rightMenu-line rightMenuOther"><a class="rightMenu-item menu-link" id="menu-randomPost" onclick="toRandomPost()"><i class="icon-shuffle"/><span>{tr('ui_explore')}</span></a>{taxonomyDocuments(site,lang,'categories').length>0&&<a class="rightMenu-item menu-link" href={`${localeHome(lang,site)}categories/`}><i class="icon-cube"/><span>{tr('ui_categories')}</span></a>}{tags.size>0&&<a class="rightMenu-item menu-link" href={`${localeHome(lang,site)}tags/`}><i class="icon-tags"/><span>{tr('ui_tags')}</span></a>}</div><div class="rightMenu-group rightMenu-line rightMenuOther"><div class="rightMenu-item" id="menu-copy"><i class="icon-copy"/><span>{tr('ui_copy_address')}</span></div>{e.comments.barrage?.enable&&<div class="rightMenu-item" id="menu-commentBarrage"><i class="icon-chat--fill"/><span class="menu-commentBarrage-text">{tr('ui_show_featured_comments')}</span></div>}<div class="rightMenu-item" id="menu-darkmode"><i class="icon-moon-clear-fill"/><span class="menu-darkmode-text">{tr('ui_dark_mode')}</span></div>{e.style.translate?.enable&&<div class="rightMenu-item" id="menu-translate"><i class="icon-fanti"/><span>{tr('ui_traditional_chinese')}</span></div>}</div></div><div id="rightmenu-mask"/></div>}
+{e.nav.right?.search && <SearchDialog site={site} lang={lang}/>}

@@ -1,0 +1,134 @@
+---
+import {ClientRouter} from 'astro:transitions';
+import Navigation from '../components/shell/Navigation.astro';
+import Footer from '../components/shell/Footer.astro';
+import Chrome from '../components/shell/Chrome.astro';
+import RecentComments from '../components/shell/RecentComments.astro';
+import {browserConfig} from '../components/shell/config';
+import {localizeConfig,localeHome,languageDestinations} from '../lib/locale';
+import {articles} from '../lib/queries';
+import '../styles/shell.css';
+import '../styles/responsive.css';
+import type {Site,Document} from '../lib/types';
+interface Props {site:Site;lang:string;title:string;description?:string;canonical?:string;document?:Document;pageType?:string;bodyClass?:string;}
+const {site,lang,title,document:doc,pageType='page',bodyClass=''}=Astro.props;
+const config=localizeConfig(site,lang), e=config.extra;
+// Route names select components; the theme expects only page/post document classes.
+const htmlType=['post','collection-content','collection-detail'].includes(pageType)?'post':'page';
+// A translated page must not inherit a default-language SEO sentence.
+const siteSEO=lang===site.defaultLanguage?e.site.seo:site.config.extra?.locale?.[lang]?.site?.seo;
+const description=Astro.props.description || doc?.description || siteSEO || config.description || '';
+const canonical=new URL(Astro.props.canonical || doc?.url || Astro.url.pathname,config.base_url).href;
+const pageTitle=pageType==='index'?(e.site.title_index || config.title):`${title} | ${config.title}`;
+const cover=doc?.extra?.cover ? new URL(doc.extra.cover,new URL(doc.url,config.base_url)).href : (doc?.extra?.global_cover || e.site.logo);
+const clientConfig=browserConfig(site,lang,pageType,title);
+const safeJSON=(value:unknown)=>JSON.stringify(value).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
+const themeColors=`[data-theme=light]{--wjx-theme:${e.style.theme_light_skin};--wjx-theme-op:${e.style.theme_light_skin}23;--wjx-theme-op-deep:${e.style.theme_light_skin}dd;--wjx-theme-none:${e.style.theme_light_skin}00}[data-theme=dark]{--wjx-theme:${e.style.theme_dark_skin};--wjx-theme-op:${e.style.theme_dark_skin}23;--wjx-theme-op-deep:${e.style.theme_dark_skin}dd;--wjx-theme-none:${e.style.theme_dark_skin}00}:root{--wjx-main:var(--wjx-theme)!important;--wjx-main-op:var(--wjx-theme-op)!important;--wjx-main-op-deep:var(--wjx-theme-op-deep)!important;--wjx-main-none:var(--wjx-theme-none)!important}`;
+// Accept family names and fallback lists, never arbitrary CSS or a closing style tag.
+const configuredFont=typeof e.style.font_family==='string'?e.style.font_family.trim():'';
+const fontStyles=configuredFont&&/^[\p{L}\p{N} ,"'_-]+$/u.test(configuredFont)
+  ? `:root{--site-font-family:${configuredFont},"Hiragino Sans GB","Microsoft YaHei",sans-serif}body{font-family:var(--site-font-family)}#aside-content .author-info__description,#aside-content .author-info__name,#site-name,#site-subtitle,#site-title,#error-wrap .error-content .error-info{font-family:var(--site-font-family)}` : '';
+const abstractMode=/^[a-z0-9-]+$/i.test(e.post.abstract?.mode||'')?e.post.abstract.mode:'local';
+const articleURLs=articles(site,lang).map(item=>item.url);
+const styles=pageType.startsWith('collection-')||doc?.layout?.includes('collection-')?['collection',...(doc?.layout?.match(/collection-(detail|content)/)?['post']:[])]:pageType==='archives'?['archive']:pageType.startsWith('taxonomy')?['taxonomy']:pageType==='links'?['friend']:['index','post','about','equipment','404'].includes(pageType)?[pageType]:[];
+---
+<!doctype html>
+<html lang={lang}>
+<head>
+  <ClientRouter fallback="swap"/>
+  <script>import '../scripts/navigation';</script>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="format-detection" content="telephone=no"/>
+  <meta name="generator" content="Astro"/><title>{pageTitle}</title><meta name="description" content={description}/><meta name="author" content={config.author}/>
+  <meta name="theme-color" content={e.style.theme_light_skin}/><link rel="canonical" href={canonical}/>
+  <meta property="og:type" content={pageType==='post'?'article':'website'}/><meta property="og:title" content={title||config.title}/><meta property="og:description" content={description}/><meta property="og:url" content={canonical}/><meta property="og:image" content={new URL(cover,config.base_url).href}/><meta property="og:site_name" content={config.title}/><meta property="og:locale" content={lang.replace('-','_')}/>
+  <meta name="twitter:card" content="summary_large_image"/><meta name="twitter:title" content={title||config.title}/><meta name="twitter:description" content={description}/><meta name="twitter:url" content={canonical}/><meta name="twitter:image" content={new URL(cover,config.base_url).href}/>
+  {doc?.date&&<meta property="article:published_time" content={String(doc.date)}/>}{doc?.updated&&<meta property="article:modified_time" content={String(doc.updated)}/>}
+  {doc?.draft&&<meta name="robots" content="noindex,nofollow"/>}
+  {pageType==='links'&&<meta name="robots" content="none"/>}
+  {languageDestinations(site,lang,doc).filter(item=>item.translated).map(item=><link class="activity-hreflang" rel="alternate" hreflang={item.code} href={new URL(item.url,config.base_url).href}/>)}
+  <link rel="alternate" type="application/rss+xml" title={config.title} href={`${localeHome(lang,site)}rss.xml`}/><link rel="alternate" type="application/atom+xml" title={config.title} href={`${localeHome(lang,site)}atom.xml`}/>
+  <link rel="manifest" href="/manifest.json"/><link rel="icon" href={e.site.favicon||e.site.logo}/><link rel="apple-touch-icon" href={e.site.logo}/>
+  <link rel="stylesheet" href="/dist/css/global.css"/><link rel="stylesheet" href="/icon/font.css"/>
+  {e.style.package_type==='split'&&styles.map(name=><link rel="stylesheet" href={`/dist/css/${name}.css`}/>)}
+  {pageType==='wechat'&&<link rel="stylesheet" href="/dist/css/wechat.css"/>}
+  {pageType==='music'&&<link rel="stylesheet" href="/libs/aplayer/music.css"/>}
+  <link rel="stylesheet" href="/css/i18n.css"/><link rel="stylesheet" href="/css/custom.css"/>
+  {e.activity?.enable&&<link rel="stylesheet" href="/css/activity.css"/>}
+  <link rel="stylesheet" href="/libs/snackbar/snackbar.min.css"/>
+  {e.tool.rightside?.readmode&&<link rel="stylesheet" href="/css/read-mode.css"/>}
+  {e.other.toc_enable&&<link rel="stylesheet" href="/libs/tocbot/4.18.2/tocbot.css"/>}
+  {e.code.enable&&<><link rel="stylesheet" href="/libs/prism/prism.min.css"/><link rel="stylesheet" href="/libs/prism/code.css"/><link rel="stylesheet" data-code-theme="light" href={`/libs/prism/themes/prism-${e.code.theme_light}.css`}/><link rel="stylesheet" data-code-theme="dark" href={`/libs/prism/themes/prism-${e.code.theme_dark}.css`}/></>}
+  <style is:inline id="wjx-theme-styles" set:html={themeColors}/>
+  {fontStyles&&<style is:inline id="wjx-font-styles" set:html={fontStyles}/>}
+  <style is:inline set:html={`:root{--code-max-height:${Number(e.code.height_limit||300)}px}`}/>
+  <script is:inline data-astro-rerun id="site-config" set:html={`var GLOBAL_CONFIG=${safeJSON(clientConfig)};var ASTRO_ARTICLES=${safeJSON(articleURLs)};var meting_api=${safeJSON(e.tool.nav_music?.meting_api||'')};var innerHeight=window.innerHeight;`}/>
+  <script is:inline src="/libs/jquery/jquery-3.7.1.min.js"/>
+  <script is:inline src="/js/utils.js"/>
+  <script is:inline define:vars={{colorScheme:e.style.color_scheme}}>
+    window.saveToLocal={set(key,value,ttl){if(!ttl)return;try{localStorage.setItem(key,JSON.stringify({value,expiry:Date.now()+ttl*86400000}))}catch{}},get(key){try{const item=JSON.parse(localStorage.getItem(key)||'null');if(!item)return;if(item.expiry<Date.now()){localStorage.removeItem(key);return}return item.value}catch{return undefined}}};
+    const scriptRequests=new Map();
+    window.getScript=url=>{if(!scriptRequests.has(url))scriptRequests.set(url,new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=url;script.onload=resolve;script.onerror=error=>{scriptRequests.delete(url);reject(error)};document.head.append(script)}));return scriptRequests.get(url)};
+    window.getCSS=(url,id)=>new Promise((resolve,reject)=>{const link=document.createElement('link');link.rel='stylesheet';link.href=url;link.dataset.siteVendor='';if(id)link.id=id;link.onload=resolve;link.onerror=reject;document.head.append(link)});
+    window.activateDarkMode=()=>{document.documentElement.dataset.theme='dark';document.documentElement.classList.add('color-scheme-dark');window.wjx?.initThemeColor()};
+    window.activateLightMode=()=>{document.documentElement.dataset.theme='light';document.documentElement.classList.remove('color-scheme-dark');window.wjx?.initThemeColor()};
+    const stored=saveToLocal.get('theme');const media=matchMedia('(prefers-color-scheme:dark)');
+    const followsSystem=()=>{try{return localStorage.getItem('site-theme-system')==='true'||!saveToLocal.get('theme')&&colorScheme==='system'}catch{return colorScheme==='system'}};
+    const initial=followsSystem()?(media.matches?'dark':'light'):(stored||colorScheme);
+    initial==='dark'?activateDarkMode():activateLightMode();
+    media.addEventListener('change',event=>{if(followsSystem())event.matches?activateDarkMode():activateLightMode()});
+    if(saveToLocal.get('aside-status')==='hide')document.documentElement.classList.add('hide-aside');
+    window.preloader={initLoading(){document.getElementById('loading-box')?.classList.remove('loaded')},endLoading(){document.getElementById('loading-box')?.classList.add('loaded')}};
+  </script>
+  {e.other.loading_box?.progress_bar&&<script is:inline data-pace-options='{"restartOnRequestAfter":false,"eventLag":false}' src="/libs/pace/pace.min.js"/>}
+  <slot name="head"/>
+</head>
+<body>
+  <div id="loading-box" hidden={!e.other.loading_box?.enable} transition:persist="navigation-loading" transition:animate="none" onclick="window.preloader.endLoading()" role="status" aria-label={lang.startsWith('zh')?'页面加载中':'Loading page'}><div class="loading-bg"><img class="loading-img" src={e.other.loading_box?.img||e.site.logo} alt="" fetchpriority="high"/><div class="loading-image-dot"/></div></div>
+  <noscript><style is:inline>#loading-box{display:none!important}</style></noscript>
+  <script is:inline>
+    (()=>{
+      const stop=()=>{clearTimeout(timer);document.removeEventListener('astro:page-load',finish);document.removeEventListener('astro:before-preparation',stop)};
+      const finish=()=>{window.preloader?.endLoading();stop()};
+      const timer=setTimeout(finish,8000);
+      document.addEventListener('astro:page-load',finish,{once:true});
+      // A new navigation takes ownership of the persisted loading screen.
+      document.addEventListener('astro:before-preparation',stop,{once:true});
+    })();
+  </script>
+  {e.top.global_background?.enable&&<div id="web_bg"><div>{e.top.global_background.enable_above_video?<video class="index-video" id="index-video" src={e.top.global_background.video} autoplay loop muted playsinline/>:<img class="img" src={e.top.global_background.img} alt=""/>}</div></div>}
+  <div id="an_music_bg"/>
+  <div id="body-wrap" class:list={[htmlType,bodyClass]} data-type={htmlType} data-language={lang}>
+    <slot name="header"><header class="not-top-img" id="page-header"><Navigation site={site} lang={lang} title={title} document={doc}/></header></slot>
+    <slot/>
+    {pageType!=='wechat'&&<Footer site={site} lang={lang}/>}
+  </div>
+  <Chrome site={site} lang={lang} pageType={pageType}/>
+  {e.tool.nav_music?.enable&&<div class="needEndHide" id="nav-music"><a id="nav-music-hoverTips" onclick="wjx.musicToggle()">{lang.startsWith('zh')?'播放音乐':'Play music'}</a><div id="console-music-bg"/><meting-js transition:persist="nav-music-player" id={e.tool.nav_music.id} server={e.tool.nav_music.server} type="playlist" mutex="true" preload="none" theme="var(--wjx-main)" data-lrctype="0" order="random"/></div>}
+  {(e.tool.nav_music?.enable||pageType==='music')&&<><link rel="stylesheet" href="/libs/aplayer/APlayer.min.css"/><script is:inline defer src="/libs/aplayer/APlayer.min.js"/><script is:inline defer src="/libs/aplayer/Meting2.min.js"/></>}
+  <script is:inline data-astro-rerun>window.$rightside=document.getElementById('rightside');</script>
+  <script is:inline defer src="/libs/clipboard/clipboard.min.js"/><script is:inline defer src="/libs/qrcode/qrcode.min.js"/>
+  <script is:inline defer src="/libs/countup/countup.js"/>
+  <script is:inline defer src="/libs/snackbar/snackbar.min.js"/><script is:inline defer src="/libs/fast-average-color/index.browser.min.js"/><script is:inline defer src="/libs/waterfall/waterfall.min.js"/>
+  {e.other.toc_enable&&<script is:inline defer src="/libs/tocbot/4.18.2/tocbot.min.js"/>}
+  <script is:inline defer src="/js/main.js"/>
+  {e.tool.right_menu?.enable&&<script is:inline defer src="/js/rightmenu.js"/>}
+  <script is:inline defer src={`/js/abstract/${abstractMode}.js`}/>
+  <script is:inline defer src="/js/bundle.js"/>
+  {e.style.translate?.enable&&<script is:inline defer src="/js/tw_cn.js"/>}
+  <script is:inline defer src="/js/i18n.js"/>
+  {e.activity?.enable&&<script is:inline type="module" src="/js/activity.js"/>}
+  {e.lib?.katex&&<script is:inline defer src="/libs/katex/katex.min.js"/>}
+  {e.code.enable&&<script is:inline defer src="/libs/prism/prism.min.js"/>}
+  {e.style.universe&&<><canvas transition:persist="universe" id="universe" width="1312" height="880"/><script is:inline defer src="/libs/canvas/dark.js"/></>}
+  {e.comments.enable&&e.comments.system==='twikoo'&&e.comments.twikoo?.env_id&&<script is:inline data-astro-rerun defer src="/js/comment/twikoo.js"/>}
+  {e.comments.enable&&e.comments.system==='artalk'&&e.comments.artalk?.server&&<script is:inline data-astro-rerun defer src="/js/comment/artalk.js"/>}
+  {e.comments.enable&&e.comments.system==='waline'&&e.comments.waline?.server_url&&<script is:inline data-astro-rerun defer src="/js/comment/waline.js"/>}
+  {e.comments.enable&&e.comments.barrage?.enable&&<><link rel="stylesheet" href="/css/commentBarrage.css"/><script is:inline data-astro-rerun defer src="/js/commentBarrage.js"/></>}
+  <slot name="scripts"/>
+  <RecentComments site={site} lang={lang}/>
+  {e.site.analytics?.umami?.enable&&<script is:inline defer src={e.site.analytics.umami.js} data-website-id={e.site.analytics.umami.id} data-host-url={e.site.analytics.umami.remote_url||undefined} data-domains={e.site.analytics.umami.domain||undefined}/>}
+  {e.site.analytics?.clarity?.enable&&<script is:inline define:vars={{clarityId:e.site.analytics.clarity.id}}>
+    (function(c,l,a,r,i){c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};const s=l.createElement(r);s.async=true;s.src='https://www.clarity.ms/tag/'+i;l.head.appendChild(s)})(window,document,'clarity','script',clarityId);
+  </script>}
+</body>
+</html>

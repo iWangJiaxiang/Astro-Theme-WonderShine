@@ -1,0 +1,221 @@
+/* ========================================
+   导航栏按钮交互样式
+   合并自: navbar-button.css
+          navbar-button-hover.css
+   ======================================== */
+
+/* -------------------- 按钮基础状态 -------------------- */
+
+#nav .nav-item {
+    border-radius: 8px;
+    color: var(--wjx-white);
+    transition: 0.3s;
+}
+
+.nav-fixed #nav .nav-item {
+    color: var(--wjx-fontcolor);
+    transition: 0.3s;
+}
+
+/* -------------------- 按钮悬浮效果 -------------------- */
+
+#nav .nav-item:hover {
+    color: var(--wjx-white);
+    background: var(--wjx-white-op);
+    transition: 0.3s;
+}
+
+.page #nav .nav-item:hover {
+    color: var(--wjx-card-bg) !important;
+    background: var(--wjx-lighttext);
+    transition: 0.3s;
+    box-shadow: var(--wjx-shadow-main);
+}
+
+.nav-fixed #nav .nav-item:hover {
+    background: var(--wjx-lighttext);
+    color: var(--wjx-card-bg);
+    transition: 0.3s;
+}
+
+/* -------------------- 菜单项悬浮效果 -------------------- */
+
+@media screen and (min-width: 768px) {
+    .menus_item:hover > .site-page {
+        color: var(--wjx-card-bg);
+        background: var(--wjx-white-op);
+        transition: 0.3s;
+        box-shadow: var(--wjx-shadow-main);
+    }
+
+    .page .menus_item:hover > .site-page {
+        color: var(--wjx-card-bg);
+        background: var(--wjx-main);
+        transition: 0.3s;
+        box-shadow: var(--wjx-shadow-main);
+    }
+
+    .nav-fixed .menus_item:hover > .site-page {
+        background-color: var(--wjx-lighttext);
+    }
+}
+
+@media screen and (max-width: 768px) {
+    #sidebar #sidebar-menus .menus_items li .site-page:hover {
+        background: var(--wjx-main);
+        color: var(--wjx-white);
+    }
+
+    #sidebar #sidebar-menus .menus_items li .site-page span:hover {
+        color: var(--wjx-white);
+    }
+}
+
+/* -------------------- 站点名称图标悬浮 -------------------- */
+
+.nav-fixed #nav #site-name i {
+    color: var(--wjx-fontcolor);
+    transition: 0.3s;
+}
+
+#nav #site-name:hover i {
+    color: var(--wjx-white);
+}
+
+/* -------------------- 辅助按钮悬浮 -------------------- */
+
+#assist-open a {
+    padding: 0;
+    pointer-events: none;
+}
+
+#assist-open {
+    transition: 0.3s;
+    border-radius: 40px;
+}
+
+#assist-open:hover {
+    color: var(--wjx-white) !important;
+    background: var(--wjx-white-op);
+}
+
+#page-header.nav-fixed #assist-open:hover {
+    background: var(--wjx-main);
+}
+
+#page-header.nav-fixed #assist-open:hover i,
+.page #nav #assist-open.nav-button:hover i {
+    color: var(--wjx-white);
+}
+
+.page #nav #assist-open:hover {
+    background: var(--wjx-main);
+}
+
+/* -------------------- 顶部栏 -------------------- */
+
+.topbar-html {
+    background: #aeaeae !important;
+}
+
+/* -------------------- 品牌图标放大 -------------------- */
+
+i.fab {
+    font-size: 20px;
+    vertical-align: middle;
+    margin-bottom: 4px;
+}
+
+/* -------------------- 传送门 -------------------- */
+
+#travellings_button {
+    display: inline;
+    padding: 0 0.4rem;
+    transition: 0.3s;
+}
+
+#page-header.not-top-img #travellings_button::after,
+#body-wrap .nav-fixed #travellings_button::after {
+    background: var(--wjx-main) !important;
+}
+
+#body-wrap #travellings_button {
+    display: flex;
+}
+
+#body-wrap #travellings_button::after {
+    --height: 1.8rem;
+    content: attr(title);
+    position: fixed;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--wjx-card-bg);
+    background: var(--wjx-white-op) !important;
+    box-shadow: var(--wjx-shadow-nav);
+    border-radius: var(--wjx-radius-full);
+    width: fit-content;
+    height: var(--height);
+    font-size: var(--global-font-size);
+    white-space: nowrap;
+    margin: auto;
+    padding: 0 4em;
+    top: calc((60px - var(--height)) / 2);
+    right: 0;
+    left: 0;
+    line-height: 0;
+    opacity: 0;
+    z-index: 1;
+    visibility: hidden;
+    transform: scaleX(1.1);
+    pointer-events: none;
+    transition: 0.5s;
+}
+
+#body-wrap #travellings_button:hover::after {
+    opacity: 1;
+    transform: none;
+    visibility: visible;
+}
+
+#body-wrap .page #travellings_button:hover::after {
+    background: var(--wjx-main) !important;
+}
+
+#body-wrap #travellings_button:hover a {
+    background: var(--wjx-main);
+    box-shadow: var(--wjx-shadow-main);
+}
+
+#body-wrap:has(#travellings_button:hover) #nav #menus,
+#body-wrap:has(#travellings_button:hover) #page-name {
+    display: none;
+}
+
+@media screen and (max-width: 900px) {
+    #body-wrap #travellings_button::after {
+        padding: 0 2em;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    #page-header.nav-fixed #travellings_button {
+        opacity: 0;
+    }
+
+    #page-header.nav-fixed #randomPost_button {
+        opacity: 0;
+    }
+}
+
+/* -------------------- 小角标 -------------------- */
+
+.el-input.el-input--small.el-input-group.el-input-group--prepend::after {
+    display: none;
+    content: '';
+    position: absolute;
+    border: 15px solid transparent;
+    border-top-color: #444;
+    left: 50%;
+    transform: translate(-50%, -46px);
+}

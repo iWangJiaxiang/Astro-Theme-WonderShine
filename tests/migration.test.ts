@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { migrateSite } from '../scripts/migrate-site.ts';
+import { loadSite } from '../packages/theme/src/lib/content.ts';
+import { LocalRepository } from '../apps/studio/server/repository.ts';
+import { ContentService } from '../apps/studio/server/content-service.ts';
+
+test('migration preserves source bytes and URLs while Studio edits the new format',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'wondershine-migrate-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const source=join(root,'old'),destination=join(root,'new');await mkdir(join(source,'content/articles/example'),{recursive:true});await mkdir(join(source,'static/uploads'),{recursive:true});
+ await writeFile(join(source,'config.toml'),'base_url="https://example.test"\ndefault_language="en"\ntheme="legacy"\n');
+ const text='+++\ntitle="Example"\ntemplate="page/post.html"\ndate=2020-01-01\n+++\n## New heading\n\nBody remains exact.\n';
+ await writeFile(join(source,'content/articles/example/index.md'),text);
+ await mkdir(join(source,'content/articles/admin'),{recursive:true});
+ await writeFile(join(source,'content/articles/admin/index.md'),text);
+ await mkdir(join(source,'static/admin'),{recursive:true});
+ await writeFile(join(source,'static/admin/index.html'),'legacy admin');
+ await writeFile(join(source,'static/uploads/image.svg'),'<svg xmlns="http://www.w3.org/2000/svg"/>');
+ const archive=join(root,'theme.tgz'),aliases=join(root,'aliases.json');await writeFile(archive,'fixture');await writeFile(aliases,JSON.stringify({'/articles/example/':{'new-heading':'old-heading'}}));
+ await migrateSite(source,destination,archive,aliases);
+ assert.equal(await readFile(join(source,'content/articles/example/index.md'),'utf8'),text);
+ const site=await loadSite({root:destination});const example=site.documents.find(doc=>doc.path==='/articles/example/')!;assert.equal(example.layout,'post');assert.equal(example.body,'## New heading\n\nBody remains exact.\n');assert.match(example.html,/id="old-heading"/);assert.ok(site.documents.some(doc=>doc.path==='/articles/admin/'));await assert.rejects(readFile(join(destination,'public/admin/index.html')),/ENOENT/);
+ const service=new ContentService(new LocalRepository(destination));const doc=await service.document('content/articles/example/index.md');
+ await service.saveDocument(doc.path,{title:'Updated'},doc.body,doc.revision);
+ const saved=await readFile(join(destination,doc.path),'utf8');assert.match(saved,/layout\s*=\s*"post"/);assert.doesNotMatch(saved,/template=/);
+ assert.ok((await readFile(join(destination,'public/uploads/image.svg'))).length);
+ await assert.rejects(migrateSite(source,destination,archive),/exist/i);
+ await assert.rejects(migrateSite(source,join(source,'nested'),archive),/outside/);
+});

@@ -1,0 +1,4 @@
+---
+const { item, sprite } = Astro.props;
+---
+{item.logo ? <img src={item.logo} title={item.name} alt={item.name || ''} loading="lazy" decoding="async" /> : item.icon ? <i class={item.icon}></i> : item.svg_symbol_id ? <svg role="img" aria-label={item.name}><use href={`${item.svg_sprite || sprite}#${item.svg_symbol_id}`} /></svg> : <span>{item.name?.slice(0,1)}</span>}

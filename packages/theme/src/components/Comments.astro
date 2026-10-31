@@ -1,0 +1,37 @@
+---
+import {t,localizeConfig,localizeUrl} from '../lib/locale';
+const {site,lang,document}=Astro.props;
+const config=localizeConfig(site,lang);
+const comments=config.extra.comments;
+const note=document?.kind==='note';
+const commentPath=note?(document.extra.comment_path||(document.extra.id?`/thread/${document.extra.id}/`:document.url)):document?.extra.comment_path;
+const visitorMail=comments?.visitor_mail?.enable?String(comments.visitor_mail.mail||''):undefined;
+---
+{comments?.enable && !document?.extra.disable_comment && <div id="post-comment" class:list={{'activity-comments':note}} data-comment-path={commentPath}>
+  {note?<h2>{t('comments',lang,site,'activity')} {comments.system==='twikoo'&&<span id="twikoo-count"></span>}</h2>:<>
+  <div class="comment-head"><div class="comment-headline"><i class="icon-chat--fill"></i> <span>{t('comments',lang,site)}</span></div><div class="comment-randomInfo">{visitorMail!==undefined&&<button type="button" onclick="wjx.addRandomCommentInfo()">{t('ui_anonymous_comments',lang,site)}</button>}<a href={localizeUrl('/privacy',lang,site)}>{t('ui_privacy_policy',lang,site)}</a></div><div class="comment-tips" id="comment-tips"><span>{t('ui_keep_blank_lines_for_the_best_comment_formatting',lang,site)}</span></div></div>
+  </>}
+  {visitorMail!==undefined&&<script is:inline data-astro-rerun define:vars={{visitorMail}}>window.visitorMail=visitorMail;</script>}
+  {comments.system==='twikoo' && comments.twikoo?.env_id && <div id="twikoo-wrap"></div>}
+  {comments.system==='artalk' && comments.artalk?.server && <div id="artalk-wrap"></div>}
+  {comments.system==='waline' && comments.waline?.server_url && <div id="waline-wrap"></div>}
+</div>}
+
+<style is:global>
+.comment-randomInfo{display:flex;align-items:center;gap:.75rem}
+.comment-randomInfo button{padding:0;border:0;font:inherit;color:inherit;cursor:pointer}
+.comment-randomInfo button:hover{color:var(--wjx-theme)}
+.comment-randomInfo button:focus-visible{outline:2px solid var(--wjx-theme);outline-offset:3px}
+#twikoo .tk-tag-green{background-color:#3b70fc;border:none;border-radius:4px;color:#fff}
+.atk-sidebar-layer{top:10%;left:20%;width:60%;height:80%;transform:translateY(120%);border-radius:12px;padding:10px 0;background:#fff}
+.atk-layer-wrap .atk-layer-mask{backdrop-filter:blur(10px)}
+.atk-main-editor>.atk-bottom .atk-plug-btn:not(:last-child){border-right:1px solid var(--at-color-border)}
+.atk-main-editor>.atk-bottom .atk-plug-btn{display:inline-flex;align-content:center;justify-content:center}
+.atk-comment>.atk-avatar,.atk-comment>.atk-avatar img{width:48px;height:48px}
+.atk-comment>.atk-avatar img{border-radius:50%;transition:all .3s ease}
+.atk-comment>.atk-avatar img:hover{transform:scale(1.2);border-radius:4px}
+.atk-comment>.atk-avatar img.error:before{width:48px!important;height:48px!important;border-radius:3px}
+.atk-comment>.atk-avatar img.error:after{display:none}
+#owo-big p{color:var(--at-color-meta);text-overflow:ellipsis;white-space:nowrap;overflow:hidden;text-align:center;font-size:12px;margin:-14px 0 0!important}
+@media(max-width:600px){.atk-sidebar-layer{width:100%;height:100%;left:0;top:0;border-radius:0}}
+</style>

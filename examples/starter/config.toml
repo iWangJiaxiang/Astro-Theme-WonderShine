@@ -1,0 +1,49 @@
+base_url = "https://example.com"
+title = "WonderShine"
+description = "Stories, ideas and everyday moments."
+author = "Alex"
+default_language = "en"
+generate_feeds = true
+
+[[taxonomies]]
+name = "tags"
+
+[[taxonomies]]
+name = "categories"
+
+[languages.zh-CN]
+title = "WonderShine"
+description = "记录想法与日常。"
+
+[[languages.zh-CN.taxonomies]]
+name = "tags"
+
+[[languages.zh-CN.taxonomies]]
+name = "categories"
+
+[extra.activity]
+enable = true
+
+[extra.style]
+package_type = "split"
+
+[extra.post.post_edit]
+enable = false
+
+[extra.sidebar]
+widget_list = [ "profile", "tags", "recent-posts" ]
+
+[extra.sidebar.profile]
+profile_desc = "A space for ideas and everyday moments."
+
+[extra.top.banner_left]
+enable = true
+title_big = "<div class=\"banners-title-big\">Make room<br>for your ideas.</div>"
+title_small = "Welcome to WonderShine"
+
+[extra.other.loading_box]
+enable = true
+img = "/img/logo.svg"
+
+[extra.locale.zh-CN.sidebar.profile]
+profile_desc = "记录生活，分享想法。"

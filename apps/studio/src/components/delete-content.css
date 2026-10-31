@@ -1,0 +1,12 @@
+.delete-content-dialog { width: min(560px, calc(100vw - 40px)); max-height: calc(100dvh - 48px); padding: 0; border: 1px solid var(--studio-line); border-radius: 14px; color: var(--studio-text, inherit); background: var(--studio-card); box-shadow: 0 24px 80px #0003; overflow: auto; }
+.delete-content-dialog::backdrop { background: #10162a66; backdrop-filter: blur(3px); }
+.delete-content-panel { padding: 26px; }
+.delete-content-panel > p { font-size: 13px; }
+.delete-content-details { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 18px; padding: 16px 0; border-block: 1px solid var(--studio-line); font-size: 13px; }
+.delete-content-details dt { color: var(--studio-muted); }
+.delete-content-details dd { margin: 0; overflow-wrap: anywhere; }
+.delete-content-path { font: 12px/1.65 ui-monospace, monospace; }
+.delete-content-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+.delete-content-confirm { min-height: 42px; padding: 10px 18px; border-radius: 9px; background: #b7283c; color: #fff; font-size: 14px; font-weight: 600; }
+.delete-content-confirm:disabled { opacity: .55; cursor: not-allowed; }
+.library-row > .content-delete { flex-shrink: 0; margin-right: 18px; }

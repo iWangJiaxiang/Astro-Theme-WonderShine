@@ -1,0 +1,31 @@
+---
+import Navigation from '../shell/Navigation.astro';
+import {localizeConfig} from '../../lib/locale';
+const {site,document,lang}=Astro.props,config=localizeConfig(site,lang),above=config.extra.top.above;
+const enabled=above.enable_above??above.enable;
+const greeting=config.extra.other.greeting;
+const strings=(above.typed||[]).map((item:any)=>item.realNode?.text||item.text||item).filter((item:unknown)=>typeof item==='string');
+---
+<header class={enabled?'full_page':'not-top-img'} id="page-header"><Navigation site={site} lang={lang} title={config.title} document={document}/>
+  {greeting?.enable_greeting&&<div id="greetingBox"/>}
+  {enabled&&<><link rel="stylesheet" href="/css/fullPage.css"/><div class="pl-container" style={{'--home-image':`url(${above.index_img})`,'--home-phone-image':`url(${above.phone_index_img||above.index_img})`}}>{above.enable_above_video?<video class="index-video" id="index-video" autoplay src={above.index_video} loop muted playsinline style="display:block;object-fit:cover;width:100%;height:100%;pointer-events:none"/>:<><div class="pl-img pl-blur pl-visible"/><div class="pl-img pl-visible"/></>}</div><div id="site-info"><h1 id="site-title">{config.title}</h1><div id="site-subtitle"><span id="subtitle">{strings[0]||config.description}</span><span class="typed-cursor" aria-hidden="true"/></div></div><div id="scroll-down"><i class="icon-angle-down scroll-down-effects"/></div></>}
+</header>
+{enabled&&<script is:inline data-astro-rerun define:vars={{strings,random:above.enable_typed_random}}>
+  document.addEventListener('astro:page-load',async()=>{
+    const subtitle=document.getElementById('subtitle');
+    const values=[...strings];
+    if(random)try{const response=await fetch('https://v1.hitokoto.cn');if(response.ok){const quote=await response.json();if(quote.hitokoto)values.push(quote.hitokoto)}}catch{}
+    if(!values.length)return;
+    try{if(!window.Typed)await getScript('https://npm.elemecdn.com/typed.js@2.0.12/lib/typed.min.js');if(!subtitle?.isConnected)return;window.typed=new Typed('#subtitle',{strings:values,startDelay:300,typeSpeed:100,loop:true,backSpeed:50})}catch{}
+  },{once:true});
+</script>}
+{greeting?.enable_greeting&&<script is:inline data-astro-rerun define:vars={{settings:greeting.setting||[],lang}}>
+  const box=document.getElementById('greetingBox');
+  if(box){const hour=new Date().getHours(),entries=settings.map(item=>item.realNode||item),match=entries.find(item=>hour>=item.start_time&&hour<=item.end_time);const element=document.createElement('div');element.id='greeting';element.textContent=match?.greeting||(lang.startsWith('zh')?'欢迎回来 👋':'Welcome back 👋');box.append(element);setTimeout(()=>element.classList.add('shown'),1000);setTimeout(()=>{element.classList.remove('shown');setTimeout(()=>box.remove(),500)},4000)}
+</script>}
+<style is:global>
+.pl-img{background-image:var(--home-image)}#page-header.full_page #site-title{color:white}#page-header.full_page #site-subtitle{color:white}
+#greetingBox{position:fixed;top:10px;left:15%;width:400px;text-align:center;z-index:10000;pointer-events:none}
+#greeting{display:inline-block;position:relative;opacity:0;top:-110px;padding:5px 40px;border-radius:50px;background:#fff;color:#000;font-size:small;transition:.5s;box-shadow:0 10px 20px #0000000d}
+#greeting.shown{opacity:1;top:0}@media(max-width:768px){.pl-img{background-image:var(--home-phone-image)}}
+</style>

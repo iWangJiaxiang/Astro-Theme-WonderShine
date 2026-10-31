@@ -1,0 +1,40 @@
+---
+import {loadSite} from '../lib/content';
+import {articles,cover} from '../lib/queries';
+import {localizeConfig,localeHome,t} from '../lib/locale';
+import SiteLayout from '../layouts/SiteLayout.astro';
+import Navigation from '../components/shell/Navigation.astro';
+import ResponsiveImage from '../components/ResponsiveImage.astro';
+const site=await loadSite(),lang=site.defaultLanguage;
+const config=localizeConfig(site,lang),error=config.extra.other.error_404;
+const posts=articles(site,lang).slice(0,6);
+const title=lang.startsWith('zh')?'404 未找到页面':'404 Page not found';
+---
+<SiteLayout site={site} lang={lang} title={title} description={title} canonical="/404.html" pageType="404" bodyClass="page">
+  <div class="errors" slot="header">
+    <header class={config.extra.top.above?.enable_above?'full_page':'not-top-img'} id="page-header">
+      <Navigation site={site} lang={lang} title={config.title}/>
+    </header>
+    <main id="error-wrap">
+      <div class="error-content">
+        <div class="error-img" role="presentation" style={{backgroundImage:`url(${JSON.stringify(error.background)})`}}></div>
+        <div class="error-info">
+          <h1 class="error_title">404</h1>
+          <div class="error_subtitle">{error.subtitle}</div>
+          <a class="button--animated" href={localeHome(lang,site)}><i class="icon-rocket" aria-hidden="true"></i>{t('ui_return_home',lang,site)}</a>
+        </div>
+      </div>
+    </main>
+    <div class="aside-list">
+      <div class="aside-list-group">
+        {posts.map(post=><div class="aside-list-item">
+          <a class="thumbnail div_border" href={post.url} title={post.title}>
+            <ResponsiveImage site={site} src={cover(post,site)} alt={post.title} width={800} sizes="(min-width:800px) 392px, 49vw"/>
+          </a>
+          <div class="content"><a class="title" href={post.url} title={post.title}>{post.title}</a></div>
+        </div>)}
+      </div>
+    </div>
+  </div>
+</SiteLayout>
+<style>.div_border{border-radius:.5rem}</style>

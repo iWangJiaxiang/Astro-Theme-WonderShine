@@ -1,0 +1,321 @@
+/* ========================================
+   文章头部样式 (Tailwind CSS v4 重构)
+   ======================================== */
+
+/* -------------------- 文章头部信息 -------------------- */
+
+#page-header #post-info {
+    @apply absolute px-12 mx-auto z-10 flex flex-col items-start justify-center w-full h-full text-center inset-0;
+    color: var(--wjx-white);
+    max-width: 1400px;
+    animation: slide-in 0.6s 0s backwards;
+}
+
+@media screen and (max-width: 768px) {
+    #page-header #post-info {
+        @apply justify-normal px-4;
+        padding: 0 6%;
+        padding-top: 18rem;
+        bottom: 1.1rem;
+    }
+}
+
+@media screen and (min-width: 1300px) {
+    #page-header #post-info {
+        @apply flex justify-center h-full;
+    }
+}
+
+#post-info #post-meta > .meta-secondline > span:first-child {
+    @apply mr-3;
+}
+
+.meta-secondline span {
+    @apply flex items-center leading-none;
+}
+
+@media screen and (max-width: 768px) {
+    .meta-secondline span {
+        @apply leading-normal;
+    }
+}
+
+/* -------------------- 文章头图 -------------------- */
+
+#page-header.post-bg {
+    @apply overflow-hidden h-80;
+    background-color: var(--wjx-background);
+    transition: 0.6s;
+}
+
+#page-header.post-bg::before {
+    @apply absolute top-0 left-0 block w-full;
+    transition: 0.3s;
+    opacity: 1;
+    height: 20rem;
+    background-color: var(--wjx-main);
+    content: "";
+}
+
+@media screen and (max-width: 768px) {
+    #page-header.post-bg {
+        height: 30rem !important;
+        margin-bottom: -12px;
+    }
+
+    #page-header.post-bg:before {
+        height: 15rem;
+    }
+
+    .post-bg #post-cover {
+        min-height: 15rem !important;
+        height: 70% !important;
+        opacity: 1 !important;
+    }
+}
+
+@media screen and (min-width: 1300px) {
+    #page-header.post-bg {
+        @apply h-100;
+    }
+
+    #page-header {
+        @apply h-100;
+    }
+
+    #page-header.post-bg:before {
+        @apply h-100;
+        background-color: var(--wjx-main);
+        animation: slide-in-op 0.6s 0s forwards;
+    }
+
+    #post-info .post-title {
+        width: 1100px;
+        font-size: 2.6rem !important;
+    }
+}
+
+.post-bg #post-cover {
+    @apply w-full h-full object-cover;
+    min-width: 50vw;
+    min-height: 20rem;
+    opacity: 0.8;
+}
+
+/* -------------------- 封面容器 -------------------- */
+
+.coverdiv {
+    @apply w-[70%] h-full relative overflow-hidden mb-0;
+    margin: 0 -20% 0 auto;
+    transform: rotate(10deg) translateY(-10%) scale(2);
+    filter: blur(10px);
+}
+
+.coverdiv.loaded {
+    @apply block;
+}
+
+.coverdiv:after {
+    @apply absolute w-full h-full top-0 left-0;
+    content: '';
+    box-shadow: 110px -130px 300px 60px var(--wjx-main) inset;
+}
+
+@media screen and (max-width: 768px) {
+    .coverdiv {
+        @apply w-full fixed ml-auto mr-0 z-[1];
+        height: 30rem;
+        transform: rotate(0) translateY(0) scale(1);
+        filter: blur(0);
+    }
+
+    .coverdiv:after {
+        @apply h-[70%];
+        box-shadow: 0 0 105px 99px var(--wjx-main) inset;
+    }
+}
+
+@media screen and (min-width: 768px) {
+    .coverdiv {
+        @apply w-[70%] h-full relative overflow-hidden mb-0 opacity-0;
+        margin: 0 -20% 0 auto;
+        transform: rotate(10deg) translateY(-8%) scale(1.8);
+        filter: blur(10px);
+    }
+
+    .coverdiv.loaded {
+        @apply block opacity-50;
+        animation: showCover 1s 0.3s backwards;
+        transform: rotate(10deg) translateY(-10%) scale(2);
+    }
+
+    @keyframes showCover {
+        from {
+            opacity: 0;
+            transform: rotate(10deg) translateY(-8%) scale(1.8);
+        }
+        to {
+            opacity: 0.5;
+            transform: rotate(10deg) translateY(-10%) scale(2);
+        }
+    }
+}
+
+@media screen and (min-width: 1300px) {
+    .coverdiv {
+        @apply w-[70%] h-full relative overflow-hidden mb-0 opacity-0;
+        margin: 0 -20% 0 auto;
+        transform: rotate(10deg) translateY(-8%) scale(1.8);
+        filter: blur(10px);
+    }
+
+    .coverdiv.loaded {
+        @apply block opacity-50;
+        animation: showCover 1s 0.3s backwards;
+        transform: rotate(10deg) translateY(-10%) scale(2);
+    }
+}
+
+/* -------------------- 页面头部 -------------------- */
+
+#page-header {
+    @apply flex relative w-full bg-center bg-cover bg-no-repeat transition-all duration-500 ease-linear;
+}
+
+#page-header #scroll-down .scroll-down-effects,
+#page-header #site-subtitle,
+#page-header #site-title {
+    @apply text-center leading-normal;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+#page-header #site-title {
+    @apply m-0;
+    color: var(--white);
+    font-size: 1.85em;
+}
+
+@media screen and (min-width: 768px) {
+    #page-header #site-title {
+        font-size: 2.85em;
+    }
+}
+
+#page-header #site-subtitle {
+    color: var(--light-grey);
+    font-size: 1.15em;
+}
+
+@media screen and (min-width: 768px) {
+    #page-header #site-subtitle {
+        font-size: 1.72em;
+    }
+}
+
+#page-header #site_social_icons {
+    @apply hidden mx-auto w-60 text-center;
+}
+
+@media screen and (max-width: 768px) {
+    #page-header #site_social_icons {
+        @apply block;
+    }
+}
+
+#page-header #site_social_icons .social-icon {
+    @apply mx-2 cursor-pointer;
+    color: var(--light-grey);
+    text-shadow: rgba(0, 0, 0, 0.15) 0.1rem 0.1rem 0.2rem;
+    font-size: 1.43em;
+}
+
+#page-header #scroll-down .scroll-down-effects {
+    @apply relative w-full text-3xl;
+    color: var(--light-grey);
+}
+
+#page-header.not-home-page {
+    @apply h-80;
+}
+
+@media screen and (max-width: 768px) {
+    #page-header.not-home-page {
+        @apply h-56;
+    }
+}
+
+#page-header #page-site-info {
+    @apply absolute top-40 px-2 w-full;
+}
+
+@media screen and (max-width: 768px) {
+    #page-header #page-site-info {
+        @apply top-28;
+    }
+
+    #page-header.post-bg {
+        @apply h-72 transition-none;
+        background-color: var(--wjx-main) !important;
+    }
+}
+
+@media screen and (max-width: 900px) {
+    #page-header #post-info {
+        @apply bottom-6 text-left;
+    }
+}
+
+#page-header.not-top-img {
+    @apply mb-2 h-[60px];
+    background: 0px center;
+}
+
+#page-header.not-top-img #nav .nav-item {
+    color: var(--wjx-fontcolor);
+    text-shadow: none;
+}
+
+#page-header.not-top-img #travellings_button::after {
+    background: var(--wjx-main) !important;
+}
+
+/* -------------------- 文章顶部其他信息 -------------------- */
+
+#post > #post-info {
+    margin-bottom: 1.5rem;
+}
+
+#post > #post-info .post-title {
+    padding-bottom: 0.2rem;
+    color: var(--text-highlight-color);
+    border-bottom: 1px solid var(--light-grey);
+}
+
+#post > #post-info #post-meta,
+#post > #post-info #post-meta a {
+    color: rgb(120, 129, 138);
+}
+
+#post-meta > div {
+    @apply text-left;
+}
+
+#post-info #post-meta {
+    @apply mt-1.5 flex select-none;
+    color: var(--wjx-white);
+    transition: 0.3s;
+}
+
+#post-info #post-meta a {
+    @apply no-underline leading-none rounded-xl;
+    color: var(--wjx-fontcolor);
+}
+
+#post-info #post-meta a:hover {
+    @apply no-underline;
+    color: var(--wjx-white);
+}
+
+#post-info #post-meta i {
+    @apply leading-none;
+}

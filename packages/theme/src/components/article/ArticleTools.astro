@@ -1,0 +1,19 @@
+---
+import {t,localizeConfig,localizeUrl} from '../../lib/locale';
+import type {Site,Document} from '../../lib/types';
+interface Props {site:Site;document:Document;lang:string;style:string}
+const {site,document:doc,lang,style}=Astro.props;
+const config=localizeConfig(site,lang),tr=(key:string)=>t(key,lang,site),url=(path:string)=>localizeUrl(path,lang,site);
+const reward=config.extra.about_reward.reward,share=config.extra.post.share_right;
+---
+<div class="post-tools-left">
+  <div class:list={[{'rewardLeftButton':style==='one'}]}>
+    {reward.enable_reward_wz&&<div class="post-reward" onclick="AddRewardMask()"><div class="reward-button button--animated" title={tr('ui_support_the_author')}><i class="icon-hand-heart-fill"></i> {tr('ui_support_the_author')}</div><div class="reward-main"><ul class="reward-all"><li class="reward-title">{tr('ui_thank_you_for_supporting_my_work')}</li><li><ul class="reward-group">{[['wechat',reward.wxPay],['alipay',reward.alipay]].map(([key,src])=><li class="reward-item"><a href={src} target="_blank" rel="noopener noreferrer"><img src={src} alt={tr(key)} class="post-qr-code-img" loading="lazy"/></a><div class="post-qr-code-desc">{tr(key)}</div></li>)}</ul></li><li><a class="reward-main-btn" href={url(reward.reward_md_url)}><div class="reward-text">{tr('ui_supporters')}</div><div class="reward-dec">{tr('ui_your_support_makes_writing_worthwhile')}</div></a></li></ul></div></div>}
+    {(style==='one'||config.extra.post.post_edit.enable_post_edit)&&<div class="reward-link mode"><a class="reward-link-button" href={style==='one'?url('/subscribe/'):config.extra.post.post_edit.post_edit_url}><i class="icon-plant-fill"></i>{tr(style==='one'?'subscribe':'ui_operation_and_responsibility')}</a></div>}
+  </div>
+  <div class:list={[{'shareRight':style==='one'}]}>
+    {share.mobile_edit&&<div class="copyright-link mobile"><div class="copyright-qrcode"><div class="copyright-button" title={tr('ui_read_this_article_on_your_phone')}><i class="icon-qrcode"></i></div><div class="copyright-main"><div class="copyright-main-all"><div id="qrcode"></div><div class="reward-dec">{tr('ui_read_this_article_on_your_phone')}</div></div></div></div></div>}
+    {share.weibo_edit&&<div class="copyright-link weibo"><a class="copyright-button" rel="noopener external nofollow noreferrer" target="_blank" href={`https://service.weibo.com/share/share.php?title=${encodeURIComponent(doc.title)}&url=${encodeURIComponent(new URL(doc.url,config.base_url).href)}`} title={tr('ui_share_to_weibo')}><i class="icon-weibo" style="font-size:22px"></i></a></div>}
+    {share.copyurl_edit&&<div class="copyright-link copyurl"><button class="copyright-button" id="post-share-url" onclick="rm.copyPageUrl()" title={tr('ui_copy_link')}><i class="icon-link"></i></button></div>}
+  </div>
+</div>

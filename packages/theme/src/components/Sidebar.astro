@@ -1,0 +1,14 @@
+---
+import {localizeConfig} from '../lib/locale';
+import SidebarWidgets from './sidebar/SidebarWidgets.astro';
+import type {Site,Document} from '../lib/types';
+interface Props {site:Site;lang:string;document?:Document;kind?:string;}
+const {site,lang,document,kind='indexWidget'}=Astro.props;
+const config=localizeConfig(site,lang),widgets=config.extra.sidebar.widgets[kind]||[];
+const toc=widgets.findIndex((entry:{widget:string})=>entry.widget==='toc');
+const stickyStart=toc>=0?toc:Math.max(0,widgets.length-3);
+---
+{config.extra.sidebar.location!=='hide-aside'&&widgets.length>0&&<aside class="aside-content" id="aside-content">
+  <SidebarWidgets site={site} lang={lang} document={document} widgets={widgets.slice(0,stickyStart)}/>
+  <div class="sticky_layout"><SidebarWidgets site={site} lang={lang} document={document} widgets={widgets.slice(stickyStart)}/></div>
+</aside>}
