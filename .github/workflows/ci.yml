@@ -22,3 +22,13 @@ jobs:
       - run: npm run studio:build
       - run: npm run audit:distribution
       - run: npm run test:package
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+      - run: npm run test:browser
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: theme-browser-results
+          path: temp/browser/
