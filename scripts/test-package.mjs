@@ -7,8 +7,11 @@ const root=process.cwd(), temporary=await mkdtemp(path.join(tmpdir(),'wondershin
 function run(args,cwd=root){const r=spawnSync('npm',args,{cwd,encoding:'utf8',maxBuffer:32*1024*1024,timeout:240000});assert.ifError(r.error);assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout;}
 try {
  run(['run','build:theme']);
+ await writeFile('packages/theme/dist/stale-build-probe.mjs', 'export const stale = true;');
+ await writeFile('packages/theme/assets/dist/stale-build-probe.css', 'body { color: red; }');
  const [packed]=JSON.parse(run(['pack','./packages/theme','--pack-destination',temporary,'--json']));
  const names=packed.files.map(f=>f.path);
+ assert.ok(!names.some(name=>name.includes('stale-build-probe')), 'prepack must remove stale generated output');
  for(const name of ['integration.mjs','dist/assets.mjs','assets/dist/css/global.css','defaults/config.toml','locales/theme.toml','src/pages/[...path].astro'])assert.ok(names.includes(name),name);
  assert.ok(!names.some(name=>/^(?:examples|apps|tests|content)\//.test(name)));
  const site=path.join(temporary,'site');
