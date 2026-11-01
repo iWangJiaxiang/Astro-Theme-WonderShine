@@ -14,18 +14,16 @@ import { LocalRepository, type Repository, validatePath } from './repository.js'
 import { StudioError } from './errors.js';
 
 export interface GitOptions { url: string; branch: string; username: string; token: string; name: string; email: string }
-export class GitRepository implements Repository {
-  readonly mode = 'git';
-  private origin: string;
-  constructor(private options: GitOptions) {
-    const url = new URL(options.url);
-    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error('Git URL 必须是无内嵌凭据的 HTTPS 地址');
-    if (!/^[\w][\w/.-]*$/.test(options.branch) || options.branch.includes('..') || options.branch.endsWith('/')) throw new Error('Git 分支名称无效');
-    this.origin = url.origin;
-  }
-  private http: HttpClient = { request: async request => {
+export function validateGitOptions(options: GitOptions): void {
+  const url = new URL(options.url);
+  if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash) throw new Error('Git URL 必须是无内嵌凭据的 HTTPS 地址');
+  if (!/^[\w][\w/.-]*$/.test(options.branch) || options.branch.includes('..') || options.branch.endsWith('/') || options.branch.split('/').some(part => part.endsWith('.lock') || part.endsWith('.') || part.startsWith('.'))) throw new Error('Git 分支名称无效');
+}
+export function gitHttp(url: string): HttpClient {
+  const origin = new URL(url).origin;
+  return { request: async request => {
     // Never forward repository credentials through redirects or to another host.
-    if (new URL(request.url).origin !== this.origin) throw new Error('Git 请求越过配置的域名');
+    if (new URL(request.url).origin !== origin) throw new Error('Git 请求越过配置的域名');
     const parts: Uint8Array[] = [];
     if (request.body) for await (const part of request.body) parts.push(part);
     const response = await fetch(request.url, {
@@ -38,6 +36,15 @@ export class GitRepository implements Repository {
     return { url: response.url, method: request.method!, statusCode: response.status, statusMessage: response.statusText,
       headers: Object.fromEntries(response.headers.entries()), body: body() };
   } };
+}
+export class GitRepository implements Repository {
+  readonly mode = 'git';
+  get saveScope() { return this.options.url + ':' + this.options.branch; }
+  constructor(private options: GitOptions) {
+    validateGitOptions(options);
+    this.http = gitHttp(options.url);
+  }
+  private http: HttpClient;
   private readCheckout = new MediaCheckout(async () => {
     const directory = await mkdtemp(join(tmpdir(), 'wondershine-read-'));
     try {

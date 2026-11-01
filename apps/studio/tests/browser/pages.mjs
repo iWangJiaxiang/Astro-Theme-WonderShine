@@ -11,7 +11,7 @@ export async function checkPageManagement({ page, base, screenshots, click, head
     await page.waitForSelector('.page-editor-tabs');
     await click('页面设置');
   };
-  const saveSettings = async () => { await click('保存页面设置'); await page.waitForSelector('.embedded-settings .notice.success'); };
+  const saveSettings = async () => { await click('本地保存设置'); await page.waitForSelector('.embedded-settings .notice.success'); };
   const config = async () => parse(await readFile(base + '/site/config.toml', 'utf8'));
   const data = async () => parse(await readFile(base + '/site/data.toml', 'utf8'));
 
@@ -57,7 +57,7 @@ export async function checkPageManagement({ page, base, screenshots, click, head
   await fill('[name="extra.subscribe.follow_url"]', '/studio-subscription/');
   await click('正文与属性');
   const subscriptionBody = await page.$eval('.markdown-source', textarea => textarea.value);
-  await fill('.markdown-source', '# Subscription without shortcode'); await click('保存内容');
+  await fill('.markdown-source', '# Subscription without shortcode'); await click('本地保存');
   await page.waitForFunction(() => document.querySelector('.editor-page > .notice.error')?.textContent.includes('先保存或放弃页面设置'));
   assert.ok((await readFile(base + '/site/content/pages/subscribe.md', 'utf8')).includes('subscribe_list'));
   await page.click('.page-editor-tabs button:last-child');
@@ -66,12 +66,12 @@ export async function checkPageManagement({ page, base, screenshots, click, head
   await click('正文与属性');
   const releaseSave = delayNextDocumentSave();
   try {
-    await click('保存内容');
+    await click('本地保存');
     await page.waitForFunction(() => document.querySelector('.page-editor-tabs button:last-child')?.disabled);
     assert.equal(await page.$eval('.page-settings-pane', pane => pane.inert), true, 'settings must stay inert during a pending content save');
   } finally { releaseSave(); }
   await page.waitForSelector('.editor-page > .notice.success');
-  await fill('.markdown-source', subscriptionBody); await click('保存内容');
+  await fill('.markdown-source', subscriptionBody); await click('本地保存');
   await page.waitForSelector('.editor-page > .notice.success');
   await page.click('.page-editor-tabs button:last-child');
   assert.equal((await config()).extra.subscribe.follow_url, '/studio-subscription/');

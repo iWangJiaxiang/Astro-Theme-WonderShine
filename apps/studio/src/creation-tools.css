@@ -72,3 +72,27 @@
 
 .ai-source p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .ai-image-preview img { max-height: 180px; }
+
+@media (max-width: 600px) {
+  .media-workspace.has-directory-tree { grid-template-columns: minmax(0, 1fr); }
+  .media-directory-tree { position: static; max-height: 220px; border-right: 0; border-bottom: 1px solid var(--studio-line); padding: 14px; }
+  .has-directory-tree .media-results { padding: 14px; }
+  .media-upload .choice-field { grid-template-columns: minmax(0, 1fr); }
+  .media-upload .choice-field > :nth-child(n) { grid-column: 1; grid-row: auto; }
+}
+
+/* One save action with an explicit destination and a workspace-scoped preference. */
+.save-button { display: inline-flex; flex: 0 0 auto; align-items: stretch; max-width: 100%; }
+.save-button > .save-button-main { border-radius: 9px 0 0 9px; min-width: 96px; }
+.save-button > .save-button-toggle { border-radius: 0 9px 9px 0; border-left: 1px solid #ffffff40; min-width: 36px; padding-inline: 9px; }
+.save-button > button:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: 3px; z-index: 1; }
+.save-mode-menu { position: fixed; z-index: 10000; width: 240px; max-width: calc(100vw - 16px); padding: 6px; border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-card); color: var(--wjx-fontcolor); box-shadow: 0 12px 36px #10162a26; font-size: 13px; }
+.save-mode-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 9px 10px; border: 0; border-radius: 7px; text-align: left; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.save-mode-menu button:hover:not(:disabled), .save-mode-menu button:focus-visible { background: var(--form-surface); outline: 2px solid transparent; }
+.save-mode-menu button[aria-checked="true"] { color: var(--wjx-theme); background: color-mix(in srgb, var(--wjx-theme) 9%, var(--studio-card)); }
+.save-mode-menu button:disabled { opacity: .45; cursor: default; }
+.save-mode-check { width: 16px; flex: 0 0 16px; }
+.save-mode-menu small { font-size: 10px; margin-left: auto; color: var(--studio-muted); }
+.save-mode-menu .save-mode-default { margin-top: 5px; border-top: 1px solid var(--studio-line); border-radius: 0 0 7px 7px; font-size: 12px; justify-content: center; }
+.save-mode-menu p { margin: 6px; font-size: 12px; }
+.saved-branch { display: block; font-family: ui-monospace, monospace; overflow-wrap: anywhere; font-size: 11px; margin: 6px 0; color: var(--studio-muted); }

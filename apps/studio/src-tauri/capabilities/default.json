@@ -1,0 +1,65 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "studio-local",
+  "description": "Local app only: sandboxed workspaces and HTTPS Git transport. Remote web pages receive no permissions.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "fs:allow-read-file",
+    "fs:allow-write-file",
+    "fs:allow-read-dir",
+    "fs:allow-mkdir",
+    "fs:allow-remove",
+    "fs:allow-rename",
+    "fs:allow-stat",
+    "fs:allow-lstat",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        {
+          "path": "$APPDATA"
+        },
+        {
+          "path": "$APPDATA/workspaces"
+        },
+        {
+          "path": "$APPDATA/workspaces/**"
+        }
+      ]
+    },
+    {
+      "identifier": "http:default",
+      "allow": [
+        {
+          "url": "https://**:*"
+        },
+        {
+          "url": "http://localhost:*"
+        },
+        {
+          "url": "http://127.0.0.1:*"
+        },
+        {
+          "url": "http://[\\:\\:1]:*"
+        }
+      ]
+    },
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://github.com/*/*/releases/tag/studio-v*"
+        },
+        {
+          "url": "https://apps.apple.com/*"
+        },
+        {
+          "url": "https://testflight.apple.com/*"
+        }
+      ]
+    }
+  ]
+}

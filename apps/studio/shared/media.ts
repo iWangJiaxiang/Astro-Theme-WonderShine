@@ -37,6 +37,8 @@ export function storedMediaPath(value: string, mode: MediaMode, documentPath = '
   if (mode === 'document' && supportsColocatedMedia(documentPath)) return documentDirectory(documentPath) + value;
   return null;
 }
-export const mediaURL = (path: string, version = 0) => `/api/media/file?path=${encodeURIComponent(path)}&v=${version}`;
+let mediaResolver: ((path: string, version: number) => string) | undefined;
+export function setMediaResolver(resolver?: (path: string, version: number) => string): void { mediaResolver = resolver; }
+export const mediaURL = (path: string, version = 0) => mediaResolver ? mediaResolver(path, version) : `/api/media/file?path=${encodeURIComponent(path)}&v=${version}`;
 export function formatBytes(size: number): string { return size < 1024 ? `${size} B` : size < 1024 * 1024 ? `${(size / 1024).toFixed(1)} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`; }
 export const markdownImage = (item: MediaItem, path: string) => `![${item.name.replace(/[\[\]\\\r\n]/g, '')}](${path.split('/').map(part => encodeURIComponent(part).replaceAll('(', '%28').replaceAll(')', '%29')).join('/')})`;

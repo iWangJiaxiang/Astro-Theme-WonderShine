@@ -83,6 +83,10 @@ h1 { font-size: 26px; margin-bottom: 8px; }
   .editor-page > .page-heading > div:first-child { flex: 1; }
   .editor-page > .page-heading > .row { max-width: 48%; }
 }
+@media (min-width: 761px) and (max-width: 1180px) {
+  .editor-page:not(.embedded-note-editor) > .page-heading { flex-direction: column; align-items: stretch; }
+  .editor-page > .page-heading > .row { width: 100%; justify-content: flex-start; }
+}
 @media (min-width: 1680px) {
   .main-content { padding-top: 32px; }
   .content-row { padding-block: 16px; }
@@ -115,3 +119,27 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 .selection-create-action svg { flex-shrink: 0; }
 .selection-create-action:hover:not(:disabled) { background: color-mix(in srgb, var(--wjx-theme) 11%, var(--studio-card)); }
 .selection-create-action:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: 2px; }
+
+/* Headings establish hierarchy; secondary context stays close to its control. */
+.page-heading h1, .page-heading h3 { margin-bottom: 0; }
+.editor-file-location { margin-top: 8px; font-size: 12px; color: var(--studio-muted); }
+.editor-file-location summary { cursor: pointer; width: fit-content; }
+.editor-file-location summary:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: 4px; border-radius: 3px; }
+.editor-file-location .path-label { margin-bottom: 0; overflow-wrap: anywhere; }
+.metadata-card > .form-switch { padding-block: 4px; }
+.language-version-bar { gap: 12px; }
+
+@media (max-width: 760px) {
+  .topbar { height: auto; min-height: 64px; row-gap: 12px; }
+}
+
+/* Keep field actions readable when nested settings narrow the available space. */
+.advanced-field > .row { flex-wrap: nowrap; }
+.advanced-field > .row > input { flex: 1; width: 0; min-width: 0; }
+.advanced-field > .row > button { flex-shrink: 0; white-space: nowrap; }
+@media (max-width: 760px) {
+  .editor-page > .page-heading > .row > button { flex: 1 0 auto; white-space: nowrap; }
+  .editor-page > .page-heading > .row > .autosave-control { flex-basis: 100%; }
+}
+
+.writing-card > .title-field { grid-template-columns: auto minmax(0, 1fr); }

@@ -1,0 +1,334 @@
+name: Studio apps & release
+run-name: Studio ${{ inputs.version || github.ref_name }} · ${{ github.event_name }}
+on:
+  push:
+    paths: &studio_paths
+      - 'apps/studio/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/studio.yml'
+  pull_request:
+    paths: *studio_paths
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Stable Studio version (e.g. 0.2.0); blank uses package.json'
+        type: string
+        required: false
+      publish:
+        description: 'Publish a Studio release after all platforms pass'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: studio-${{ github.event_name == 'release' && github.event.release.tag_name || inputs.publish && format('studio-v{0}', inputs.version) || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'release' && !inputs.publish }}
+env:
+  CARGO_TERM_COLOR: always
+  VITE_STUDIO_RELEASE_REPOSITORY: ${{ github.repository }}
+  VITE_STUDIO_IOS_UPDATE_URL: ${{ vars.STUDIO_IOS_UPDATE_URL }}
+jobs:
+  prepare:
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'studio-v')
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.context.outputs.version }}
+      tag: ${{ steps.context.outputs.tag }}
+      release: ${{ steps.context.outputs.release }}
+      sha: ${{ steps.context.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - id: context
+        run: node apps/studio/scripts/release/context.mjs
+      - name: Validate release configuration before building
+        if: steps.context.outputs.release == 'true'
+        run: node apps/studio/scripts/release/preflight.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STUDIO_VERSION: ${{ steps.context.outputs.version }}
+          STUDIO_SOURCE: ${{ steps.context.outputs.sha }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+          APPLE_DEVELOPMENT_TEAM: ${{ vars.APPLE_DEVELOPMENT_TEAM }}
+          STUDIO_UPLOAD_TESTFLIGHT: ${{ vars.STUDIO_UPLOAD_TESTFLIGHT }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+  verify:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck -w @wondershine/studio
+      - run: npm test -w @wondershine/studio
+      - run: node --test apps/studio/tests/release-scripts.test.mjs
+      - run: npm run build
+      - run: npm run studio:build
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+      - run: npm run test:browser -w @wondershine/studio
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - run: node apps/studio/tests/browser/app-updates.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - run: npm run build:app -w @wondershine/studio
+      - run: npm run test:native-browser -w @wondershine/studio
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - run: node apps/studio/tests/browser/native-ui.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: studio-browser-results
+          path: apps/studio/test-results/
+          retention-days: 7
+  desktop:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: linux-x64, runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu, bundles: 'deb,rpm,appimage' }
+          - { platform: linux-arm64, runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, bundles: 'deb,rpm,appimage' }
+          - { platform: macos-x64, runner: macos-15, target: x86_64-apple-darwin, bundles: dmg }
+          - { platform: macos-arm64, runner: macos-15, target: aarch64-apple-darwin, bundles: dmg }
+          - { platform: windows-x64, runner: windows-2022, target: x86_64-pc-windows-msvc, bundles: nsis }
+          - { platform: windows-arm64, runner: windows-2022, target: aarch64-pc-windows-msvc, bundles: nsis }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
+    env:
+      STUDIO_VERSION: ${{ needs.prepare.outputs.version }}
+      STUDIO_SOURCE: ${{ needs.prepare.outputs.sha }}
+      STUDIO_PLATFORM: ${{ matrix.platform }}
+      STUDIO_RELEASE: ${{ needs.prepare.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/studio/src-tauri
+          key: ${{ matrix.platform }}
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf rpm
+      - run: npm ci
+      - run: node apps/studio/scripts/release/version.mjs
+      - name: Build desktop installers
+        run: npm exec -w @wondershine/studio -- tauri build --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
+      - name: Native permissions regression
+        if: matrix.platform == 'macos-arm64'
+        run: cargo test --locked --manifest-path apps/studio/src-tauri/Cargo.toml --features custom-protocol --test http_permissions
+      - run: node apps/studio/scripts/release/collect.mjs
+        env:
+          STUDIO_BUNDLE_DIR: apps/studio/src-tauri/target/${{ matrix.target }}/release/bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-app-${{ matrix.platform }}
+          path: temp/studio-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+  android:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      STUDIO_VERSION: ${{ needs.prepare.outputs.version }}
+      STUDIO_SOURCE: ${{ needs.prepare.outputs.sha }}
+      STUDIO_RELEASE: ${{ needs.prepare.outputs.release }}
+      STUDIO_PLATFORM: android
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Android NDK
+        run: |
+          sdkmanager 'ndk;27.2.12479018'
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/studio/src-tauri
+          key: android
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - run: node apps/studio/scripts/release/version.mjs
+      - run: npm exec -w @wondershine/studio -- tauri android init --ci
+      - name: Debug APK
+        if: needs.prepare.outputs.release != 'true'
+        run: npm exec -w @wondershine/studio -- tauri android build --ci --debug --apk
+      - name: Configure release signing
+        if: needs.prepare.outputs.release == 'true'
+        run: node apps/studio/scripts/release/android-sign.mjs
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Signed APK and AAB
+        if: needs.prepare.outputs.release == 'true'
+        run: npm exec -w @wondershine/studio -- tauri android build --ci --apk --aab
+        env:
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - run: node apps/studio/scripts/release/collect.mjs
+        env:
+          STUDIO_BUNDLE_DIR: apps/studio/src-tauri/gen/android/app/build/outputs
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/studio-release.jks"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-app-android
+          path: temp/studio-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+  ios:
+    needs: prepare
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      STUDIO_VERSION: ${{ needs.prepare.outputs.version }}
+      STUDIO_SOURCE: ${{ needs.prepare.outputs.sha }}
+      STUDIO_RELEASE: ${{ needs.prepare.outputs.release }}
+      STUDIO_PLATFORM: ios
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/studio/src-tauri
+          key: ios
+      - run: brew install xcodegen
+      - run: npm ci
+      - run: node apps/studio/scripts/release/version.mjs
+      - run: npm exec -w @wondershine/studio -- tauri ios init --ci
+        env:
+          APPLE_DEVELOPMENT_TEAM: ${{ needs.prepare.outputs.release == 'true' && vars.APPLE_DEVELOPMENT_TEAM || '' }}
+      - name: Simulator app (no distribution credentials)
+        if: needs.prepare.outputs.release != 'true'
+        run: npm exec -w @wondershine/studio -- tauri ios build --ci --debug --target aarch64-sim --no-sign
+      - name: Signed App Store IPA
+        if: needs.prepare.outputs.release == 'true'
+        run: npm exec -w @wondershine/studio -- tauri ios build --ci --target aarch64 --export-method app-store-connect
+        env:
+          APPLE_DEVELOPMENT_TEAM: ${{ vars.APPLE_DEVELOPMENT_TEAM }}
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+      - run: node apps/studio/scripts/release/collect.mjs
+        env:
+          STUDIO_BUNDLE_DIR: apps/studio/src-tauri/gen/apple/build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: studio-app-ios
+          path: temp/studio-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+  testflight:
+    needs: [prepare, verify, desktop, android, ios]
+    if: needs.prepare.outputs.release == 'true' && vars.STUDIO_UPLOAD_TESTFLIGHT == 'true'
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: studio-app-ios
+          path: temp/studio-artifacts
+      - run: node apps/studio/scripts/release/testflight.mjs
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+  publish:
+    needs: [prepare, verify, desktop, android, ios, testflight]
+    if: >-
+      always() && needs.prepare.outputs.release == 'true' &&
+      needs.verify.result == 'success' && needs.desktop.result == 'success' &&
+      needs.android.result == 'success' && needs.ios.result == 'success' &&
+      (needs.testflight.result == 'success' || needs.testflight.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: studio-publish-${{ needs.prepare.outputs.tag }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: studio-app-*
+          merge-multiple: true
+          path: temp/studio-artifacts
+      - run: node apps/studio/scripts/release/publish.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STUDIO_VERSION: ${{ needs.prepare.outputs.version }}
+          STUDIO_SOURCE: ${{ needs.prepare.outputs.sha }}

@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue';
+import { ref, watch } from './reactivity';
 import { initialLocale, localeStorageKey, translate, type Locale, type Message, type MessageParams } from '../shared/i18n';
 export type { Message } from '../shared/i18n';
 function detect(): Locale {

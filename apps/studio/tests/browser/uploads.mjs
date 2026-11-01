@@ -57,14 +57,14 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await fill('dialog.media-dialog[open] [aria-label="搜索仓库图片"]', 'cover-upload.png');
   await page.waitForSelector('[data-media-path="public/uploads/cover-upload.png"]');
   await page.click('[data-media-path="public/uploads/cover-upload.png"]'); await click('使用这张图片');
-  await click('保存更改'); await page.waitForSelector('.notice.success');
+  await click('本地保存'); await page.waitForSelector('.notice.success');
   assert.equal(parse(await readFile(base + '/site/config.toml', 'utf8')).extra.site.logo, '/uploads/cover-upload.png');
 
   await click('文章'); await heading('文章');
   await page.waitForSelector('[data-path="content/articles/studio-browser-test/index.md"]');
   await page.click('[data-path="content/articles/studio-browser-test/index.md"]');
   await page.waitForSelector('.markdown-source');
-  await page.click('[data-image-field="extra.cover"] .secondary');
+  await page.locator('[data-image-field="extra.cover"] .secondary').click();
   await page.waitForSelector('dialog.media-dialog[open]');
   assert.equal(await page.$eval('.upload-destination', el => el.textContent), '文件位置：content/articles/studio-browser-test');
   await upload(['cover-upload.png']); await finished();
@@ -75,7 +75,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await click('插入图片'); await page.waitForSelector('dialog.media-dialog[open]');
   await upload(['上传 配图.webp']); await finished();
   assert.equal(await selected(), 'content/articles/studio-browser-test/上传 配图.webp');
-  await click('使用这张图片'); await click('保存内容'); await page.waitForSelector('.editor-page > .notice.success');
+  await click('使用这张图片'); await click('本地保存'); await page.waitForSelector('.editor-page > .notice.success');
   const saved = splitDocument(await readFile(base + '/site/content/articles/studio-browser-test/index.md', 'utf8'));
   assert.equal(parse(saved.header).extra.cover, 'cover-upload.png');
   assert.match(saved.body, /!\[上传 配图.webp\]\(%E4%B8%8A%E4%BC%A0%20%E9%85%8D%E5%9B%BE.webp\)/);

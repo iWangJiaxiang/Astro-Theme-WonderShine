@@ -69,7 +69,7 @@ try {
   const editedTopic = await metadata(topicPath);
   assert.equal(String(editedTopic.date), String(initialTopic.date));
   assert.notEqual(String(editedTopic.updated), String(initialTopic.updated));
-  await click('发布话题'); await saved(); assert.equal((await metadata(topicPath)).draft, false);
+  await click('本地保存 · 可发布'); await saved(); assert.equal((await metadata(topicPath)).draft, false);
   await page.screenshot({ path: join(screenshots, 'topic-editor-desktop.png'), fullPage: true });
   await click('en · 创建译文草稿'); await page.waitForFunction(() => document.querySelector('.path-label')?.textContent.endsWith('index.en.md'));
   assert.equal(await page.$eval('.markdown-source', input => input.value), '更新介绍，创建时间保持不变。');
@@ -89,7 +89,7 @@ try {
   assert.equal(note.draft, true); assert.equal(note.extra.kind, 'note');
   assert.deepEqual(note.extra.topics, [initialTopic.extra.id]);
   assert.equal(note.extra.thread_root, undefined); assert.equal(note.extra.reply_to, undefined);
-  await click('发布动态'); await saved(); assert.equal((await metadata(notePath)).draft, false);
+  await click('本地保存 · 可发布'); await saved(); assert.equal((await metadata(notePath)).draft, false);
   await click('en · 创建译文草稿'); await page.waitForFunction(() => document.querySelector('.path-label')?.textContent.endsWith('index.en.md'));
   assert.equal(await page.$eval('.markdown-source', input => input.value), '记录一个独立的想法。');
   await fill('.markdown-source', 'An independent thought.'); await click('保存草稿'); await saved();
@@ -103,7 +103,7 @@ try {
   await fill('.modal input[placeholder="给它取个名字"]', '文章关联话题');
   await fill('.modal input[placeholder="my-first-story"]', 'topic-browser-test'); await click('进入编辑器');
   await page.waitForSelector('.markdown-source'); await fill('.markdown-source', '文章也可以关联同一个话题。');
-  await choose('extra.topics', initialTopic.extra.id); await click('保存内容'); await saved();
+  await choose('extra.topics', initialTopic.extra.id); await click('本地保存'); await saved();
   assert.deepEqual((await metadata(await path())).extra.topics, [initialTopic.extra.id]);
   await click('合集管理'); await page.waitForSelector('.content-library');
   assert.match(await page.$eval('.page-heading', node => node.textContent), /文章按系列整理，音乐按专辑整理/);

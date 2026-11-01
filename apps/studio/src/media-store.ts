@@ -1,4 +1,4 @@
-import { ref, shallowRef, watch } from 'vue';
+import { ref, shallowRef, watch } from './reactivity';
 import type { Message } from './i18n';
 import { api, errorMessage, session } from './api';
 import type { MediaItem, MediaListing } from '../shared/media';

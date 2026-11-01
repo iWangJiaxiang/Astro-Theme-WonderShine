@@ -1,0 +1,85 @@
+.workspace-status-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin:1.5rem 0 }
+.workspace-status-grid dt { color:var(--text-secondary,#777);font-size:.85rem }
+.workspace-status-grid dd { margin:.25rem 0 0;font-size:2rem;font-weight:650 }
+.workspace-panel .field { margin:1.5rem 0;max-width:42rem }
+.native-connect { min-height:100vh;display:grid;place-items:center;padding:2rem;background:var(--bg,#f5f6f8) }
+.native-connect .card { width:min(100%,680px);padding:2rem }
+.native-connect h1 { margin:.5rem 0 }
+.native-connect form { display:grid;gap:1rem;margin-top:1.5rem }
+.native-connect .connection-fields { display:grid;grid-template-columns:1fr 1fr;gap:1rem }
+.native-connect .field { gap:.35rem;display:flex;flex-direction:column;align-items:stretch }
+.native-connect .field input,.native-connect .field select { width:100% }
+@media(max-width:600px) { .native-connect { padding:1rem }.native-connect .card{padding:1.25rem}.native-connect .connection-fields{grid-template-columns:1fr} }
+.native-change-connection { position:fixed;top:1rem;left:1rem;z-index:100 }
+
+/* Group credentials, models and actions without repeating section captions. */
+section.native-ai-settings { max-width: 960px; }
+.native-ai-settings .native-ai-form { padding: 28px; }
+.native-ai-settings fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.native-ai-settings .field { display: grid; grid-template-columns: 132px minmax(0, 1fr); align-items: center; gap: 12px; margin: 0; }
+.native-ai-credentials { display: grid; gap: 16px; }
+.native-ai-credentials .native-key-note { margin: -6px 0 0 144px; }
+.native-ai-models { display: grid; gap: 16px; border-top: 1px solid var(--studio-line); margin-top: 24px; padding-top: 24px; }
+.native-ai-settings .native-image-size select { width: auto; max-width: 100%; justify-self: start; }
+.native-ai-actions { border-top: 1px solid var(--studio-line); margin-top: 24px; padding-top: 20px; justify-content: flex-end; gap: 12px; }
+.native-ai-actions > span { margin-right: auto; }
+.native-ai-disclosure { margin: 16px 0 0; }
+.connection-modes { display: flex; gap: 4px; margin-top: 24px; padding: 4px; background: var(--form-surface); border-radius: 10px; }
+.connection-modes button { flex: 1; min-height: 40px; padding: 8px 12px; border-radius: 7px; font-size: 13px; }
+.connection-modes button[aria-pressed=true] { background: var(--studio-card); color: var(--wjx-theme); box-shadow: 0 1px 4px #0000000d; font-weight: 600; }
+.connection-storage-note { margin: 20px 0 0; }
+.workspace-panel .workspace-sync-card { padding: 28px; }
+.workspace-sync-card h2 { margin-bottom: 0; }
+.workspace-sync-card .workspace-status-grid { padding-bottom: 24px; border-bottom: 1px solid var(--studio-line); }
+.workspace-panel .workspace-sync-actions { justify-content: flex-end; margin-top: 24px; }
+@media (max-width: 600px) {
+  .native-ai-settings .native-ai-form, .workspace-panel .workspace-sync-card { padding: 20px; }
+  .native-ai-settings .field { grid-template-columns: 1fr; gap: 8px; }
+  .native-ai-credentials .native-key-note { margin-left: 0; }
+  .native-ai-actions > span { flex-basis: 100%; }
+  .native-ai-actions .primary { flex: 1; }
+  .workspace-status-grid { gap: 12px; }
+  .workspace-status-grid dt { font-size: 12px; }
+  .workspace-panel .workspace-sync-actions > button { flex: 1; }
+}
+
+/* Folder and URL are the primary actions; credentials stay in a disclosure. */
+.native-connect { padding: 32px 20px; align-items: center; }
+.native-connect .connection-card { width: min(100%, 620px); min-width: 0; padding: 32px; }
+.connection-brand { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--studio-muted); font-size: 13px; }
+.native-connect h1 { margin: 24px 0 0; font-size: clamp(23px, 3vw, 28px); line-height: 1.3; }
+.native-connect .connection-modes { margin-top: 24px; }
+.connection-modes button { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.native-connect .connection-form-fields { display: grid; gap: 20px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.native-connect .field { min-width: 0; margin: 0; }
+.native-connect .field > span { font-size: 13px; }
+.native-connect .field input, .native-connect .field select { min-width: 0; max-width: 100%; min-height: 42px; }
+.connection-folder { min-width: 0; }
+.folder-picker { width: 100%; min-height: 154px; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; background: var(--form-surface); border: 1px dashed var(--studio-line); border-radius: 12px; color: var(--wjx-fontcolor); }
+.folder-picker:hover, .folder-picker:focus-visible { border-color: var(--wjx-theme); background: color-mix(in srgb, var(--wjx-theme) 5%, var(--studio-card)); }
+.folder-picker > span { max-width: 100%; overflow-wrap: anywhere; }
+.folder-picker-action { font-size: 12px; color: var(--wjx-theme); }
+.selected-repository { display: flex; align-items: start; gap: 12px; margin-top: 12px; font-size: 12px; color: var(--studio-muted); }
+.repository-path { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.repository-branch { max-width: 40%; overflow-wrap: anywhere; padding: 2px 8px; background: var(--form-surface); border-radius: 5px; }
+.connection-options { border-top: 1px solid var(--studio-line); padding-top: 14px; min-width: 0; }
+.connection-options summary { cursor: pointer; font-size: 13px; font-weight: 500; padding: 4px 0; }
+.connection-option-fields { display: grid; gap: 16px; margin-top: 16px; }
+.connection-footer { display: flex; justify-content: center; border-top: 1px solid var(--studio-line); margin-top: 24px; padding-top: 16px; }
+.connection-service { display: inline-flex; align-items: center; gap: 8px; color: var(--studio-muted); font-size: 13px; }
+@media (max-width: 600px) {
+  .native-connect { padding: 20px 16px; }
+  .native-connect .connection-card { padding: 24px 20px; }
+  .native-connect .connection-fields { grid-template-columns: 1fr; gap: 16px; }
+  .native-connect h1 { margin-top: 20px; }
+}
+
+.connection-progress { display: grid; gap: 8px; min-width: 0; }
+.connection-progress-caption { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--studio-muted); font-variant-numeric: tabular-nums; }
+.connection-progress progress { width: 100%; height: 6px; border: 0; border-radius: 3px; overflow: hidden; accent-color: var(--wjx-theme); background: var(--form-surface); }
+.connection-progress progress::-webkit-progress-bar { background: var(--form-surface); border-radius: 3px; }
+.connection-progress progress::-webkit-progress-value { background: var(--wjx-theme); border-radius: 3px; }
+.connection-progress progress:indeterminate { background: linear-gradient(90deg, var(--form-surface) 20%, var(--wjx-theme) 50%, var(--form-surface) 80%); background-size: 200% 100%; animation: connection-progress-pulse 1.6s ease-in-out infinite; }
+.connection-progress progress:indeterminate::-webkit-progress-bar { background: transparent; }
+@keyframes connection-progress-pulse { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .connection-progress progress:indeterminate { animation: none; } }

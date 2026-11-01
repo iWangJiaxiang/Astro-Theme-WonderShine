@@ -55,7 +55,7 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await fill('[aria-label="选择浅色主题色"]', '#3355aa');
   assert.equal(await page.$eval('[name="extra.style.theme_light_skin"]', e => e.value), '#3355aa');
   assert.equal(await page.$eval('[data-field="extra.style.theme_light_skin"] .color-swatch', e => getComputedStyle(e).backgroundColor), 'rgb(51, 85, 170)');
-  await click('保存更改'); await page.waitForSelector('.notice.success');
+  await click('本地保存'); await page.waitForSelector('.notice.success');
   assert.equal(parse(await readFile(base + '/site/config.toml', 'utf8')).extra.style.theme_light_skin, '#3355aa');
   await page.screenshot({ path: screenshots + '/form-colors.png', fullPage: true });
   await click('工作台'); await heading('今天，写点什么？');
@@ -71,7 +71,7 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await click('取消');
   assert.ok(await page.$eval('button[name="extra.style.font_family"]', el => el.textContent.includes('Custom Font')));
   await choose('extra.style.font_family', 'PingFang SC');
-  await click('保存更改'); await page.waitForSelector('.notice.success');
+  await click('本地保存'); await page.waitForSelector('.notice.success');
 
   await click('导航菜单'); await heading('导航菜单');
   const name = 'menu.nav_menu.0.menus.0.icon';
@@ -86,7 +86,7 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await choose(name, 'icon-github');
   await page.evaluate(() => document.fonts.ready);
   assert.ok(await page.$eval(`[data-field="${name}"] .studio-glyph`, el => el.textContent.length > 0 && getComputedStyle(el).fontFamily.includes('studio-icons')));
-  await click('保存更改'); await page.waitForSelector('.notice.success');
+  await click('本地保存'); await page.waitForSelector('.notice.success');
   assert.equal(parse(await readFile(base + '/site/data.toml', 'utf8')).menu.nav_menu[0].menus[0].icon, 'icon-github');
 
   await click('关于页设置'); await heading('关于页设置');
@@ -95,13 +95,13 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   const before = await page.$eval(`[name="${emojiField}"]`, el => el.value);
   await choose(emojiField + '-emoji', '🚀');
   assert.ok(await page.$eval(`[name="${emojiField}"]`, el => el.value.includes('🚀') && el.value.includes('数码科技爱好者')));
-  await click('保存更改'); await page.waitForSelector('.notice.success');
+  await click('本地保存'); await page.waitForSelector('.notice.success');
   assert.notEqual(before, parse(await readFile(base + '/site/config.toml', 'utf8')).extra.about.author_info_left_tags[0]);
 
   await click('首页推荐'); await heading('首页推荐');
   const path = 'articles/welcome/index.md';
   await choose('post.today_recommend.post_path', path);
-  await click('保存更改'); await page.waitForSelector('.notice.success');
+  await click('本地保存'); await page.waitForSelector('.notice.success');
   assert.equal(parse(await readFile(base + '/site/data.toml', 'utf8')).post.today_recommend.post_path, path);
 
   // Creation form remains open when Enter is pressed in a nested chooser.
@@ -130,12 +130,12 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   assert.equal(await page.$eval('input[name="date"]', el => el.value), '2026-10-24', 'must show original calendar day, not UTC previous day');
   await fill('input[name="date"]', '2026-10-26');
   await fill('input[name="updated"]', '');
-  await click('保存内容'); await page.waitForSelector('.notice.success');
+  await click('本地保存'); await page.waitForSelector('.notice.success');
   const dateData = parse(splitDocument(await readFile(dateFile, 'utf8')).header);
   assert.equal(dateData.date, '2026-10-26T00:30:12.123456+08:00');
   assert.equal(Object.hasOwn(dateData, 'updated'), false, 'clearing updated removes the field, not an invalid empty datetime');
   await page.screenshot({ path: screenshots + '/form-date-editor.png', fullPage: true });
-  await fill('input[name="date"]', ''); await click('保存内容');
+  await fill('input[name="date"]', ''); await click('本地保存');
   await page.waitForSelector('.editor-page > .notice.error');
   assert.match(await page.$eval('.editor-page > .notice.error', el => el.textContent), /需要发布时间/);
   assert.equal(parse(splitDocument(await readFile(dateFile, 'utf8')).header).date, '2026-10-26T00:30:12.123456+08:00');
@@ -148,7 +148,7 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await click('技能清单'); await page.waitForSelector('[name="skill.items.0.name"]');
   await choose('skill.items.0.svg_symbol_id', 'python');
   await page.waitForFunction(() => document.querySelector('[data-field="skill.items.0.svg_symbol_id"] use')?.getAttribute('href')?.endsWith('#python'));
-  await click('保存页面设置'); await page.waitForSelector('.embedded-settings .notice.success');
+  await click('本地保存设置'); await page.waitForSelector('.embedded-settings .notice.success');
   const skills = parse(await readFile(base + '/site/data.toml', 'utf8')).skill;
   assert.equal(skills.items[0].svg_symbol_id, 'python');
   assert.equal(Object.hasOwn(skills.items[0], 'svg_sprite'), false, 'inherited sprite must stay absent');

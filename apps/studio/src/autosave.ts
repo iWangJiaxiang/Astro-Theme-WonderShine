@@ -15,3 +15,16 @@ export interface AutosaveState { ready: boolean; dirty: boolean; busy: boolean; 
 export function canAutosave(state: AutosaveState): boolean {
   return state.ready && state.dirty && !state.busy && !state.blocked && state.authenticated;
 }
+
+/** Native WebViews may not persist cookies for their custom protocol. */
+export function readAutosavePreference(): number {
+  if ('__TAURI_INTERNALS__' in window) {
+    try { return parseAutosave(localStorage.getItem(autosaveCookie) || '0'); } catch { return 0; }
+  }
+  return readAutosave(document.cookie);
+}
+export function writeAutosavePreference(seconds: number): void {
+  if ('__TAURI_INTERNALS__' in window) {
+    try { localStorage.setItem(autosaveCookie, String(parseAutosave(String(seconds)))); } catch { /* Autosave still works for this session. */ }
+  } else document.cookie = writeAutosave(seconds, location.protocol === 'https:');
+}

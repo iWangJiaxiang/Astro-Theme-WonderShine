@@ -14,7 +14,8 @@ test('cloud entry retains the named onRequest export required by the platform ro
   assert.equal(Reflect.get(cloudEntry, 'onRequest'), cloudHandler);
 });
 test('cloud handler rejects partial deployments instead of falling back to ephemeral local storage', async () => {
-  for (const change of [{ STUDIO_STATE: 'file' }, { STUDIO_GIT_URL: '' }, { STUDIO_ORIGIN: 'http://localhost:5173' }, { STUDIO_SESSION_SECRET: 'short' }]) {
+  const invalidEnvironments: Record<string, string>[] = [{ STUDIO_STATE: 'file' }, { STUDIO_GIT_URL: '' }, { STUDIO_ORIGIN: 'http://localhost:5173' }, { STUDIO_SESSION_SECRET: 'short' }, { STUDIO_GIT_WORKSPACE: '/tmp/ephemeral-workspace' }];
+  for (const change of invalidEnvironments) {
     const response = await cloudHandler({ request: new Request('https://studio.example/api/auth/config'), env: { ...env, ...change } });
     assert.equal(response.status, 503);
     assert.equal((await response.text()).includes('dummy'), false);

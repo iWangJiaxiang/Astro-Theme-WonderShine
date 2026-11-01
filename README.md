@@ -4,6 +4,13 @@
 
 本仓库是独立主题源码，演示内容和插图均为虚构示例；不包含维护者的个人博客数据。当前版本为本地开发预览，尚未发布到 npm。
 
+## 开始使用
+
+- **新建博客**：[从零搭建](docs/getting-started.md)，从空目录到独立站点、第一篇文章和创作中心。
+- **已有 Zola 博客**：[迁移到 Astro](docs/migration.md)，保留旧站，在新目录转换内容并核对历史链接。
+
+主题源码、个人站点和 Creator Studio 各自独立。以下「本地运行」预览的是仓库内的 Demo；自己的内容请按上面的指南放进独立站点。
+
 ## 本地运行
 
 需要 Node.js 22.23.4 或更高版本。
@@ -35,14 +42,7 @@ npm run dev
 
 ## 在独立站点使用
 
-首次本地打包：
-
-```sh
-npm run build:theme
-npm pack ./packages/theme --pack-destination /tmp
-```
-
-复制 `examples/starter` 到独立目录，将其中 `@wondershine/theme` 的依赖改为生成的 `.tgz` 的绝对 `file:` 地址，然后运行 `npm install` 和 `npm run dev`。正式发布后再换为 npm 版本号。
+按 [从零搭建](docs/getting-started.md) 打包主题、复制 Starter，并把主题包保存到新站 `vendor/`。使用 `file:vendor/<主题包文件名>.tgz` 相对依赖，让其他设备和 CI 也能安装。正式发布后可换为 npm 版本号。
 
 ```js
 import { defineConfig } from 'astro/config';
@@ -59,14 +59,17 @@ npm run setup -w @wondershine/studio
 npm run studio:dev
 ```
 
-设置 `STUDIO_SITE_ROOT` 为你的独立站点绝对路径；也可以配置 `STUDIO_GIT_URL` 使用 Git 内容仓库。凭据只保存在 Studio 服务端环境中。Studio 的 Git 模式会写入并推送所配置的内容仓库，请按实际部署需求启用；本次提取和验证只使用本地或临时测试仓库。
+设置 `STUDIO_SITE_ROOT` 为你的独立站点绝对路径；也可以配置 `STUDIO_GIT_URL` 使用 Git 内容仓库。浏览器本地文件模式只写指定站点。在线 Git 模式每次保存会提交并推送；持久工作区模式则分别保存、提交和同步，见 [工作区说明](docs/studio-workspaces.md)。服务端凭据保存在私有环境中。
 
-博客仍为静态站，不需要长期运行 Node.js；Studio 是另一个独立服务。`astro dev` 会响应保存，静态部署必须重新构建。
+桌面 App 可直接连接 Git，并在客户端配置 AI API；密钥仅保留在当前连接。它也能连接已有 Studio 服务。构建方法和移动端限制见 [Studio apps](docs/studio-apps.md)。
+
+博客仍为静态站，不需要长期运行 Node.js；浏览器版 Studio 是另一个独立服务。`astro dev` 会响应保存，静态部署必须重新构建。
 
 ## 文档
 
+- [从零搭建博客](docs/getting-started.md)
+- [从 Zola 主题迁移](docs/migration.md)
 - [配置与内容格式](docs/configuration.md)
-- [从旧站点迁移](docs/migration.md)
 - [独立部署](docs/deployment.md)
 - [本地打包与后续发布](docs/releasing.md)
 - [来源与第三方代码](NOTICE.md)

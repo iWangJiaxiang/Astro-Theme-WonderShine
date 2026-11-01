@@ -1,3 +1,5 @@
+import { revisionOf as scopeHash } from '../core/portable.js';
+import { saveCapabilities } from '../core/save.js';
 import { TranslationService } from './translation.js';
 import { AiService } from './ai.js';
 import type { TranslationRequest } from '../shared/translation.js';
@@ -88,13 +90,23 @@ export function createApp(options: AppOptions) {
   app.get('/api/bootstrap', async c => {
     if (c.req.query('refresh') === '1') options.repository.clearReadCache?.();
     const [site, appearance] = await Promise.all([content.settings('site'), content.settings('appearance')]);
-    return c.json({ site: site.values, appearance: appearance.values, mode: options.repository.mode,
+    return c.json({ site: site.values, appearance: appearance.values, saveScope: await scopeHash(options.repository.saveScope ?? options.config.origin), saveCapabilities: saveCapabilities(options.repository), mode: options.repository.mode, workspace: !!options.repository.workspace,
       groups: settingsSchemas.map(({ id, title, description }) => ({ id, title, description })) });
   });
+  const workspace = () => {
+    if (!options.repository.workspace) throw new StudioError(404, '当前连接未启用本地 Git 工作区');
+    return options.repository.workspace;
+  };
+  app.get('/api/workspace', async c => c.json(await workspace().status()));
+  app.post('/api/workspace/commit', async c => {
+    const input = await c.req.json<{ message: string }>();
+    return c.json(await workspace().commit(input?.message));
+  });
+  app.post('/api/workspace/sync', async c => c.json(await workspace().sync()));
   app.get('/api/settings/:id', async c => c.json(await content.settings(c.req.param('id'), c.req.query('language'))));
   app.put('/api/settings/:id', async c => {
-    const input = await c.req.json<{ revision: string | null; changes: unknown }>();
-    return c.json(await content.saveSettings(c.req.param('id'), input.changes, input.revision, c.req.query('language')));
+    const input = await c.req.json<{ revision: string | null; changes: unknown; saveMode?: unknown }>();
+    return c.json(await content.saveSettings(c.req.param('id'), input.changes, input.revision, c.req.query('language'), input.saveMode));
   });
   app.get('/api/media', async c => {
     const listing = await options.repository.listMedia(c.req.query('refresh') === '1');
@@ -129,8 +141,8 @@ export function createApp(options: AppOptions) {
   });
   app.get('/api/document', async c => c.json(await content.document(c.req.query('path') || '')));
   app.put('/api/document', async c => {
-    const input = await c.req.json<{ path: string; changes: unknown; body: string; revision: string | null }>();
-    return c.json(await content.saveDocument(input.path, input.changes, input.body, input.revision));
+    const input = await c.req.json<{ path: string; changes: unknown; body: string; revision: string | null; saveMode?: unknown }>();
+    return c.json(await content.saveDocument(input.path, input.changes, input.body, input.revision, input.saveMode));
   });
   app.delete('/api/document', async c => {
     const input = await c.req.json<{ path: string; revision: string }>();

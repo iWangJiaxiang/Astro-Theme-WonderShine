@@ -1,7 +1,13 @@
 name: Verify theme and Studio
 on:
   push:
+    paths-ignore: &theme_ignore
+      - 'apps/studio/**'
+      - 'docs/**'
+      - 'plan/**'
+      - '.github/workflows/studio.yml'
   pull_request:
+    paths-ignore: *theme_ignore
 permissions:
   contents: read
 jobs:
@@ -27,8 +33,13 @@ jobs:
       - run: npm run test:browser
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - run: npm run test:browser -w @wondershine/studio
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: theme-browser-results
-          path: temp/browser/
+          path: |
+            temp/browser/
+            apps/studio/test-results/

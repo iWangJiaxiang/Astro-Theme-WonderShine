@@ -30,7 +30,7 @@ await new Promise(resolve => reserve.listen(0, '127.0.0.1', resolve));
 const port = reserve.address().port;
 await new Promise(resolve => reserve.close(resolve));
 const origin = `http://localhost:${port}`;
-const server = spawn(process.execPath, ['dist/server.mjs'], { cwd: studio, env: { ...process.env,
+const server = spawn(process.execPath, process.env.STUDIO_TEST_DEV ? ['--import', 'tsx', 'server/dev.ts'] : ['dist/server.mjs'], { cwd: studio, env: { ...process.env,
   STUDIO_ORIGIN: origin, PORT: String(port), STUDIO_HOST: '127.0.0.1', STUDIO_SITE_ROOT: base + '/site',
   STUDIO_STATE: 'file', STUDIO_STATE_DIR: base + '/state', STUDIO_GIT_URL: '', STUDIO_OIDC_ISSUER: '',
   STUDIO_ADMIN_USER: 'owner', STUDIO_ADMIN_PASSWORD_HASH: await hashPassword('studio-browser-test-2026'), STUDIO_SESSION_SECRET: randomBytes(32).toString('hex') }, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -41,13 +41,16 @@ try {
   if (!executablePath) throw new Error('Set STUDIO_TEST_BROWSER to an installed Chrome/Chromium executable.');
   for (let i = 0; i < 100; i++) { try { if ((await fetch(origin + '/api/auth/config')).ok) break; } catch {} if (i === 99) throw new Error('Server did not start: ' + logs); await new Promise(r => setTimeout(r, 100)); }
   browser = await puppeteer.launch({ headless: true, executablePath });
-  const page = await browser.newPage(), errors = [], failures = [];
+  const page = await browser.newPage(), errors = [], failures = [], reactWarnings = [];
+  page.on('console', message => { const text = message.text(); if (/Cannot update a component|Invalid DOM property|Each child in a list|You provided a .*prop/i.test(text)) reactWarnings.push(text); });
   page.on('pageerror', error => errors.push(error.message)); page.on('dialog', dialog => dialog.accept());
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.setRequestInterception(true);
   let holdDocumentWrite = false, releaseDocumentWrite;
   const delayNextDocumentSave = () => { holdDocumentWrite = true; return () => { holdDocumentWrite = false; releaseDocumentWrite?.(); releaseDocumentWrite = undefined; }; };
   page.on('request', request => {
+    if (request.url() === origin + '/api/ai/config') return request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: true, image: false }) });
+    if (request.url() === origin + '/api/ai/text') return request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: 'Reviewed browser summary fixture.' }) });
     if (holdDocumentWrite && request.url() === origin + '/api/document' && request.method() === 'PUT') { releaseDocumentWrite = () => request.continue(); return; }
     return request.url().startsWith(origin + '/') || request.url().startsWith('data:') ? request.continue() : request.abort();
   });
@@ -65,10 +68,36 @@ try {
  await checkOnboarding({ page, click, heading, screenshots });
  await page.waitForFunction(()=>Number(document.querySelector('.stat-card strong')?.textContent)>0);
  await page.screenshot({path:screenshots+'/dashboard-desktop.png'});
- await click('站点信息');await heading('站点信息');await fill('.settings-grid .field input','Studio integration fixture');await click('保存更改');await page.waitForSelector('.notice.success');
+ const dashboardTitle = await page.$eval('.home-grid .content-row strong', node => node.textContent);
+ await page.waitForSelector('.note-composer .markdown-source');
+ await fill('.note-composer .markdown-source', 'Keep this unsaved dashboard draft.');
+ page.removeAllListeners('dialog');
+ const dismissedNavigation = new Promise(resolve => page.once('dialog', async dialog => { await dialog.dismiss(); resolve(); }));
+ await page.$eval('.home-grid .content-row', node => node.click()); await dismissedNavigation;
+ await heading('今天，写点什么？');
+ assert.equal(await page.$eval('.note-composer .markdown-source', node => node.value), 'Keep this unsaved dashboard draft.');
+ page.on('dialog', dialog => dialog.accept());
+ await fill('.note-composer .markdown-source', '');
+ await page.$eval('.home-grid .content-row', node => node.click());
+ await heading(dashboardTitle); await page.waitForSelector('.editor-page .markdown-source');
+ await click('工作台'); await heading('今天，写点什么？');
+ console.log('PASS: dashboard article shortcut and cancelled navigation preserve the current draft.');
+ await click('站点信息');await heading('站点信息');await fill('.settings-grid .field input','Studio integration fixture');await click('本地保存');await page.waitForSelector('.notice.success');
  assert.match(await readFile(base+'/site/config.toml','utf8'),/Studio integration fixture/);
  for(const name of ['导航菜单','友链管理','关于页设置','标签与分类','外观样式']){await click(name);await heading(name);assert.equal(await page.$('.notice.error'),null,name)}
+ // Reproduce the Shanghai-after-midnight / previous-UTC-day boundary in the actual editor.
+ await page.emulateTimezone('Asia/Shanghai');
+ await page.evaluate(() => {
+   window.originalDate = Date;
+   window.Date = class extends Date {
+     constructor(...args) { super(...(args.length ? args : ['2026-10-27T00:30:00+08:00'])); }
+     static now() { return new window.originalDate('2026-10-27T00:30:00+08:00').getTime(); }
+   };
+ });
  await click('文章');await heading('文章');await click('新建文章');await fill('.modal input[placeholder="给它取个名字"]','Browser test story');await fill('.modal input[placeholder="my-first-story"]','studio-browser-test');await click('进入编辑器');await heading('Browser test story');
+ assert.equal(await page.$eval('.metadata-card input[name=date]', input => input.value), '2026-10-26');
+ assert.match(await page.$eval('.metadata-card input[name="date-time"]', input => input.value), /^16:30/);
+ await page.evaluate(() => { window.Date = window.originalDate; delete window.originalDate; });
  await choose('taxonomies.tags', 'tech');
  await choose('taxonomies.categories', 'misc');
  assert.equal(await page.$('[data-field="layout"] input[value=""]'), null, 'empty layout must not be selectable');
@@ -77,16 +106,22 @@ try {
  await choose('taxonomies.tags', 'tech');
  assert.equal(await page.$('.metadata-card .structured-item input'), null, 'taxonomies must not use free text');
  await fill('.markdown-source','# A new story\n\nThis is a browser integration test.\n');
+ await page.click('.ai-action'); await page.waitForSelector('.ai-assistant-dialog[open]');
+ await click('生成摘要'); await click('应用摘要');
+ await page.waitForSelector('.ai-assistant-dialog', { hidden: true });
+ assert.equal(await page.$eval('#article-description', node => node.value), 'Reviewed browser summary fixture.');
+ console.log('PASS: AI summary application updates the document and closes the dialog.');
  await page.$eval('.metadata-card input[type=checkbox]',el=>el.click());
- await click('保存内容');await page.waitForSelector('.notice.success');
+ await click('本地保存');await page.waitForSelector('.notice.success');
  let source=await readFile(base+'/site/content/articles/studio-browser-test/index.md','utf8');assert.match(source,/draft = false/);assert.match(source,/# A new story/);
+ assert.equal(Date.parse(String(parse(splitDocument(source).header).date)), Date.parse('2026-10-27T00:30:00+08:00'));
  assert.deepEqual({ ...parse(splitDocument(source).header).taxonomies }, { tags: ['tech'], categories: ['misc'] });
  await click('正文预览');await page.waitForSelector('.markdown-preview h1');
  await click('可视化编辑');await page.waitForSelector('.vditor-ir [contenteditable=true]',{timeout:15000});
  await page.screenshot({path:screenshots+'/editor-desktop.png'});
  await click('Markdown 源码');
  await writeFile(base+'/site/content/articles/studio-browser-test/index.md',source.replace('Browser test story','Changed externally'));
- await fill('.title-field input','My local edit');await click('保存内容');await page.waitForSelector('.notice.error');assert.match(await page.$eval('.notice.error',e=>e.textContent),/文件已更新/);
+ await fill('.title-field input','My local edit');await click('本地保存');await page.waitForSelector('.notice.error');assert.match(await page.$eval('.notice.error',e=>e.textContent),/文件已更新/);
  assert.match(await readFile(base+'/site/content/articles/studio-browser-test/index.md','utf8'),/Changed externally/);
  await click('工作台');await heading('今天，写点什么？');
  await page.setViewport({width:390,height:844,deviceScaleFactor:1});await page.waitForFunction(() => document.querySelector('.sidebar').getBoundingClientRect().right <= 0);await page.screenshot({path:screenshots+'/dashboard-mobile.png',fullPage:true});
@@ -104,7 +139,7 @@ try {
     await click('进入编辑器'); await heading(item.title);
     await fill('.markdown-source', '# ' + item.title + '\n\nBrowser test content.\n');
     await page.$eval('.metadata-card input[type=checkbox]', el => el.click());
-    await click('保存内容'); await page.waitForSelector('.notice.success');
+    await click('本地保存'); await page.waitForSelector('.notice.success');
     await click('← 返回内容库'); await heading('合集管理');
   }
 
@@ -114,13 +149,13 @@ try {
   await fill('.modal input[placeholder="my-first-story"]', 'selected-story');
   await choose('article-collection', 'studio-column/studio-collection');
   await click('进入编辑器'); await heading('Selected collection story');
-  await click('保存内容'); await page.waitForSelector('.notice.success');
+  await click('本地保存'); await page.waitForSelector('.notice.success');
   assert.ok((await readFile(base + '/site/content/collections/studio-column/studio-collection/selected-story/index.md', 'utf8')).includes('collection-content'));
 
   await click('页面'); await heading('页面'); await click('新建页面');
   await fill('.modal input[placeholder="给它取个名字"]', 'Browser page'); await fill('.modal input[placeholder="my-first-story"]', 'studio-page');
   await click('进入编辑器'); await heading('Browser page'); await fill('.markdown-source', '# Browser page');
-  await page.$eval('.metadata-card input[type=checkbox]', el => el.click()); await click('保存内容'); await page.waitForSelector('.notice.success');
+  await page.$eval('.metadata-card input[type=checkbox]', el => el.click()); await click('本地保存'); await page.waitForSelector('.notice.success');
   await checkPageManagement({ page, base, screenshots, click, heading, fill, delayNextDocumentSave });
   await checkControls({ page, click, heading, fill, base, screenshots, choose });
   await checkMedia({ page, base, theme, screenshots, click, heading, fill });
@@ -141,14 +176,14 @@ try {
  await click('可视化编辑');await page.waitForSelector('.vditor-ir [contenteditable=true]');await click('恢复草稿');
  if(await page.$('.markdown-source')){assert.match(await page.$eval('.markdown-source',e=>e.value),/Recovered writing/);await click('可视化编辑');await page.waitForSelector('.vditor-ir [contenteditable=true]')}
  else if(!await page.$eval('.vditor-ir [contenteditable=true]',e=>e.textContent.includes('Recovered writing')))failures.push('recovery did not update visible rich editor');
- await page.click('.vditor-ir [contenteditable=true]');await page.keyboard.press('End');await page.keyboard.type('FAST-INPUT-TAIL');await click('保存内容');await page.waitForSelector('.notice.success');
+ await page.click('.vditor-ir [contenteditable=true]');await page.keyboard.press('End');await page.keyboard.type('FAST-INPUT-TAIL');await click('本地保存');await page.waitForSelector('.notice.success');
  if(!(await readFile(base+'/site/'+path,'utf8')).includes('FAST-INPUT-TAIL'))failures.push('immediate save lost rich input');
  await page.click('.vditor-ir [contenteditable=true]');await page.keyboard.type('MODE-SWITCH-TAIL');await click('Markdown 源码');
  if(!await page.$eval('.markdown-source',e=>e.value.includes('MODE-SWITCH-TAIL')))failures.push('mode switch lost rich input');
  await page.$eval('.markdown-source',e=>{e.value+='SOURCE-AFTER-SWITCH';e.dispatchEvent(new Event('input',{bubbles:true}))});
  await new Promise(r=>setTimeout(r,1000));if(!await page.$eval('.markdown-source',e=>e.value.includes('SOURCE-AFTER-SWITCH')))failures.push('old rich callback replaced new source');
  await click('站点信息');await page.waitForSelector('.settings-grid');await page.$eval('.settings-grid input',e=>{e.value='Unsaved through reauthentication';e.dispatchEvent(new Event('input',{bubbles:true}))});
- await page.evaluate(async()=>{const s=await(await fetch('/api/auth/session')).json();await fetch('/api/auth/logout',{method:'POST',headers:{'x-csrf-token':s.csrf}})});await click('保存更改');await page.waitForSelector('[name=username]');
+ await page.evaluate(async()=>{const s=await(await fetch('/api/auth/session')).json();await fetch('/api/auth/logout',{method:'POST',headers:{'x-csrf-token':s.csrf}})});await click('本地保存');await page.waitForSelector('[name=username]');
  await page.type('[name=username]','owner');await page.type('[name=password]','studio-browser-test-2026');await click('进入创作中心');await page.waitForFunction(()=>!document.querySelector('[name=username]'));
  if(!await page.$('.settings-grid input'))failures.push('expired session discarded settings form');
  else if(await page.$eval('.settings-grid input',e=>e.value)!=='Unsaved through reauthentication')failures.push('reauthentication lost configuration changes');
@@ -159,6 +194,7 @@ try {
   await click('站点信息'); await page.waitForSelector('.settings-grid input');
   assert.equal(await page.$eval('.settings-grid input', e => e.value), 'Unsaved through reauthentication');
   assert.deepEqual(errors, []);
+  assert.deepEqual(reactWarnings, [], 'React must not report invalid DOM or lifecycle updates');
   buildAstro(base + '/site');
   {
     const html = async path => readFile(base + '/site/dist/' + path + '/index.html', 'utf8');

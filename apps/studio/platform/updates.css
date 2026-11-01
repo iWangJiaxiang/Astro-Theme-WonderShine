@@ -1,0 +1,6 @@
+.native-update-footer { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:8px 16px; padding:12px 20px calc(12px + env(safe-area-inset-bottom)); font-size:12px; color:var(--text-secondary,#687080); background:var(--studio-card,#fff); }
+.native-update-footer button { font:inherit; padding:4px 8px; color:var(--wjx-theme,#425aef); }
+.native-update-notice { position:fixed; right:max(20px,env(safe-area-inset-right)); bottom:max(20px,env(safe-area-inset-bottom)); z-index:150; display:flex; align-items:center; flex-wrap:wrap; gap:8px; width:min(360px,calc(100vw - 40px)); padding:18px; border:1px solid var(--studio-line,#dce0e8); border-radius:14px; background:var(--studio-card,#fff); color:var(--wjx-fontcolor,#222); box-shadow:0 8px 32px #0002; }
+.native-update-notice > div { width:100%; margin-bottom:4px; }
+.native-update-notice button { min-height:36px; padding:6px 12px; font-size:13px; }
+.native-update-notice .native-update-skip { margin-left:auto; color:var(--text-secondary,#687080); font-size:12px; }

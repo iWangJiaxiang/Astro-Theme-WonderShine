@@ -6,11 +6,8 @@ import { StudioError } from './errors.js';
 
 export const MAX_MEDIA_SIZE = 20 * 1024 * 1024;
 const MAX_MEDIA_FILES = 5000, MAX_VISITED = 20000;
-export function validateMediaPath(path: string): void {
-  if (typeof path !== 'string' || path.length > 1000 || !/^(public|content)\//.test(path) || !imageMime(path)
-    || /[\\\x00-\x1f\x7f%?#]/.test(path) || path.split('/').some(part => !part || part.startsWith('.')))
-    throw new StudioError(400, '请选择仓库 public 或 content 目录中的图片');
-}
+import { validateMediaPath } from '../core/media-validation.js';
+export { validateMediaPath } from '../core/media-validation.js';
 export async function safeMediaPath(rootPath: string, path: string): Promise<string> {
   const root = await realpath(resolve(rootPath));
   let file = root;

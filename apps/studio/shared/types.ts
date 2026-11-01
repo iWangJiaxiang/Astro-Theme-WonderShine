@@ -1,6 +1,6 @@
 export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 export interface FileSnapshot { path: string; text: string; revision: string }
-export interface SaveResult { revision: string; commit?: string; message: string }
+export interface SaveResult { revision: string; commit?: string; branch?: string; branchPending?: boolean; message: string }
 export type ArticleReference = { kind: 'internal'; path: string } | { kind: 'external'; url: string; title: string };
 export interface ArticleSummary {
   path: string; title: string; date: string; draft: boolean; kind: 'article' | 'page' | 'collection' | 'note' | 'topic';

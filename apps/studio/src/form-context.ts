@@ -1,4 +1,4 @@
-import type { InjectionKey, Ref } from 'vue';
+import type { InjectionKey, Ref } from './reactivity';
 import type { Choice } from '../shared/choices';
 import type { Message } from './i18n';
 import type { Json } from '../shared/types';

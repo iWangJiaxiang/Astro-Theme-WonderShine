@@ -5,6 +5,7 @@ import type { TranslationSettings } from '../shared/translation.js';
 import { resolve } from 'node:path';
 import { LocalRepository, type Repository } from './repository.js';
 import { GitRepository } from './git-repository.js';
+import { GitWorkspaceRepository } from './git-workspace.js';
 import { FileState, BlobState, type StateStore } from './state.js';
 
 export interface OidcSettings { issuer: string; clientId: string; clientSecret?: string; subjects: string[]; label: string }
@@ -33,9 +34,12 @@ export function inspectConfig(env: NodeJS.ProcessEnv = process.env): { config: S
   }
   if (!username && !oidc) throw new Error('至少启用账号密码或 OIDC 认证之一');
   if (!env.STUDIO_GIT_URL && !env.STUDIO_SITE_ROOT) throw new Error('请配置 STUDIO_SITE_ROOT 或 STUDIO_GIT_URL 指向独立站点');
-  const repository = env.STUDIO_GIT_URL ? new GitRepository({ url: env.STUDIO_GIT_URL, branch: env.STUDIO_GIT_BRANCH || 'master',
+  if (env.STUDIO_GIT_WORKSPACE && (!env.STUDIO_GIT_URL || env.STUDIO_STATE === 'blob')) throw new Error('持久 Git 工作区需要 Git 地址和本地持久磁盘，不能用于云函数 Blob 部署');
+  const gitOptions = { url: env.STUDIO_GIT_URL || '', branch: env.STUDIO_GIT_BRANCH || 'master',
     username: env.STUDIO_GIT_USERNAME || 'x-access-token', token: env.STUDIO_GIT_TOKEN || '',
-    name: env.STUDIO_GIT_AUTHOR || 'Creator Studio', email: env.STUDIO_GIT_EMAIL || 'studio@localhost' })
+    name: env.STUDIO_GIT_AUTHOR || 'Creator Studio', email: env.STUDIO_GIT_EMAIL || 'studio@localhost' };
+  const repository = env.STUDIO_GIT_URL
+    ? env.STUDIO_GIT_WORKSPACE ? new GitWorkspaceRepository({ ...gitOptions, directory: env.STUDIO_GIT_WORKSPACE }) : new GitRepository(gitOptions)
     : new LocalRepository(resolve(env.STUDIO_SITE_ROOT!));
   if (env.STUDIO_STATE === 'blob' && repository.mode !== 'git') throw new Error('Makers 部署必须配置 Git 仓库，不能保存到临时文件系统');
   if (env.STUDIO_STATE && !['file', 'blob'].includes(env.STUDIO_STATE)) throw new Error('STUDIO_STATE 必须是 file 或 blob');

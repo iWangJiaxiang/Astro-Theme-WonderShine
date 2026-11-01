@@ -47,7 +47,7 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   await chooseImage('extra.site.logo', shared);
   assert.equal(await page.$eval('[name="extra.site.logo"]', el => el.value), '/img/媒体 配图.webp');
   await page.waitForFunction(() => document.querySelector('[data-image-field="extra.site.logo"] img')?.naturalWidth > 0);
-  await click('保存更改'); await page.waitForSelector('.notice.success');
+  await click('本地保存'); await page.waitForSelector('.notice.success');
   assert.equal(parse(await readFile(base + '/site/config.toml', 'utf8')).extra.site.logo, '/img/媒体 配图.webp');
 
   const friendsFile = base + '/site/public/data/friends.json';
@@ -64,17 +64,17 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   assert.equal(await page.$eval('[data-image-field="groups.0.links.0.logo"] label', el => el.textContent), '备用图标地址');
   assert.equal(await page.$('[data-image-field="groups.0.links.0.logo"] .image-field-preview'), null);
   await fill('[name="groups.0.links.0.logo"]', 'https://backup-icon.invalid/edited.png');
-  await click('保存更改'); await page.waitForSelector('.notice.success');
+  await click('本地保存'); await page.waitForSelector('.notice.success');
   assert.equal(JSON.parse(await readFile(friendsFile, 'utf8')).groups[0].links[0].logo, 'https://backup-icon.invalid/edited.png');
   assert.deepEqual(backupRequests, [], 'backup URLs must not be requested on load or edit');
   page.off('request', trackBackup);
   await chooseImage('groups.0.links.0.logo', shared);
   assert.equal(await page.$('[data-image-field="groups.0.links.0.logo"] .image-field-preview'), null);
-  await click('保存更改'); await page.waitForSelector('.notice.success');
+  await click('本地保存'); await page.waitForSelector('.notice.success');
   assert.equal(JSON.parse(await readFile(base + '/site/public/data/friends.json', 'utf8')).groups[0].links[0].logo, '/img/媒体 配图.webp');
   await click('关于页设置'); await heading('关于页设置');
   await chooseImage('extra.about.photos.0.url', shared);
-  await click('保存更改'); await page.waitForSelector('.notice.success');
+  await click('本地保存'); await page.waitForSelector('.notice.success');
   assert.equal(parse(await readFile(base + '/site/config.toml', 'utf8')).extra.about.photos[0].url, '/img/媒体 配图.webp');
 
   await click('文章'); await heading('文章');
@@ -90,7 +90,7 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   await fill('dialog.media-dialog[open] [aria-label="搜索仓库图片"]', '媒体 配图');
   await page.waitForSelector(`dialog.media-dialog[open] [data-media-path="${shared}"]`);
   await page.click(`dialog.media-dialog[open] [data-media-path="${shared}"]`); await click('使用这张图片');
-  await click('保存内容'); await page.waitForSelector('.editor-page > .notice.success');
+  await click('本地保存'); await page.waitForSelector('.editor-page > .notice.success');
   const saved = splitDocument(await readFile(base + '/site/content/articles/studio-browser-test/index.md', 'utf8'));
   assert.equal(parse(saved.header).extra.cover, '封面 配图.webp');
   assert.equal(parse(saved.header).extra.global_cover, '/img/媒体 配图.webp');
