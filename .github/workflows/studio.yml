@@ -1,5 +1,5 @@
 name: Studio apps & release
-run-name: Studio ${{ inputs.version || github.ref_name }} · ${{ github.event_name }}
+run-name: Studio ${{ inputs.target || 'all' }} · ${{ inputs.version || github.ref_name }} · ${{ github.event_name }}
 on:
   push:
     paths: &studio_paths
@@ -14,18 +14,25 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
+      target:
+        description: 'Build/distribution target'
+        type: choice
+        options:
+          - all
+          - ios
+        default: all
       version:
         description: 'Stable Studio version (e.g. 0.2.0); blank uses package.json'
         type: string
         required: false
       publish:
-        description: 'Publish a Studio release after all platforms pass'
+        description: 'Publish: all → GitHub Release; ios → TestFlight only'
         type: boolean
         default: false
 permissions:
   contents: read
 concurrency:
-  group: studio-${{ github.event_name == 'release' && github.event.release.tag_name || inputs.publish && format('studio-v{0}', inputs.version) || github.ref }}
+  group: studio-${{ inputs.target || 'all' }}-${{ github.event_name == 'release' && github.event.release.tag_name || inputs.publish && format('studio-v{0}', inputs.version) || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'release' && !inputs.publish }}
 env:
   CARGO_TERM_COLOR: always
@@ -40,6 +47,9 @@ jobs:
       tag: ${{ steps.context.outputs.tag }}
       release: ${{ steps.context.outputs.release }}
       sha: ${{ steps.context.outputs.sha }}
+      target: ${{ steps.context.outputs.target }}
+      iosRelease: ${{ steps.context.outputs.iosRelease }}
+      testflight: ${{ steps.context.outputs.testflight }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -49,25 +59,15 @@ jobs:
           node-version: '24'
       - id: context
         run: node apps/studio/scripts/release/context.mjs
-      - name: Validate release configuration before building
+        env:
+          STUDIO_UPLOAD_TESTFLIGHT: ${{ vars.STUDIO_UPLOAD_TESTFLIGHT }}
+      - name: Validate GitHub Release source and version
         if: steps.context.outputs.release == 'true'
         run: node apps/studio/scripts/release/preflight.mjs
         env:
           GH_TOKEN: ${{ github.token }}
           STUDIO_VERSION: ${{ steps.context.outputs.version }}
           STUDIO_SOURCE: ${{ steps.context.outputs.sha }}
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
-          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
-          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
-          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
-          STUDIO_UPLOAD_TESTFLIGHT: ${{ vars.STUDIO_UPLOAD_TESTFLIGHT }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
   verify:
     needs: prepare
     runs-on: ubuntu-24.04
@@ -114,6 +114,7 @@ jobs:
           retention-days: 7
   desktop:
     needs: prepare
+    if: needs.prepare.outputs.target == 'all'
     strategy:
       fail-fast: false
       matrix:
@@ -168,6 +169,7 @@ jobs:
           retention-days: 7
   android:
     needs: prepare
+    if: needs.prepare.outputs.target == 'all'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
@@ -184,6 +186,14 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - name: Validate Android signing configuration
+        if: needs.prepare.outputs.release == 'true'
+        run: node apps/studio/scripts/release/signing-preflight.mjs
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       - uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
@@ -244,10 +254,10 @@ jobs:
     env:
       STUDIO_VERSION: ${{ needs.prepare.outputs.version }}
       STUDIO_SOURCE: ${{ needs.prepare.outputs.sha }}
-      STUDIO_RELEASE: ${{ needs.prepare.outputs.release }}
+      STUDIO_RELEASE: ${{ needs.prepare.outputs.iosRelease }}
       STUDIO_PLATFORM: ios
       # Simulator builds skip signing but Tauri still requires a non-empty team.
-      APPLE_DEVELOPMENT_TEAM: ${{ needs.prepare.outputs.release == 'true' && secrets.APPLE_DEVELOPMENT_TEAM || '0000000000' }}
+      APPLE_DEVELOPMENT_TEAM: ${{ needs.prepare.outputs.iosRelease == 'true' && secrets.APPLE_DEVELOPMENT_TEAM || '0000000000' }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -257,6 +267,18 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - name: Validate iOS and TestFlight signing configuration
+        if: needs.prepare.outputs.iosRelease == 'true'
+        run: node apps/studio/scripts/release/signing-preflight.mjs
+        env:
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+          STUDIO_UPLOAD_TESTFLIGHT: ${{ needs.prepare.outputs.testflight }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-ios,aarch64-apple-ios-sim
@@ -269,10 +291,10 @@ jobs:
       - run: node apps/studio/scripts/release/version.mjs
       - run: npm exec -w @wondershine/studio -- tauri ios init --ci
       - name: Simulator app (no distribution credentials)
-        if: needs.prepare.outputs.release != 'true'
+        if: needs.prepare.outputs.iosRelease != 'true'
         run: npm exec -w @wondershine/studio -- tauri ios build --ci --debug --target aarch64-sim --no-sign
       - name: Signed App Store IPA
-        if: needs.prepare.outputs.release == 'true'
+        if: needs.prepare.outputs.iosRelease == 'true'
         run: npm exec -w @wondershine/studio -- tauri ios build --ci --target aarch64 --export-method app-store-connect
         env:
           APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
@@ -289,8 +311,8 @@ jobs:
           if-no-files-found: error
           retention-days: 7
   testflight:
-    needs: [prepare, verify, desktop, android, ios]
-    if: needs.prepare.outputs.release == 'true' && vars.STUDIO_UPLOAD_TESTFLIGHT == 'true'
+    needs: [prepare, verify, ios]
+    if: needs.prepare.outputs.testflight == 'true'
     runs-on: macos-15
     timeout-minutes: 20
     steps:
@@ -298,6 +320,9 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
       - uses: actions/download-artifact@v8.0.2
         with:
           name: studio-app-ios

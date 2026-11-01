@@ -18,7 +18,8 @@ Release 标题统一为 `WonderShine Studio X.Y.Z`，例如 `WonderShine Studio 
 | --- | --- |
 | Push / PR 修改 `apps/studio/**`、`packages/**`、根 package/lock 或 Studio workflow | 远程测试、全平台构建，保存 Actions artifacts；不创建 Release |
 | 发布标签为 `studio-vX.Y.Z` 的稳定 GitHub Release | 构建正式安装包，上传到该 Release |
-| Actions → **Studio apps & release** → **Run workflow** | 可输入 `0.2.0`，勾选 `publish` 后自动创建并发布 Release；不勾选只构建 |
+| 手动运行，`target=all` | 不勾选 `publish`：全平台验证构建；勾选：创建并发布 GitHub Release |
+| 手动运行，`target=ios` | 不勾选 `publish`：Studio 验证和未签名 iOS 模拟器构建；勾选：签名 IPA 并上传 TestFlight |
 
 `workflow_dispatch` 需要先把工作流推送到默认分支。首次推送后可在 Actions 页面查看远程构建与测试记录。`studio-v` 与主题包的标签区分；主题 Release 不触发 App 发行。首版只发布稳定版本，不将 prerelease 推送给普通用户。
 
@@ -42,7 +43,7 @@ GitHub Releases 是当前桌面/Android 的部署入口；Google Play 上架需�
 
 在仓库 Settings → Secrets and variables → Actions 配置，密钥不写入代码、不发给 AI。
 
-### Android（正式发行必填）
+### Android（全平台正式发行必填，独立 iOS 不需要）
 
 | Secret | 含义 |
 | --- | --- |
@@ -64,6 +65,8 @@ GitHub Releases 是当前桌面/Android 的部署入口；Google Play 上架需�
 | `IOS_CERTIFICATE_PASSWORD` | Secret | `.p12` 密码 |
 | `IOS_MOBILE_PROVISION` | Secret | 与 identifier、证书匹配的 App Store Connect provisioning profile 的 base64 |
 
+已有 Xcode 证书可优先复用；证书类型、私钥导出、描述文件及 Base64 操作见 [iOS 签名材料准备](studio-ios-signing.md)。
+
 Tauri CLI 负责导入签名材料及构建。独立设置 iOS `bundleVersion=run_number.run_attempt`，不往三段营销版本后追加第四段；重跑构建有新的 build number。首次证书验证在远程构建时进行；仅检查 Secret 存在不代表证书有效。
 
 `APPLE_DEVELOPMENT_TEAM` 统一从 repository secret 读取，不回退读取同名 Variable。若之前配置在 Variables 中，先创建同名 Secret，再删除旧 Variable。不要在日志或示例配置中输出真实值；模拟器构建继续使用占位 Team ID。
@@ -72,13 +75,22 @@ Secret 能保护 Actions 配置，并让 GitHub 对日志中匹配的值自动�
 
 ### 自动上传 TestFlight（可选）
 
-设置 Variable `STUDIO_UPLOAD_TESTFLIGHT=true`，并配置 Secrets `APPLE_API_ISSUER`、`APPLE_API_KEY`（Key ID）、`APPLE_API_KEY_BASE64`（`.p8` 内容的 base64）。上传在所有构建及测试成功后进行；失败会阻止 Release 完成标记上传。Apple 后台仍需处理构建并配置测试员，CI 上传成功不代表立即可安装或通过审核。
+配置 Secrets `APPLE_API_ISSUER`、`APPLE_API_KEY`（Key ID）、`APPLE_API_KEY_BASE64`（`.p8` 内容的 base64），加上前述四个 iOS Secrets，共七项。
+
+- **独立 iOS 发布**：手动运行选择 `target=ios`，填写版本并勾选 `publish`。只运行 Studio 验证、iOS 签名构建和 TestFlight 上传；不需要 Android 凭据，也不需要 `STUDIO_UPLOAD_TESTFLIGHT` Variable。
+- **全平台发布附带 TestFlight**：`target=all` 或 `studio-v*` Release 使用 Variable `STUDIO_UPLOAD_TESTFLIGHT=true` 开启上传。
+
+TestFlight 只等待 Studio 验证和 iOS 构建。因此全平台模式下，即使 Android 或桌面构建失败，TestFlight 也可能已经上传；完整 GitHub Release 仍需全部平台及启用的 TestFlight 上传成功。Apple 后台仍需处理构建并配置测试员，CI 上传成功不代表立即可安装或通过审核。
+
+独立 iOS 发布不会创建 GitHub tag、GitHub Release 或 `studio-release.json`，也不会触发现有基于 GitHub 完成标记的 App 更新提示。测试员通过 TestFlight 获取构建。
 
 Variable `STUDIO_IOS_UPDATE_URL` 可填 App Store 页面或 TestFlight 邀请链接，只允许 `https://apps.apple.com/…` 或 `https://testflight.apple.com/…`。没有配置时 App 打开 GitHub Release 说明页。该地址是在构建时写入 App 的，变更后需要重新发行。
 
 ## 发布过程与失败恢复
 
-1. 先验证版本、标签源提交及 Android/iOS 必需签名配置。
+以下为全平台 GitHub Release 流程；独立 iOS 仅执行验证、iOS 构建及 TestFlight 上传。
+
+1. 先验证版本、标签源提交；各平台任务分别检查自己的签名配置。
 2. 远程运行 Studio 单元测试、浏览器测试与截图；并行构建八个平台/架构产物。
 3. 每个平台记录源 SHA、版本、文件名和 SHA-256。最终发布任务验证各平台产物来自同一源码版本。
 4. 上传安装包及 `SHA256SUMS`。手动发布时创建 draft，上传完成后将其公开。

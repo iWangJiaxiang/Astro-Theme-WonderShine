@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { stableVersion, releaseContext } from '../scripts/release/context.mjs';
+import { validateSigningConfiguration } from '../scripts/release/signing-preflight.mjs';
 
 const script = name => fileURLToPath(new URL(`../scripts/release/${name}.mjs`, import.meta.url));
 test('only stable Studio release tags publish; pushes and PRs never publish', () => {
@@ -16,6 +17,59 @@ test('only stable Studio release tags publish; pushes and PRs never publish', ()
   assert.equal(releaseContext('release', { release: { tag_name: 'studio-v0.3.0' } }, '0.1.0', 'abc').version, '0.3.0');
   assert.throws(() => releaseContext('release', { release: { tag_name: 'theme-v1.0.0' } }, '0.1.0', 'abc'));
   assert.throws(() => releaseContext('release', { release: { tag_name: 'studio-v1.0.0', prerelease: true } }, '0.1.0', 'abc'));
+});
+
+test('iOS-only distribution signs and uploads without publishing a GitHub Release', () => {
+  const context = releaseContext('workflow_dispatch', { inputs: { target: 'ios', version: '0.2.0', publish: 'true' } }, '0.1.0', 'abc');
+  assert.equal(context.target, 'ios');
+  assert.equal(context.iosRelease, 'true');
+  assert.equal(context.testflight, 'true');
+  assert.equal(context.release, 'false');
+  assert.equal(context.version, '0.2.0');
+  const preview = releaseContext('workflow_dispatch', { inputs: { target: 'ios', publish: 'false' } }, '0.1.0', 'abc', true);
+  assert.equal(preview.target, 'ios');
+  assert.equal(preview.iosRelease, 'false');
+  assert.equal(preview.testflight, 'false');
+  assert.equal(preview.release, 'false');
+});
+
+test('full releases retain optional TestFlight while push and PR cannot opt in', () => {
+  const event = { inputs: { target: 'all', publish: 'true' } };
+  for (const enabled of [false, true]) {
+    const context = releaseContext('workflow_dispatch', event, '0.1.0', 'abc', enabled);
+    assert.equal(context.release, 'true');
+    assert.equal(context.iosRelease, 'true');
+    assert.equal(context.testflight, String(enabled));
+    const tag = releaseContext('release', { release: { tag_name: 'studio-v0.2.0' } }, '0.1.0', 'abc', enabled);
+    assert.equal(tag.target, 'all');
+    assert.equal(tag.testflight, String(enabled));
+  }
+  for (const name of ['push', 'pull_request']) {
+    const context = releaseContext(name, { inputs: { target: 'ios', publish: 'true' } }, '0.1.0', 'abc', true);
+    assert.equal(context.target, 'all');
+    assert.equal(context.release, 'false');
+    assert.equal(context.iosRelease, 'false');
+    assert.equal(context.testflight, 'false');
+  }
+  assert.throws(() => releaseContext('workflow_dispatch', { inputs: { target: 'unknown' } }, '0.1.0', 'abc'), /target/);
+});
+
+test('iOS signing and TestFlight preflight require only Apple credentials and never disclose values', () => {
+  const env = { APPLE_DEVELOPMENT_TEAM: 'private-team-fixture', IOS_CERTIFICATE: 'certificate-fixture', IOS_CERTIFICATE_PASSWORD: 'password-fixture', IOS_MOBILE_PROVISION: 'profile-fixture' };
+  assert.doesNotThrow(() => validateSigningConfiguration('ios', env));
+  const upload = { ...env, STUDIO_UPLOAD_TESTFLIGHT: 'true' };
+  assert.throws(() => validateSigningConfiguration('ios', upload), error => {
+    assert.match(error.message, /APPLE_API_ISSUER/);
+    assert.match(error.message, /APPLE_API_KEY_BASE64/);
+    assert.doesNotMatch(error.message, /ANDROID_|private-team-fixture|password-fixture/);
+    return true;
+  });
+  Object.assign(upload, { APPLE_API_ISSUER: 'issuer-fixture', APPLE_API_KEY: 'key-fixture', APPLE_API_KEY_BASE64: 'p8-fixture' });
+  assert.doesNotThrow(() => validateSigningConfiguration('ios', upload));
+  assert.throws(() => validateSigningConfiguration('ios', { ...upload, APPLE_DEVELOPMENT_TEAM: '' }), /APPLE_DEVELOPMENT_TEAM/);
+  assert.throws(() => validateSigningConfiguration('android', upload), /ANDROID_KEYSTORE_BASE64/);
+  assert.doesNotThrow(() => validateSigningConfiguration('android', { ANDROID_KEYSTORE_BASE64: 'keystore', ANDROID_STORE_PASSWORD: 'password', ANDROID_KEY_ALIAS: 'alias', ANDROID_KEY_PASSWORD: 'password', STUDIO_UPLOAD_TESTFLIGHT: 'true' }));
+  assert.throws(() => validateSigningConfiguration('unknown', env), /platform/);
 });
 
 test('version injection changes only Studio versions in runner fixtures', async () => {

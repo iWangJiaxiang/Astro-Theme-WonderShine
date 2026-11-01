@@ -8,17 +8,22 @@ export function stableVersion(value) {
   return value;
 }
 
-export function releaseContext(eventName, event, fallback, sha) {
-  const release = eventName === 'release' || (eventName === 'workflow_dispatch' && String(event.inputs?.publish) === 'true');
+export function releaseContext(eventName, event, fallback, sha, uploadTestflight = false) {
+  const manual = eventName === 'workflow_dispatch';
+  const target = manual ? event.inputs?.target || 'all' : 'all';
+  if (!['all', 'ios'].includes(target)) throw new Error('Unsupported Studio distribution target');
+  const publish = eventName === 'release' || (manual && String(event.inputs?.publish) === 'true');
+  const release = publish && target === 'all';
   const tag = eventName === 'release' ? event.release?.tag_name : '';
   if (eventName === 'release' && (!tag?.startsWith('studio-v') || event.release?.prerelease || event.release?.draft)) throw new Error('Only stable studio-vX.Y.Z releases are supported');
-  const version = stableVersion(tag ? tag.slice(8) : event.inputs?.version || fallback);
-  return { version, tag: `studio-v${version}`, release: String(release), sha };
+  const version = stableVersion(tag ? tag.slice(8) : (manual && event.inputs?.version) || fallback);
+  return { version, tag: `studio-v${version}`, release: String(release), sha, target,
+    iosRelease: String(publish), testflight: String(publish && (target === 'ios' || uploadTestflight)) };
 }
 
 if (process.argv[1]?.endsWith('/context.mjs')) {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
   const pkg = JSON.parse(readFileSync('apps/studio/package.json', 'utf8'));
-  const context = releaseContext(process.env.GITHUB_EVENT_NAME, event, pkg.version, process.env.GITHUB_SHA);
+  const context = releaseContext(process.env.GITHUB_EVENT_NAME, event, pkg.version, process.env.GITHUB_SHA, process.env.STUDIO_UPLOAD_TESTFLIGHT === 'true');
   for (const [key, value] of Object.entries(context)) appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
 }
