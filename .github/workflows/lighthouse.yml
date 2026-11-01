@@ -29,6 +29,19 @@ jobs:
         run: |
           for file in reports/lighthouse-*/summary.json; do cat "$file"; done
           for file in reports/lighthouse-*/summary.md; do cat "$file" >> "$GITHUB_STEP_SUMMARY"; done
+      - name: Read representative performance diagnostics
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync, readdirSync} from 'node:fs';
+          for (const folder of readdirSync('reports')) {
+            const summary = JSON.parse(readFileSync(`reports/${folder}/summary.json`, 'utf8'));
+            for (const result of summary.results) {
+              const report = JSON.parse(readFileSync(`reports/${folder}/${result.representative.file.replace('.html', '.json')}`, 'utf8'));
+              const ids = ['lcp-breakdown-insight', 'lcp-discovery-insight', 'layout-shifts', 'bootup-time'];
+              console.log(JSON.stringify({device: summary.device, page: result.name, diagnostics: Object.fromEntries(ids.map(id => [id, report.audits[id]]))}));
+            }
+          }
+          NODE
   audit:
     if: inputs.report_run_id == ''
     runs-on: ubuntu-24.04
