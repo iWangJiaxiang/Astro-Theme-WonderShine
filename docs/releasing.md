@@ -49,4 +49,4 @@ npm run preview
 
 ## Studio App 发行
 
-Studio 独立使用 `studio-vX.Y.Z` 标签，支持 Actions 手动发布。桌面和移动 App 的构建及测试只在远程 CI 执行。平台矩阵、Android/iOS 签名、TestFlight 和应用更新提醒见 [Studio App 发行](studio-releases.md)。上面的主题 npm 包流程不用于 Studio App 打包。
+Studio 独立使用 `studio-vX.Y.Z` 标签。桌面和移动 App 的构建及测试只在远程 CI 执行。平台产物、分发边界和应用更新提醒见 [Studio App 发行](studio-releases.md)。上面的主题 npm 包流程不用于 Studio App 打包。

@@ -47,7 +47,7 @@ AI sends the selected article content to the configured provider only when gener
 
 ## Development and builds
 
-Builds, packaging and tests now run only on remote GitHub Actions runners. Use **Studio apps & release** for code-change builds or a versioned release; see [Studio releases](studio-releases.md) for artifacts, signing and mobile distribution. The workflow initializes ignored Android/iOS native projects on its runners. Local machines do not need the mobile SDKs.
+Builds, packaging and tests now run only on remote GitHub Actions runners. See [Studio releases](studio-releases.md) for supported artifacts and distribution boundaries. The workflow initializes ignored Android/iOS native projects on its runners. Local machines do not need the mobile SDKs.
 
 For a lightweight local UI preview, run `npm run dev:app -w @wondershine/studio`. It starts Vite without invoking Cargo or packaging. Native capabilities require the App produced by CI. Desktop runs a single instance to protect local workspace operations; launching it again shows, restores and focuses the existing window.
 
