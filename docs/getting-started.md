@@ -1,8 +1,8 @@
 # 从零搭建 WonderShine 博客
 
-这篇文档从一个空目录开始，搭建独立的 Astro 博客，再连接 Creator Studio 写文章。已有 Zola 站点请使用 [迁移指南](migration.md)。
+这篇文档从一个空目录开始，搭建独立的 Astro 博客，再连接 WonderShine Studio 写文章。已有 Zola 站点请使用 [迁移指南](migration.md)。
 
-当前主题处于开发预览阶段，尚未发布到 npm。下面使用本地主题源码打出的 npm 包，不需要先发布主题。
+主题已发布到 npm，包名为 `@wondershine/theme`。下面从源码仓库复制最小 Starter，再安装其中锁定版本的主题依赖；不需要自己打包主题。
 
 ## 1. 准备目录和环境
 
@@ -22,32 +22,26 @@ workspace/
 └── my-blog/                  # 你的配置、文章和图片
 ```
 
-先取得包含本文档的主题源码，并进入其根目录。后面的 `WONDERSHINE_SOURCE` 指向这个目录，`BLOG_SITE` 指向**尚不存在**的新站目录。请按实际位置修改：
+先取得包含本文档的主题源码，并进入其根目录：
+
+```sh
+git clone https://github.com/iWangJiaxiang/Astro-Theme-WonderShine.git
+cd Astro-Theme-WonderShine
+```
+
+后面的 `WONDERSHINE_SOURCE` 指向这个目录，`BLOG_SITE` 指向**尚不存在**的新站目录。请按实际位置修改：
 
 ```sh
 # 在 Astro-Theme-WonderShine 根目录执行。
 export WONDERSHINE_SOURCE="$PWD"
 export BLOG_SITE="$HOME/Sites/my-blog"
-npm ci
 ```
 
 这些变量供后续命令共用；请在同一个终端继续操作。不要在主题的 `examples/` 中存放个人文章。
 
-## 2. 打包主题
+## 2. 复制最小 Starter
 
-仍在主题根目录运行：
-
-```sh
-mkdir -p temp/theme-pack
-npm pack ./packages/theme --pack-destination temp/theme-pack
-export THEME_ARCHIVE="$WONDERSHINE_SOURCE/temp/theme-pack/wondershine-theme-0.1.0.tgz"
-```
-
-`npm pack` 会先构建主题资源。`0.1.0` 是当前源码版本；以后升级时，以命令输出的实际文件名为准。主题包包含页面、组件、默认配置和资源，**不包含 Creator Studio 或你的内容**。
-
-## 3. 创建独立站点
-
-下面的命令复制最小 Starter，排除开发缓存，把主题包放进新站的 `vendor/`，并生成相对路径依赖。目标目录已经存在时会停止，不会覆盖已有站点。
+下面的命令复制 Starter，排除开发缓存，并保留其 npm 主题依赖。目标目录已经存在时会停止，不会覆盖已有站点。
 
 ```sh
 node --input-type=module <<'JS'
@@ -55,9 +49,7 @@ import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 const source = process.env.WONDERSHINE_SOURCE;
 const site = path.resolve(process.env.BLOG_SITE);
-const archive = process.env.THEME_ARCHIVE;
 const starter = path.join(source, 'examples/starter');
-const filename = path.basename(archive);
 await mkdir(path.dirname(site), { recursive: true });
 await mkdir(site);
 await cp(starter, site, {
@@ -65,16 +57,19 @@ await cp(starter, site, {
   filter: file => !path.relative(starter, file).split(path.sep)
     .some(part => ['node_modules', 'dist', '.astro', '.astro-assets', '.git'].includes(part)),
 });
-await mkdir(path.join(site, 'vendor'));
-await cp(archive, path.join(site, 'vendor', filename));
 const pkg = JSON.parse(await readFile(path.join(site, 'package.json'), 'utf8'));
 pkg.name = 'my-blog';
-pkg.dependencies['@wondershine/theme'] = `file:vendor/${filename}`;
 await writeFile(path.join(site, 'package.json'), JSON.stringify(pkg, null, 2) + '\n');
 await writeFile(path.join(site, '.gitignore'),
   'node_modules/\ndist/\n.astro/\n.astro-assets/\n.state/\n.studio-history/\n.studio-write-lock/\n.env\n.env.*\n!.env.example\n.DS_Store\n');
 JS
+```
 
+## 3. 安装并预览
+
+在新站目录安装依赖。Starter 已指定兼容的 Astro 和主题版本：
+
+```sh
 cd "$BLOG_SITE"
 npm install
 npm run dev
@@ -102,7 +97,6 @@ export default defineConfig({ integrations: [wondershine()] });
 | `content/collections/` | 系列与章节等分组内容 |
 | `content/pages/` | 关于等独立页面 |
 | `public/` | 公共图片、图标和 `css/custom.css` |
-| `vendor/` | 本站安装的主题包，需随站点保存 |
 
 先修改 `config.toml` 中的 `title`、`description`、`author` 和 `base_url`。`base_url` 填正式网址；本地预览不需要把它改为 localhost。暂未确定域名时可以保留示例值，但上线前必须更换。
 
@@ -155,6 +149,7 @@ This is my first post.
 
 ```sh
 cd /absolute/path/to/Astro-Theme-WonderShine
+npm ci
 npm run setup -w @wondershine/studio
 npm run doctor -w @wondershine/studio
 npm run studio:dev
@@ -194,20 +189,18 @@ npm run preview -- --host 127.0.0.1 --port 4325
 
 访问 `http://127.0.0.1:4325/`，检查首页、文章、动态、语言切换和图片。预览的是上一次构建的 `dist/`；修改内容后要再次 `npm run build`。
 
-确认后，将整个站点源码、`vendor/`、`package.json`、`package-lock.json` 纳入自己的 Git 仓库。不要把 `.env`、状态目录或构建缓存纳入版本控制。后续其他设备和 CI 用 `npm ci` 安装锁定依赖，然后构建并部署 `dist/`。
+确认后，将整个站点源码、`package.json`、`package-lock.json` 纳入自己的 Git 仓库。不要把 `.env`、状态目录或构建缓存纳入版本控制。后续其他设备和 CI 用 `npm ci` 安装锁定依赖，然后构建并部署 `dist/`。
 
 保存内容、同步 Git、部署网站是三个步骤。只有托管平台执行了新构建并发布产物，访客才会看到更新。评论、搜索、音乐和 AI 的外部服务需要另行配置；安装主题不会自动创建这些服务。
 
 ## 7. 可选：用 submodule 固定主题源码
 
-仅使用主题时，保留 `vendor/` 中的 npm 包即可。需要一起开发主题或从同一站点仓库运行 Studio 时，可在已初始化的博客 Git 仓库中加入 submodule：
+仅使用主题时，npm 依赖已经足够。需要一起开发主题或从同一站点仓库运行 Studio 时，可在已初始化的博客 Git 仓库中加入 submodule：
 
 ```sh
 git submodule add https://github.com/iWangJiaxiang/Astro-Theme-WonderShine.git themes/wondershine
 ```
 
-只有已推送到上游的提交才能由其他人正常取得。开发预览如果还只有本地提交，继续使用旁边的主题源码目录，不要假设远端已包含本地修改。
-
-submodule 负责记录源码版本，`vendor/*.tgz` 才是博客实际安装的包。切换 submodule 不会自动更新正在使用的主题，需要在选定源码版本重新 `npm ci`、`npm pack`，复制新包到 `vendor/` 并重新安装。升级步骤见 [打包与发布](releasing.md)。
+submodule 记录源码版本，`package.json` 和 `package-lock.json` 记录博客实际安装的主题版本。切换 submodule 不会自动更新 npm 依赖；两者需要分别管理。
 
 示例 Starter 没有 `theme:sync`、`studio:setup` 或 `verify` 这类个人博客脚本；本文使用主题仓库实际提供的命令。
