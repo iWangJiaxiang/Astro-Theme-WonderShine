@@ -66,7 +66,11 @@ node apps/studio/tests/browser/native-ui.mjs
 
 Native engine integration tests run actual Git smart-HTTP against temporary bare repositories and cover offline reopen, commits, fast-forward, rejected pushes, divergence and interrupted operations. Browser tests execute the portable core without Node globals and normalize filesystem statistics through the actual Tauri adapter. Full native UI tests use the configured CSP and an IPC fixture; they are not a substitute for real iOS/Android devices or live hosting-provider authentication tests.
 
-Provider capabilities currently advertise only Git protocol access. OAuth, repository discovery, PR/MR and deployment-status APIs remain disabled rather than exposing nonfunctional buttons. Real provider credentials are never used by automated tests.
+The installed App supports GitHub and CNB device authorization and account repository selection. The maintainer supplies public Client IDs through `VITE_STUDIO_GITHUB_CLIENT_ID` and `VITE_STUDIO_CNB_CLIENT_ID`; no client secret or Studio service participates. GitHub requires Device Flow enabled and requests `repo` access for private repository editing. The CNB application needs device authorization enabled and the `account-profile:r`, `account-engage:r`, `repo-basic-info:r`, and `repo-code:rw` permissions. Authorization and repository API calls go directly to the selected platform. Tokens remain in the current connection only; restarting requires sign-in again. Builds without a Client ID show sign-in as unavailable and continue to support manual Git remotes.
+
+Provider-specific discovery is separate from the generic Git transport. Other Git providers continue to use explicit remote URLs. PR/MR and deployment-status APIs remain unimplemented. Automated tests use fixture credentials only; real account authorization needs a configured provider application.
+
+On mobile, the installed App applies safe-area spacing, touch targets, 16px editing controls, pinch-zoom restrictions and keyboard-aware dialogs. The web edition retains browser zoom. CI checks the generated AppIcon catalog and captures an installed iOS simulator launch; physical-device gesture, keyboard and accessibility acceptance remains separate.
 
 ### Actual macOS WebView acceptance test
 

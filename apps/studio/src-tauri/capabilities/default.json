@@ -58,6 +58,12 @@
         },
         {
           "url": "https://testflight.apple.com/*"
+        },
+        {
+          "url": "https://github.com/login/device*"
+        },
+        {
+          "url": "https://cnb.cool/*"
         }
       ]
     }

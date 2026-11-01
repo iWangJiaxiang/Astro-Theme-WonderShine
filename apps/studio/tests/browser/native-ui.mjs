@@ -20,6 +20,7 @@ const root = join(appData, 'workspaces', profile.id, 'repo');
 const localRoot = join(base, 'selected local blog');
 let selectedFolder = null, folderGranted = false;
 let browser, server;
+let allowOAuthHttp = false, oauthApproved = false;
 let allowCloneHttp = false, failNextHttp = false, failNextBranchWrite = false;
 let releaseDownload = () => {}, releaseCheckout = () => {};
 let downloadGate = Promise.resolve(), checkoutGate = Promise.resolve();
@@ -110,6 +111,36 @@ try {
           }
           default: throw new Error('Unsupported fixture FS command: ' + command);
         }
+      } else if (allowOAuthHttp && command === 'plugin:opener|open_url') {
+        assert.ok(/^https:\/\/(github.com\/login\/device|cnb.cool\/oauth2\/device)/.test(args.url));
+      } else if (allowOAuthHttp && command.startsWith('plugin:http|')) {
+        const operation = command.split('|')[1];
+        if (operation === 'fetch') {
+          const config = args.clientConfig, url = new URL(config.url);
+          assert.ok(['https://github.com', 'https://api.github.com', 'https://cnb.cool', 'https://api.cnb.cool'].includes(url.origin));
+          assert.equal(config.maxRedirections, 0, 'OAuth must disable redirects in the actual native client');
+          assert.equal(new Map(config.headers).get('user-agent'), 'WonderShine-Studio');
+          value = nextResource++; requests.set(value, config);
+        } else if (operation === 'fetch_send') {
+          const config = requests.get(args.rid), url = new URL(config.url), github = url.hostname.includes('github');
+          let body;
+          if (url.pathname === '/login/device/code' || url.pathname === '/oauth2/device/auth') {
+            body = {device_code:'device-fixture',user_code:'TEST-CODE',expires_in:600,interval:1,verification_uri:github?'https://github.com/login/device':'https://cnb.cool/oauth2/device/verify'};
+          } else if (url.pathname === '/login/oauth/access_token' || url.pathname === '/oauth2/token') {
+            body = oauthApproved ? {access_token:'oauth-fixture-token',token_type:'bearer'} : {error:'authorization_pending'};
+          } else {
+            assert.equal(new Map(config.headers).get('authorization'), 'Bearer oauth-fixture-token');
+            if (url.pathname === '/user') body = github ? {login:'fixture-writer',name:'Fixture Writer'} : {username:'fixture-writer',nickname:'Fixture Writer'};
+            else if (url.pathname === '/user/repos') body = github ? [{id:1,full_name:'fixture-writer/blog',default_branch:'main',permissions:{push:true},private:false}] : [{id:'1',path:'fixture-writer/blog',visibility_level:'Public'}];
+            else throw new Error('Unexpected OAuth fixture endpoint');
+          }
+          const rid = nextResource++; responses.set(rid, Buffer.from(JSON.stringify(body))); requests.delete(args.rid);
+          value = {rid,status:200,statusText:'OK',url:config.url,headers:[['content-type','application/json']]};
+        } else if (operation === 'fetch_read_body') {
+          const body = responses.get(args.rid); value = body?.length ? [...body,0] : [1]; responses.delete(args.rid);
+        } else if (operation === 'fetch_cancel' || operation === 'fetch_cancel_body') {
+          requests.delete(args.rid); responses.delete(args.rid);
+        } else throw new Error('Unexpected OAuth HTTP operation');
       } else if (allowCloneHttp && command.startsWith('plugin:http|')) {
         const operation = command.split('|')[1];
         if (operation === 'fetch') {
@@ -309,6 +340,37 @@ try {
   await click('连接自建创作中心'); await page.waitForSelector('input[placeholder="https://studio.example.com"]');
   await click('返回仓库连接'); await page.waitForSelector('.connection-url input');
   assert.equal(await page.$('.folder-picker'), null, 'Returning from remote service uses the mobile repository URL mode');
+
+  await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1');
+  await page.reload({waitUntil:'networkidle0'}); await heading('连接创作工作区');
+  assert.equal(await page.$eval('html', node => node.dataset.nativeMobile), 'true');
+  assert.match(await page.$eval('meta[name=viewport]', node => node.content), /maximum-scale=1/);
+  assert.equal(await page.evaluate(() => {const event = new Event('gesturestart', {cancelable:true}); document.dispatchEvent(event); return event.defaultPrevented;}), true);
+  assert.ok(await page.$eval('.connection-url input', node => parseFloat(getComputedStyle(node).fontSize) >= 16), 'iOS inputs avoid focus zoom');
+  if (process.env.STUDIO_TEST_OAUTH === 'fixture') {
+    assert.ok(await page.$eval('.account-login button', node => node.getBoundingClientRect().height >= 44));
+
+    allowOAuthHttp = true;
+    for (const provider of ['GitHub', 'CNB']) {
+      oauthApproved = false;
+      await click(`使用 ${provider} 登录`); await page.waitForSelector('.oauth-code');
+      assert.equal(await page.$eval('.oauth-code', node => node.textContent), 'TEST-CODE');
+      await screenshot('oauth-device-' + provider.toLowerCase());
+      oauthApproved = true; await page.waitForSelector('.oauth-repository');
+      await page.type('.oauth-dialog input', 'blog');
+      await screenshot('oauth-repositories-' + provider.toLowerCase());
+      await page.setViewport({width:390,height:430,isMobile:true,hasTouch:true});
+      await page.waitForFunction(() => parseFloat(document.documentElement.style.getPropertyValue('--native-visible-height')) < 500);
+      assert.ok(await page.$eval('.oauth-dialog', node => node.getBoundingClientRect().bottom <= visualViewport.height + visualViewport.offsetTop + 1), 'Repository picker fits visible keyboard viewport');
+      await screenshot('oauth-keyboard-' + provider.toLowerCase());
+      await page.setViewport({width:390,height:844,isMobile:true,hasTouch:true});
+      await page.click('.oauth-repository'); await page.waitForFunction(() => !document.querySelector('.oauth-dialog'));
+      assert.equal(await page.$eval('.connection-url input', node => node.value), `https://${provider === 'GitHub' ? 'github.com' : 'cnb.cool'}/fixture-writer/blog.git`);
+      assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('oauth-fixture-token')), false);
+    }
+    allowOAuthHttp = false;
+    await click('远程仓库');
+  }
   await page.waitForSelector('.connection-url input');await screenshot('connection-first-launch-mobile');
   await page.click('.connection-options summary');await screenshot('connection-options-mobile');await noOverflow('mobile connection options');
   await page.select('.language-switcher select','en');await screenshot('connection-options-en-mobile');await noOverflow('English connection options');
@@ -338,6 +400,10 @@ try {
   const saved = await page.evaluate(()=>JSON.parse(localStorage.getItem('wondershine.native.workspaces.v1')));
   assert.equal(saved[0].branch,'release/blog');
   assert.equal(execFileSync('git',['branch','--show-current'],{cwd:join(appData,'workspaces',saved[0].id,'repo')}).toString().trim(),'release/blog');
+  await page.select('.language-switcher select', 'zh-CN');
+  await click('站点信息'); await page.waitForSelector('.settings-card input');
+  assert.deepEqual(await page.$$eval('.settings-card input:not([type=checkbox]):not([type=radio]):not([type=color]), .settings-card select, .settings-card textarea', fields => fields.filter(node => node.getClientRects().length && (parseFloat(getComputedStyle(node).fontSize) < 16 || node.getBoundingClientRect().height < 44)).map(node => node.outerHTML.slice(0,80))), [], 'Native iOS settings retain readable editing size and touch targets');
+  await screenshot('settings-iphone'); await noOverflow('iPhone settings');
   assert.deepEqual(errors, []); assert.deepEqual(cspErrors, []); assert.deepEqual(failedResources, []);
   console.log('Native UI passed: desktop/mobile connection modes, offline dashboard, source save, bundled Vditor, native asset preview, client API settings, secret redaction, configuration reopen, logout.');
   console.log('Screenshots: ' + screenshots);
