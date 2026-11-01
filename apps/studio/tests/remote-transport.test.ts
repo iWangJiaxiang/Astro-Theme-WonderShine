@@ -48,3 +48,95 @@ test('remote logout completes its response before showing another connection', a
   controller.enqueue(new TextEncoder().encode('{"ok":true}')); controller.close();
   assert.deepEqual(await (await pending).json(),{ok:true}); assert.equal(disconnected,true);
 });
+
+
+test('disposing a remote session aborts in-flight requests and rejects reuse', async () => {
+  let active!: AbortSignal;
+  let calls = 0;
+  const transport = createRemoteTransport('https://studio.example', async (_input, init) => {
+    calls++;
+    active = init!.signal!;
+    return new Promise<Response>((_resolve, reject) => active.addEventListener('abort', () => reject(active.reason), { once: true }));
+  });
+  const pending = transport('/content', { method: 'GET' });
+  transport.dispose(); transport.dispose();
+  assert.equal(active.aborted, true);
+  await assert.rejects(pending, { name: 'AbortError' });
+  await assert.rejects(transport('/auth/session', {}), { name: 'AbortError' });
+  assert.equal(calls, 1);
+});
+
+test('caller cancellation is retained and cancelled requests never reach native HTTP', async () => {
+  const caller = new AbortController(); caller.abort();
+  let calls = 0;
+  const transport = createRemoteTransport('https://studio.example', async () => { calls++; return new Response('{}'); });
+  await assert.rejects(transport('/content', { signal: caller.signal }), { name: 'AbortError' });
+  assert.equal(calls, 0);
+});
+
+test('remote requests have bounded deadlines without retrying writes', async context => {
+  const deadlines: number[] = [];
+  const controllers: AbortController[] = [];
+  context.mock.method(AbortSignal, 'timeout', (duration: number) => {
+    deadlines.push(duration);
+    const controller = new AbortController(); controllers.push(controller); return controller.signal;
+  });
+  let calls = 0;
+  const transport = createRemoteTransport('https://studio.example', async (_input, init) => {
+    calls++;
+    return new Promise<Response>((_resolve, reject) => init!.signal!.addEventListener('abort', () => reject('Request cancelled'), { once: true }));
+  });
+  for (const [path, method] of [['/auth/config', 'GET'], ['/media/file?path=test.png', 'GET'], ['/ai/image', 'POST']]) {
+    const pending = transport(path, { method });
+    controllers.at(-1)!.abort(new DOMException('Timed out', 'TimeoutError'));
+    await assert.rejects(pending, { name: 'TimeoutError' });
+  }
+  assert.deepEqual(deadlines, [15_000, 60_000, 300_000]);
+  assert.equal(calls, 3);
+});
+
+test('discarded redirect and late response bodies release their native resources', async () => {
+  for (const late of [false, true]) {
+    let cancelled = false;
+    let release!: (response: Response) => void;
+    const transport = createRemoteTransport('https://studio.example', () => new Promise(resolve => { release = resolve; }));
+    const pending = transport('/auth/login', { method: 'POST' });
+    if (late) transport.dispose();
+    release(new Response(new ReadableStream({ cancel() { cancelled = true; } }), { status: late ? 200 : 302 }));
+    await assert.rejects(pending, late ? { name: 'AbortError' } : /重定向/);
+    assert.equal(cancelled, true);
+  }
+});
+
+test('disconnect during authentication decoding cannot restore an old session', async () => {
+  let release!: (data: unknown) => void;
+  let entered!: () => void;
+  const decoding = new Promise<void>(resolve => { entered = resolve; });
+  const response = new Response();
+  response.json = () => { entered(); return new Promise(resolve => { release = resolve; }); };
+  const transport = createRemoteTransport('https://studio.example', async () => response);
+  const pending = transport('/auth/login', { method: 'POST' });
+  await decoding; transport.dispose();
+  release({ identity: { id: 'old-user' } });
+  await assert.rejects(pending, { name: 'AbortError' });
+});
+
+
+test('native authentication body cancellation preserves the timeout reason', async context => {
+  const deadline = new AbortController();
+  context.mock.method(AbortSignal, 'timeout', () => deadline.signal);
+  let entered!: () => void;
+  const decoding = new Promise<void>(resolve => { entered = resolve; });
+  const transport = createRemoteTransport('https://studio.example', async (_input, init) => {
+    const response = new Response();
+    response.json = () => {
+      entered();
+      return new Promise((_resolve, reject) => init!.signal!.addEventListener('abort', () => reject('Request cancelled'), { once: true }));
+    };
+    return response;
+  });
+  const pending = transport('/auth/config', { method: 'GET' });
+  await decoding;
+  deadline.abort(new DOMException('Timed out', 'TimeoutError'));
+  await assert.rejects(pending, { name: 'TimeoutError' });
+});

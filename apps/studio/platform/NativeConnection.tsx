@@ -64,7 +64,7 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
       const next = [nextProfile, ...profiles.filter(item => item.id !== nextProfile.id)];
       try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* Workspace itself remains on disk. */ }
       setProfiles(next); setToken(''); onConnected(dispose);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : t('无法打开工作区')); }
+    } catch (reason) { setError(reason instanceof Error && reason.name === 'TimeoutError' ? t('连接超时，请重试。') : reason instanceof Error ? reason.message : t('无法打开工作区')); }
     finally { setBusy(false); }
   }
   return <main className="native-connect"><section className="card connection-card">
