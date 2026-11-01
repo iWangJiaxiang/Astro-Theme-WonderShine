@@ -22,7 +22,7 @@ for (const provider of ['github', 'cnb'] as const) {
     const result = await listRepositories(account, 1, fetcher, signal());
     assert.equal(result.repositories.length, 1); assert.equal(result.repositories[0].url, `${origin}/writer/blog.git`);
     assert.equal(result.repositories[0].branch, provider === 'github' ? 'main' : '');
-    for (const { init } of requests) { assert.equal(init?.redirect, 'error'); assert.equal(String(init?.body).includes('client_secret'), false); }
+    for (const { init } of requests) { assert.equal(init?.redirect, 'error'); assert.equal(new Headers(init?.headers).get('User-Agent'), 'WonderShine-Studio'); assert.equal(String(init?.body).includes('client_secret'), false); }
     assert.equal(requests[0].url, origin + (provider === 'github' ? '/login/device/code' : '/oauth2/device/auth'));
     assert.equal(requests[4].init?.headers && new Headers(requests[4].init.headers).get('Authorization'), 'Bearer token-fixture');
   });

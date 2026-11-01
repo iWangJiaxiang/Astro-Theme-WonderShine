@@ -21,7 +21,10 @@ export function verificationUrl(provider: AccountProvider, value: string): strin
 }
 async function json(fetcher: ProviderFetch, url: string, init: RequestInit, signal: AbortSignal, timeout = 30000) {
   signal.throwIfAborted();
-  const response = await fetcher(url, { ...init, redirect: 'error', credentials: 'omit', signal: AbortSignal.any([signal, AbortSignal.timeout(Math.max(1, timeout))]) });
+  const headers = new Headers(init.headers);
+  headers.set('User-Agent', 'WonderShine-Studio');
+  const response = await fetcher(url, { ...init, headers, redirect: 'error', credentials: 'omit', signal: AbortSignal.any([signal, AbortSignal.timeout(Math.max(1, timeout))]) });
+  if (response.url && new URL(response.url).origin !== new URL(url).origin) { await response.body?.cancel(); throw new Error('平台返回了无效响应'); }
   // Parse only expected responses; never surface token-bearing response bodies in UI/logs.
   if (!response.ok && response.status !== 400) { await response.body?.cancel(); throw new Error('无法连接账号平台，请重试'); }
   const data: unknown = await response.json();
@@ -102,7 +105,7 @@ export async function listRepositories(account: ProviderAccount, page: number, f
     if (!name || name.split('/').length < 2 || name.split('/').some(part => !part || part === '.' || part === '..') || /[\s?#\\\x00-\x1f]/.test(name)) throw new Error('平台返回了无效响应');
     // Construct from the trusted platform origin, never a token-bearing API redirect/clone URL.
     return [{ id: String(row.id), name, url: `${providers[account.provider].origin}/${name}.git`,
-      branch: github ? text(row.default_branch) : '', private: github ? !!row.private : row.visibility_level !== 'public' }];
+      branch: github ? text(row.default_branch) : '', private: github ? !!row.private : text(row.visibility_level).toLowerCase() !== 'public' }];
   });
   return { repositories, more: data.length === 100 };
 }

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetch as nativeFetch } from '@tauri-apps/plugin-http';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { beginDeviceLogin, completeDeviceLogin, loadAccount, listRepositories, type AccountProvider, type ProviderAccount, type AccountRepository, type DeviceGrant } from './provider-auth';
+import { beginDeviceLogin, completeDeviceLogin, loadAccount, listRepositories, type AccountProvider, type ProviderAccount, type AccountRepository, type DeviceGrant, type ProviderFetch } from './provider-auth';
 import { t } from '../src/i18n';
 import { useSignals } from '../src/reactivity';
+const providerFetch: ProviderFetch = (url, init) => nativeFetch(url, { ...init, maxRedirections: 0 });
 const clientIds = { github: import.meta.env.VITE_STUDIO_GITHUB_CLIENT_ID || '', cnb: import.meta.env.VITE_STUDIO_CNB_CLIENT_ID || '' };
 export default function AccountLogin({ onSelect, disabled }: { onSelect: (account: ProviderAccount, repository: AccountRepository) => void; disabled: boolean }) {
   useSignals();
@@ -24,16 +25,16 @@ export default function AccountLogin({ onSelect, disabled }: { onSelect: (accoun
     const request = new AbortController(); controller.current = request;
     setProvider(next); setGrant(null); setAccount(null); setRepos([]); setQuery(''); setError(''); setBusy(true); setPage(1); setMore(false);
     try {
-      const device = await beginDeviceLogin(next, clientIds[next], nativeFetch, request.signal);
+      const device = await beginDeviceLogin(next, clientIds[next], providerFetch, request.signal);
       if (request.signal.aborted) return;
       setGrant(device);
       // A visible button retries opening if the OS declines the initial handoff.
       void openUrl(device.verificationUrl).catch(() => {});
-      const token = await completeDeviceLogin(next, clientIds[next], device, nativeFetch, request.signal);
-      const user = await loadAccount(next, token, nativeFetch, request.signal);
+      const token = await completeDeviceLogin(next, clientIds[next], device, providerFetch, request.signal);
+      const user = await loadAccount(next, token, providerFetch, request.signal);
       if (request.signal.aborted) return;
       setGrant(null); setAccount(user);
-      const result = await listRepositories(user, 1, nativeFetch, request.signal);
+      const result = await listRepositories(user, 1, providerFetch, request.signal);
       if (request.signal.aborted) return;
       setRepos(result.repositories); setMore(result.more); setPage(1);
     } catch (reason) {
@@ -44,7 +45,7 @@ export default function AccountLogin({ onSelect, disabled }: { onSelect: (accoun
     if (!account || !controller.current) return;
     const signal = controller.current.signal; setBusy(true); setError('');
     try {
-      const result = await listRepositories(account, page + 1, nativeFetch, signal);
+      const result = await listRepositories(account, page + 1, providerFetch, signal);
       if (signal.aborted) return;
       setRepos(current => [...new Map([...current, ...result.repositories].map(repo => [repo.id, repo])).values()]);
       setMore(result.more); setPage(current => current + 1);

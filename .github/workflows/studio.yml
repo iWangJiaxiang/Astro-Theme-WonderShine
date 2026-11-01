@@ -102,11 +102,15 @@ jobs:
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - run: npm run build:app -w @wondershine/studio
+        env:
+          VITE_STUDIO_GITHUB_CLIENT_ID: studio-ci-github
+          VITE_STUDIO_CNB_CLIENT_ID: studio-ci-cnb
       - run: npm run test:native-browser -w @wondershine/studio
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - run: node apps/studio/tests/browser/native-ui.mjs
         env:
+          STUDIO_TEST_OAUTH: fixture
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - uses: actions/upload-artifact@v7.0.2
         if: always()

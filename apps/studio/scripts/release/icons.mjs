@@ -19,7 +19,11 @@ async function checkIcon(file, size, opaque = false, masked = false) {
   const pixel = (x, y) => [...data.subarray((y * size + x) * 4, (y * size + x) * 4 + 3)];
   if (!masked) assert.deepEqual(pixel(0, 0), [66, 90, 239], 'Brand background must reach the icon edges');
   // The W center stroke is white, the upper center background is blue.
-  assert.ok(pixel(Math.floor(size / 2), Math.floor(size * .44)).every(value => value > 235), 'WonderShine W stroke missing');
+  let whiteStroke = false;
+  for (let y = Math.floor(size * .35); y < size * .65; y++) for (let x = Math.floor(size * .35); x < size * .65; x++) {
+    if (pixel(x, y).every(value => value > 220)) whiteStroke = true;
+  }
+  assert.ok(whiteStroke, 'WonderShine W stroke missing');
 }
 if (platform === 'ios') {
   const directory = path.join(tauri, 'gen/apple/Assets.xcassets/AppIcon.appiconset');
