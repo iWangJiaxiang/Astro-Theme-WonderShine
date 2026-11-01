@@ -63,7 +63,7 @@ jobs:
           IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
           IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
-          APPLE_DEVELOPMENT_TEAM: ${{ vars.APPLE_DEVELOPMENT_TEAM }}
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
           STUDIO_UPLOAD_TESTFLIGHT: ${{ vars.STUDIO_UPLOAD_TESTFLIGHT }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
@@ -247,7 +247,7 @@ jobs:
       STUDIO_RELEASE: ${{ needs.prepare.outputs.release }}
       STUDIO_PLATFORM: ios
       # Simulator builds skip signing but Tauri still requires a non-empty team.
-      APPLE_DEVELOPMENT_TEAM: ${{ needs.prepare.outputs.release == 'true' && vars.APPLE_DEVELOPMENT_TEAM || '0000000000' }}
+      APPLE_DEVELOPMENT_TEAM: ${{ needs.prepare.outputs.release == 'true' && secrets.APPLE_DEVELOPMENT_TEAM || '0000000000' }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -275,7 +275,7 @@ jobs:
         if: needs.prepare.outputs.release == 'true'
         run: npm exec -w @wondershine/studio -- tauri ios build --ci --target aarch64 --export-method app-store-connect
         env:
-          APPLE_DEVELOPMENT_TEAM: ${{ vars.APPLE_DEVELOPMENT_TEAM }}
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
           IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
           IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}

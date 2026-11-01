@@ -59,12 +59,16 @@ GitHub Releases 是当前桌面/Android 的部署入口；Google Play 上架需�
 
 | 配置 | 类型 | 含义 |
 | --- | --- | --- |
-| `APPLE_DEVELOPMENT_TEAM` | Variable | Apple Team ID |
+| `APPLE_DEVELOPMENT_TEAM` | Secret | Apple Team ID，直接填写原值，不做 Base64 编码 |
 | `IOS_CERTIFICATE` | Secret | 导出的 Apple Distribution `.p12` 的 base64 |
 | `IOS_CERTIFICATE_PASSWORD` | Secret | `.p12` 密码 |
 | `IOS_MOBILE_PROVISION` | Secret | 与 identifier、证书匹配的 App Store Connect provisioning profile 的 base64 |
 
 Tauri CLI 负责导入签名材料及构建。独立设置 iOS `bundleVersion=run_number.run_attempt`，不往三段营销版本后追加第四段；重跑构建有新的 build number。首次证书验证在远程构建时进行；仅检查 Secret 存在不代表证书有效。
+
+`APPLE_DEVELOPMENT_TEAM` 统一从 repository secret 读取，不回退读取同名 Variable。若之前配置在 Variables 中，先创建同名 Secret，再删除旧 Variable。不要在日志或示例配置中输出真实值；模拟器构建继续使用占位 Team ID。
+
+Secret 能保护 Actions 配置，并让 GitHub 对日志中匹配的值自动遮罩，但不保证对变换后的值同样有效，也不会清除签名 IPA 内的 Team ID。Apple 的签名 entitlements / provisioning profile 可能包含团队标识；此配置不提供签名产物匿名化。参见 [GitHub Secrets](https://docs.github.com/en/actions/concepts/security/secrets) 和 [Apple provisioning profiles](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles)。
 
 ### 自动上传 TestFlight（可选）
 
