@@ -12,6 +12,7 @@ async function visit(path) {
   for (const entry of await readdir(path, { withFileTypes: true })) {
     const full = join(path, entry.name);
     if (entry.isSymbolicLink()) continue;
+    if (platform === 'android' && entry.isFile() && entry.name.endsWith('.aab')) continue;
     const simulator = platform === 'ios' && process.env.STUDIO_RELEASE !== 'true' && entry.isDirectory() && entry.name.endsWith('.app');
     if (simulator) {
       const name = `${platform}-simulator-${process.env.STUDIO_VERSION}.app.tar.gz`;

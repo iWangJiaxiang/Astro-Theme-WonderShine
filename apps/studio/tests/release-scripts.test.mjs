@@ -102,7 +102,8 @@ test('collector refuses empty outputs and debug Android artifacts for a release'
     assert.throws(collect, /signed APK/);
     await rm(join(root, 'bundle/app-debug.apk'));
     await writeFile(join(root, 'bundle/app-release.apk'), 'signed fixture apk');
-    // APK-only distribution must not require an App Bundle.
+    // Ignore stale App Bundles even when present alongside an APK.
+    await writeFile(join(root, 'bundle/app-release.aab'), 'not published');
     collect();
     const manifest = JSON.parse(await readFile(join(root, 'temp/studio-artifacts/android.json')));
     assert.equal(manifest.files.length, 1);

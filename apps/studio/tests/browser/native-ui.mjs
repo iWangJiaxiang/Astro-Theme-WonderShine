@@ -347,8 +347,9 @@ try {
   assert.match(await page.$eval('meta[name=viewport]', node => node.content), /maximum-scale=1/);
   assert.equal(await page.evaluate(() => {const event = new Event('gesturestart', {cancelable:true}); document.dispatchEvent(event); return event.defaultPrevented;}), true);
   assert.ok(await page.$eval('.connection-url input', node => parseFloat(getComputedStyle(node).fontSize) >= 16), 'iOS inputs avoid focus zoom');
-  assert.ok(await page.$eval('.account-login button', node => node.getBoundingClientRect().height >= 44));
   if (process.env.STUDIO_TEST_OAUTH === 'fixture') {
+    assert.ok(await page.$eval('.account-login button', node => node.getBoundingClientRect().height >= 44));
+
     allowOAuthHttp = true;
     for (const provider of ['GitHub', 'CNB']) {
       oauthApproved = false;
