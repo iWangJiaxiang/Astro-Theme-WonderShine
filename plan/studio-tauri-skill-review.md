@@ -31,3 +31,7 @@ Studio run `41265683995` passed at `33f5db1`: six desktop targets, Android debug
 ## Final verification
 
 Run `41266411593` passed for all eight packaging targets, 197 Studio tests, 4 release tests and browser regressions. The browser exercised the deferred native-runtime chunk before/after connection and the mobile service-return flow. The native-runtime chunk is 104.78 kB (32.83 kB gzip) in the CI output; this is its size, not a measured startup-time improvement. Desktop restoration compiled on all desktop targets; interactive minimized-window behavior is not covered by the headless browser suite.
+
+Screenshot review found missing CJK fonts on the Ubuntu runner. Both workflows now install Noto CJK and emoji fonts before launching Chromium. The follow-up Studio run `41266954914` and theme run `41266954894` passed at `6cb3fce`, including all packaging targets. No signed release or store upload was performed.
+
+Final desktop/mobile connection screenshots were visually inspected: Chinese text renders correctly, controls fit their viewports and the update action is visible. Selected screenshots remain in `temp/ci-final-screenshots/`; downloaded archives were removed.
