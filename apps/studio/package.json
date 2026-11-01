@@ -26,7 +26,8 @@
     "app:ios": "tauri ios dev",
     "test:native-browser": "node tests/browser/native.mjs",
     "test:react-browser": "node tests/browser/react-lifecycle.mjs",
-    "test:native-macos": "node tests/native/macos.mjs"
+    "test:native-macos": "node tests/native/macos.mjs",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@edgeone/pages-blob": "0.0.18",
