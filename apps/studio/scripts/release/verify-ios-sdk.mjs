@@ -9,6 +9,12 @@ export function validateIOSSdk(value) {
   return value;
 }
 
+export function validateIOSExportCompliance(plist) {
+  if (plist?.ITSAppUsesNonExemptEncryption !== false) {
+    throw new Error('Signed IPA must declare ITSAppUsesNonExemptEncryption as boolean false.');
+  }
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const manifest = JSON.parse(readFileSync('temp/studio-artifacts/ios.json', 'utf8'));
   const artifact = manifest.files.find(file => /^[\w.-]+\.ipa$/.test(file.name));
@@ -18,6 +24,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const plists = entries.filter(entry => /^Payload\/[^/]+\.app\/Info\.plist$/.test(entry));
   if (plists.length !== 1) throw new Error('Expected one main app Info.plist in the signed IPA');
   const plist = execFileSync('unzip', ['-p', ipa, plists[0]]);
-  const sdk = execFileSync('plutil', ['-extract', 'DTSDKName', 'raw', '-o', '-', '-'], { input: plist, encoding: 'utf8' }).trim();
-  console.log(`Verified signed IPA SDK: ${validateIOSSdk(sdk)}`);
+  const metadata = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', '-'], { input: plist, encoding: 'utf8' }));
+  validateIOSExportCompliance(metadata);
+  console.log(`Verified signed IPA SDK: ${validateIOSSdk(metadata.DTSDKName)}`);
+  console.log(`Verified signed IPA encryption declaration: false; build ${metadata.CFBundleVersion}`);
 }

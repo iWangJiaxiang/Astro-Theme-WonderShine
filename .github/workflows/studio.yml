@@ -333,7 +333,7 @@ jobs:
       - run: node apps/studio/scripts/release/collect.mjs
         env:
           STUDIO_BUNDLE_DIR: apps/studio/src-tauri/gen/apple/build
-      - name: Verify SDK embedded in signed IPA
+      - name: Verify SDK and encryption declaration in signed IPA
         if: needs.prepare.outputs.iosRelease == 'true'
         run: node apps/studio/scripts/release/verify-ios-sdk.mjs
       - uses: actions/upload-artifact@v7.0.2
