@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdir, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, writeFile, copyFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import assert from 'node:assert/strict';
 
@@ -22,7 +22,10 @@ assert.equal(plist.CFBundleIcons?.CFBundlePrimaryIcon?.CFBundleIconName, 'AppIco
 const icons = plist.CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconFiles;
 assert.ok(icons?.length, 'Compiled app must reference icon files');
 const files = await readdir(app);
-assert.ok(files.some(file => /AppIcon.*\.png$/.test(file)), 'Compiled icon resources must be present');
+const compiledIcon = files.find(file => /AppIcon.*\.png$/.test(file));
+assert.ok(compiledIcon, 'Compiled icon resources must be present');
+await copyFile(join(app, compiledIcon), join(output, 'compiled-app-icon.png'));
+await copyFile(resolve('apps/studio/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png'), join(output, 'app-icon-1024.png'));
 const listing = JSON.parse(run(['simctl', 'list', 'devices', 'available', '-j']));
 const devices = Object.entries(listing.devices).filter(([runtime]) => runtime.includes('iOS')).flatMap(([, list]) => list);
 const device = devices.find(device => device.name.startsWith('iPhone') && device.isAvailable);
