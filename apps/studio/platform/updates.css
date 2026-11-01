@@ -4,3 +4,5 @@
 .native-update-notice > div { width:100%; margin-bottom:4px; }
 .native-update-notice button { min-height:36px; padding:6px 12px; font-size:13px; }
 .native-update-notice .native-update-skip { margin-left:auto; color:var(--text-secondary,#687080); font-size:12px; }
+
+.native-update-notice .primary { background:var(--wjx-theme,#425aef); color:#fff; }

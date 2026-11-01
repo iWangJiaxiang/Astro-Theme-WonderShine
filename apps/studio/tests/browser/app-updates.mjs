@@ -55,6 +55,12 @@ try {
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   await page.waitForSelector('.native-update-notice');
   assert.equal(await page.evaluate(() => window.updateFixture.calls), 1, 'StrictMode must not duplicate startup requests');
+  const buttonStyle = await page.$eval('.native-update-notice .primary', el => {
+    const style = getComputedStyle(el);
+    return { foreground: style.color, background: style.backgroundColor };
+  });
+  assert.notEqual(buttonStyle.background, 'rgba(0, 0, 0, 0)', 'Update action must remain visible before a workspace theme is loaded');
+  assert.notEqual(buttonStyle.foreground, buttonStyle.background);
   for (const width of [1440, 1024, 390]) {
     await page.setViewport({ width, height: 850, deviceScaleFactor: 1 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
