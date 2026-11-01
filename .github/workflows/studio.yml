@@ -91,6 +91,8 @@ jobs:
         id: chrome
       - name: Enable Chromium sandbox namespaces on the ephemeral runner
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Install fonts for multilingual browser screenshots
+        run: sudo apt-get update && sudo apt-get install -y fonts-noto-cjk fonts-noto-color-emoji
       - run: npm run test:browser -w @wondershine/studio
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}

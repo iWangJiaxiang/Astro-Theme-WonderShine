@@ -13,7 +13,7 @@ All builds, unit tests and browser tests run on GitHub Actions. Local work is li
 - [x] Load repository inspection, Git/content runtime and remote-service transport on demand, after the user chooses a connection. Module loading remains inside the existing error and busy handling.
 - [x] Add remote browser coverage for deferred loading and mobile return navigation.
 - [x] Include the pending update-button contrast fix and its browser regression check.
-- [ ] Independent static review and final remote CI verification.
+- [x] Independent static review and final remote CI verification: `41266411593` passed at `a6bcd9e`.
 
 ## Reviewed boundaries
 
@@ -27,3 +27,7 @@ All builds, unit tests and browser tests run on GitHub Actions. Local work is li
 ## Baseline
 
 Studio run `41265683995` passed at `33f5db1`: six desktop targets, Android debug APK, iOS simulator bundle and verification. Theme run `41265261166` also passed. Formal signed mobile releases have not been exercised.
+
+## Final verification
+
+Run `41266411593` passed for all eight packaging targets, 197 Studio tests, 4 release tests and browser regressions. The browser exercised the deferred native-runtime chunk before/after connection and the mobile service-return flow. The native-runtime chunk is 104.78 kB (32.83 kB gzip) in the CI output; this is its size, not a measured startup-time improvement. Desktop restoration compiled on all desktop targets; interactive minimized-window behavior is not covered by the headless browser suite.
