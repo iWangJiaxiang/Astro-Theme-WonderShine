@@ -4,8 +4,9 @@ import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { stableVersion, releaseContext } from '../scripts/release/context.mjs';
+import { validateIOSSdk } from '../scripts/release/verify-ios-sdk.mjs';
 import { validateSigningConfiguration } from '../scripts/release/signing-preflight.mjs';
 
 const script = name => fileURLToPath(new URL(`../scripts/release/${name}.mjs`, import.meta.url));
@@ -169,5 +170,36 @@ else if (args[1] === 'upload') {
     state.sha = 'another-source';
     await writeFile(stateFile, JSON.stringify(state));
     assert.throws(() => run('publish'), /another source commit/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+
+test('signed IPA SDK validation rejects old, simulator and missing metadata', () => {
+  for (const value of ['', 'iphoneos18.5', 'iphonesimulator26.2', 'iphoneos26junk', '26']) assert.throws(() => validateIOSSdk(value));
+  for (const value of ['iphoneos26', 'iphoneos26.2', 'iphoneos27.0']) assert.equal(validateIOSSdk(value), value);
+});
+
+test('TestFlight requires explicit Apple success even with exit zero, and always removes API keys', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'studio-testflight-'));
+  try {
+    await mkdir(join(root, 'bin'));
+    await mkdir(join(root, 'temp/studio-artifacts'), { recursive: true });
+    await writeFile(join(root, 'temp/studio-artifacts/ios.json'), JSON.stringify({ files: [{ name: 'fixture.ipa' }] }));
+    const env = { ...process.env, PATH: `${join(root, 'bin')}:${process.env.PATH}`, RUNNER_TEMP: root,
+      APPLE_API_KEY: 'FIXTUREKEY', APPLE_API_ISSUER: 'private-issuer-fixture', APPLE_API_KEY_BASE64: Buffer.from('private-p8-fixture').toString('base64') };
+    for (const fixture of [
+      { output: 'UPLOAD FAILED with 1 error: SDK version issue. private-issuer-fixture', exit: 0, success: false },
+      { output: 'No confirmation from Apple. private-issuer-fixture', exit: 0, success: false },
+      { output: 'UPLOAD SUCCEEDED', exit: 1, success: false },
+      { output: 'UPLOAD SUCCEEDED but Validation failed', exit: 0, success: false },
+      { output: 'UPLOAD SUCCEEDED', exit: 0, success: true },
+      { output: 'No errors uploading', exit: 0, success: true },
+    ]) {
+      await writeFile(join(root, 'bin/xcrun'), `#!/usr/bin/env node\nconsole.error(${JSON.stringify(fixture.output)});process.exit(${fixture.exit});\n`, { mode: 0o755 });
+      const result = spawnSync(process.execPath, [script('testflight')], { cwd: root, env, encoding: 'utf8' });
+      assert.equal(result.status === 0, fixture.success);
+      assert.doesNotMatch(result.stdout + result.stderr, /private-issuer-fixture|private-p8-fixture|FIXTUREKEY/);
+      await assert.rejects(readFile(join(root, 'studio-appstore/private_keys/AuthKey_FIXTUREKEY.p8')), { code: 'ENOENT' });
+    }
   } finally { await rm(root, { recursive: true, force: true }); }
 });

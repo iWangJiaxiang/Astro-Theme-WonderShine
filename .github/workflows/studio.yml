@@ -268,8 +268,9 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - name: Validate iOS SDK for App Store Connect
+      - name: Select Xcode and validate iOS SDK for App Store Connect
         run: |
+          sudo xcode-select --switch "$DEVELOPER_DIR"
           xcodebuild -version
           sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
           printf 'iOS SDK: %s\n' "$sdk_version"
@@ -295,7 +296,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/studio/src-tauri
-          key: ios-xcode26.3
+          key: ios-xcode26.3-selected
       - run: brew install xcodegen
       - run: npm ci
       - run: node apps/studio/scripts/release/version.mjs
@@ -314,6 +315,9 @@ jobs:
       - run: node apps/studio/scripts/release/collect.mjs
         env:
           STUDIO_BUNDLE_DIR: apps/studio/src-tauri/gen/apple/build
+      - name: Verify SDK embedded in signed IPA
+        if: needs.prepare.outputs.iosRelease == 'true'
+        run: node apps/studio/scripts/release/verify-ios-sdk.mjs
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: studio-app-ios
@@ -339,6 +343,8 @@ jobs:
         with:
           name: studio-app-ios
           path: temp/studio-artifacts
+      - name: Select upload tools
+        run: sudo xcode-select --switch "$DEVELOPER_DIR"
       - run: node apps/studio/scripts/release/testflight.mjs
         env:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
