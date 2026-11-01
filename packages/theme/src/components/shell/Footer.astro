@@ -7,7 +7,7 @@ const tr=(key:string)=>t(key,lang,site);
 const year=new Date().getFullYear(), start=Number(config.extra.site.start_year || year);
 ---
 <footer id="footer">
-  {footer.footer_bar?.enable && <div id="wjx-footer-bar"><div class="footer-logo">{config.author}</div><div class="footer-bar-description">{config.description}</div><a class="footer-bar-link" href={localizeUrl('/about/',lang,site)}>{tr('learn_more')}</a></div>}
+  {footer.footer_bar?.enable && <div id="wjx-footer-bar"><div class="footer-logo">{config.author}</div><div class="footer-bar-description">{config.description}</div><a class="footer-bar-link" href={localizeUrl('/about/',lang,site)}>{tr('about')}</a></div>}
   <div id="footer_deal">
     {(social.left || []).map((link:any)=><a class={link.option_social_data==='custom'?'custom_socials':'deal_link'} href={link.url} title={link.name} target="_blank" rel="external nofollow noopener noreferrer">{link.option_social_data==='custom'?<Fragment set:html={link.icon}/>:<i class={link.icon}/>}</a>)}
     {social.img_enable && <ResponsiveImage site={site} pictureClass="footer_mini_logo" pictureStyle="border-radius:500px;overflow:hidden;flex-shrink:0" src={config.extra.site.logo} alt={tr('back_top')} width={50} height={50} sizes="50px" loading="lazy" style="border-radius:500px" onclick="btf.scrollToDest(0,500)"/>}

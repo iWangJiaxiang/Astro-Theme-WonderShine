@@ -33,18 +33,12 @@
 }
 
 #aside-content #card-toc .toc-content a.toc-link:not(.active) {
-    opacity: 0.6;
-    cursor: pointer;
-    filter: blur(1px);
-    transition: 0.3s;
-}
-
-#aside-content #card-toc:hover .toc-content a.toc-link:not(.active) {
-    filter: blur(0px);
     opacity: 1;
+    cursor: pointer;
+    transition: color 0.3s, background-color 0.3s;
 }
 
-#aside-content #card-toc .toc-content a:hover.toc-link:not(.active) {
+#aside-content #card-toc .toc-content a.toc-link:not(.active):is(:hover, :focus-visible) {
     color: var(--wjx-lighttext);
 }
 
