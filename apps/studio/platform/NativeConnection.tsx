@@ -2,10 +2,7 @@ import { useState } from 'react';
 import type { GitProgressEvent } from 'isomorphic-git';
 import { open } from '@tauri-apps/plugin-dialog';
 import { hostingProviders, validateProfile, type HostingKind, type WorkspaceProfile } from './hosting';
-import { inspectLocalRepository } from './local-workspace';
 import { tauriFiles } from './tauri-filesystem';
-import { connectRemoteWorkspace } from './remote-runtime';
-import { connectNativeWorkspace } from './native-runtime';
 import LanguageSwitcher from '../src/components/LanguageSwitcher';
 import Icon from '../src/components/Icon';
 import { t } from '../src/i18n';
@@ -38,6 +35,7 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
   const local = connection === 'local';
   function field(key: keyof WorkspaceProfile, value: string) { setProfile(current => ({ ...current, [key]: value })); }
   function switchConnection(value: Connection) {
+    if (value === 'local' && !folderAvailable) value = 'clone';
     setConnection(value); setError(''); setToken('');
     setProfile(profiles.find(item => value === 'local' ? item.source === 'local' : item.source !== 'local') || blank());
   }
@@ -46,6 +44,7 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
     try {
       const selected = await open({ directory: true, multiple: false, recursive: true, title: t('选择本地仓库'), ...(profile.localPath ? { defaultPath: profile.localPath } : {}) });
       if (typeof selected !== 'string') return;
+      const { inspectLocalRepository } = await import('./local-workspace');
       const detected = await inspectLocalRepository(tauriFiles(selected), selected);
       const previous = profiles.find(item => item.localPath === detected.localPath);
       setProfile({ ...detected, ...(previous ? { id: previous.id, authorName: detected.authorName || previous.authorName, authorEmail: detected.authorEmail || previous.authorEmail, username: previous.username } : {}) });
@@ -55,8 +54,12 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
   async function connect(event: React.FormEvent) {
     event.preventDefault(); setBusy(true); setError(''); setProgress(null);
     try {
-      if (connection === 'remote') { const dispose = await connectRemoteWorkspace(address.trim(), onDisconnect); onConnected(dispose); return; }
+      if (connection === 'remote') {
+        const { connectRemoteWorkspace } = await import('./remote-runtime');
+        const dispose = await connectRemoteWorkspace(address.trim(), onDisconnect); onConnected(dispose); return;
+      }
       const nextProfile = { ...profile, url: profile.url.trim(), branch: profile.branch.trim(), label: profile.label.trim() || profile.url.trim().split('/').at(-1)?.replace(/\.git$/, '') || 'Blog' };
+      const { connectNativeWorkspace } = await import('./native-runtime');
       const dispose = await connectNativeWorkspace(nextProfile, token, onDisconnect, setProgress);
       const next = [nextProfile, ...profiles.filter(item => item.id !== nextProfile.id)];
       try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* Workspace itself remains on disk. */ }
@@ -67,7 +70,7 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
   return <main className="native-connect"><section className="card connection-card">
     <div className="connection-brand"><span>WonderShine Studio</span><LanguageSwitcher /></div><h1>{t('连接创作工作区')}</h1>
     <div className="connection-modes" role="group" aria-label={t('连接方式')}>
-      <button disabled={busy} aria-pressed={local} onClick={() => switchConnection('local')}><Icon name="folder" size={19} />{t('本地文件夹')}</button>
+      {folderAvailable && <button disabled={busy} aria-pressed={local} onClick={() => switchConnection('local')}><Icon name="folder" size={19} />{t('本地文件夹')}</button>}
       <button disabled={busy} aria-pressed={connection === 'clone'} onClick={() => switchConnection('clone')}><Icon name="link" size={19} />{t('远程仓库')}</button>
     </div>
     {error && <p className="notice error" role="alert">{t(error)}</p>}

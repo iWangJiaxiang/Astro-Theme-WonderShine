@@ -71,6 +71,10 @@ try {
   if (!executablePath) throw new Error('Set STUDIO_TEST_BROWSER to an installed Chromium executable.');
   browser = await puppeteer.launch({ headless: true, executablePath });
   const page = await browser.newPage(), errors = [], cspErrors = [], failedResources = [];
+  const loadedScripts = new Set();
+  const runtimeChunks = (await fs.readdir(join(distribution, 'assets'))).filter(name => /^native-runtime-.*\.js$/.test(name));
+  assert.ok(runtimeChunks.length > 0, 'Native runtime must be a separate on-demand chunk');
+  page.on('request', request => { if (request.resourceType() === 'script') loadedScripts.add(new URL(request.url()).pathname.split('/').at(-1)); });
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error' && /Content Security Policy|Refused to/.test(message.text())) cspErrors.push(message.text()); });
   page.on('response', response => { if (response.status() >= 400 && !response.url().endsWith('/favicon.ico')) failedResources.push(`${response.status()} ${response.url()}`); });
@@ -163,6 +167,7 @@ try {
   };
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.goto(origin, { waitUntil: 'networkidle0' }); await heading('连接创作工作区');
+  assert.equal(runtimeChunks.some(name => loadedScripts.has(name)), false, 'Connection screen must not load the Git/content runtime before opening a workspace');
   await screenshot('connection-git-desktop'); await noOverflow('desktop connection');
   await click('本地文件夹'); await screenshot('connection-folder-desktop');
   await page.click('.folder-picker');
@@ -173,6 +178,7 @@ try {
   await page.setViewport({width:390,height:844}); await screenshot('connection-folder-options-mobile'); await noOverflow('local folder options');
   await page.setViewport({width:1440,height:1000});
   await click('打开工作区'); await heading('今天，写点什么？');
+  assert.ok(runtimeChunks.some(name => loadedScripts.has(name)), 'Opening a workspace loads the deferred native runtime');
   await click('工作区同步'); await page.waitForSelector('.workspace-status-grid');
   assert.equal(await page.$$eval('button', buttons => buttons.find(b => b.textContent.trim() === '同步 Git').disabled), true, 'local repository without a remote disables sync');
   await page.click('[aria-label="退出登录"]'); await heading('连接创作工作区');
@@ -299,6 +305,10 @@ try {
   await page.setViewport({width:390,height:844,isMobile:true,hasTouch:true});
   await page.reload({waitUntil:'networkidle0'});await heading('连接创作工作区');
   assert.equal(await page.$eval('.connection-modes button[aria-pressed=true]',node=>node.textContent.trim()),'远程仓库','mobile first launch starts with usable repository URL entry');
+  assert.equal(await page.$$eval('.connection-modes button', buttons => buttons.some(button => button.textContent.includes('本地文件夹'))), false, 'Mobile does not offer an unsupported folder picker');
+  await click('连接自建创作中心'); await page.waitForSelector('input[placeholder="https://studio.example.com"]');
+  await click('返回仓库连接'); await page.waitForSelector('.connection-url input');
+  assert.equal(await page.$('.folder-picker'), null, 'Returning from remote service uses the mobile repository URL mode');
   await page.waitForSelector('.connection-url input');await screenshot('connection-first-launch-mobile');
   await page.click('.connection-options summary');await screenshot('connection-options-mobile');await noOverflow('mobile connection options');
   await page.select('.language-switcher select','en');await screenshot('connection-options-en-mobile');await noOverflow('English connection options');

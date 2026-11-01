@@ -16,6 +16,8 @@ The Studio UI uses React/Vite. The Astro website remains a separate static build
 
 Filesystem and image-preview permissions are granted by the directory picker and persisted across desktop restarts. No blanket filesystem permission is requested. Mobile platforms use the remote repository workflow below instead of arbitrary folder access.
 
+The connection screen loads repository inspection and the Git/content runtime only after a folder is selected or a workspace is opened. Mobile hides the unsupported desktop folder option; returning from a Studio server connection returns to the repository URL form.
+
 **Remote repository** accepts a pasted HTTPS Git URL and downloads a complete single-branch repository into the App data directory. Leave Branch empty to follow the remote default branch, or specify a branch under Connection & commit settings. The detected branch is saved after the first successful download; reopening never switches it silently. The connection screen shows real Git phases and per-phase progress, with an indeterminate bar before progress is available. Failed downloads can be retried. It reopens offline, saves files on-device, and commits without a network. Sync is explicit. Entering an HTTPS Git URL works independently of hosting-provider APIs; GitHub, GitLab, CNB, Gitee, Gitea, Forgejo and generic/self-hosted services are selectable. Tokens are held only in memory for the current connection and are never saved in profiles or Git config. Reconnect with a token before private-remote synchronization if the workspace was opened offline.
 
 **Connect to your Studio** opens the same bundled UI against a user-owned HTTPS server. Password login uses the existing server session and CSRF protocol; the native transport retains the session cookie in memory, limits requests to that origin, and refuses redirects. Content is saved by the server. This mode does not clone a local repository. Editor recovery drafts retain their existing local storage behavior and are isolated by server origin. OIDC in a native app still needs a dedicated callback flow; use the Web UI for OIDC today.
@@ -47,7 +49,7 @@ AI sends the selected article content to the configured provider only when gener
 
 Builds, packaging and tests now run only on remote GitHub Actions runners. Use **Studio apps & release** for code-change builds or a versioned release; see [Studio releases](studio-releases.md) for artifacts, signing and mobile distribution. The workflow initializes ignored Android/iOS native projects on its runners. Local machines do not need the mobile SDKs.
 
-For a lightweight local UI preview, run `npm run dev:app -w @wondershine/studio`. It starts Vite without invoking Cargo or packaging. Native capabilities require the App produced by CI. Desktop runs a single instance to protect local workspace operations.
+For a lightweight local UI preview, run `npm run dev:app -w @wondershine/studio`. It starts Vite without invoking Cargo or packaging. Native capabilities require the App produced by CI. Desktop runs a single instance to protect local workspace operations; launching it again shows, restores and focuses the existing window.
 
 ## Verification
 
