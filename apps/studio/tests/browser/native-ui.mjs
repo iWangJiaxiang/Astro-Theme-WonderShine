@@ -309,6 +309,22 @@ try {
   await click('连接自建创作中心'); await page.waitForSelector('input[placeholder="https://studio.example.com"]');
   await click('返回仓库连接'); await page.waitForSelector('.connection-url input');
   assert.equal(await page.$('.folder-picker'), null, 'Returning from remote service uses the mobile repository URL mode');
+
+  await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1');
+  await page.reload({waitUntil:'networkidle0'}); await heading('连接创作工作区');
+  assert.equal(await page.$eval('html', node => node.dataset.nativeMobile), 'true');
+  assert.match(await page.$eval('meta[name=viewport]', node => node.content), /maximum-scale=1/);
+  assert.equal(await page.evaluate(() => {const event = new Event('gesturestart', {cancelable:true}); document.dispatchEvent(event); return event.defaultPrevented;}), true);
+  assert.ok(await page.$eval('.connection-url input', node => parseFloat(getComputedStyle(node).fontSize) >= 16), 'iOS inputs avoid focus zoom');
+  assert.ok(await page.$eval('.account-login button', node => node.getBoundingClientRect().height >= 44));
+  // Builds without maintenance-owned Client IDs explain unavailable sign-in without requesting secrets.
+  await click('使用 GitHub 登录'); await page.waitForSelector('.oauth-dialog[open]');
+  if (!process.env.VITE_STUDIO_GITHUB_CLIENT_ID) {
+    await page.waitForFunction(() => document.querySelector('.oauth-dialog')?.textContent.includes('此版本尚未配置账号登录'));
+    await screenshot('oauth-unconfigured-iphone');
+  }
+  await page.evaluate(() => document.querySelector('.oauth-dialog').close());
+  await page.waitForFunction(() => !document.querySelector('.oauth-dialog'));
   await page.waitForSelector('.connection-url input');await screenshot('connection-first-launch-mobile');
   await page.click('.connection-options summary');await screenshot('connection-options-mobile');await noOverflow('mobile connection options');
   await page.select('.language-switcher select','en');await screenshot('connection-options-en-mobile');await noOverflow('English connection options');

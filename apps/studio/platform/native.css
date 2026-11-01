@@ -83,3 +83,19 @@ section.native-ai-settings { max-width: 960px; }
 .connection-progress progress:indeterminate::-webkit-progress-bar { background: transparent; }
 @keyframes connection-progress-pulse { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .connection-progress progress:indeterminate { animation: none; } }
+
+.account-login { margin-top: 20px; }
+.account-login-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.oauth-dialog { width: min(560px, calc(100vw - 24px)); padding: 0; color: var(--wjx-fontcolor); border: 1px solid var(--studio-line); border-radius: 16px; }
+.oauth-dialog .selection-panel { height: auto; min-height: 250px; display: flex; flex-direction: column; }
+.oauth-dialog .notice { margin: 16px; }
+.oauth-device { display: grid; gap: 20px; justify-items: center; padding: 24px; }
+.oauth-device p { margin: 0; }
+.oauth-code { font: 700 26px ui-monospace, monospace; letter-spacing: 3px; user-select: all; }
+.oauth-device [role=status], .oauth-status { color: var(--studio-muted); font-size: 13px; }
+.oauth-status { padding: 20px; }
+.oauth-repositories { overflow-y: auto; min-height: 0; max-height: 360px; padding: 8px 12px; }
+.oauth-repository { display: flex; gap: 12px; align-items: center; justify-content: space-between; width: 100%; min-height: 48px; padding: 12px; text-align: left; border-radius: 8px; }
+.oauth-repository:hover, .oauth-repository:focus-visible { background: var(--form-surface); }
+.oauth-repository span { overflow-wrap: anywhere; min-width: 0; }
+.oauth-repository small { color: var(--studio-muted); flex-shrink: 0; }
