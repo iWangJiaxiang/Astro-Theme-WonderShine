@@ -252,6 +252,7 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 90
     env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
       STUDIO_VERSION: ${{ needs.prepare.outputs.version }}
       STUDIO_SOURCE: ${{ needs.prepare.outputs.sha }}
       STUDIO_RELEASE: ${{ needs.prepare.outputs.iosRelease }}
@@ -267,6 +268,15 @@ jobs:
         with:
           node-version: '24'
           cache: npm
+      - name: Validate iOS SDK for App Store Connect
+        run: |
+          xcodebuild -version
+          sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
+          printf 'iOS SDK: %s\n' "$sdk_version"
+          if [ "${sdk_version%%.*}" -lt 26 ]; then
+            echo '::error::App Store Connect requires iOS SDK 26 or later.'
+            exit 1
+          fi
       - name: Validate iOS and TestFlight signing configuration
         if: needs.prepare.outputs.iosRelease == 'true'
         run: node apps/studio/scripts/release/signing-preflight.mjs
@@ -285,7 +295,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/studio/src-tauri
-          key: ios
+          key: ios-xcode26.3
       - run: brew install xcodegen
       - run: npm ci
       - run: node apps/studio/scripts/release/version.mjs
@@ -315,6 +325,8 @@ jobs:
     if: needs.prepare.outputs.testflight == 'true'
     runs-on: macos-15
     timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@v7.0.1
         with:
