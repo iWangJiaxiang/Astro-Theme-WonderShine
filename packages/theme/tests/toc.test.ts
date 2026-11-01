@@ -16,11 +16,12 @@ const initializerStart = bundle.indexOf("window.initBlogLazy = runOnce('initBlog
 const initializerEnd = bundle.indexOf("document.addEventListener('DOMContentLoaded'", initializerStart);
 const initializerSource = bundle.slice(initializerStart, initializerEnd);
 
-function initializePage(pageType: string, options: { card?: boolean; library?: boolean; headings?: number } = {}) {
-  const { card = true, library = true, headings = 2 } = options;
+function initializePage(pageType: string, options: { card?: boolean; library?: boolean; headings?: number; abstract?: boolean } = {}) {
+  const { card = true, library = true, headings = 2, abstract = true } = options;
   const calls: string[] = [];
   let selector = '';
   const noOp = () => {};
+  const runPostAbstract = () => calls.push('abstract');
   const tocContent = { addEventListener: noOp };
   const tocCard = {
     querySelector: () => tocContent,
@@ -30,7 +31,7 @@ function initializePage(pageType: string, options: { card?: boolean; library?: b
   };
   const context = {
     GLOBAL_CONFIG: browserConfig(site, 'zh-CN', pageType, 'Chapter'),
-    window: {} as { initBlogLazy?: () => void },
+    window: { ...(abstract ? { runPostAbstract } : {}) } as { initBlogLazy?: () => void; runPostAbstract?: () => void },
     runOnce: () => (callback: () => void) => callback,
     document: {
       querySelector: () => ({ querySelectorAll: () => Array.from({ length: headings }, () => ({ id: 'heading' })) }),
@@ -38,7 +39,7 @@ function initializePage(pageType: string, options: { card?: boolean; library?: b
     },
     ...(library ? { tocbot: { init: (settings: { contentSelector: string }) => { calls.push('toc'); selector = settings.contentSelector; } } } : {}),
     initializePageWidgets: noOp,
-    runPostAbstract: () => calls.push('abstract'), setPostDate: noOp,
+    ...(abstract ? { runPostAbstract } : {}), setPostDate: noOp,
     wjx: { qrcodeCreate: () => calls.push('qrcode') },
     toggleCardCategory: () => calls.push('categories'), setPostDateList: noOp,
     addTableWrap: noOp, clickFnOfTagHide: noOp,
@@ -65,6 +66,10 @@ test('collection listings retain listing behavior and do not initialize article 
     assert.equal(config.isPost, false, type);
     assert.deepEqual(calls, ['categories'], type);
   }
+});
+
+test('reading pages without the optional abstract library still initialize TOC and sharing', () => {
+  assert.deepEqual(initializePage('post', { abstract: false }).calls, ['toc', 'qrcode']);
 });
 
 test('missing TOC library, omitted widget and heading-free chapters preserve subsequent initialization', () => {

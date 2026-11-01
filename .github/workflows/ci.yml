@@ -1,5 +1,6 @@
 name: Verify theme and Studio
 on:
+  workflow_dispatch:
   push:
     paths-ignore: &theme_ignore
       - 'apps/studio/**'
