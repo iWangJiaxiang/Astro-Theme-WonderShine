@@ -1,7 +1,12 @@
 name: Theme npm package
-run-name: Theme npm · ${{ github.event_name == 'release' && github.event.release.tag_name || 'dry run' }}
+run-name: Theme npm · ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.bootstrap && 'first publication' || 'dry run' }}
 on:
   workflow_dispatch:
+    inputs:
+      bootstrap:
+        description: 'First npm publication only (requires temporary NPM_BOOTSTRAP_TOKEN)'
+        type: boolean
+        default: false
   release:
     types: [published]
 permissions:
@@ -18,6 +23,7 @@ jobs:
     timeout-minutes: 40
     outputs:
       publish: ${{ steps.context.outputs.publish }}
+      bootstrap: ${{ steps.context.outputs.bootstrap }}
       version: ${{ steps.context.outputs.version }}
       dist-tag: ${{ steps.context.outputs.distTag }}
     steps:
@@ -94,6 +100,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: npm
+    concurrency:
+      group: theme-npm-publish
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
@@ -117,7 +126,17 @@ jobs:
         env:
           THEME_VERSION: ${{ needs.verify.outputs.version }}
       - name: Publish with npm trusted publishing
+        if: needs.verify.outputs.bootstrap != 'true'
         run: npm publish "$PACKAGE_ARCHIVE" --ignore-scripts --access public --tag "$DIST_TAG"
         env:
+          PACKAGE_ARCHIVE: ${{ steps.artifact.outputs.archive }}
+          DIST_TAG: ${{ needs.verify.outputs.dist-tag }}
+      - name: Publish first package version
+        if: needs.verify.outputs.bootstrap == 'true'
+        run: |
+          node scripts/npm-bootstrap.mjs
+          npm publish "$PACKAGE_ARCHIVE" --ignore-scripts --access public --provenance --tag "$DIST_TAG"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
           PACKAGE_ARCHIVE: ${{ steps.artifact.outputs.archive }}
           DIST_TAG: ${{ needs.verify.outputs.dist-tag }}

@@ -23,7 +23,8 @@ export function themeReleaseContext(eventName, event, pkg, repository, sha) {
     if (event.release?.draft || event.release?.tag_name !== tag) throw new Error('Release tag must match packages/theme/package.json exactly');
     if (Boolean(event.release.prerelease) !== version.prerelease) throw new Error('GitHub prerelease status must match the package version');
   }
-  return { ...version, tag, publish: String(eventName === 'release'), sha, repository };
+  const bootstrap = eventName === 'workflow_dispatch' && String(event.inputs?.bootstrap) === 'true';
+  return { ...version, tag, publish: String(eventName === 'release' || bootstrap), bootstrap: String(bootstrap), sha, repository };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { themeVersion, themeReleaseContext } from '../scripts/npm-release.mjs';
+import { assertUnpublishedPackage } from '../scripts/npm-bootstrap.mjs';
 import { artifactManifest, verifyArtifact } from '../scripts/npm-artifact.mjs';
 
 const repository = 'fixture/theme', sha = 'a'.repeat(40);
@@ -15,7 +16,7 @@ test('theme versions reject unsafe and noncanonical values; prereleases never be
   assert.equal(themeVersion('1.2.3-0').distTag, 'next');
 });
 
-test('manual runs cannot publish; theme releases must match version, prerelease state and provenance source', () => {
+test('manual validation cannot publish; theme releases must match version, prerelease state and provenance source', () => {
   assert.equal(themeReleaseContext('workflow_dispatch', { inputs: { publish: 'true' } }, pkg, repository, sha).publish, 'false');
   assert.equal(themeReleaseContext('release', release('theme-v0.2.0'), pkg, repository, sha).publish, 'true');
   const preview = { ...pkg, version: '0.3.0-beta.1' };
@@ -50,4 +51,25 @@ test('Studio distribution and isolated acceptance identifiers stay separate and 
   assert.equal(config.identifier, 'wang.jiaxiang.wondershine-studio');
   assert.ok(rust.includes(`"${config.identifier}.acceptance"`));
   assert.ok(runner.includes(`${config.identifier}.acceptance/workspaces`));
+});
+
+
+test('first publication requires an explicit manual bootstrap input; releases keep OIDC', () => {
+  for (const input of [undefined, false, 'false', 'yes']) {
+    const context = themeReleaseContext('workflow_dispatch', { inputs: { bootstrap: input } }, pkg, repository, sha);
+    assert.equal(context.publish, 'false');
+    assert.equal(context.bootstrap, 'false');
+  }
+  for (const input of [true, 'true']) {
+    const context = themeReleaseContext('workflow_dispatch', { inputs: { bootstrap: input } }, pkg, repository, sha);
+    assert.equal(context.publish, 'true');
+    assert.equal(context.bootstrap, 'true');
+  }
+  const event = { ...release('theme-v0.2.0'), inputs: { bootstrap: 'true' } };
+  assert.equal(themeReleaseContext('release', event, pkg, repository, sha).bootstrap, 'false');
+});
+
+test('bootstrap rejects existing packages and fails closed on registry errors', () => {
+  assert.doesNotThrow(() => assertUnpublishedPackage(404));
+  for (const status of [200, 301, 401, 403, 429, 500, 503]) assert.throws(() => assertUnpublishedPackage(status));
 });
