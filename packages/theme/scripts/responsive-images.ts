@@ -5,7 +5,8 @@ import sharp, { type Metadata, type OutputInfo } from 'sharp';
 import { imageManifestPath, type ImageManifest, type ImageMetadata, type ImageVariant } from '../src/lib/image-assets';
 
 const widths = [96, 240, 480, 800, 1200, 1600];
-const recipe = `responsive-v1:${sharp.versions.sharp}:webp74:avif44-effort3:${widths.join(',')}`;
+export interface ResponsiveImageOptions { avif?: boolean }
+const imageRecipe = (avif: boolean) => `responsive-v2:${sharp.versions.sharp}:webp74-effort4:avif${avif ? '44-effort3' : 'off'}:${widths.join(',')}`;
 const raster = /\.(?:jpe?g|png|webp|avif)$/i;
 async function files(directory: string): Promise<string[]> {
   const result: string[] = [];
@@ -18,7 +19,7 @@ async function files(directory: string): Promise<string[]> {
   return result;
 }
 
-async function encode(buffer: Buffer, hash: string, cache: string): Promise<ImageMetadata | undefined> {
+async function encode(buffer: Buffer, hash: string, cache: string, avif: boolean): Promise<ImageMetadata | undefined> {
   const record = path.join(cache, hash + '.json');
   try {
     const entry = JSON.parse(await fs.readFile(record, 'utf8')) as ImageMetadata;
@@ -34,7 +35,7 @@ async function encode(buffer: Buffer, hash: string, cache: string): Promise<Imag
   const entry: ImageMetadata = { width, height, originalBytes: buffer.length, webp: [], avif: [] };
   const selected = [...new Set([...widths.filter(size => size < width), Math.min(width, widths.at(-1)!)] )];
   for (const size of selected) {
-    for (const format of ['webp', 'avif'] as const) {
+    for (const format of avif ? ['webp', 'avif'] as const : ['webp'] as const) {
       const name = `${hash}-${size}.${format}`, target = path.join(cache, name);
       let result: { data: Buffer; info: OutputInfo };
       try {
@@ -59,7 +60,8 @@ async function encode(buffer: Buffer, hash: string, cache: string): Promise<Imag
 }
 
 /** Encode each image digest once; source URLs and originals remain untouched. */
-export async function prepareResponsiveImages(root: string, publicRoot: string): Promise<ImageManifest> {
+export async function prepareResponsiveImages(root: string, publicRoot: string, options: ResponsiveImageOptions = {}): Promise<ImageManifest> {
+  const avif = options.avif !== false, recipe = imageRecipe(avif);
   const cache = path.resolve(process.env.ASTRO_IMAGE_CACHE_DIR || path.join(root, '.astro/images/cache'));
   const output = path.join(publicRoot, '_images');
   await fs.mkdir(cache, { recursive: true });
@@ -72,7 +74,7 @@ export async function prepareResponsiveImages(root: string, publicRoot: string):
       const file = pending.pop()!;
       const buffer = await fs.readFile(file);
       const hash = createHash('sha256').update(recipe).update(buffer).digest('hex').slice(0, 24);
-      if (!work.has(hash)) work.set(hash, encode(buffer, hash, cache));
+      if (!work.has(hash)) work.set(hash, encode(buffer, hash, cache, avif));
       const entry = await work.get(hash);
       if (!entry) continue;
       manifest['/' + path.relative(publicRoot, file).split(path.sep).join('/')] = entry;

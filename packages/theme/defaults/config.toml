@@ -295,7 +295,7 @@ content = ""
 [extra.comments]
 enable = false
 system = "twikoo"
-lazy_load = false
+lazy_load = true
 use = "none"
 provider = "none"
 

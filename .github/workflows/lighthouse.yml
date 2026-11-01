@@ -19,7 +19,7 @@ jobs:
     permissions:
       actions: read
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           github-token: ${{ github.token }}
           run-id: ${{ inputs.report_run_id }}
@@ -37,7 +37,7 @@ jobs:
             const summary = JSON.parse(readFileSync(`reports/${folder}/summary.json`, 'utf8'));
             for (const result of summary.results) {
               const report = JSON.parse(readFileSync(`reports/${folder}/${result.representative.file.replace('.html', '.json')}`, 'utf8'));
-              const ids = ['lcp-breakdown-insight', 'lcp-discovery-insight', 'layout-shifts', 'bootup-time'];
+              const ids = ['lcp-breakdown-insight', 'lcp-discovery-insight', 'layout-shifts', 'bootup-time', 'final-screenshot'];
               console.log(JSON.stringify({device: summary.device, page: result.name, diagnostics: Object.fromEntries(ids.map(id => [id, report.audits[id]]))}));
             }
           }
@@ -51,16 +51,25 @@ jobs:
       matrix:
         device: [mobile, desktop]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Reuse responsive image encodings
+        uses: actions/cache@v6.1.0
+        with:
+          path: .astro/image-cache
+          key: ${{ runner.os }}-theme-images-v1-${{ hashFiles('package-lock.json', 'packages/theme/scripts/responsive-images.ts') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-theme-images-v1-${{ hashFiles('package-lock.json', 'packages/theme/scripts/responsive-images.ts') }}-
       - run: npm run build
-      - uses: browser-actions/setup-chrome@v1
+        env:
+          ASTRO_IMAGE_CACHE_DIR: ${{ github.workspace }}/.astro/image-cache
+      - uses: browser-actions/setup-chrome@v2.2.0
         id: chrome
       - name: Prepare sandbox and multilingual fonts
         run: |
@@ -77,7 +86,7 @@ jobs:
         run: cat "temp/lighthouse/$AUDIT_DEVICE/summary.md" >> "$GITHUB_STEP_SUMMARY"
         env:
           AUDIT_DEVICE: ${{ matrix.device }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: lighthouse-${{ matrix.device }}

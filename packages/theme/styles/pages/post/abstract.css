@@ -74,8 +74,8 @@
 
 #abstract-tag {
     font-size: 12px;
-    background-color: var(--wjx-lighttext);
-    color: var(--wjx-card-bg);
+    background-color: var(--wjx-card-bg);
+    color: var(--wjx-fontcolor);
     font-weight: bold;
     border-radius: 4px;
     margin-left: auto;

@@ -12,23 +12,37 @@ permissions:
   contents: read
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Reuse responsive image encodings
+        uses: actions/cache@v6.1.0
+        with:
+          path: .astro/image-cache
+          key: ${{ runner.os }}-theme-images-v1-${{ hashFiles('package-lock.json', 'packages/theme/scripts/responsive-images.ts') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-theme-images-v1-${{ hashFiles('package-lock.json', 'packages/theme/scripts/responsive-images.ts') }}-
       - run: npm run build
+        env:
+          ASTRO_IMAGE_CACHE_DIR: ${{ github.workspace }}/.astro/image-cache
       - run: npm run build:starter
+        env:
+          ASTRO_IMAGE_CACHE_DIR: ${{ github.workspace }}/.astro/image-cache
       - run: npm run check
       - run: npm test
+      - run: node --test tests/npm-release.test.mjs
       - run: npm run test:integration
       - run: npm run studio:build
       - run: npm run audit:distribution
       - run: npm run test:package
-      - uses: browser-actions/setup-chrome@v1
+        env:
+          ASTRO_IMAGE_CACHE_DIR: ${{ github.workspace }}/.astro/image-cache
+      - uses: browser-actions/setup-chrome@v2.2.0
         id: chrome
       - name: Enable Chromium sandbox namespaces on the ephemeral runner
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
@@ -40,7 +54,7 @@ jobs:
       - run: npm run test:browser -w @wondershine/studio
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: theme-browser-results

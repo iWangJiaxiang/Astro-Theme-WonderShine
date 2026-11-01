@@ -588,10 +588,11 @@ var runJustifiedGallery = function (ele) {
 var addFancybox = function (ele) {
     const runFancybox = (ele) => {
         ele.each(function (i, o) {
+            if (!o.isConnected || o.closest('a')) return;
             const $this = $(o)
             const lazyloadSrc = $this.attr('data-original') || $this.attr('src')
-            const dataCaption = $this.attr('alt') || ''
-            $this.wrap(`<a href="${lazyloadSrc}" data-fancybox="images" data-caption="${dataCaption}" class="fancybox" data-srcset="${lazyloadSrc}"></a>`)
+            const dataCaption = ($this.attr('data-caption') || $this.attr('alt') || $this.find('img').attr('alt') || '') || ''
+            $this.wrap($('<a>').attr({href:lazyloadSrc, 'data-fancybox':'images', 'data-caption':dataCaption, class:'fancybox', 'data-srcset':lazyloadSrc}))
 
         })
 
@@ -606,10 +607,8 @@ var addFancybox = function (ele) {
     }
 
     if (typeof $.fancybox === 'undefined') {
-        // $('head').append(`<link rel="stylesheet" type="text/css" href="${GLOBAL_CONFIG.source.fancybox.css}">`)
-        $.getScript(`${GLOBAL_CONFIG.source.fancybox.js}`, function () {
-            runFancybox($(ele))
-        })
+        const style = document.getElementById('fancybox-style') ? Promise.resolve() : getCSS(GLOBAL_CONFIG.source.fancybox.css, 'fancybox-style');
+        Promise.all([style, getScript(GLOBAL_CONFIG.source.fancybox.js)]).then(() => runFancybox($(ele))).catch(() => {});
     } else {
         runFancybox($(ele))
     }
@@ -997,7 +996,7 @@ window.initBlogLazy = runOnce('initBlogLazy')(() => {
     if (GLOBAL_CONFIG.isPost) {
         tocFn();
         // 二维码
-        runPostAbstract()
+        typeof window.runPostAbstract === 'function' && runPostAbstract()
         setPostDate()
         wjx.qrcodeCreate()
     } else {

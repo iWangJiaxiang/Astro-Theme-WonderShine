@@ -9,3 +9,5 @@ Options: `siteRoot` selects the content directory (default: Astro project root).
 Custom CSS: `public/css/custom.css`. Exported components: `@wondershine/theme/components/*`; layouts: `@wondershine/theme/layouts/*`. No Tera renderer, submodule or personal site checkout is required.
 
 License: AGPL-3.0-or-later. Source: https://github.com/iWangJiaxiang/Astro-Theme-WonderShine
+
+Maintainer releases use `theme-vX.Y.Z` GitHub Releases and the **Theme npm package** workflow. Manual runs validate the packed package without publishing. See `docs/npm-releases.md` in the source repository for trusted publisher setup and prerelease rules.

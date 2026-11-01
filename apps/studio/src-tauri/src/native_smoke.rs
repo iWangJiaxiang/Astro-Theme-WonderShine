@@ -15,7 +15,7 @@ pub fn on_page_load(window: &tauri::Webview<tauri::Wry>, payload: &tauri::webvie
 
 
 pub fn configure(mut context: tauri::Context<tauri::Wry>) -> tauri::Context<tauri::Wry> {
-    context.config_mut().identifier = "me.wondershine.studio.acceptance".into();
+    context.config_mut().identifier = "wang.jiaxiang.wondershine-studio.acceptance".into();
     // Keep automation timers running when another desktop window takes focus.
     // The regular App retains the platform's default background policy.
     for window in &mut context.config_mut().app.windows {

@@ -6,12 +6,13 @@ import test from 'node:test';
 const source = readFileSync(new URL('../assets/libs/aplayer/Meting2.min.js', import.meta.url), 'utf8');
 const tick = () => new Promise(resolve => setTimeout(resolve, 10));
 
-function harness(remote = false) {
+function harness(remote = false, lazy = false) {
   let resolveRequest: (value: unknown) => void = () => {};
   const players: {destroyed: boolean; currentTime: number; destroy: () => void}[] = [];
   const requests: AbortSignal[] = [];
   class Element {
     isConnected = true;
+    hasAttribute(name: string) { return lazy && name === 'data-lazy'; }
     attributes = remote ? [{name: 'id', value: '123'}] : [{name: 'url', value: '/song.mp3'}];
     innerText = ''; textContent = '';
     appendChild() {}
@@ -67,4 +68,18 @@ test('Meting keeps a pending playlist through a move but ignores it after perman
   assert.equal(removed.requests[0].aborted, true);
   await removed.respond();
   assert.equal(removed.players.length, 0);
+});
+
+
+test('an upgraded lazy navigation player stays idle until explicitly activated', async () => {
+  const {element, requests, players} = harness(true, true);
+  element.connectedCallback();
+  assert.equal(requests.length, 0);
+  assert.equal(players.length, 0);
+  element._activated = true;
+  element.connectedCallback();
+  assert.equal(requests.length, 1);
+  element.isConnected = false; element.disconnectedCallback();
+  await tick();
+  assert.equal(requests[0].aborted, true);
 });

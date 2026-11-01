@@ -11,7 +11,7 @@ import { localImagePath, responsiveImage } from '../src/lib/image-assets';
 test('local image URLs exclude remote, traversal and encoded unsafe paths', () => {
   assert.equal(localImagePath('/images/a%20b.png?v=2#photo'), '/images/a b.png');
   assert.equal(localImagePath('https://example.test/img/a.png', 'https://example.test'), '/img/a.png');
-  for (const url of ['//remote.test/a.png', 'https://remote.test/a.png', '/img/%2e%2e/secret.png', '/img/%00.png', 'data:image/png;base64,abc', 'relative.png']) {
+  for (const url of ['//remote.test/a.png', 'https://remote.test/a.png', '/img/%2e%2e/secret.png', '/img/%00.png', '/img/%5csecret.png', 'data:image/png;base64,abc', 'relative.png']) {
     assert.equal(localImagePath(url, 'https://example.test'), undefined, url);
   }
 });
@@ -121,4 +121,23 @@ test('filesystem write errors still reject image preparation', async t => {
   const error = Object.assign(new Error('Test disk full'), { code: 'ENOSPC' });
   t.mock.method(fs, 'writeFile', async () => { throw error; });
   await assert.rejects(prepareResponsiveImages(root, output), error);
+});
+
+test('AVIF configuration selects encoders and separates cached recipe results', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'astro-images-format-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const output = path.join(root, 'public');
+  await mkdir(output);
+  await writeFile(path.join(output, 'avatar.png'), await sharp({ create: { width: 24, height: 16, channels: 3, background: '#996633' } }).png().toBuffer());
+  const webpOnly = (await prepareResponsiveImages(root, output, { avif: false }))['/avatar.png'];
+  assert.equal(webpOnly.avif.length, 0);
+  assert.equal(webpOnly.webp.length, 1);
+  assert.equal((await readdir(path.join(output, '_images'))).some(file => file.endsWith('.avif')), false);
+  const dual = (await prepareResponsiveImages(root, output, { avif: true }))['/avatar.png'];
+  assert.equal(dual.avif.length, 1);
+  assert.notEqual(dual.webp[0].src, webpOnly.webp[0].src, 'format configuration is part of the cache recipe');
+  await publishImageManifest(root, { '/avatar.png': dual });
+  const site = { root, config: { extra: { other: { avif_enable: false } } } };
+  assert.equal(responsiveImage(site, '/avatar.png').avifSrcset, undefined);
+  assert.ok(responsiveImage(site, '/avatar.png').webpSrcset);
 });

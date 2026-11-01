@@ -4,6 +4,10 @@
   "description": "WonderShine: an Astro theme for articles, threads and multilingual publishing",
   "type": "module",
   "license": "AGPL-3.0-or-later",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "author": "Jiaxiang Wang",
   "repository": {
     "type": "git",
@@ -44,7 +48,8 @@
     "markdown-it-task-lists": "^2.1.1",
     "sharp": "^0.35.5",
     "smol-toml": "^1.4.2",
-    "unicode-default-word-boundary": "16.0.0"
+    "unicode-default-word-boundary": "16.0.0",
+    "prismjs": "^1.30.0"
   },
   "scripts": {
     "prepack": "node ../../scripts/build-theme.mjs"

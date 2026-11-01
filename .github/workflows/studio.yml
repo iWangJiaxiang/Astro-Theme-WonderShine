@@ -41,10 +41,10 @@ jobs:
       release: ${{ steps.context.outputs.release }}
       sha: ${{ steps.context.outputs.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
       - id: context
@@ -73,11 +73,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
           cache: npm
@@ -87,7 +87,7 @@ jobs:
       - run: node --test apps/studio/tests/release-scripts.test.mjs
       - run: npm run build
       - run: npm run studio:build
-      - uses: browser-actions/setup-chrome@v1
+      - uses: browser-actions/setup-chrome@v2.2.0
         id: chrome
       - name: Enable Chromium sandbox namespaces on the ephemeral runner
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
@@ -106,7 +106,7 @@ jobs:
       - run: node apps/studio/tests/browser/native-ui.mjs
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: studio-browser-results
@@ -132,11 +132,11 @@ jobs:
       STUDIO_PLATFORM: ${{ matrix.platform }}
       STUDIO_RELEASE: ${{ needs.prepare.outputs.release }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
           cache: npm
@@ -160,7 +160,7 @@ jobs:
       - run: node apps/studio/scripts/release/collect.mjs
         env:
           STUDIO_BUNDLE_DIR: apps/studio/src-tauri/target/${{ matrix.target }}/release/bundle
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: studio-app-${{ matrix.platform }}
           path: temp/studio-artifacts/
@@ -176,19 +176,19 @@ jobs:
       STUDIO_RELEASE: ${{ needs.prepare.outputs.release }}
       STUDIO_PLATFORM: android
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
           cache: npm
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6.1.0
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4.0.4
         with:
           packages: platform-tools
           log-accepted-android-sdk-licenses: false
@@ -203,7 +203,7 @@ jobs:
         with:
           workspaces: apps/studio/src-tauri
           key: android
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6.4.1
       - run: npm ci
       - run: node apps/studio/scripts/release/version.mjs
       - run: npm exec -w @wondershine/studio -- tauri android init --ci
@@ -231,7 +231,7 @@ jobs:
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/studio-release.jks"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: studio-app-android
           path: temp/studio-artifacts/
@@ -249,11 +249,11 @@ jobs:
       # Simulator builds skip signing but Tauri still requires a non-empty team.
       APPLE_DEVELOPMENT_TEAM: ${{ needs.prepare.outputs.release == 'true' && vars.APPLE_DEVELOPMENT_TEAM || '0000000000' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
           cache: npm
@@ -282,7 +282,7 @@ jobs:
       - run: node apps/studio/scripts/release/collect.mjs
         env:
           STUDIO_BUNDLE_DIR: apps/studio/src-tauri/gen/apple/build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7.0.2
         with:
           name: studio-app-ios
           path: temp/studio-artifacts/
@@ -294,11 +294,11 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           name: studio-app-ios
           path: temp/studio-artifacts
@@ -322,14 +322,14 @@ jobs:
       group: studio-publish-${{ needs.prepare.outputs.tag }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ needs.prepare.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: '24'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8.0.2
         with:
           pattern: studio-app-*
           merge-multiple: true

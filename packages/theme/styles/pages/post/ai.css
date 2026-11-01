@@ -28,8 +28,9 @@
     margin: 10px 16px 0px 5px;
     width: fit-content;
     line-height: 1;
-    background: var(--wjx-main);
-    color: #fff;
+    background: var(--wjx-secondbg);
+    color: var(--wjx-fontcolor);
+    border: 1px solid var(--wjx-card-border);
     border-radius: 6px;
     -webkit-user-select: none;
     -moz-user-select: none;
@@ -44,8 +45,8 @@
 }
 
 .abstract-btn-item:hover {
-    background: var(--wjx-theme);
-    color: var(--wjx-card-bg);
+    background: var(--wjx-card-bg);
+    color: var(--wjx-fontcolor);
 }
 
 .ai-recommend {

@@ -803,3 +803,6 @@
         bottom: 30px;
     }
 }
+
+/* Category and title remain distinct pointer/keyboard targets. */
+.recent-post-info-top-tips a.original{display:inline-flex;align-items:center;min-height:24px;padding:2px 0;margin-bottom:4px}

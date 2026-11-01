@@ -1,0 +1,3 @@
+@reference "tailwindcss/theme";
+@reference "tailwindcss/utilities";
+@import "./pages/post/fancybox.css";

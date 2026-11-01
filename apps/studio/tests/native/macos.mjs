@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 if (process.platform !== 'darwin') throw new Error('This test requires macOS and a graphical login session.');
 const studio = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const id = randomUUID();
-const folder = join(homedir(), 'Library/Application Support/me.wondershine.studio.acceptance/workspaces', id);
+const folder = join(homedir(), 'Library/Application Support/wang.jiaxiang.wondershine-studio.acceptance/workspaces', id);
 const localMode = process.env.STUDIO_NATIVE_SMOKE_LOCAL === '1';
 const localFolder = localMode ? await fs.realpath(await fs.mkdtemp(join(tmpdir(), 'studio-native-local-'))) : undefined;
 const root = localFolder || join(folder, 'repo'), resultPath = join(folder, 'state/native-smoke-result.json');

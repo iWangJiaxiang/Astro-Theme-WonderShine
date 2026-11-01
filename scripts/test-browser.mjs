@@ -14,7 +14,7 @@ const demo = {
   pages: [
     ['home', '/'], ['article', '/articles/welcome/'],
     ['thread', '/thread/11111111-2222-4333-8444-555555555555/'],
-    ['series', '/collections/field-notes/'], ['tags', '/tags/design/'],
+    ['series', '/collections/field-notes/'], ['tags', '/tags/design/'], ['timeline', '/timeline/'],
     ['chinese', '/zh-CN/'],
   ],
   navigation: { path: '/articles/', language: 'zh-CN', translatedPath: '/zh-CN/articles/' },
@@ -54,7 +54,8 @@ export async function checkBrowser(options = demo) {
     browser = await puppeteer.launch({ headless: true, executablePath });
     const page = await browser.newPage();
     await page.setViewport({ width: 1440, height: 900 });
-    const failures = [], errors = [];
+    const failures = [], errors = [], requests = [];
+    page.on('request', request => requests.push(request.url()));
     page.on('pageerror', error => errors.push(error.message));
     page.on('response', response => {
       if (response.url().startsWith(origin) && response.status() >= 400) failures.push(`${response.url()} ${response.status()}`);
@@ -67,12 +68,39 @@ export async function checkBrowser(options = demo) {
       return (!background || getComputedStyle(background).visibility === 'hidden') && !document.documentElement.hasAttribute('data-astro-transition');
     });
     for (const [name, route] of options.pages) {
+      requests.length = 0;
       const response = await page.goto(origin + route, { waitUntil: 'networkidle0' });
       assert.equal(response.status(), 200, route);
       await settled();
       await page.screenshot({ path: path.join(screenshots, `blog-${name}.png`) });
       const broken = await page.$$eval('img', images => images.filter(image => image.offsetParent && image.complete && !image.naturalWidth && image.src.startsWith(location.origin)).map(image => image.src));
       assert.deepEqual(broken, [], route);
+      if (options === demo && ['home', 'timeline'].includes(name)) {
+        assert.deepEqual(requests.filter(url => /\/libs\/(prism\/.*\.js|katex\/|qrcode\/)/.test(url)), [], 'Reading libraries must not load on '+name);
+        assert.ok(!requests.some(url => url.endsWith('/dist/css/global.css')), 'Split styles must not also request all-page global.css');
+      }
+    }
+    if (options === demo) {
+      await page.goto(origin, {waitUntil:'networkidle0'}); await settled();
+      await page.evaluate(() => {window.__codeNavigationProbe = true; window.pjax.loadUrl('/code-check/');});
+      await page.waitForFunction(() => location.pathname === '/code-check/');
+      await settled();
+      await page.waitForSelector('[data-code-copy]');
+      assert.equal(await page.evaluate(() => window.__codeNavigationProbe), true);
+      assert.ok(await page.$('.post-content code .token.keyword'), 'Code arrives highlighted');
+      assert.equal(await page.$eval('code[data-lang="unknown-language"]', code => code.textContent.trim()), '<script>This remains text.</script>');
+      const fold = await page.$('[data-code-fold]');
+      if (fold) {await fold.click(); assert.equal(await fold.evaluate(button => button.getAttribute('aria-expanded')), 'false'); await fold.click();}
+      await page.evaluate(() => {Object.defineProperty(navigator, 'clipboard', {configurable:true, value:{writeText:async text => {window.__copiedCode = text;}}});});
+      await (await page.$('[data-code-copy]')).click();
+      await page.waitForFunction(() => window.__copiedCode?.includes('const greeting: string'));
+      await page.screenshot({path:path.join(screenshots,'blog-code.png')});
+      await page.evaluate(() => window.pjax.loadUrl('/'));
+      await page.waitForFunction(() => location.pathname === '/'); await settled();
+      await page.evaluate(() => window.pjax.loadUrl('/code-check/'));
+      await page.waitForFunction(() => location.pathname === '/code-check/'); await settled();
+      await page.waitForSelector('[data-code-copy]');
+      assert.equal(await page.$$eval('.ws-code-toolbar', bars => bars.length), 2, 'Code tools reinitialize exactly once per block');
     }
     await page.goto(origin, { waitUntil: 'networkidle0' });
     await settled();

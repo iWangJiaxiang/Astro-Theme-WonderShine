@@ -515,24 +515,32 @@ var wjx = {
 
     // 二维码
     qrcodeCreate: function () {
-        if (document.getElementById('qrcode')) {
-            document.getElementById("qrcode").innerHTML = "";
-            var qrcode = new QRCode(document.getElementById("qrcode"), {
-                text: window.location.href,
-                width: 250,
-                height: 250,
-                colorDark: "#000",
-                colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.H
-            });
-        }
+        const container = document.getElementById('qrcode');
+        const trigger = container?.closest('.copyright-link');
+        if (!trigger || container.dataset.ready) return;
+        container.dataset.ready = 'true';
+        let request;
+        const load = () => {
+            if (request) return;
+            request = (typeof QRCode === 'undefined' ? getScript('/libs/qrcode/qrcode.min.js') : Promise.resolve())
+                .then(() => {
+                    if (!container.isConnected) return;
+                    container.replaceChildren();
+                    new QRCode(container, {text: window.location.href, width: 250, height: 250,
+                        colorDark: '#000', colorLight: '#fff', correctLevel: QRCode.CorrectLevel.H});
+                }).catch(() => {request = undefined;});
+        };
+        for (const event of ['pointerenter', 'focusin', 'touchstart']) trigger.addEventListener(event, load, {passive:true});
     },
 
     // 刷新即刻短文瀑布流
     reflashEssayWaterFall: function() {
         document.querySelector("#waterfall") && setTimeout((function() {
-                waterfall("#waterfall"),
-                    document.getElementById("waterfall") && document.getElementById("waterfall").classList.add("show")
+                const target = document.getElementById('waterfall');
+                (typeof waterfall === 'function' ? Promise.resolve() : getScript('/libs/waterfall/waterfall.min.js')).then(() => {
+                    if (!target?.isConnected) return;
+                    waterfall('#waterfall'); target.classList.add('show');
+                }).catch(() => {})
             }
         ), 500)
     },
@@ -655,46 +663,46 @@ var wjx = {
     },
 
     //切换音乐播放状态
-    musicToggle: function (changePaly = true) {
+    musicToggle: async function (changePaly = true) {
         const navMusicEl = document.getElementById("nav-music");
-        if (!wjx_musicFirst) {
+        const element = navMusicEl?.querySelector('meting-js');
+        if (!element || element.dataset.loading === 'true') return;
+        try {
+            element.dataset.loading = 'true';
+            const player = element?.aplayer || await window.ensureNavMusic();
+            if (!element?.isConnected || document.querySelector('#nav-music meting-js') !== element) return;
             wjx.musicBindEvent();
-            wjx_musicFirst = true;
-        }
-        let msgPlay = '<i class="icon-play"></i><span>播放音乐</span>';
-        let msgPause = '<i class="icon-pause"></i><span>暂停音乐</span>';
-        if (wjx_musicPlaying) {
-            navMusicEl.classList.remove("playing");
-            if(GLOBAL_CONFIG.rightMenuEnable){
-                document.getElementById("menu-music-toggle").innerHTML = msgPlay;
-            }
-            document.getElementById("nav-music-hoverTips").innerHTML = "音乐已暂停";
-            document.querySelector("#consoleMusic").classList.remove("on");
-            wjx_musicPlaying = false;
-            navMusicEl.classList.remove("stretch");
-        } else {
-            navMusicEl.classList.add("playing");
-            if(GLOBAL_CONFIG.rightMenuEnable){
-                document.getElementById("menu-music-toggle").innerHTML = msgPause;
-            }
-            document.querySelector("#consoleMusic").classList.add("on");
-            wjx_musicPlaying = true;
-            navMusicEl.classList.add("stretch");
-        }
-        if (changePaly) document.querySelector("#nav-music meting-js").aplayer.toggle();
-        if(GLOBAL_CONFIG.rightMenuEnable){
-            rm.hideRightMenu();
+            const playing = changePaly ? player.audio.paused : !player.audio.paused;
+            const english = !document.documentElement.lang.startsWith('zh');
+            const label = playing ? (english ? 'Pause music' : '暂停音乐') : (english ? 'Play music' : '播放音乐');
+            const currentNav = document.getElementById('nav-music');
+            currentNav?.classList.toggle('playing', playing);
+            currentNav?.classList.toggle('stretch', playing);
+            document.querySelector('#consoleMusic')?.classList.toggle('on', playing);
+            const menu = document.getElementById('menu-music-toggle');
+            if (menu) menu.innerHTML = '<i class="icon-' + (playing ? 'pause' : 'play') + '"></i><span>' + label + '</span>';
+            const tip = document.getElementById('nav-music-hoverTips');
+            if (tip) tip.textContent = label;
+            wjx_musicPlaying = playing;
+            if (changePaly) player.toggle();
+            if (GLOBAL_CONFIG.rightMenuEnable) rm.hideRightMenu();
+        } catch (error) {
+            console.warn('Navigation music could not be loaded', error);
+            const tip = document.getElementById('nav-music-hoverTips');
+            if (tip) tip.textContent = document.documentElement.lang.startsWith('zh') ? '加载失败，点击重试' : 'Could not load music. Click to retry';
+        } finally {
+            delete element.dataset.loading;
         }
     },
 
-    // 音乐绑定事件
+    // Bind once to the persisted element, rather than once to the old document.
     musicBindEvent: function () {
-        document.querySelector("#nav-music .aplayer-music").addEventListener("click", function () {
-            wjx.musicTelescopic();
-        });
-        document.querySelector("#nav-music .aplayer-button").addEventListener("click", function () {
-            wjx.musicToggle(false);
-        });
+        const element = document.querySelector('#nav-music meting-js');
+        if (!element || element.dataset.musicBound === 'true') return;
+        element.querySelector('.aplayer-music')?.addEventListener('click', () => wjx.musicTelescopic());
+        element.querySelector('.aplayer-button')?.addEventListener('click', () => wjx.musicToggle(false));
+        element.dataset.musicBound = 'true';
+        wjx_musicFirst = true;
     },
 
     // 音乐伸缩
@@ -708,15 +716,21 @@ var wjx = {
     },
 
     //音乐上一曲
-    musicSkipBack: function () {
-        document.querySelector("meting-js").aplayer.skipBack(),
-            rm.hideRightMenu()
+    musicSkipBack: async function () {
+        try {
+            const player = document.querySelector('meting-js')?.aplayer || await window.ensureNavMusic();
+            player.skipBack();
+            if (window.rm) rm.hideRightMenu();
+        } catch (error) { console.warn('Music could not skip backward', error); }
     },
 
     //音乐下一曲
-    musicSkipForward: function () {
-        document.querySelector("meting-js").aplayer.skipForward(),
-            rm.hideRightMenu()
+    musicSkipForward: async function () {
+        try {
+            const player = document.querySelector('meting-js')?.aplayer || await window.ensureNavMusic();
+            player.skipForward();
+            if (window.rm) rm.hideRightMenu();
+        } catch (error) { console.warn('Music could not skip forward', error); }
     },
 
     //获取音乐中的名称

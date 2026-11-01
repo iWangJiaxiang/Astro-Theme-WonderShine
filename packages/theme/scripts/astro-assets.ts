@@ -54,7 +54,7 @@ export async function prepareAssets(root: string, destination: string) {
         if (error.code !== 'ENOENT') throw error;
       });
     }
-    const images = await prepareResponsiveImages(root, staging);
+    const images = await prepareResponsiveImages(root, staging, { avif: site.config.extra?.other?.avif_enable !== false });
     await publishImageManifest(root, images, path.join(staging, '_images/manifest.json'));
     // Publish a complete snapshot only after all reads succeed, including deletions.
     await fs.rename(destination, previous).then(() => { movedPrevious = true; }).catch((error: NodeJS.ErrnoException) => {

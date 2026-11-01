@@ -1,0 +1,123 @@
+name: Theme npm package
+run-name: Theme npm · ${{ github.event_name == 'release' && github.event.release.tag_name || 'dry run' }}
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+permissions:
+  contents: read
+concurrency:
+  group: theme-npm-${{ github.event_name == 'release' && github.event.release.tag_name || github.ref }}
+  cancel-in-progress: false
+env:
+  NPM_CLI_VERSION: '11.21.1'
+jobs:
+  verify:
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'theme-v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    outputs:
+      publish: ${{ steps.context.outputs.publish }}
+      version: ${{ steps.context.outputs.version }}
+      dist-tag: ${{ steps.context.outputs.distTag }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Use an OIDC-capable npm CLI
+        run: npm install --global "npm@$NPM_CLI_VERSION" --ignore-scripts
+      - name: Validate release source and version
+        id: context
+        run: node scripts/npm-release.mjs
+      - run: npm ci
+      - name: Reuse responsive image encodings
+        uses: actions/cache@v6.1.0
+        with:
+          path: .astro/image-cache
+          key: ${{ runner.os }}-theme-images-v1-${{ hashFiles('package-lock.json', 'packages/theme/scripts/responsive-images.ts') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-theme-images-v1-${{ hashFiles('package-lock.json', 'packages/theme/scripts/responsive-images.ts') }}-
+      - run: node --test tests/npm-release.test.mjs
+      - run: npm run build
+        env:
+          ASTRO_IMAGE_CACHE_DIR: ${{ github.workspace }}/.astro/image-cache
+      - run: npm run build:starter
+        env:
+          ASTRO_IMAGE_CACHE_DIR: ${{ github.workspace }}/.astro/image-cache
+      - run: npm run check
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run audit:distribution
+      - name: Pack and verify an isolated consumer installation
+        run: npm run test:package
+        env:
+          ASTRO_IMAGE_CACHE_DIR: ${{ github.workspace }}/.astro/image-cache
+      - name: Preserve the tested archive
+        id: artifact
+        run: node scripts/npm-artifact.mjs prepare
+        env:
+          THEME_VERSION: ${{ steps.context.outputs.version }}
+      - name: Validate publication without uploading
+        run: npm publish "$PACKAGE_ARCHIVE" --dry-run --ignore-scripts --access public --tag "$DIST_TAG"
+        env:
+          PACKAGE_ARCHIVE: ${{ steps.artifact.outputs.archive }}
+          DIST_TAG: ${{ steps.context.outputs.distTag }}
+      - uses: browser-actions/setup-chrome@v2.2.0
+        id: chrome
+      - name: Prepare browser sandbox and multilingual fonts
+        run: |
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk fonts-noto-color-emoji
+      - run: npm run test:browser
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: theme-npm-package
+          path: temp/npm-release/
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: theme-npm-browser-results
+          path: temp/browser/
+          retention-days: 7
+  publish:
+    needs: verify
+    if: needs.verify.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+      - run: npm install --global "npm@$NPM_CLI_VERSION" --ignore-scripts
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: theme-npm-package
+          path: temp/npm-release
+      - name: Verify the tested archive and its source
+        id: artifact
+        run: node scripts/npm-artifact.mjs verify
+        env:
+          THEME_VERSION: ${{ needs.verify.outputs.version }}
+      - name: Publish with npm trusted publishing
+        run: npm publish "$PACKAGE_ARCHIVE" --ignore-scripts --access public --tag "$DIST_TAG"
+        env:
+          PACKAGE_ARCHIVE: ${{ steps.artifact.outputs.archive }}
+          DIST_TAG: ${{ needs.verify.outputs.dist-tag }}

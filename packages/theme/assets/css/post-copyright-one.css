@@ -315,3 +315,8 @@ img.post-copyright__author_img_front {
     margin: 10px
 }
 
+
+/* Keep subscription text legible independently of the configured accent. */
+.reward-link.mode{background:#22783a;color:#fff}
+.reward-link.mode:hover,.reward-link.mode:focus-within{background:#185b2b;color:#fff}
+.reward-link.mode a{color:#fff}

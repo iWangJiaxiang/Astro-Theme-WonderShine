@@ -18,4 +18,4 @@ const visible=taxonomy||['category','tag','custom-category','custom-tag','custom
   {currentTerm&&<div class="category-bar-item select" id={currentTerm.term}><a href={currentTerm.url}>{currentTerm.name}</a></div>}
   <div class:list={['category-bar-item',{select:!current}]} id="category-bar-home"><a href={url('/')}>{tr('ui_home')}</a></div>
   {mode==='custom-url'?(settings.nav_custom_url||[]).map((item:any)=><div class="category-bar-item"><a href={url(item.url)}>{item.title}</a></div>):terms.filter(item=>item.term!==current).map(item=><div class="category-bar-item" id={item.term}><a href={item.url}>{item.name}</a></div>)}
-</div>{moreUrl&&<a class="category-bar-more" href={moreUrl}>{tr('ui_more')}</a>}</div>}
+</div>{moreUrl&&<a class="category-bar-more" href={moreUrl}>{tr(more==='customUrl'?'ui_more_information':moreKind)}</a>}</div>}

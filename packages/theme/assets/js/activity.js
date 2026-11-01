@@ -49,13 +49,18 @@ if (typeof document !== 'undefined') {
       const visible = new Set(result.items);
       const matching = new Set(result.all);
       const ordered = [...result.all, ...items.filter(item => !matching.has(item))];
-      const fragment = document.createDocumentFragment();
-      for (const item of ordered) { item.node.hidden = !visible.has(item); fragment.append(item.node); }
-      container.append(fragment);
+      // Keep existing nodes in place when SSR already emitted the requested order.
+      // Moving every card after first paint can reset LCP candidates and shift images.
+      for (let index = 0; index < ordered.length; index++) {
+        const item = ordered[index];
+        item.node.hidden = !visible.has(item);
+        if (container.children[index] !== item.node) container.insertBefore(item.node, container.children[index] || null);
+      }
       for (const filter of filters) {
         const active = filter.dataset.activityFilter === result.kind;
         filter.classList.toggle('is-active', active);
         filter.setAttribute('aria-pressed', String(active));
+        filter.disabled = false;
         filter.closest('nav').hidden = false;
       }
       if (empty) empty.hidden = result.total > 0;

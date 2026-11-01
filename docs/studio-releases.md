@@ -4,6 +4,14 @@ Studio 使用 `.github/workflows/studio.yml`。**构建、打包、单元测试�
 
 Release 标题统一为 `WonderShine Studio X.Y.Z`，例如 `WonderShine Studio 0.2.0`；版本标签使用 `studio-vX.Y.Z`。
 
+应用的 Tauri bundle ID 为 `wang.jiaxiang.wondershine-studio`。iOS 使用此 ID；Tauri 的 Android 生成器会把连字符转成下划线，因此 Android applicationId 为 `wang.jiaxiang.wondershine_studio`。注册 App Store Connect / Play Console 应用、签名或配置更新时，应使用对应平台的 ID。
+
+### 从旧开发包迁移
+
+旧开发包的 ID 是 `me.wondershine.studio`。更换 ID 后，系统会将新包视为另一个应用，不能假定会覆盖安装、共享 WebView 数据或自动读取旧 AppData；商店中已有的旧 ID 也不能直接改名。本次没有删除、搬移或合并旧应用数据。
+
+升级前，使用旧 App 提交或备份未保存内容。新 App 可以重新选择原有本地仓库文件夹；远程缓存仓库中未推送的 Git 提交和未提交文件需从旧 AppData 的 `workspaces/<id>/repo` 备份后导入，重新克隆远程仓库不会带回这些本地内容。macOS 旧目录为 `~/Library/Application Support/me.wondershine.studio`，新目录为 `~/Library/Application Support/wang.jiaxiang.wondershine-studio`；其他平台以 Tauri 的 AppData 目录为准。Git/API 凭据和设备设置需在新 App 中重新配置。确认新 App 中内容完整前，保留旧目录与旧 App。
+
 ## 触发方式
 
 | 事件 | 结果 |
@@ -47,7 +55,7 @@ GitHub Releases 是当前桌面/Android 的部署入口；Google Play 上架需�
 
 ### iOS（正式发行必填）
 
-先在 Apple Developer / App Store Connect 登记 `me.wondershine.studio`（fork 自用请同时修改 Tauri identifier 和 Apple 登记信息）。
+先在 Apple Developer / App Store Connect 登记 `wang.jiaxiang.wondershine-studio`（fork 自用请同时修改 Tauri identifier 和 Apple 登记信息）。
 
 | 配置 | 类型 | 含义 |
 | --- | --- | --- |
@@ -93,3 +101,7 @@ fork 的 CI 默认通过 `github.repository` 指向自己的 Release；直接源
 ## 验证状态
 
 构建与测试在 GitHub Actions 执行，本机只做静态检查。平台安装包和运行测试以对应源码提交的 CI 结果为准；签名与 TestFlight 上传需要另行配置正式发行凭据。模拟器构建使用占位 Team ID 并明确跳过签名，正式发行必须使用真实 Team ID。
+
+2026-11-01 检查的 Studio run `41266954914` 有 11 条 warning：10 条来自 Actions 使用已退役的 Node 20 runtime，1 条来自 `setup-java@v4` 退役。工作流已升级到声明 Node 24 runtime 的版本：checkout 7.0.1、setup-node 7.1.0、setup-java 6.1.0、upload-artifact 7.0.2、download-artifact 8.0.2、setup-android 4.0.4、setup-gradle 6.4.1、setup-chrome 2.2.0。Theme workflow 固定 `ubuntu-24.04`，避免 `ubuntu-latest` 镜像迁移造成未经验证的环境变化。
+
+该 run 的另外 3 条 notice 是 GitHub 的 macOS ARM64 runner 容量排队提醒，不是项目版本错误；升级 Actions 不保证消除平台排队提示。以上版本依据各 Actions 官方 release 和 `action.yml` 核对，实际构建兼容性由新提交的远程 CI 验证。

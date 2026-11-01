@@ -21,7 +21,7 @@ export function localImagePath(src: string, baseUrl?: string): string | undefine
     }
     if (!value.startsWith('/') || value.includes('\\')) return;
     const pathname = decodeURIComponent(value.split(/[?#]/)[0]);
-    if (pathname.split('/').some(part => part === '..' || part === '.') || /[\u0000-\u001f]/.test(pathname)) return;
+    if (pathname.includes('\\') || pathname.split('/').some(part => part === '..' || part === '.') || /[\u0000-\u001f]/.test(pathname)) return;
     return pathname;
   } catch { return; }
 }
@@ -50,7 +50,19 @@ export function responsiveImage(site: Pick<Site, 'root' | 'config'>, src: string
     width: metadata?.width,
     height: metadata?.height,
     webpSrcset: srcset(metadata?.webp),
-    avifSrcset: srcset(metadata?.avif),
+    avifSrcset: site.config.extra?.other?.avif_enable === false ? undefined : srcset(metadata?.avif),
     metadata,
   };
+}
+
+/** Native auto-sizing follows the actual lazy-image box; older browsers use the explicit fallback. */
+export function responsiveSizes(fallback: string, loading: 'lazy' | 'eager' = 'lazy'): string {
+  const explicit = fallback.replace(/^auto(?:\s*,\s*|$)/i, '') || '100vw';
+  return loading === 'lazy' ? `auto, ${explicit}` : explicit;
+}
+
+/** Conservative content fallback for browsers without auto-sized lazy images. */
+export function contentImageSizes(maxWidth = 960): string {
+  const width = Number.isFinite(maxWidth) && maxWidth > 0 ? Math.round(maxWidth) : 960;
+  return `(max-width: 768px) min(${width}px, calc(100vw - 38px)), (max-width: 1200px) min(${width}px, calc(100vw - 112px)), ${width}px`;
 }

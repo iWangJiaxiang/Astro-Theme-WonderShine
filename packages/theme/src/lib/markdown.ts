@@ -1,7 +1,8 @@
 import MarkdownIt from 'markdown-it';
+import {highlightCode} from './code-highlight';
 import footnote from 'markdown-it-footnote';
 import taskLists from 'markdown-it-task-lists';
-import {responsiveImage} from './image-assets';
+import {responsiveImage, responsiveSizes, contentImageSizes} from './image-assets';
 import { full as emoji } from 'markdown-it-emoji';
 import anyAscii from 'any-ascii';
 import { split as unicodeWords } from 'unicode-default-word-boundary';
@@ -77,14 +78,24 @@ function shortcodeMarkup(name: string, args: Record<string, string | number | bo
   if (name === 'subscribe_list') return subscriptionMarkup(context);
   if (name !== 'image') throw new Error(`Unsupported shortcode ${name} in ${context.document.relativePath}`);
   if (typeof args.img_name !== 'string' || !args.img_name) throw new Error('image shortcode requires img_name');
-  const width = typeof args.width === 'number' && args.width > 0 ? args.width : 1000;
+  const requestedWidth = typeof args.width === 'number' && args.width > 0 ? args.width : 1000;
   const original = resolveContentUrl(args.img_name, context);
-  const image = context.root ? responsiveImage({root:context.root,config:context.config},original,width) : undefined;
+  const image = context.root ? responsiveImage({root:context.root,config:context.config},original,requestedWidth) : undefined;
+  const width = Math.min(requestedWidth, image?.width || requestedWidth);
   const src = escapeHtml(original);
   const alt = escapeHtml(String(args.alt || ''));
+  const sizes = responsiveSizes(contentImageSizes(width));
   const dimensions = image?.width && image.height ? ` width="${width}" height="${Math.round(width * image.height / image.width)}"` : '';
-  const sources=image?[['avif',image.avifSrcset],['webp',image.webpSrcset]].filter(([,set])=>set).map(([type,set])=>`<source type="image/${type}" srcset="${escapeHtml(set!)}" sizes="(max-width:900px) 100vw, ${width}px">`).join(''):'';
-  return `<picture class="progressive-picture loaded" style="max-width:${width}px;height:auto;" alt="${alt}" src="${src}" data-original="${src}">${sources}<img class="progressive-content loaded no-lightbox" alt="${alt}"${dimensions} loading="lazy" decoding="async" src="${escapeHtml(image?.src||original)}" data-original="${src}"></picture>`;
+  const sources = imageSources(image, sizes);
+  const srcset = image?.webpSrcset ? ` srcset="${escapeHtml(image.webpSrcset)}" sizes="${escapeHtml(sizes)}"` : '';
+  return `<picture class="progressive-picture loaded" style="max-width:${width}px;height:auto;" alt="${alt}" src="${src}" data-original="${src}">${sources}<img class="progressive-content loaded no-lightbox" alt="${alt}"${dimensions} loading="lazy" decoding="async" src="${escapeHtml(image?.src||original)}"${srcset} data-original="${src}"></picture>`;
+}
+
+function imageSources(image: ReturnType<typeof responsiveImage> | undefined, sizes: string): string {
+  if (!image) return '';
+  return [['avif', image.avifSrcset], ['webp', image.webpSrcset]]
+    .filter(([, srcset]) => srcset)
+    .map(([format, srcset]) => `<source type="image/${format}" srcset="${escapeHtml(srcset!)}" sizes="${escapeHtml(sizes)}">`).join('');
 }
 
 function plainText(tokens: Token[]): string {
@@ -133,13 +144,19 @@ export function renderMarkdown(body: string, context: MarkdownContext): { html: 
   const imageRule = md.renderer.rules.image!;
   md.renderer.rules.image = (tokens, index, options, env, renderer) => {
     const token = tokens[index];
-    const original=resolveContentUrl(token.attrGet('src') || '', context);
-    const image=context.root?responsiveImage({root:context.root,config:context.config},original):undefined;
-    token.attrSet('src',image?.src||original);
-    token.attrSet('data-original',original);
-    if(image?.webpSrcset){token.attrSet('srcset',image.webpSrcset);token.attrSet('sizes','(max-width:900px) 100vw, 960px');}
-    if (settings.lazy_async_image !== false) { token.attrSet('loading', 'lazy'); token.attrSet('decoding', 'async'); }
-    return imageRule(tokens, index, options, env, renderer);
+    const original = resolveContentUrl(token.attrGet('src') || '', context);
+    const image = context.root ? responsiveImage({root:context.root,config:context.config},original) : undefined;
+    const lazy = settings.lazy_async_image !== false;
+    const sizes = responsiveSizes(contentImageSizes(image?.width ? Math.min(image.width, 960) : 960), lazy ? 'lazy' : 'eager');
+    token.attrSet('src', image?.src || original);
+    token.attrSet('data-original', original);
+    if (image?.width && image.height) { token.attrSet('width', String(image.width)); token.attrSet('height', String(image.height)); }
+    if (image?.webpSrcset) { token.attrSet('srcset', image.webpSrcset); token.attrSet('sizes', sizes); }
+    if (lazy) { token.attrSet('loading', 'lazy'); token.attrSet('decoding', 'async'); }
+    const sources = imageSources(image, sizes);
+    if (sources) token.attrJoin('class', 'no-lightbox');
+    const rendered = imageRule(tokens, index, options, env, renderer);
+    return sources ? `<picture class="responsive-image" style="display:contents" data-original="${escapeHtml(original)}" data-caption="${escapeHtml(token.attrGet('alt') || '')}">${sources}${rendered}</picture>` : rendered;
   };
   md.renderer.rules.link_open = (tokens, index, options, _env, renderer) => {
     const token = tokens[index];
@@ -159,7 +176,8 @@ export function renderMarkdown(body: string, context: MarkdownContext): { html: 
     const token = tokens[index];
     const language = token.info.trim().split(/[ ,\t]+/)[0] || '';
     const attributes = language ? ` class="language-${escapeHtml(language)}" data-lang="${escapeHtml(language)}"` : '';
-    return `<pre${attributes}><code${attributes}>${escapeHtml(token.content)}</code></pre>\n`;
+    const highlighted = context.config.extra?.code?.enable ? highlightCode(token.content, language) : escapeHtml(token.content);
+    return `<pre${attributes}><code${attributes}>${highlighted}</code></pre>\n`;
   };
   const environment = {};
   const tokens = md.parse(body.replace(/<!--\s*more\s*-->/g, '<span id="continue-reading"></span>'), environment);

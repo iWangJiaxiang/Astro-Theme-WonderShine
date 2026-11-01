@@ -196,5 +196,5 @@ function runPostAbstract() {
         clearSTO();
         observer.disconnect();
     }, {once:true});
-    genAbstract();
+    // Keep the server-rendered summary visible; animate only after an explicit request.
 }

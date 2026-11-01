@@ -19,9 +19,9 @@ const year=new Date().getFullYear(), start=Number(config.extra.site.start_year |
   </div>}
   {footer.enable && <div id="footer-bar" style={`padding:${footer.footer_banner_padding || 0}rem`}><div class="footer-bar-links">
     <div class="footer-bar-left"><div id="footer-bar-tips">
-      <div class="copyright-group">© <span class="inline-word" id="copyright-info">{start===year?year:`${start} - ${year}`}</span>&nbsp;By&nbsp;<a class="footer-bar-link" href={localeHome(lang,site)}><img src={config.extra.site.logo} alt="" id="copyright-logo" loading="lazy"/>{config.title}</a></div>
+      <div class="copyright-group">© <span class="inline-word" id="copyright-info">{start===year?year:`${start} - ${year}`}</span>&nbsp;By&nbsp;<a class="footer-bar-link" href={localeHome(lang,site)}><ResponsiveImage site={site} src={config.extra.site.logo} alt="" id="copyright-logo" width={20} height={20} sizes="20px"/>{config.title}</a></div>
       <div class="compliance-group">
-        {config.extra.site.compliance_security && footer.gongwangan && <a class="footer-bar-link" href={config.extra.site.compliance_security_link} target="_blank" rel="noopener external nofollow noreferrer">{config.extra.site.compliance_icon && <img src={config.extra.site.compliance_icon} alt="" id="beian-icon" loading="lazy"/>}<span>{config.extra.site.compliance_security}</span></a>}
+        {config.extra.site.compliance_security && footer.gongwangan && <a class="footer-bar-link" href={config.extra.site.compliance_security_link} target="_blank" rel="noopener external nofollow noreferrer">{config.extra.site.compliance_icon && <ResponsiveImage site={site} src={config.extra.site.compliance_icon} alt="" id="beian-icon" width={14} sizes="14px"/>}<span>{config.extra.site.compliance_security}</span></a>}
         {config.extra.site.compliance_icp && footer.icp_icon && <a class="footer-bar-link" href="https://beian.miit.gov.cn/#/Integrated/index" target="_blank" rel="noopener external nofollow noreferrer">{config.extra.site.compliance_icp}</a>}
         <a class="footer-bar-link" href="https://github.com/iWangJiaxiang/Astro-Theme-WonderShine"><div class="status-light"/><span>{tr('built_with')}</span></a>
       </div>

@@ -8,6 +8,9 @@ import {parseFragment, type DefaultTreeAdapterMap} from 'parse5';
 class Element {
   children: Element[]=[];
   parent?: Element;
+  get parentElement(){return this.parent;}
+  isConnected=true;
+  getBoundingClientRect(){return {width:200,height:100,top:0,bottom:100,left:0,right:200};}
   className=''; id=''; href=''; src=''; title=''; dateTime=''; alt=''; loading=''; decoding='';
   private value='';
   constructor(readonly tagName: string) {}
@@ -38,10 +41,10 @@ async function render(items:unknown[],lang='zh-CN') {
   let onLoad:(()=>Promise<void>)|undefined;
   runInNewContext(script,{
     window:{addEventListener:(_event:string,callback:()=>Promise<void>)=>{onLoad=callback;}},
-    document:{addEventListener:(_event:string,callback:()=>Promise<void>)=>{onLoad=callback;},querySelector:()=>consoleList,getElementById:()=>sidebar,createElement:(tag:string)=>new Element(tag),createTextNode:(text:string)=>{const node=new Element('#text');node.textContent=text;return node;}},
+    document:{removeEventListener(){},addEventListener:(_event:string,callback:()=>Promise<void>)=>{onLoad=callback;},querySelector:()=>consoleList,getElementById:()=>sidebar,createElement:(tag:string)=>new Element(tag),createTextNode:(text:string)=>{const node=new Element('#text');node.textContent=text;return node;}},
     DOMParser:class {parseFromString(html:string){const body=new Element('body');body.append(...parseFragment(html).childNodes.map(convert));return {body};}},
     settings:{site:'https://blog.example.com',system:'twikoo',count:5,lang,empty:lang==='zh-CN'?'暂无评论':'No comments yet',error:'error',labels:lang==='zh-CN'?{image:'[图片]',link:'[链接]',code:'[代码]'}:{image:'[Image]',link:'[Link]',code:'[Code]'},dates:lang==='zh-CN'?{just:'刚刚',minute:'分钟前',hour:'小时前',day:'天前'}:{just:'Just now',minute:' min ago',hour:' hours ago',day:' days ago'}},
-    saveToLocal:{get:()=>JSON.stringify(items)},URL,Date:FixedDate,Intl,
+    saveToLocal:{get:()=>JSON.stringify(items)},URL,Date:FixedDate,Intl,AbortController,innerHeight:800,innerWidth:1000,getComputedStyle:()=>({display:'block',visibility:'visible',opacity:'1'}),
   });
   await onLoad!();
   return {sidebar,consoleList};
@@ -86,4 +89,84 @@ test('empty comments and invalid timestamps remain readable',async()=>{
   assert.equal((await render([])).sidebar.textContent,'暂无评论');
   const {sidebar}=await render([{...item,date:'bad-date'}]);
   assert.equal(sidebar.children[0].children[1].children[1].children[1].textContent,'');
+});
+
+test('hidden console comments wait for visibility and cancel without requesting a service', async () => {
+  const events=new Map<string,()=>unknown>();
+  let cacheReads=0, disconnected=0;
+  const hidden=new Element('div');
+  hidden.getBoundingClientRect=()=>({width:0,height:0,top:0,bottom:0,left:0,right:0});
+  runInNewContext(script,{
+    window:{addEventListener(){},removeEventListener(){}},
+    document:{body:{},addEventListener:(event:string,callback:()=>unknown)=>events.set(event,callback),removeEventListener:(event:string)=>events.delete(event),querySelector:()=>hidden,getElementById:()=>null},
+    settings:{system:'twikoo'},saveToLocal:{get(){cacheReads++;return '[]';}},AbortController,
+    innerHeight:800,innerWidth:1000,getComputedStyle:()=>({display:'block',visibility:'visible',opacity:'1'}),
+    IntersectionObserver:class {observe(){} disconnect(){disconnected++;}},MutationObserver:class {observe(){} disconnect(){disconnected++;}},
+    requestAnimationFrame:()=>1,cancelAnimationFrame(){},
+  });
+  const pending=events.get('astro:page-load')!();
+  assert.equal(cacheReads,0);
+  events.get('astro:before-swap')!();
+  await pending;
+  assert.equal(cacheReads,0);
+  assert.equal(disconnected,2);
+});
+
+test('an in-flight recent-comments request is aborted and cannot update a replacement page', async () => {
+  const events=new Map<string,()=>unknown>();
+  const container=new Element('div');container.textContent='Waiting';
+  let signal:AbortSignal|undefined,respond:((value:unknown)=>void)|undefined,cacheWrites=0;
+  const document={body:{},addEventListener:(event:string,callback:()=>unknown)=>events.set(event,callback),removeEventListener:(event:string)=>events.delete(event),querySelector:()=>container,getElementById:()=>null};
+  runInNewContext(script,{
+    window:{},document,settings:{system:'artalk',error:'error'},saveToLocal:{get(){},set(){cacheWrites++;}},
+    GLOBAL_CONFIG:{source:{artalk:{artalkUrl:'https://comments.test',siteName:'test'}}},
+    fetch:(_url:string,options:{signal:AbortSignal})=>{signal=options.signal;return new Promise(resolve=>{respond=resolve;});},
+    AbortController,URLSearchParams,innerHeight:800,innerWidth:1000,getComputedStyle:()=>({display:'block',visibility:'visible',opacity:'1'}),
+  });
+  const pending=events.get('astro:page-load')!();
+  await Promise.resolve();
+  const requestSignal=signal as AbortSignal|undefined;
+  assert.ok(requestSignal);
+  events.get('astro:before-swap')!();document.body={};
+  assert.equal(requestSignal.aborted,true);
+  respond!({ok:true,json:async()=>({data:[]})});
+  await pending;
+  assert.equal(container.textContent,'Waiting');
+  assert.equal(cacheWrites,0);
+});
+
+
+test('an empty comment list loads when its containing card is visible', async () => {
+  const events=new Map<string,()=>unknown>();
+  const card=new Element('section'),container=new Element('div');card.append(container);
+  container.getBoundingClientRect=()=>({width:200,height:0,top:0,bottom:0,left:0,right:200});
+  let reads=0;
+  runInNewContext(script,{
+    window:{},document:{body:{},addEventListener:(event:string,callback:()=>unknown)=>events.set(event,callback),removeEventListener:(event:string)=>events.delete(event),querySelector:()=>container,getElementById:()=>null},
+    settings:{system:'twikoo',empty:'No comments yet'},saveToLocal:{get(){reads++;return '[]';}},AbortController,
+    innerHeight:800,innerWidth:1000,getComputedStyle:()=>({display:'block',visibility:'visible',opacity:'1'}),
+  });
+  await events.get('astro:page-load')!();
+  assert.equal(reads,1);
+  assert.equal(container.textContent,'No comments yet');
+});
+
+test('revealing an initially transparent comment card starts loading once', async () => {
+  const events=new Map<string,()=>unknown>();
+  const container=new Element('div');
+  let hidden=true,reads=0,changed:(()=>void)|undefined,frame:(()=>void)|undefined;
+  runInNewContext(script,{
+    window:{addEventListener(){},removeEventListener(){}},
+    document:{body:{},addEventListener:(event:string,callback:()=>unknown)=>events.set(event,callback),removeEventListener:(event:string)=>events.delete(event),querySelector:()=>container,getElementById:()=>null},
+    settings:{system:'twikoo',empty:'No comments yet'},saveToLocal:{get(){reads++;return '[]';}},AbortController,
+    innerHeight:800,innerWidth:1000,getComputedStyle:()=>({display:'block',visibility:'visible',opacity:hidden?'0':'1'}),
+    IntersectionObserver:class {observe(){} disconnect(){}},MutationObserver:class {constructor(callback:()=>void){changed=callback;}observe(){} disconnect(){}},
+    requestAnimationFrame:(callback:()=>void)=>{frame=callback;return 1;},cancelAnimationFrame(){},
+  });
+  const pending=events.get('astro:page-load')!();
+  assert.equal(reads,0);
+  hidden=false;changed!();frame!();
+  await pending;
+  assert.equal(reads,1);
+  assert.equal(container.textContent,'No comments yet');
 });

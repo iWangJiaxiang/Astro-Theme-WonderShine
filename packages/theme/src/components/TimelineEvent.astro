@@ -18,5 +18,5 @@ const tr=(key:string)=>t(key,lang,site,'activity');
 <p class="timeline-summary" data-overflow-fade>{item.description||plain(item.html)}</p>
 {kind==='note'&&<References site={site} document={item} lang={lang}/>}
 <TopicLinks site={site} document={item} lang={lang}/><a class="timeline-read" href={item.url}>{tr('read')} →</a>
-</div>{image&&<a class="timeline-cover" href={item.url} aria-label={item.title}><ResponsiveImage site={site} src={image} alt="" loading="lazy" sizes="210px"/></a>}</div>
+</div>{image&&<a class="timeline-cover" href={item.url} aria-label={item.title}><ResponsiveImage site={site} src={image} alt="" loading="lazy" sizes="(max-width: 600px) 112px, 210px"/></a>}</div>
 </article>
