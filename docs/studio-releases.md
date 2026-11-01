@@ -12,7 +12,7 @@ Release 标题统一为 `WonderShine Studio X.Y.Z`，例如 `WonderShine Studio 
 | 发布标签为 `studio-vX.Y.Z` 的稳定 GitHub Release | 构建正式安装包，上传到该 Release |
 | Actions → **Studio apps & release** → **Run workflow** | 可输入 `0.2.0`，勾选 `publish` 后自动创建并发布 Release；不勾选只构建 |
 
-`workflow_dispatch` 需要先把工作流推送到默认分支。当前仓库尚未推送，尚无远程运行记录。`studio-v` 与主题包的标签区分；主题 Release 不触发 App 发行。首版只发布稳定版本，不将 prerelease 推送给普通用户。
+`workflow_dispatch` 需要先把工作流推送到默认分支。首次推送后可在 Actions 页面查看远程构建与测试记录。`studio-v` 与主题包的标签区分；主题 Release 不触发 App 发行。首版只发布稳定版本，不将 prerelease 推送给普通用户。
 
 手动入口固定所选分支的提交 SHA；已有标签必须指向相同 SHA。所有 runner 都 checkout 同一 SHA。版本只在 runner 上注入 Studio package、Tauri 配置及 Cargo/package lock，不改主题版本、不回写 Git。版本要求三个数字，major 不超过 2000，minor/patch 不超过 99；建议从 `0.1.0` 递增。
 
@@ -92,4 +92,4 @@ fork 的 CI 默认通过 `github.repository` 指向自己的 Release；直接源
 
 ## 验证状态
 
-本轮只做静态检查和独立代码审查，未在本机运行构建或测试。工作流、平台安装包、签名、TestFlight 上传及 App 运行测试必须在推送后由远程 CI 验收；当前不宣称各平台已通过。
+构建与测试在 GitHub Actions 执行，本机只做静态检查。平台安装包和运行测试以对应源码提交的 CI 结果为准；签名与 TestFlight 上传需要另行配置正式发行凭据。模拟器构建使用占位 Team ID 并明确跳过签名，正式发行必须使用真实 Team ID。

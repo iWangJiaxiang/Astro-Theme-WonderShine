@@ -89,6 +89,8 @@ jobs:
       - run: npm run studio:build
       - uses: browser-actions/setup-chrome@v1
         id: chrome
+      - name: Enable Chromium sandbox namespaces on the ephemeral runner
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: npm run test:browser -w @wondershine/studio
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
@@ -185,6 +187,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - name: Android NDK
         run: |
           sdkmanager 'ndk;27.2.12479018'
@@ -239,6 +244,8 @@ jobs:
       STUDIO_SOURCE: ${{ needs.prepare.outputs.sha }}
       STUDIO_RELEASE: ${{ needs.prepare.outputs.release }}
       STUDIO_PLATFORM: ios
+      # Simulator builds skip signing but Tauri still requires a non-empty team.
+      APPLE_DEVELOPMENT_TEAM: ${{ needs.prepare.outputs.release == 'true' && vars.APPLE_DEVELOPMENT_TEAM || '0000000000' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -259,8 +266,6 @@ jobs:
       - run: npm ci
       - run: node apps/studio/scripts/release/version.mjs
       - run: npm exec -w @wondershine/studio -- tauri ios init --ci
-        env:
-          APPLE_DEVELOPMENT_TEAM: ${{ needs.prepare.outputs.release == 'true' && vars.APPLE_DEVELOPMENT_TEAM || '' }}
       - name: Simulator app (no distribution credentials)
         if: needs.prepare.outputs.release != 'true'
         run: npm exec -w @wondershine/studio -- tauri ios build --ci --debug --target aarch64-sim --no-sign

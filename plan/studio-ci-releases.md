@@ -29,3 +29,10 @@
 - 独立 reviewer 静态复核通过；修复发布中断后的重试顺序、iOS build number 四段问题、撤回后旧更新卡片残留。
 - 桌面当前没有 Windows/macOS 商业代码签名；移动正式发行强制要求签名，文档明确 App Store/TestFlight 分发限制。
 - 工作流未推送或运行；没有创建远端标签/Release；实际平台通过状态待远程验收。
+
+## 2026-11-01 首次远程验收
+
+- 用户已授权推送；`feat/studio-react-workspaces` 已推送，首次源码 SHA `39b1e98`，Studio run `41264678950`，主题 run `41264678946`。
+- 首次 push 被 Twikoo 第三方管理界面的示例凭据格式拦截；保留本地历史 bundle 后，将两处 placeholder 改为明确的 YOUR_TENCENT_SECRET_ID/KEY，并仅重写尚未发布的历史，未绕过保护。
+- 首轮远程 Studio 197 项单测、4 项发行脚本测试通过。Android SDK 初始化、iOS 空 Team ID、Ubuntu Chrome namespace 环境问题已定位，修复后继续远程验证。
+- 全程没有本地构建、打包或测试；不创建正式 Release。

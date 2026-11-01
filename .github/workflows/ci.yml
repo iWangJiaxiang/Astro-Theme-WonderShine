@@ -30,6 +30,8 @@ jobs:
       - run: npm run test:package
       - uses: browser-actions/setup-chrome@v1
         id: chrome
+      - name: Enable Chromium sandbox namespaces on the ephemeral runner
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: npm run test:browser
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}

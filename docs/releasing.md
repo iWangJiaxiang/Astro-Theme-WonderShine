@@ -1,6 +1,6 @@
 # 打包与发布
 
-当前远程 origin 为 Astro-Theme-WonderShine，当前版本仅本地验证，尚未推送或发布。
+主题与 Studio 源码托管在 Astro-Theme-WonderShine；主题包和 App 使用各自的发行流程。
 
 1. `npm ci`
 2. `npm run build`
