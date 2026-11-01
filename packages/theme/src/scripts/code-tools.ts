@@ -1,3 +1,5 @@
+export {};
+
 type CodeOptions = {enable?: boolean; enable_copy?: boolean; enable_expander?: boolean; enable_line?: boolean; enable_title?: boolean; enable_height_limit?: boolean; prism_limit?: number};
 const host = window as Window & {GLOBAL_CONFIG?: {prism?: CodeOptions}};
 
