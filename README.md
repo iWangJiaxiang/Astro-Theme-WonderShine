@@ -72,6 +72,8 @@ npm run studio:dev
 - [配置与内容格式](docs/configuration.md)
 - [独立部署](docs/deployment.md)
 - [本地打包与后续发布](docs/releasing.md)
+- [npm 自动发布与 Trusted Publisher 配置](docs/npm-releases.md)
+- [WonderShine Studio App 发行](docs/studio-releases.md)
 - [来源与第三方代码](NOTICE.md)
 
 沿用原主题的 **AGPL-3.0-or-later** 许可。见 [LICENSE](LICENSE)。

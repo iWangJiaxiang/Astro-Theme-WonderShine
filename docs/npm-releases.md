@@ -45,3 +45,7 @@ OIDC 会自动附带 npm provenance。`package.json` 中的 repository 必须对
 构建/验证失败时修复代码并重跑；npm 认证失败时检查 trusted publisher 的仓库、workflow 和 environment 是否完全匹配。若上传成功后 Actions 中断，先在 npm 核对该版本是否已存在；已存在时保留发行记录，不强行覆盖、不重复提交同版本。工作流不会删除或撤回 npm 包。
 
 参考：npm 官方 [Trusted publishing](https://docs.npmjs.com/trusted-publishers/)，GitHub Actions 官方 [Publishing Node.js packages](https://docs.github.com/en/actions/use-cases-and-examples/publishing-packages/publishing-nodejs-packages)。配置要求核对日期：2026-11-01。
+
+## 已执行的远程验证
+
+2026-11-01，源码 `ab3f4ee0a67beb12de54b8d304c003a7fc2c40a7` 的 dry-run `41271876571` 全部通过，包括独立消费者安装构建与浏览器检查。验证包为 `wondershine-theme-0.1.0.tgz`，正式 publish job 按设计跳过；未向 npm 上传。日志中的未登录提示来自无认证 dry-run，不能替代首次正式发布时的 Trusted Publisher 权限验证。

@@ -105,3 +105,5 @@ fork 的 CI 默认通过 `github.repository` 指向自己的 Release；直接源
 2026-11-01 检查的 Studio run `41266954914` 有 11 条 warning：10 条来自 Actions 使用已退役的 Node 20 runtime，1 条来自 `setup-java@v4` 退役。工作流已升级到声明 Node 24 runtime 的版本：checkout 7.0.1、setup-node 7.1.0、setup-java 6.1.0、upload-artifact 7.0.2、download-artifact 8.0.2、setup-android 4.0.4、setup-gradle 6.4.1、setup-chrome 2.2.0。Theme workflow 固定 `ubuntu-24.04`，避免 `ubuntu-latest` 镜像迁移造成未经验证的环境变化。
 
 该 run 的另外 3 条 notice 是 GitHub 的 macOS ARM64 runner 容量排队提醒，不是项目版本错误；升级 Actions 不保证消除平台排队提示。以上版本依据各 Actions 官方 release 和 `action.yml` 核对，实际构建兼容性由新提交的远程 CI 验证。
+
+2026-11-01 升级后 run `41271484308`（源码 `d3db703fc893c649f9922fd8cc62c3e5a6711372`）全部通过：Studio 验证、Windows/macOS/Linux 的 x64 与 ARM64、Android debug APK、iOS simulator app。重新读取 check-run annotations 确认 warning 从 11 条降至 0 条，3 条平台 capacity notice 仍存在。完整前后记录见 `plan/actions-annotations-2026-11-01.json`。

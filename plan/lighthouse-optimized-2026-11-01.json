@@ -1,0 +1,1645 @@
+{
+  "date": "2026-11-01",
+  "runId": 41271796610,
+  "source": "ab3f4ee0a67beb12de54b8d304c003a7fc2c40a7",
+  "fixture": "theme-demo",
+  "selection": "Median performance score of three cold runs per device/page; other metrics from the same run",
+  "devices": [
+    {
+      "source": "ab3f4ee0a67beb12de54b8d304c003a7fc2c40a7",
+      "device": "desktop",
+      "fixture": "theme-demo",
+      "limitations": "Production-built fictional demo on Astro preview, not the personal blog or CDN. Default Lighthouse simulated throttling. Three fresh Chrome runs; representative is median performance score.",
+      "results": [
+        {
+          "name": "home",
+          "route": "/",
+          "performanceRange": [
+            100,
+            100
+          ],
+          "allScores": [
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            }
+          ],
+          "representative": {
+            "file": "home-2.report.html",
+            "categories": {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            "lighthouseVersion": "13.6.0",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+            "configSettings": {
+              "output": [
+                "json",
+                "html"
+              ],
+              "maxWaitForFcp": 30000,
+              "maxWaitForLoad": 45000,
+              "pauseAfterFcpMs": 1000,
+              "pauseAfterLoadMs": 1000,
+              "networkQuietThresholdMs": 1000,
+              "cpuQuietThresholdMs": 1000,
+              "formFactor": "desktop",
+              "throttling": {
+                "rttMs": 40,
+                "throughputKbps": 10240,
+                "requestLatencyMs": 0,
+                "downloadThroughputKbps": 0,
+                "uploadThroughputKbps": 0,
+                "cpuSlowdownMultiplier": 1
+              },
+              "throttlingMethod": "simulate",
+              "screenEmulation": {
+                "mobile": false,
+                "width": 1350,
+                "height": 940,
+                "deviceScaleFactor": 1,
+                "disabled": false
+              },
+              "emulatedUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+              "auditMode": false,
+              "gatherMode": false,
+              "clearStorageTypes": [
+                "file_systems",
+                "shader_cache",
+                "service_workers",
+                "cache_storage"
+              ],
+              "disableStorageReset": false,
+              "debugNavigation": false,
+              "channel": "cli",
+              "usePassiveGathering": false,
+              "disableFullPageScreenshot": false,
+              "skipAboutBlank": false,
+              "blankPage": "about:blank",
+              "ignoreStatusCode": false,
+              "locale": "en-US",
+              "blockedUrlPatterns": null,
+              "additionalTraceCategories": null,
+              "extraHeaders": null,
+              "precomputedLanternData": null,
+              "onlyAudits": null,
+              "onlyCategories": [
+                "performance",
+                "accessibility",
+                "best-practices",
+                "seo"
+              ],
+              "skipAudits": null
+            },
+            "metrics": {
+              "first-contentful-paint": {
+                "value": 329.8958,
+                "display": "0.3 s"
+              },
+              "largest-contentful-paint": {
+                "value": 329.8958,
+                "display": "0.3 s"
+              },
+              "total-blocking-time": {
+                "value": 0,
+                "display": "0 ms"
+              },
+              "cumulative-layout-shift": {
+                "value": 0,
+                "display": "0"
+              },
+              "speed-index": {
+                "value": 428.66027532391513,
+                "display": "0.4 s"
+              }
+            },
+            "findings": [
+              {
+                "id": "unminified-javascript",
+                "title": "Minify JavaScript",
+                "score": 0.5,
+                "display": "Est savings of 10 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/js/utils.js\",\"totalBytes\":11505,\"wastedBytes\":4284,\"wastedPercent\":37.23575546668052},{\"url\":\"http://127.0.0.1:4399/js/bundle.js\",\"totalBytes\":11222,\"wastedBytes\":4172,\"wastedPercent\":37.17945003042507},{\"url\":\"http://127.0.0.1:4399/js/tw_cn.js\",\"totalBytes\":13218,\"wastedBytes\":2246,\"wastedPercent\":16.989935956084167}]"
+              },
+              {
+                "id": "unused-css-rules",
+                "title": "Reduce unused CSS",
+                "score": 0,
+                "display": "Est savings of 19 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"wastedBytes\":19299,\"wastedPercent\":76.76496281777406,\"totalBytes\":25141}]"
+              },
+              {
+                "id": "forced-reflow-insight",
+                "title": "Forced reflow",
+                "score": 0,
+                "details": "[{\"type\":\"table\",\"headings\":[{\"key\":\"source\",\"valueType\":\"source-location\",\"label\":\"Source\"},{\"key\":\"reflowTime\",\"valueType\":\"ms\",\"granularity\":1,\"label\":\"Total reflow time\"}],\"items\":[{\"source\":{\"type\":\"text\",\"value\":\"[unattributed]\"},\"reflowTime\":38.341},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"urlProvider\":\"network\",\"line\":0,\"column\":5660},\"reflowTime\":2.424}]}]"
+              },
+              {
+                "id": "network-dependency-tree-insight",
+                "title": "Network dependency tree",
+                "score": 0,
+                "details": "[{\"type\":\"list-section\",\"value\":{\"type\":\"network-tree\",\"chains\":{\"DF2A72EFA3B6618FAA6FE600C990E847\":{\"url\":\"http://127.0.0.1:4399/\",\"navStartToEndTime\":28,\"transferSize\":11274,\"isLongest\":true,\"children\":{\"3668.5\":{\"url\":\"http://127.0.0.1:4399/icon/font.css\",\"navStartToEndTime\":46,\"transferSize\":2261,\"isLongest\":true,\"children\":{\"3668.39\":{\"url\":\"http://127.0.0.1:4399/icon/fonts/icomoon.woff?aavezc\",\"navStartToEndTime\":134,\"transferSize\":49227,\"isLongest\":true,\"children\":{}}}},\"3668.26\":{\"url\":\"http://127.0.0.1:4399/js/activity.js\",\"navStartToEndTime\":119,\"transferSize\":2528,\"children\":{}},\"3668.2\":{\"url\":\"http://127.0.0.1:4399/_astro/ClientRouter.astro_astro_type_script_index_0_lang.Dl5zeXL3.js\",\"navStartToEndTime\":38,\"transferSize\":2104,\"children\":{\"3668.38\":{\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"navStartToEndTime\":119,\"transferSize\":4657,\"children\":{}}}},\"3668.37\":{\"url\":\"http://127.0.0.1:4399/manifest.json\",\"navStartToEndTime\":119,\"transferSize\":546,\"children\":{}},\"3668.19\":{\"url\":\"http://127.0.0.1:4399/_astro/Pagination.astro_astro_type_script_index_0_lang.CtK9aAxl.js\",\"navStartToEndTime\":118,\"transferSize\":761,\"children\":{}},\"3668.18\":{\"url\":\"http://127.0.0.1:4399/_astro/PostCards.astro_astro_type_script_index_0_lang.d67CEGOn.js\",\"navStartToEndTime\":61,\"transferSize\":689,\"children\":{}},\"3668.17\":{\"url\":\"http://127.0.0.1:4399/_astro/RecentTop.astro_astro_type_script_index_0_lang.BglHJ69_.js\",\"navStartToEndTime\":61,\"transferSize\":692,\"children\":{}},\"3668.15\":{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"navStartToEndTime\":56,\"transferSize\":3209,\"children\":{}},\"3668.14\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"navStartToEndTime\":55,\"transferSize\":5536,\"children\":{}},\"3668.10\":{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"navStartToEndTime\":55,\"transferSize\":838,\"children\":{}},\"3668.9\":{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"navStartToEndTime\":54,\"transferSize\":3526,\"children\":{}},\"3668.4\":{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"navStartToEndTime\":54,\"transferSize\":25437,\"children\":{}},\"3668.3\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"navStartToEndTime\":48,\"transferSize\":2724,\"children\":{}},\"3668.7\":{\"url\":\"http://127.0.0.1:4399/css/i18n.css\",\"navStartToEndTime\":47,\"transferSize\":1681,\"children\":{}},\"3668.8\":{\"url\":\"http://127.0.0.1:4399/css/custom.css\",\"navStartToEndTime\":47,\"transferSize\":337,\"children\":{}},\"3668.6\":{\"url\":\"http://127.0.0.1:4399/dist/css/index.css\",\"navStartToEndTime\":47,\"transferSize\":3583,\"children\":{}}}}},\"longestChain\":{\"duration\":134}}},{\"type\":\"list-section\",\"title\":\"Preconnected origins\",\"description\":\"[preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints help the browser establish a connection earlier in the page load, saving time when the first request for that origin is made. The following are the origins that the page preconnected to.\",\"value\":{\"type\":\"text\",\"value\":\"No origins were preconnected\"}},{\"type\":\"list-section\",\"title\":\"Preconnect candidates\",\"description\":\"Add [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints to your most important origins, but try to use no more than 4\",\"value\":{\"type\":\"text\",\"value\":\"No additional origins are good candidates for preconnecting\"}}]"
+              },
+              {
+                "id": "render-blocking-insight",
+                "title": "Render-blocking requests",
+                "score": 0,
+                "display": "Est savings of 140 ms",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"totalBytes\":25437,\"wastedMs\":165},{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"totalBytes\":3209},{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"totalBytes\":5536},{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"totalBytes\":838},{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"totalBytes\":3526,\"wastedMs\":85}]"
+              }
+            ],
+            "warnings": []
+          }
+        },
+        {
+          "name": "article",
+          "route": "/articles/welcome/",
+          "performanceRange": [
+            100,
+            100
+          ],
+          "allScores": [
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            }
+          ],
+          "representative": {
+            "file": "article-2.report.html",
+            "categories": {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            "lighthouseVersion": "13.6.0",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+            "configSettings": {
+              "output": [
+                "json",
+                "html"
+              ],
+              "maxWaitForFcp": 30000,
+              "maxWaitForLoad": 45000,
+              "pauseAfterFcpMs": 1000,
+              "pauseAfterLoadMs": 1000,
+              "networkQuietThresholdMs": 1000,
+              "cpuQuietThresholdMs": 1000,
+              "formFactor": "desktop",
+              "throttling": {
+                "rttMs": 40,
+                "throughputKbps": 10240,
+                "requestLatencyMs": 0,
+                "downloadThroughputKbps": 0,
+                "uploadThroughputKbps": 0,
+                "cpuSlowdownMultiplier": 1
+              },
+              "throttlingMethod": "simulate",
+              "screenEmulation": {
+                "mobile": false,
+                "width": 1350,
+                "height": 940,
+                "deviceScaleFactor": 1,
+                "disabled": false
+              },
+              "emulatedUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+              "auditMode": false,
+              "gatherMode": false,
+              "clearStorageTypes": [
+                "file_systems",
+                "shader_cache",
+                "service_workers",
+                "cache_storage"
+              ],
+              "disableStorageReset": false,
+              "debugNavigation": false,
+              "channel": "cli",
+              "usePassiveGathering": false,
+              "disableFullPageScreenshot": false,
+              "skipAboutBlank": false,
+              "blankPage": "about:blank",
+              "ignoreStatusCode": false,
+              "locale": "en-US",
+              "blockedUrlPatterns": null,
+              "additionalTraceCategories": null,
+              "extraHeaders": null,
+              "precomputedLanternData": null,
+              "onlyAudits": null,
+              "onlyCategories": [
+                "performance",
+                "accessibility",
+                "best-practices",
+                "seo"
+              ],
+              "skipAudits": null
+            },
+            "metrics": {
+              "first-contentful-paint": {
+                "value": 333.77495000000005,
+                "display": "0.3 s"
+              },
+              "largest-contentful-paint": {
+                "value": 635.5499000000001,
+                "display": "0.6 s"
+              },
+              "total-blocking-time": {
+                "value": 0,
+                "display": "0 ms"
+              },
+              "cumulative-layout-shift": {
+                "value": 1.8540204218923302e-06,
+                "display": "0"
+              },
+              "speed-index": {
+                "value": 792.8994406123277,
+                "display": "0.8 s"
+              }
+            },
+            "findings": [
+              {
+                "id": "largest-contentful-paint",
+                "title": "Largest Contentful Paint",
+                "score": 0.99,
+                "display": "0.6 s",
+                "details": "[]"
+              },
+              {
+                "id": "speed-index",
+                "title": "Speed Index",
+                "score": 0.99,
+                "display": "0.8 s",
+                "details": "[]"
+              },
+              {
+                "id": "unminified-javascript",
+                "title": "Minify JavaScript",
+                "score": 0.5,
+                "display": "Est savings of 10 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/js/utils.js\",\"totalBytes\":11505,\"wastedBytes\":4284,\"wastedPercent\":37.23575546668052},{\"url\":\"http://127.0.0.1:4399/js/bundle.js\",\"totalBytes\":11222,\"wastedBytes\":4172,\"wastedPercent\":37.17945003042507},{\"url\":\"http://127.0.0.1:4399/js/tw_cn.js\",\"totalBytes\":13218,\"wastedBytes\":2246,\"wastedPercent\":16.989935956084167}]"
+              },
+              {
+                "id": "unused-css-rules",
+                "title": "Reduce unused CSS",
+                "score": 0,
+                "display": "Est savings of 29 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"wastedBytes\":19094,\"wastedPercent\":75.9486422798247,\"totalBytes\":25141},{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"wastedBytes\":10294,\"wastedPercent\":81.82701652089406,\"totalBytes\":12580}]"
+              },
+              {
+                "id": "forced-reflow-insight",
+                "title": "Forced reflow",
+                "score": 0,
+                "details": "[{\"type\":\"table\",\"headings\":[{\"key\":\"source\",\"valueType\":\"source-location\",\"label\":\"Top function call\"},{\"key\":\"reflowTime\",\"valueType\":\"ms\",\"granularity\":1,\"label\":\"Total reflow time\"}],\"items\":[{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/js/main.js\",\"urlProvider\":\"network\",\"line\":277,\"column\":30},\"reflowTime\":10.265}]},{\"type\":\"table\",\"headings\":[{\"key\":\"source\",\"valueType\":\"source-location\",\"label\":\"Source\"},{\"key\":\"reflowTime\",\"valueType\":\"ms\",\"granularity\":1,\"label\":\"Total reflow time\"}],\"items\":[{\"source\":{\"type\":\"text\",\"value\":\"[unattributed]\"},\"reflowTime\":20.052},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"urlProvider\":\"network\",\"line\":0,\"column\":5660},\"reflowTime\":6.327},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":49615},\"reflowTime\":3.531},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":50335},\"reflowTime\":0.548},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":50393},\"reflowTime\":0.294},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":50457},\"reflowTime\":0.301},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":54434},\"reflowTime\":0.278},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":49637},\"reflowTime\":2.029},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":51395},\"reflowTime\":0.422},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/js/main.js\",\"urlProvider\":\"network\",\"line\":286,\"column\":47},\"reflowTime\":10.034},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/js/main.js\",\"urlProvider\":\"network\",\"line\":299,\"column\":22},\"reflowTime\":0.231},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/tocbot/4.18.2/tocbot.min.js\",\"urlProvider\":\"network\",\"line\":0,\"column\":1758},\"reflowTime\":2.002},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/tocbot/4.18.2/tocbot.min.js\",\"urlProvider\":\"network\",\"line\":0,\"column\":10340},\"reflowTime\":0.689},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/js/utils.js\",\"urlProvider\":\"network\",\"line\":638,\"column\":72},\"reflowTime\":9.252},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"urlProvider\":\"network\",\"line\":0,\"column\":2443},\"reflowTime\":8.222}]}]"
+              },
+              {
+                "id": "network-dependency-tree-insight",
+                "title": "Network dependency tree",
+                "score": 0,
+                "details": "[{\"type\":\"list-section\",\"value\":{\"type\":\"network-tree\",\"chains\":{\"9FC974045FBB24D49A9507E6E56DADC6\":{\"url\":\"http://127.0.0.1:4399/articles/welcome/\",\"navStartToEndTime\":34,\"transferSize\":11971,\"isLongest\":true,\"children\":{\"4281.5\":{\"url\":\"http://127.0.0.1:4399/icon/font.css\",\"navStartToEndTime\":50,\"transferSize\":2261,\"isLongest\":true,\"children\":{\"4281.45\":{\"url\":\"http://127.0.0.1:4399/icon/fonts/icomoon.woff?aavezc\",\"navStartToEndTime\":172,\"transferSize\":49227,\"isLongest\":true,\"children\":{}}}},\"4281.2\":{\"url\":\"http://127.0.0.1:4399/_astro/ClientRouter.astro_astro_type_script_index_0_lang.Dl5zeXL3.js\",\"navStartToEndTime\":51,\"transferSize\":2104,\"children\":{\"4281.44\":{\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"navStartToEndTime\":88,\"transferSize\":4657,\"children\":{}}}},\"4281.43\":{\"url\":\"http://127.0.0.1:4399/manifest.json\",\"navStartToEndTime\":88,\"transferSize\":546,\"children\":{}},\"4281.30\":{\"url\":\"http://127.0.0.1:4399/js/activity.js\",\"navStartToEndTime\":82,\"transferSize\":2528,\"children\":{}},\"4281.20\":{\"url\":\"http://127.0.0.1:4399/css/post-copyright-one.css\",\"navStartToEndTime\":80,\"transferSize\":1929,\"children\":{}},\"4281.17\":{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"navStartToEndTime\":78,\"transferSize\":3209,\"children\":{}},\"4281.16\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"navStartToEndTime\":78,\"transferSize\":5536,\"children\":{}},\"4281.11\":{\"url\":\"http://127.0.0.1:4399/css/read-mode.css\",\"navStartToEndTime\":75,\"transferSize\":1544,\"children\":{}},\"4281.12\":{\"url\":\"http://127.0.0.1:4399/libs/tocbot/4.18.2/tocbot.css\",\"navStartToEndTime\":75,\"transferSize\":831,\"children\":{}},\"4281.10\":{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"navStartToEndTime\":73,\"transferSize\":838,\"children\":{}},\"4281.9\":{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"navStartToEndTime\":72,\"transferSize\":3526,\"children\":{}},\"4281.8\":{\"url\":\"http://127.0.0.1:4399/css/custom.css\",\"navStartToEndTime\":72,\"transferSize\":337,\"children\":{}},\"4281.4\":{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"navStartToEndTime\":70,\"transferSize\":25437,\"children\":{}},\"4281.6\":{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"navStartToEndTime\":59,\"transferSize\":12875,\"children\":{}},\"4281.3\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"navStartToEndTime\":57,\"transferSize\":2724,\"children\":{}},\"4281.7\":{\"url\":\"http://127.0.0.1:4399/css/i18n.css\",\"navStartToEndTime\":50,\"transferSize\":1681,\"children\":{}}}}},\"longestChain\":{\"duration\":172}}},{\"type\":\"list-section\",\"title\":\"Preconnected origins\",\"description\":\"[preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints help the browser establish a connection earlier in the page load, saving time when the first request for that origin is made. The following are the origins that the page preconnected to.\",\"value\":{\"type\":\"text\",\"value\":\"No origins were preconnected\"}},{\"type\":\"list-section\",\"title\":\"Preconnect candidates\",\"description\":\"Add [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints to your most important origins, but try to use no more than 4\",\"value\":{\"type\":\"text\",\"value\":\"No additional origins are good candidates for preconnecting\"}}]"
+              },
+              {
+                "id": "render-blocking-insight",
+                "title": "Render-blocking requests",
+                "score": 0,
+                "display": "Est savings of 140 ms",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"totalBytes\":3209},{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"totalBytes\":5536},{\"url\":\"http://127.0.0.1:4399/css/read-mode.css\",\"totalBytes\":1544},{\"url\":\"http://127.0.0.1:4399/libs/tocbot/4.18.2/tocbot.css\",\"totalBytes\":831},{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"totalBytes\":838}]"
+              }
+            ],
+            "warnings": []
+          }
+        },
+        {
+          "name": "timeline",
+          "route": "/timeline/",
+          "performanceRange": [
+            100,
+            100
+          ],
+          "allScores": [
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            }
+          ],
+          "representative": {
+            "file": "timeline-2.report.html",
+            "categories": {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            "lighthouseVersion": "13.6.0",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+            "configSettings": {
+              "output": [
+                "json",
+                "html"
+              ],
+              "maxWaitForFcp": 30000,
+              "maxWaitForLoad": 45000,
+              "pauseAfterFcpMs": 1000,
+              "pauseAfterLoadMs": 1000,
+              "networkQuietThresholdMs": 1000,
+              "cpuQuietThresholdMs": 1000,
+              "formFactor": "desktop",
+              "throttling": {
+                "rttMs": 40,
+                "throughputKbps": 10240,
+                "requestLatencyMs": 0,
+                "downloadThroughputKbps": 0,
+                "uploadThroughputKbps": 0,
+                "cpuSlowdownMultiplier": 1
+              },
+              "throttlingMethod": "simulate",
+              "screenEmulation": {
+                "mobile": false,
+                "width": 1350,
+                "height": 940,
+                "deviceScaleFactor": 1,
+                "disabled": false
+              },
+              "emulatedUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+              "auditMode": false,
+              "gatherMode": false,
+              "clearStorageTypes": [
+                "file_systems",
+                "shader_cache",
+                "service_workers",
+                "cache_storage"
+              ],
+              "disableStorageReset": false,
+              "debugNavigation": false,
+              "channel": "cli",
+              "usePassiveGathering": false,
+              "disableFullPageScreenshot": false,
+              "skipAboutBlank": false,
+              "blankPage": "about:blank",
+              "ignoreStatusCode": false,
+              "locale": "en-US",
+              "blockedUrlPatterns": null,
+              "additionalTraceCategories": null,
+              "extraHeaders": null,
+              "precomputedLanternData": null,
+              "onlyAudits": null,
+              "onlyCategories": [
+                "performance",
+                "accessibility",
+                "best-practices",
+                "seo"
+              ],
+              "skipAudits": null
+            },
+            "metrics": {
+              "first-contentful-paint": {
+                "value": 330.36260000000004,
+                "display": "0.3 s"
+              },
+              "largest-contentful-paint": {
+                "value": 330.36260000000004,
+                "display": "0.3 s"
+              },
+              "total-blocking-time": {
+                "value": 0,
+                "display": "0 ms"
+              },
+              "cumulative-layout-shift": {
+                "value": 0,
+                "display": "0"
+              },
+              "speed-index": {
+                "value": 361.80556658333745,
+                "display": "0.4 s"
+              }
+            },
+            "findings": [
+              {
+                "id": "unminified-javascript",
+                "title": "Minify JavaScript",
+                "score": 0.5,
+                "display": "Est savings of 10 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/js/utils.js\",\"totalBytes\":11505,\"wastedBytes\":4284,\"wastedPercent\":37.23575546668052},{\"url\":\"http://127.0.0.1:4399/js/bundle.js\",\"totalBytes\":11222,\"wastedBytes\":4172,\"wastedPercent\":37.17945003042507},{\"url\":\"http://127.0.0.1:4399/js/tw_cn.js\",\"totalBytes\":13218,\"wastedBytes\":2246,\"wastedPercent\":16.989935956084167}]"
+              },
+              {
+                "id": "unused-css-rules",
+                "title": "Reduce unused CSS",
+                "score": 0,
+                "display": "Est savings of 32 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"wastedBytes\":20829,\"wastedPercent\":82.84772538742192,\"totalBytes\":25141},{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"wastedBytes\":12293,\"wastedPercent\":97.71926627793974,\"totalBytes\":12580}]"
+              },
+              {
+                "id": "network-dependency-tree-insight",
+                "title": "Network dependency tree",
+                "score": 0,
+                "details": "[{\"type\":\"list-section\",\"value\":{\"type\":\"network-tree\",\"chains\":{\"18E085EA07530E58A06EBD65E7436171\":{\"url\":\"http://127.0.0.1:4399/timeline/\",\"navStartToEndTime\":24,\"transferSize\":9367,\"isLongest\":true,\"children\":{\"4956.5\":{\"url\":\"http://127.0.0.1:4399/icon/font.css\",\"navStartToEndTime\":42,\"transferSize\":2261,\"isLongest\":true,\"children\":{\"4956.36\":{\"url\":\"http://127.0.0.1:4399/icon/fonts/icomoon.woff?aavezc\",\"navStartToEndTime\":138,\"transferSize\":49227,\"isLongest\":true,\"children\":{}}}},\"4956.35\":{\"url\":\"http://127.0.0.1:4399/manifest.json\",\"navStartToEndTime\":62,\"transferSize\":546,\"children\":{}},\"4956.2\":{\"url\":\"http://127.0.0.1:4399/_astro/ClientRouter.astro_astro_type_script_index_0_lang.Dl5zeXL3.js\",\"navStartToEndTime\":36,\"transferSize\":2104,\"children\":{\"4956.34\":{\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"navStartToEndTime\":61,\"transferSize\":4657,\"children\":{}}}},\"4956.23\":{\"url\":\"http://127.0.0.1:4399/js/activity.js\",\"navStartToEndTime\":61,\"transferSize\":2528,\"children\":{}},\"4956.15\":{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"navStartToEndTime\":59,\"transferSize\":3209,\"children\":{}},\"4956.14\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"navStartToEndTime\":54,\"transferSize\":5536,\"children\":{}},\"4956.10\":{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"navStartToEndTime\":54,\"transferSize\":838,\"children\":{}},\"4956.6\":{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"navStartToEndTime\":50,\"transferSize\":12875,\"children\":{}},\"4956.8\":{\"url\":\"http://127.0.0.1:4399/css/custom.css\",\"navStartToEndTime\":49,\"transferSize\":337,\"children\":{}},\"4956.9\":{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"navStartToEndTime\":49,\"transferSize\":3526,\"children\":{}},\"4956.4\":{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"navStartToEndTime\":47,\"transferSize\":25437,\"children\":{}},\"4956.7\":{\"url\":\"http://127.0.0.1:4399/css/i18n.css\",\"navStartToEndTime\":45,\"transferSize\":1681,\"children\":{}},\"4956.3\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"navStartToEndTime\":36,\"transferSize\":2724,\"children\":{}}}}},\"longestChain\":{\"duration\":138}}},{\"type\":\"list-section\",\"title\":\"Preconnected origins\",\"description\":\"[preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints help the browser establish a connection earlier in the page load, saving time when the first request for that origin is made. The following are the origins that the page preconnected to.\",\"value\":{\"type\":\"text\",\"value\":\"No origins were preconnected\"}},{\"type\":\"list-section\",\"title\":\"Preconnect candidates\",\"description\":\"Add [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints to your most important origins, but try to use no more than 4\",\"value\":{\"type\":\"text\",\"value\":\"No additional origins are good candidates for preconnecting\"}}]"
+              },
+              {
+                "id": "render-blocking-insight",
+                "title": "Render-blocking requests",
+                "score": 0,
+                "display": "Est savings of 140 ms",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"totalBytes\":3209},{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"totalBytes\":838},{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"totalBytes\":5536},{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"totalBytes\":12875,\"wastedMs\":125},{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"totalBytes\":25437,\"wastedMs\":165}]"
+              }
+            ],
+            "warnings": []
+          }
+        },
+        {
+          "name": "collection",
+          "route": "/collections/field-notes/",
+          "performanceRange": [
+            100,
+            100
+          ],
+          "allScores": [
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            }
+          ],
+          "representative": {
+            "file": "collection-2.report.html",
+            "categories": {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            "lighthouseVersion": "13.6.0",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+            "configSettings": {
+              "output": [
+                "json",
+                "html"
+              ],
+              "maxWaitForFcp": 30000,
+              "maxWaitForLoad": 45000,
+              "pauseAfterFcpMs": 1000,
+              "pauseAfterLoadMs": 1000,
+              "networkQuietThresholdMs": 1000,
+              "cpuQuietThresholdMs": 1000,
+              "formFactor": "desktop",
+              "throttling": {
+                "rttMs": 40,
+                "throughputKbps": 10240,
+                "requestLatencyMs": 0,
+                "downloadThroughputKbps": 0,
+                "uploadThroughputKbps": 0,
+                "cpuSlowdownMultiplier": 1
+              },
+              "throttlingMethod": "simulate",
+              "screenEmulation": {
+                "mobile": false,
+                "width": 1350,
+                "height": 940,
+                "deviceScaleFactor": 1,
+                "disabled": false
+              },
+              "emulatedUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+              "auditMode": false,
+              "gatherMode": false,
+              "clearStorageTypes": [
+                "file_systems",
+                "shader_cache",
+                "service_workers",
+                "cache_storage"
+              ],
+              "disableStorageReset": false,
+              "debugNavigation": false,
+              "channel": "cli",
+              "usePassiveGathering": false,
+              "disableFullPageScreenshot": false,
+              "skipAboutBlank": false,
+              "blankPage": "about:blank",
+              "ignoreStatusCode": false,
+              "locale": "en-US",
+              "blockedUrlPatterns": null,
+              "additionalTraceCategories": null,
+              "extraHeaders": null,
+              "precomputedLanternData": null,
+              "onlyAudits": null,
+              "onlyCategories": [
+                "performance",
+                "accessibility",
+                "best-practices",
+                "seo"
+              ],
+              "skipAudits": null
+            },
+            "metrics": {
+              "first-contentful-paint": {
+                "value": 335.13259999999997,
+                "display": "0.3 s"
+              },
+              "largest-contentful-paint": {
+                "value": 600.1768,
+                "display": "0.6 s"
+              },
+              "total-blocking-time": {
+                "value": 0,
+                "display": "0 ms"
+              },
+              "cumulative-layout-shift": {
+                "value": 9.59841822583842e-06,
+                "display": "0"
+              },
+              "speed-index": {
+                "value": 696.8045448553294,
+                "display": "0.7 s"
+              }
+            },
+            "findings": [
+              {
+                "id": "largest-contentful-paint",
+                "title": "Largest Contentful Paint",
+                "score": 0.99,
+                "display": "0.6 s",
+                "details": "[]"
+              },
+              {
+                "id": "unminified-javascript",
+                "title": "Minify JavaScript",
+                "score": 0.5,
+                "display": "Est savings of 10 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/js/utils.js\",\"totalBytes\":11505,\"wastedBytes\":4284,\"wastedPercent\":37.23575546668052},{\"url\":\"http://127.0.0.1:4399/js/bundle.js\",\"totalBytes\":11222,\"wastedBytes\":4172,\"wastedPercent\":37.17945003042507},{\"url\":\"http://127.0.0.1:4399/js/tw_cn.js\",\"totalBytes\":13218,\"wastedBytes\":2246,\"wastedPercent\":16.989935956084167}]"
+              },
+              {
+                "id": "unused-css-rules",
+                "title": "Reduce unused CSS",
+                "score": 0,
+                "display": "Est savings of 30 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"wastedBytes\":19864,\"wastedPercent\":79.010578398338,\"totalBytes\":25141},{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"wastedBytes\":11299,\"wastedPercent\":89.81869533527697,\"totalBytes\":12580}]"
+              },
+              {
+                "id": "forced-reflow-insight",
+                "title": "Forced reflow",
+                "score": 0,
+                "details": "[{\"type\":\"table\",\"headings\":[{\"key\":\"source\",\"valueType\":\"source-location\",\"label\":\"Top function call\"},{\"key\":\"reflowTime\",\"valueType\":\"ms\",\"granularity\":1,\"label\":\"Total reflow time\"}],\"items\":[{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/js/main.js\",\"urlProvider\":\"network\",\"line\":277,\"column\":30},\"reflowTime\":5.694}]},{\"type\":\"table\",\"headings\":[{\"key\":\"source\",\"valueType\":\"source-location\",\"label\":\"Source\"},{\"key\":\"reflowTime\",\"valueType\":\"ms\",\"granularity\":1,\"label\":\"Total reflow time\"}],\"items\":[{\"source\":{\"type\":\"text\",\"value\":\"[unattributed]\"},\"reflowTime\":31.903},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"urlProvider\":\"network\",\"line\":0,\"column\":5660},\"reflowTime\":0.139},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"urlProvider\":\"network\",\"line\":0,\"column\":101},\"reflowTime\":3.739},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":49615},\"reflowTime\":2.347},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":50335},\"reflowTime\":0.342},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":50393},\"reflowTime\":0.177},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":50457},\"reflowTime\":0.16},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":54434},\"reflowTime\":0.152},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":49637},\"reflowTime\":1.274},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":51395},\"reflowTime\":0.261},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/js/main.js\",\"urlProvider\":\"network\",\"line\":286,\"column\":47},\"reflowTime\":5.541},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/js/main.js\",\"urlProvider\":\"network\",\"line\":299,\"column\":22},\"reflowTime\":0.153},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/js/utils.js\",\"urlProvider\":\"network\",\"line\":638,\"column\":72},\"reflowTime\":8.056},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"urlProvider\":\"network\",\"line\":0,\"column\":2443},\"reflowTime\":0.592}]}]"
+              },
+              {
+                "id": "lcp-discovery-insight",
+                "title": "LCP request discovery",
+                "score": 0,
+                "details": "[{\"type\":\"checklist\",\"items\":{\"priorityHinted\":{\"label\":\"fetchpriority=high should be applied\",\"value\":false},\"requestDiscoverable\":{\"label\":\"Request is discoverable in initial document\",\"value\":true},\"eagerlyLoaded\":{\"label\":\"LCP resources shouldn’t use loading=lazy\",\"value\":true}}},{\"type\":\"node\",\"lhId\":\"page-0-IMG\",\"path\":\"1,HTML,1,BODY,1,DIV,0,DIV,0,PICTURE,0,IMG\",\"selector\":\"div#loading-box > div.loading-bg > picture.responsive-image > img.loading-img\",\"boundingRect\":{\"top\":420,\"bottom\":520,\"left\":619,\"right\":719,\"width\":100,\"height\":100},\"snippet\":\"<img class=\\\"loading-img\\\" src=\\\"/img/logo.svg\\\" alt=\\\"\\\" loading=\\\"eager\\\" decoding=\\\"async\\\" data-original=\\\"/img/logo.svg\\\">\",\"nodeLabel\":\"div#loading-box > div.loading-bg > picture.responsive-image > img.loading-img\"}]"
+              },
+              {
+                "id": "network-dependency-tree-insight",
+                "title": "Network dependency tree",
+                "score": 0,
+                "details": "[{\"type\":\"list-section\",\"value\":{\"type\":\"network-tree\",\"chains\":{\"8775B5DD93A016B5ABB048A12D5D1615\":{\"url\":\"http://127.0.0.1:4399/collections/field-notes/\",\"navStartToEndTime\":30,\"transferSize\":10170,\"isLongest\":true,\"children\":{\"5561.5\":{\"url\":\"http://127.0.0.1:4399/icon/font.css\",\"navStartToEndTime\":49,\"transferSize\":2261,\"isLongest\":true,\"children\":{\"5561.44\":{\"url\":\"http://127.0.0.1:4399/icon/fonts/icomoon.woff?aavezc\",\"navStartToEndTime\":141,\"transferSize\":49227,\"isLongest\":true,\"children\":{}}}},\"5561.42\":{\"url\":\"http://127.0.0.1:4399/manifest.json\",\"navStartToEndTime\":127,\"transferSize\":546,\"children\":{}},\"5561.2\":{\"url\":\"http://127.0.0.1:4399/_astro/ClientRouter.astro_astro_type_script_index_0_lang.Dl5zeXL3.js\",\"navStartToEndTime\":43,\"transferSize\":2104,\"children\":{\"5561.43\":{\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"navStartToEndTime\":127,\"transferSize\":4657,\"children\":{}}}},\"5561.29\":{\"url\":\"http://127.0.0.1:4399/js/activity.js\",\"navStartToEndTime\":70,\"transferSize\":2528,\"children\":{}},\"5561.20\":{\"url\":\"http://127.0.0.1:4399/css/post-copyright-one.css\",\"navStartToEndTime\":69,\"transferSize\":1929,\"children\":{}},\"5561.17\":{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"navStartToEndTime\":66,\"transferSize\":3209,\"children\":{}},\"5561.10\":{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"navStartToEndTime\":62,\"transferSize\":3526,\"children\":{}},\"5561.9\":{\"url\":\"http://127.0.0.1:4399/css/custom.css\",\"navStartToEndTime\":59,\"transferSize\":337,\"children\":{}},\"5561.16\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"navStartToEndTime\":59,\"transferSize\":5536,\"children\":{}},\"5561.7\":{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"navStartToEndTime\":59,\"transferSize\":12875,\"children\":{}},\"5561.4\":{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"navStartToEndTime\":58,\"transferSize\":25437,\"children\":{}},\"5561.12\":{\"url\":\"http://127.0.0.1:4399/css/read-mode.css\",\"navStartToEndTime\":53,\"transferSize\":1544,\"children\":{}},\"5561.11\":{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"navStartToEndTime\":52,\"transferSize\":838,\"children\":{}},\"5561.8\":{\"url\":\"http://127.0.0.1:4399/css/i18n.css\",\"navStartToEndTime\":52,\"transferSize\":1681,\"children\":{}},\"5561.6\":{\"url\":\"http://127.0.0.1:4399/dist/css/collection.css\",\"navStartToEndTime\":47,\"transferSize\":1361,\"children\":{}},\"5561.3\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"navStartToEndTime\":44,\"transferSize\":2724,\"children\":{}}}}},\"longestChain\":{\"duration\":141}}},{\"type\":\"list-section\",\"title\":\"Preconnected origins\",\"description\":\"[preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints help the browser establish a connection earlier in the page load, saving time when the first request for that origin is made. The following are the origins that the page preconnected to.\",\"value\":{\"type\":\"text\",\"value\":\"No origins were preconnected\"}},{\"type\":\"list-section\",\"title\":\"Preconnect candidates\",\"description\":\"Add [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints to your most important origins, but try to use no more than 4\",\"value\":{\"type\":\"text\",\"value\":\"No additional origins are good candidates for preconnecting\"}}]"
+              },
+              {
+                "id": "render-blocking-insight",
+                "title": "Render-blocking requests",
+                "score": 0,
+                "display": "Est savings of 140 ms",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"totalBytes\":3209},{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"totalBytes\":3526},{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"totalBytes\":25437,\"wastedMs\":165},{\"url\":\"http://127.0.0.1:4399/css/custom.css\",\"totalBytes\":337,\"wastedMs\":85},{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"totalBytes\":12875,\"wastedMs\":125}]"
+              }
+            ],
+            "warnings": []
+          }
+        },
+        {
+          "name": "chinese-home",
+          "route": "/zh-CN/",
+          "performanceRange": [
+            100,
+            100
+          ],
+          "allScores": [
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            }
+          ],
+          "representative": {
+            "file": "chinese-home-2.report.html",
+            "categories": {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            "lighthouseVersion": "13.6.0",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+            "configSettings": {
+              "output": [
+                "json",
+                "html"
+              ],
+              "maxWaitForFcp": 30000,
+              "maxWaitForLoad": 45000,
+              "pauseAfterFcpMs": 1000,
+              "pauseAfterLoadMs": 1000,
+              "networkQuietThresholdMs": 1000,
+              "cpuQuietThresholdMs": 1000,
+              "formFactor": "desktop",
+              "throttling": {
+                "rttMs": 40,
+                "throughputKbps": 10240,
+                "requestLatencyMs": 0,
+                "downloadThroughputKbps": 0,
+                "uploadThroughputKbps": 0,
+                "cpuSlowdownMultiplier": 1
+              },
+              "throttlingMethod": "simulate",
+              "screenEmulation": {
+                "mobile": false,
+                "width": 1350,
+                "height": 940,
+                "deviceScaleFactor": 1,
+                "disabled": false
+              },
+              "emulatedUserAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
+              "auditMode": false,
+              "gatherMode": false,
+              "clearStorageTypes": [
+                "file_systems",
+                "shader_cache",
+                "service_workers",
+                "cache_storage"
+              ],
+              "disableStorageReset": false,
+              "debugNavigation": false,
+              "channel": "cli",
+              "usePassiveGathering": false,
+              "disableFullPageScreenshot": false,
+              "skipAboutBlank": false,
+              "blankPage": "about:blank",
+              "ignoreStatusCode": false,
+              "locale": "en-US",
+              "blockedUrlPatterns": null,
+              "additionalTraceCategories": null,
+              "extraHeaders": null,
+              "precomputedLanternData": null,
+              "onlyAudits": null,
+              "onlyCategories": [
+                "performance",
+                "accessibility",
+                "best-practices",
+                "seo"
+              ],
+              "skipAudits": null
+            },
+            "metrics": {
+              "first-contentful-paint": {
+                "value": 331.13379999999995,
+                "display": "0.3 s"
+              },
+              "largest-contentful-paint": {
+                "value": 331.13379999999995,
+                "display": "0.3 s"
+              },
+              "total-blocking-time": {
+                "value": 0,
+                "display": "0 ms"
+              },
+              "cumulative-layout-shift": {
+                "value": 3.650934637841118e-05,
+                "display": "0"
+              },
+              "speed-index": {
+                "value": 452.1116298920541,
+                "display": "0.5 s"
+              }
+            },
+            "findings": [
+              {
+                "id": "unminified-javascript",
+                "title": "Minify JavaScript",
+                "score": 0.5,
+                "display": "Est savings of 10 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/js/utils.js\",\"totalBytes\":11505,\"wastedBytes\":4284,\"wastedPercent\":37.23575546668052},{\"url\":\"http://127.0.0.1:4399/js/bundle.js\",\"totalBytes\":11222,\"wastedBytes\":4172,\"wastedPercent\":37.17945003042507},{\"url\":\"http://127.0.0.1:4399/js/tw_cn.js\",\"totalBytes\":13218,\"wastedBytes\":2246,\"wastedPercent\":16.989935956084167}]"
+              },
+              {
+                "id": "unused-css-rules",
+                "title": "Reduce unused CSS",
+                "score": 0,
+                "display": "Est savings of 19 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"wastedBytes\":19299,\"wastedPercent\":76.76496281777406,\"totalBytes\":25141}]"
+              },
+              {
+                "id": "network-dependency-tree-insight",
+                "title": "Network dependency tree",
+                "score": 0,
+                "details": "[{\"type\":\"list-section\",\"value\":{\"type\":\"network-tree\",\"chains\":{\"A7C84FDD6598C40FB7FC3FFE44710D66\":{\"url\":\"http://127.0.0.1:4399/zh-CN/\",\"navStartToEndTime\":29,\"transferSize\":12084,\"isLongest\":true,\"children\":{\"6172.5\":{\"url\":\"http://127.0.0.1:4399/icon/font.css\",\"navStartToEndTime\":50,\"transferSize\":2261,\"isLongest\":true,\"children\":{\"6172.39\":{\"url\":\"http://127.0.0.1:4399/icon/fonts/icomoon.woff?aavezc\",\"navStartToEndTime\":137,\"transferSize\":49227,\"isLongest\":true,\"children\":{}}}},\"6172.37\":{\"url\":\"http://127.0.0.1:4399/manifest.json\",\"navStartToEndTime\":126,\"transferSize\":546,\"children\":{}},\"6172.3\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"navStartToEndTime\":46,\"transferSize\":2724,\"children\":{\"6172.38\":{\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"navStartToEndTime\":124,\"transferSize\":4657,\"children\":{}}}},\"6172.26\":{\"url\":\"http://127.0.0.1:4399/js/activity.js\",\"navStartToEndTime\":123,\"transferSize\":2528,\"children\":{}},\"6172.19\":{\"url\":\"http://127.0.0.1:4399/_astro/Pagination.astro_astro_type_script_index_0_lang.CtK9aAxl.js\",\"navStartToEndTime\":122,\"transferSize\":761,\"children\":{}},\"6172.18\":{\"url\":\"http://127.0.0.1:4399/_astro/PostCards.astro_astro_type_script_index_0_lang.d67CEGOn.js\",\"navStartToEndTime\":68,\"transferSize\":689,\"children\":{}},\"6172.14\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"navStartToEndTime\":67,\"transferSize\":5536,\"children\":{}},\"6172.17\":{\"url\":\"http://127.0.0.1:4399/_astro/RecentTop.astro_astro_type_script_index_0_lang.BglHJ69_.js\",\"navStartToEndTime\":61,\"transferSize\":692,\"children\":{}},\"6172.15\":{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"navStartToEndTime\":60,\"transferSize\":3209,\"children\":{}},\"6172.9\":{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"navStartToEndTime\":59,\"transferSize\":3526,\"children\":{}},\"6172.2\":{\"url\":\"http://127.0.0.1:4399/_astro/ClientRouter.astro_astro_type_script_index_0_lang.Dl5zeXL3.js\",\"navStartToEndTime\":58,\"transferSize\":2104,\"children\":{}},\"6172.8\":{\"url\":\"http://127.0.0.1:4399/css/custom.css\",\"navStartToEndTime\":56,\"transferSize\":337,\"children\":{}},\"6172.10\":{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"navStartToEndTime\":56,\"transferSize\":838,\"children\":{}},\"6172.4\":{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"navStartToEndTime\":55,\"transferSize\":25437,\"children\":{}},\"6172.7\":{\"url\":\"http://127.0.0.1:4399/css/i18n.css\",\"navStartToEndTime\":51,\"transferSize\":1681,\"children\":{}},\"6172.6\":{\"url\":\"http://127.0.0.1:4399/dist/css/index.css\",\"navStartToEndTime\":49,\"transferSize\":3583,\"children\":{}}}}},\"longestChain\":{\"duration\":137}}},{\"type\":\"list-section\",\"title\":\"Preconnected origins\",\"description\":\"[preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints help the browser establish a connection earlier in the page load, saving time when the first request for that origin is made. The following are the origins that the page preconnected to.\",\"value\":{\"type\":\"text\",\"value\":\"No origins were preconnected\"}},{\"type\":\"list-section\",\"title\":\"Preconnect candidates\",\"description\":\"Add [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints to your most important origins, but try to use no more than 4\",\"value\":{\"type\":\"text\",\"value\":\"No additional origins are good candidates for preconnecting\"}}]"
+              },
+              {
+                "id": "render-blocking-insight",
+                "title": "Render-blocking requests",
+                "score": 0,
+                "display": "Est savings of 140 ms",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"totalBytes\":5536},{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"totalBytes\":3526,\"wastedMs\":86},{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"totalBytes\":3209},{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"totalBytes\":25437,\"wastedMs\":166},{\"url\":\"http://127.0.0.1:4399/css/custom.css\",\"totalBytes\":337,\"wastedMs\":86}]"
+              }
+            ],
+            "warnings": []
+          }
+        }
+      ]
+    },
+    {
+      "source": "ab3f4ee0a67beb12de54b8d304c003a7fc2c40a7",
+      "device": "mobile",
+      "fixture": "theme-demo",
+      "limitations": "Production-built fictional demo on Astro preview, not the personal blog or CDN. Default Lighthouse simulated throttling. Three fresh Chrome runs; representative is median performance score.",
+      "results": [
+        {
+          "name": "home",
+          "route": "/",
+          "performanceRange": [
+            100,
+            100
+          ],
+          "allScores": [
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            }
+          ],
+          "representative": {
+            "file": "home-2.report.html",
+            "categories": {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            "lighthouseVersion": "13.6.0",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+            "configSettings": {
+              "output": [
+                "json",
+                "html"
+              ],
+              "maxWaitForFcp": 30000,
+              "maxWaitForLoad": 45000,
+              "pauseAfterFcpMs": 1000,
+              "pauseAfterLoadMs": 1000,
+              "networkQuietThresholdMs": 1000,
+              "cpuQuietThresholdMs": 1000,
+              "formFactor": "mobile",
+              "throttling": {
+                "rttMs": 150,
+                "throughputKbps": 1638.4,
+                "requestLatencyMs": 562.5,
+                "downloadThroughputKbps": 1474.5600000000002,
+                "uploadThroughputKbps": 675,
+                "cpuSlowdownMultiplier": 4
+              },
+              "throttlingMethod": "simulate",
+              "screenEmulation": {
+                "mobile": true,
+                "width": 412,
+                "height": 823,
+                "deviceScaleFactor": 1.75,
+                "disabled": false
+              },
+              "emulatedUserAgent": "Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36",
+              "auditMode": false,
+              "gatherMode": false,
+              "clearStorageTypes": [
+                "file_systems",
+                "shader_cache",
+                "service_workers",
+                "cache_storage"
+              ],
+              "disableStorageReset": false,
+              "debugNavigation": false,
+              "channel": "cli",
+              "usePassiveGathering": false,
+              "disableFullPageScreenshot": false,
+              "skipAboutBlank": false,
+              "blankPage": "about:blank",
+              "ignoreStatusCode": false,
+              "locale": "en-US",
+              "blockedUrlPatterns": null,
+              "additionalTraceCategories": null,
+              "extraHeaders": null,
+              "precomputedLanternData": null,
+              "onlyAudits": null,
+              "onlyCategories": [
+                "performance",
+                "accessibility",
+                "best-practices",
+                "seo"
+              ],
+              "skipAudits": null
+            },
+            "metrics": {
+              "first-contentful-paint": {
+                "value": 1360.1697,
+                "display": "1.4 s"
+              },
+              "largest-contentful-paint": {
+                "value": 1360.1697,
+                "display": "1.4 s"
+              },
+              "total-blocking-time": {
+                "value": 0,
+                "display": "0 ms"
+              },
+              "cumulative-layout-shift": {
+                "value": 0,
+                "display": "0"
+              },
+              "speed-index": {
+                "value": 1360.1697,
+                "display": "1.4 s"
+              }
+            },
+            "findings": [
+              {
+                "id": "first-contentful-paint",
+                "title": "First Contentful Paint",
+                "score": 0.98,
+                "display": "1.4 s",
+                "details": "[]"
+              },
+              {
+                "id": "unminified-javascript",
+                "title": "Minify JavaScript",
+                "score": 0.5,
+                "display": "Est savings of 10 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/js/utils.js\",\"totalBytes\":11505,\"wastedBytes\":4284,\"wastedPercent\":37.23575546668052},{\"url\":\"http://127.0.0.1:4399/js/bundle.js\",\"totalBytes\":11222,\"wastedBytes\":4172,\"wastedPercent\":37.17945003042507},{\"url\":\"http://127.0.0.1:4399/js/tw_cn.js\",\"totalBytes\":13218,\"wastedBytes\":2246,\"wastedPercent\":16.989935956084167}]"
+              },
+              {
+                "id": "unused-css-rules",
+                "title": "Reduce unused CSS",
+                "score": 0,
+                "display": "Est savings of 20 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"wastedBytes\":20848,\"wastedPercent\":82.92480601375706,\"totalBytes\":25141}]"
+              },
+              {
+                "id": "network-dependency-tree-insight",
+                "title": "Network dependency tree",
+                "score": 0,
+                "details": "[{\"type\":\"list-section\",\"value\":{\"type\":\"network-tree\",\"chains\":{\"127780E8A19849CAFF3B5CE5E62DFAD5\":{\"url\":\"http://127.0.0.1:4399/\",\"navStartToEndTime\":25,\"transferSize\":11274,\"isLongest\":true,\"children\":{\"3446.5\":{\"url\":\"http://127.0.0.1:4399/icon/font.css\",\"navStartToEndTime\":39,\"transferSize\":2261,\"isLongest\":true,\"children\":{\"3446.38\":{\"url\":\"http://127.0.0.1:4399/icon/fonts/icomoon.woff?aavezc\",\"navStartToEndTime\":101,\"transferSize\":49227,\"isLongest\":true,\"children\":{}}}},\"3446.2\":{\"url\":\"http://127.0.0.1:4399/_astro/ClientRouter.astro_astro_type_script_index_0_lang.Dl5zeXL3.js\",\"navStartToEndTime\":47,\"transferSize\":2104,\"children\":{\"3446.40\":{\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"navStartToEndTime\":92,\"transferSize\":4657,\"children\":{}}}},\"3446.26\":{\"url\":\"http://127.0.0.1:4399/js/activity.js\",\"navStartToEndTime\":90,\"transferSize\":2528,\"children\":{}},\"3446.37\":{\"url\":\"http://127.0.0.1:4399/manifest.json\",\"navStartToEndTime\":90,\"transferSize\":546,\"children\":{}},\"3446.19\":{\"url\":\"http://127.0.0.1:4399/_astro/Pagination.astro_astro_type_script_index_0_lang.CtK9aAxl.js\",\"navStartToEndTime\":90,\"transferSize\":761,\"children\":{}},\"3446.18\":{\"url\":\"http://127.0.0.1:4399/_astro/PostCards.astro_astro_type_script_index_0_lang.d67CEGOn.js\",\"navStartToEndTime\":90,\"transferSize\":689,\"children\":{}},\"3446.17\":{\"url\":\"http://127.0.0.1:4399/_astro/RecentTop.astro_astro_type_script_index_0_lang.BglHJ69_.js\",\"navStartToEndTime\":89,\"transferSize\":692,\"children\":{}},\"3446.3\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"navStartToEndTime\":47,\"transferSize\":2724,\"children\":{}},\"3446.14\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"navStartToEndTime\":46,\"transferSize\":5536,\"children\":{}},\"3446.10\":{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"navStartToEndTime\":46,\"transferSize\":838,\"children\":{}},\"3446.7\":{\"url\":\"http://127.0.0.1:4399/css/i18n.css\",\"navStartToEndTime\":46,\"transferSize\":1681,\"children\":{}},\"3446.15\":{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"navStartToEndTime\":45,\"transferSize\":3209,\"children\":{}},\"3446.9\":{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"navStartToEndTime\":45,\"transferSize\":3526,\"children\":{}},\"3446.4\":{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"navStartToEndTime\":45,\"transferSize\":25437,\"children\":{}},\"3446.6\":{\"url\":\"http://127.0.0.1:4399/dist/css/index.css\",\"navStartToEndTime\":40,\"transferSize\":3583,\"children\":{}},\"3446.8\":{\"url\":\"http://127.0.0.1:4399/css/custom.css\",\"navStartToEndTime\":33,\"transferSize\":337,\"children\":{}}}}},\"longestChain\":{\"duration\":101}}},{\"type\":\"list-section\",\"title\":\"Preconnected origins\",\"description\":\"[preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints help the browser establish a connection earlier in the page load, saving time when the first request for that origin is made. The following are the origins that the page preconnected to.\",\"value\":{\"type\":\"text\",\"value\":\"No origins were preconnected\"}},{\"type\":\"list-section\",\"title\":\"Preconnect candidates\",\"description\":\"Add [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints to your most important origins, but try to use no more than 4\",\"value\":{\"type\":\"text\",\"value\":\"No additional origins are good candidates for preconnecting\"}}]"
+              },
+              {
+                "id": "render-blocking-insight",
+                "title": "Render-blocking requests",
+                "score": 0,
+                "display": "Est savings of 690 ms",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/css/i18n.css\",\"totalBytes\":1681,\"wastedMs\":305},{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"totalBytes\":838,\"wastedMs\":155},{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"totalBytes\":5536,\"wastedMs\":305},{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"totalBytes\":25437,\"wastedMs\":755},{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"totalBytes\":3526,\"wastedMs\":305}]"
+              }
+            ],
+            "warnings": []
+          }
+        },
+        {
+          "name": "article",
+          "route": "/articles/welcome/",
+          "performanceRange": [
+            96,
+            96
+          ],
+          "allScores": [
+            {
+              "performance": 96,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 96,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 96,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            }
+          ],
+          "representative": {
+            "file": "article-2.report.html",
+            "categories": {
+              "performance": 96,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            "lighthouseVersion": "13.6.0",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+            "configSettings": {
+              "output": [
+                "json",
+                "html"
+              ],
+              "maxWaitForFcp": 30000,
+              "maxWaitForLoad": 45000,
+              "pauseAfterFcpMs": 1000,
+              "pauseAfterLoadMs": 1000,
+              "networkQuietThresholdMs": 1000,
+              "cpuQuietThresholdMs": 1000,
+              "formFactor": "mobile",
+              "throttling": {
+                "rttMs": 150,
+                "throughputKbps": 1638.4,
+                "requestLatencyMs": 562.5,
+                "downloadThroughputKbps": 1474.5600000000002,
+                "uploadThroughputKbps": 675,
+                "cpuSlowdownMultiplier": 4
+              },
+              "throttlingMethod": "simulate",
+              "screenEmulation": {
+                "mobile": true,
+                "width": 412,
+                "height": 823,
+                "deviceScaleFactor": 1.75,
+                "disabled": false
+              },
+              "emulatedUserAgent": "Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36",
+              "auditMode": false,
+              "gatherMode": false,
+              "clearStorageTypes": [
+                "file_systems",
+                "shader_cache",
+                "service_workers",
+                "cache_storage"
+              ],
+              "disableStorageReset": false,
+              "debugNavigation": false,
+              "channel": "cli",
+              "usePassiveGathering": false,
+              "disableFullPageScreenshot": false,
+              "skipAboutBlank": false,
+              "blankPage": "about:blank",
+              "ignoreStatusCode": false,
+              "locale": "en-US",
+              "blockedUrlPatterns": null,
+              "additionalTraceCategories": null,
+              "extraHeaders": null,
+              "precomputedLanternData": null,
+              "onlyAudits": null,
+              "onlyCategories": [
+                "performance",
+                "accessibility",
+                "best-practices",
+                "seo"
+              ],
+              "skipAudits": null
+            },
+            "metrics": {
+              "first-contentful-paint": {
+                "value": 1506.7658000000001,
+                "display": "1.5 s"
+              },
+              "largest-contentful-paint": {
+                "value": 2713.5316000000003,
+                "display": "2.7 s"
+              },
+              "total-blocking-time": {
+                "value": 1,
+                "display": "0 ms"
+              },
+              "cumulative-layout-shift": {
+                "value": 0,
+                "display": "0"
+              },
+              "speed-index": {
+                "value": 1506.7658000000001,
+                "display": "1.5 s"
+              }
+            },
+            "findings": [
+              {
+                "id": "first-contentful-paint",
+                "title": "First Contentful Paint",
+                "score": 0.96,
+                "display": "1.5 s",
+                "details": "[]"
+              },
+              {
+                "id": "largest-contentful-paint",
+                "title": "Largest Contentful Paint",
+                "score": 0.85,
+                "display": "2.7 s",
+                "details": "[]"
+              },
+              {
+                "id": "interactive",
+                "title": "Time to Interactive",
+                "score": 0.97,
+                "display": "2.7 s",
+                "details": "[]"
+              },
+              {
+                "id": "unminified-javascript",
+                "title": "Minify JavaScript",
+                "score": 0,
+                "display": "Est savings of 10 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/js/utils.js\",\"totalBytes\":11505,\"wastedBytes\":4284,\"wastedPercent\":37.23575546668052},{\"url\":\"http://127.0.0.1:4399/js/bundle.js\",\"totalBytes\":11222,\"wastedBytes\":4172,\"wastedPercent\":37.17945003042507},{\"url\":\"http://127.0.0.1:4399/js/tw_cn.js\",\"totalBytes\":13218,\"wastedBytes\":2246,\"wastedPercent\":16.989935956084167}]"
+              },
+              {
+                "id": "unused-css-rules",
+                "title": "Reduce unused CSS",
+                "score": 0,
+                "display": "Est savings of 30 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"wastedBytes\":20701,\"wastedPercent\":82.33899325360994,\"totalBytes\":25141},{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"wastedBytes\":10485,\"wastedPercent\":83.34699951409135,\"totalBytes\":12580}]"
+              },
+              {
+                "id": "network-dependency-tree-insight",
+                "title": "Network dependency tree",
+                "score": 0,
+                "details": "[{\"type\":\"list-section\",\"value\":{\"type\":\"network-tree\",\"chains\":{\"20019817A7AD2DD0ECA8D87FE906F02F\":{\"url\":\"http://127.0.0.1:4399/articles/welcome/\",\"navStartToEndTime\":21,\"transferSize\":11971,\"isLongest\":true,\"children\":{\"4059.5\":{\"url\":\"http://127.0.0.1:4399/icon/font.css\",\"navStartToEndTime\":38,\"transferSize\":2261,\"isLongest\":true,\"children\":{\"4059.45\":{\"url\":\"http://127.0.0.1:4399/icon/fonts/icomoon.woff?aavezc\",\"navStartToEndTime\":118,\"transferSize\":49227,\"isLongest\":true,\"children\":{}}}},\"4059.43\":{\"url\":\"http://127.0.0.1:4399/manifest.json\",\"navStartToEndTime\":60,\"transferSize\":546,\"children\":{}},\"4059.2\":{\"url\":\"http://127.0.0.1:4399/_astro/ClientRouter.astro_astro_type_script_index_0_lang.Dl5zeXL3.js\",\"navStartToEndTime\":35,\"transferSize\":2104,\"children\":{\"4059.44\":{\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"navStartToEndTime\":60,\"transferSize\":4657,\"children\":{}}}},\"4059.30\":{\"url\":\"http://127.0.0.1:4399/js/activity.js\",\"navStartToEndTime\":56,\"transferSize\":2528,\"children\":{}},\"4059.20\":{\"url\":\"http://127.0.0.1:4399/css/post-copyright-one.css\",\"navStartToEndTime\":56,\"transferSize\":1929,\"children\":{}},\"4059.17\":{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"navStartToEndTime\":52,\"transferSize\":3209,\"children\":{}},\"4059.16\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"navStartToEndTime\":52,\"transferSize\":5536,\"children\":{}},\"4059.12\":{\"url\":\"http://127.0.0.1:4399/libs/tocbot/4.18.2/tocbot.css\",\"navStartToEndTime\":52,\"transferSize\":831,\"children\":{}},\"4059.11\":{\"url\":\"http://127.0.0.1:4399/css/read-mode.css\",\"navStartToEndTime\":52,\"transferSize\":1544,\"children\":{}},\"4059.10\":{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"navStartToEndTime\":51,\"transferSize\":838,\"children\":{}},\"4059.6\":{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"navStartToEndTime\":51,\"transferSize\":12875,\"children\":{}},\"4059.9\":{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"navStartToEndTime\":49,\"transferSize\":3526,\"children\":{}},\"4059.4\":{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"navStartToEndTime\":48,\"transferSize\":25437,\"children\":{}},\"4059.7\":{\"url\":\"http://127.0.0.1:4399/css/i18n.css\",\"navStartToEndTime\":44,\"transferSize\":1681,\"children\":{}},\"4059.8\":{\"url\":\"http://127.0.0.1:4399/css/custom.css\",\"navStartToEndTime\":39,\"transferSize\":337,\"children\":{}},\"4059.3\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"navStartToEndTime\":35,\"transferSize\":2724,\"children\":{}}}}},\"longestChain\":{\"duration\":118}}},{\"type\":\"list-section\",\"title\":\"Preconnected origins\",\"description\":\"[preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints help the browser establish a connection earlier in the page load, saving time when the first request for that origin is made. The following are the origins that the page preconnected to.\",\"value\":{\"type\":\"text\",\"value\":\"No origins were preconnected\"}},{\"type\":\"list-section\",\"title\":\"Preconnect candidates\",\"description\":\"Add [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints to your most important origins, but try to use no more than 4\",\"value\":{\"type\":\"text\",\"value\":\"No additional origins are good candidates for preconnecting\"}}]"
+              },
+              {
+                "id": "render-blocking-insight",
+                "title": "Render-blocking requests",
+                "score": 0,
+                "display": "Est savings of 830 ms",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"totalBytes\":3209,\"wastedMs\":153},{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"totalBytes\":5536,\"wastedMs\":303},{\"url\":\"http://127.0.0.1:4399/libs/tocbot/4.18.2/tocbot.css\",\"totalBytes\":831,\"wastedMs\":153},{\"url\":\"http://127.0.0.1:4399/css/read-mode.css\",\"totalBytes\":1544,\"wastedMs\":153},{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"totalBytes\":12875,\"wastedMs\":603}]"
+              }
+            ],
+            "warnings": []
+          }
+        },
+        {
+          "name": "timeline",
+          "route": "/timeline/",
+          "performanceRange": [
+            100,
+            100
+          ],
+          "allScores": [
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            }
+          ],
+          "representative": {
+            "file": "timeline-2.report.html",
+            "categories": {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            "lighthouseVersion": "13.6.0",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+            "configSettings": {
+              "output": [
+                "json",
+                "html"
+              ],
+              "maxWaitForFcp": 30000,
+              "maxWaitForLoad": 45000,
+              "pauseAfterFcpMs": 1000,
+              "pauseAfterLoadMs": 1000,
+              "networkQuietThresholdMs": 1000,
+              "cpuQuietThresholdMs": 1000,
+              "formFactor": "mobile",
+              "throttling": {
+                "rttMs": 150,
+                "throughputKbps": 1638.4,
+                "requestLatencyMs": 562.5,
+                "downloadThroughputKbps": 1474.5600000000002,
+                "uploadThroughputKbps": 675,
+                "cpuSlowdownMultiplier": 4
+              },
+              "throttlingMethod": "simulate",
+              "screenEmulation": {
+                "mobile": true,
+                "width": 412,
+                "height": 823,
+                "deviceScaleFactor": 1.75,
+                "disabled": false
+              },
+              "emulatedUserAgent": "Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36",
+              "auditMode": false,
+              "gatherMode": false,
+              "clearStorageTypes": [
+                "file_systems",
+                "shader_cache",
+                "service_workers",
+                "cache_storage"
+              ],
+              "disableStorageReset": false,
+              "debugNavigation": false,
+              "channel": "cli",
+              "usePassiveGathering": false,
+              "disableFullPageScreenshot": false,
+              "skipAboutBlank": false,
+              "blankPage": "about:blank",
+              "ignoreStatusCode": false,
+              "locale": "en-US",
+              "blockedUrlPatterns": null,
+              "additionalTraceCategories": null,
+              "extraHeaders": null,
+              "precomputedLanternData": null,
+              "onlyAudits": null,
+              "onlyCategories": [
+                "performance",
+                "accessibility",
+                "best-practices",
+                "seo"
+              ],
+              "skipAudits": null
+            },
+            "metrics": {
+              "first-contentful-paint": {
+                "value": 1358.087,
+                "display": "1.4 s"
+              },
+              "largest-contentful-paint": {
+                "value": 1358.087,
+                "display": "1.4 s"
+              },
+              "total-blocking-time": {
+                "value": 0,
+                "display": "0 ms"
+              },
+              "cumulative-layout-shift": {
+                "value": 0,
+                "display": "0"
+              },
+              "speed-index": {
+                "value": 1358.087,
+                "display": "1.4 s"
+              }
+            },
+            "findings": [
+              {
+                "id": "first-contentful-paint",
+                "title": "First Contentful Paint",
+                "score": 0.98,
+                "display": "1.4 s",
+                "details": "[]"
+              },
+              {
+                "id": "unminified-javascript",
+                "title": "Minify JavaScript",
+                "score": 0.5,
+                "display": "Est savings of 10 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/js/utils.js\",\"totalBytes\":11505,\"wastedBytes\":4284,\"wastedPercent\":37.23575546668052},{\"url\":\"http://127.0.0.1:4399/js/bundle.js\",\"totalBytes\":11222,\"wastedBytes\":4172,\"wastedPercent\":37.17945003042507},{\"url\":\"http://127.0.0.1:4399/js/tw_cn.js\",\"totalBytes\":13218,\"wastedBytes\":2246,\"wastedPercent\":16.989935956084167}]"
+              },
+              {
+                "id": "unused-css-rules",
+                "title": "Reduce unused CSS",
+                "score": 0,
+                "display": "Est savings of 33 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"wastedBytes\":21310,\"wastedPercent\":84.76079312293993,\"totalBytes\":25141},{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"wastedBytes\":12313,\"wastedPercent\":97.87870505344995,\"totalBytes\":12580}]"
+              },
+              {
+                "id": "network-dependency-tree-insight",
+                "title": "Network dependency tree",
+                "score": 0,
+                "details": "[{\"type\":\"list-section\",\"value\":{\"type\":\"network-tree\",\"chains\":{\"B1859C465CCAC767EA6B1A44D3E59A27\":{\"url\":\"http://127.0.0.1:4399/timeline/\",\"navStartToEndTime\":22,\"transferSize\":9367,\"isLongest\":true,\"children\":{\"4737.5\":{\"url\":\"http://127.0.0.1:4399/icon/font.css\",\"navStartToEndTime\":36,\"transferSize\":2261,\"isLongest\":true,\"children\":{\"4737.36\":{\"url\":\"http://127.0.0.1:4399/icon/fonts/icomoon.woff?aavezc\",\"navStartToEndTime\":96,\"transferSize\":49227,\"isLongest\":true,\"children\":{}}}},\"4737.34\":{\"url\":\"http://127.0.0.1:4399/manifest.json\",\"navStartToEndTime\":81,\"transferSize\":546,\"children\":{}},\"4737.2\":{\"url\":\"http://127.0.0.1:4399/_astro/ClientRouter.astro_astro_type_script_index_0_lang.Dl5zeXL3.js\",\"navStartToEndTime\":31,\"transferSize\":2104,\"children\":{\"4737.35\":{\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"navStartToEndTime\":49,\"transferSize\":4657,\"children\":{}}}},\"4737.23\":{\"url\":\"http://127.0.0.1:4399/js/activity.js\",\"navStartToEndTime\":49,\"transferSize\":2528,\"children\":{}},\"4737.14\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"navStartToEndTime\":49,\"transferSize\":5536,\"children\":{}},\"4737.10\":{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"navStartToEndTime\":44,\"transferSize\":838,\"children\":{}},\"4737.15\":{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"navStartToEndTime\":44,\"transferSize\":3209,\"children\":{}},\"4737.4\":{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"navStartToEndTime\":43,\"transferSize\":25437,\"children\":{}},\"4737.9\":{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"navStartToEndTime\":40,\"transferSize\":3526,\"children\":{}},\"4737.8\":{\"url\":\"http://127.0.0.1:4399/css/custom.css\",\"navStartToEndTime\":39,\"transferSize\":337,\"children\":{}},\"4737.6\":{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"navStartToEndTime\":39,\"transferSize\":12875,\"children\":{}},\"4737.7\":{\"url\":\"http://127.0.0.1:4399/css/i18n.css\",\"navStartToEndTime\":36,\"transferSize\":1681,\"children\":{}},\"4737.3\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"navStartToEndTime\":33,\"transferSize\":2724,\"children\":{}}}}},\"longestChain\":{\"duration\":96}}},{\"type\":\"list-section\",\"title\":\"Preconnected origins\",\"description\":\"[preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints help the browser establish a connection earlier in the page load, saving time when the first request for that origin is made. The following are the origins that the page preconnected to.\",\"value\":{\"type\":\"text\",\"value\":\"No origins were preconnected\"}},{\"type\":\"list-section\",\"title\":\"Preconnect candidates\",\"description\":\"Add [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints to your most important origins, but try to use no more than 4\",\"value\":{\"type\":\"text\",\"value\":\"No additional origins are good candidates for preconnecting\"}}]"
+              },
+              {
+                "id": "render-blocking-insight",
+                "title": "Render-blocking requests",
+                "score": 0,
+                "display": "Est savings of 690 ms",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"totalBytes\":5536,\"wastedMs\":304},{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"totalBytes\":25437,\"wastedMs\":754},{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"totalBytes\":838,\"wastedMs\":154},{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"totalBytes\":3209,\"wastedMs\":154},{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"totalBytes\":12875,\"wastedMs\":604}]"
+              }
+            ],
+            "warnings": []
+          }
+        },
+        {
+          "name": "collection",
+          "route": "/collections/field-notes/",
+          "performanceRange": [
+            97,
+            97
+          ],
+          "allScores": [
+            {
+              "performance": 97,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 97,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 97,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            }
+          ],
+          "representative": {
+            "file": "collection-2.report.html",
+            "categories": {
+              "performance": 97,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            "lighthouseVersion": "13.6.0",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+            "configSettings": {
+              "output": [
+                "json",
+                "html"
+              ],
+              "maxWaitForFcp": 30000,
+              "maxWaitForLoad": 45000,
+              "pauseAfterFcpMs": 1000,
+              "pauseAfterLoadMs": 1000,
+              "networkQuietThresholdMs": 1000,
+              "cpuQuietThresholdMs": 1000,
+              "formFactor": "mobile",
+              "throttling": {
+                "rttMs": 150,
+                "throughputKbps": 1638.4,
+                "requestLatencyMs": 562.5,
+                "downloadThroughputKbps": 1474.5600000000002,
+                "uploadThroughputKbps": 675,
+                "cpuSlowdownMultiplier": 4
+              },
+              "throttlingMethod": "simulate",
+              "screenEmulation": {
+                "mobile": true,
+                "width": 412,
+                "height": 823,
+                "deviceScaleFactor": 1.75,
+                "disabled": false
+              },
+              "emulatedUserAgent": "Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36",
+              "auditMode": false,
+              "gatherMode": false,
+              "clearStorageTypes": [
+                "file_systems",
+                "shader_cache",
+                "service_workers",
+                "cache_storage"
+              ],
+              "disableStorageReset": false,
+              "debugNavigation": false,
+              "channel": "cli",
+              "usePassiveGathering": false,
+              "disableFullPageScreenshot": false,
+              "skipAboutBlank": false,
+              "blankPage": "about:blank",
+              "ignoreStatusCode": false,
+              "locale": "en-US",
+              "blockedUrlPatterns": null,
+              "additionalTraceCategories": null,
+              "extraHeaders": null,
+              "precomputedLanternData": null,
+              "onlyAudits": null,
+              "onlyCategories": [
+                "performance",
+                "accessibility",
+                "best-practices",
+                "seo"
+              ],
+              "skipAudits": null
+            },
+            "metrics": {
+              "first-contentful-paint": {
+                "value": 1360.205,
+                "display": "1.4 s"
+              },
+              "largest-contentful-paint": {
+                "value": 2620.3075,
+                "display": "2.6 s"
+              },
+              "total-blocking-time": {
+                "value": 2.5,
+                "display": "0 ms"
+              },
+              "cumulative-layout-shift": {
+                "value": 0,
+                "display": "0"
+              },
+              "speed-index": {
+                "value": 1360.205,
+                "display": "1.4 s"
+              }
+            },
+            "findings": [
+              {
+                "id": "first-contentful-paint",
+                "title": "First Contentful Paint",
+                "score": 0.98,
+                "display": "1.4 s",
+                "details": "[]"
+              },
+              {
+                "id": "largest-contentful-paint",
+                "title": "Largest Contentful Paint",
+                "score": 0.87,
+                "display": "2.6 s",
+                "details": "[]"
+              },
+              {
+                "id": "interactive",
+                "title": "Time to Interactive",
+                "score": 0.98,
+                "display": "2.6 s",
+                "details": "[]"
+              },
+              {
+                "id": "unminified-javascript",
+                "title": "Minify JavaScript",
+                "score": 0.5,
+                "display": "Est savings of 10 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/js/utils.js\",\"totalBytes\":11505,\"wastedBytes\":4284,\"wastedPercent\":37.23575546668052},{\"url\":\"http://127.0.0.1:4399/js/bundle.js\",\"totalBytes\":11222,\"wastedBytes\":4172,\"wastedPercent\":37.17945003042507},{\"url\":\"http://127.0.0.1:4399/js/tw_cn.js\",\"totalBytes\":13218,\"wastedBytes\":2246,\"wastedPercent\":16.989935956084167}]"
+              },
+              {
+                "id": "unused-css-rules",
+                "title": "Reduce unused CSS",
+                "score": 0,
+                "display": "Est savings of 31 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"wastedBytes\":20768,\"wastedPercent\":82.60620609157179,\"totalBytes\":25141},{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"wastedBytes\":11260,\"wastedPercent\":89.50892857142857,\"totalBytes\":12580}]"
+              },
+              {
+                "id": "forced-reflow-insight",
+                "title": "Forced reflow",
+                "score": 0,
+                "details": "[{\"type\":\"table\",\"headings\":[{\"key\":\"source\",\"valueType\":\"source-location\",\"label\":\"Top function call\"},{\"key\":\"reflowTime\",\"valueType\":\"ms\",\"granularity\":1,\"label\":\"Total reflow time\"}],\"items\":[{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/js/main.js\",\"urlProvider\":\"network\",\"line\":277,\"column\":30},\"reflowTime\":4.088}]},{\"type\":\"table\",\"headings\":[{\"key\":\"source\",\"valueType\":\"source-location\",\"label\":\"Source\"},{\"key\":\"reflowTime\",\"valueType\":\"ms\",\"granularity\":1,\"label\":\"Total reflow time\"}],\"items\":[{\"source\":{\"type\":\"text\",\"value\":\"[unattributed]\"},\"reflowTime\":21.283},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"urlProvider\":\"network\",\"line\":0,\"column\":5660},\"reflowTime\":1.499},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":49615},\"reflowTime\":2.139},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":50335},\"reflowTime\":0.279},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":50393},\"reflowTime\":0.144},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":50457},\"reflowTime\":0.124},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":54434},\"reflowTime\":0.117},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":49637},\"reflowTime\":1.261},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/libs/jquery/jquery-3.7.1.min.js\",\"urlProvider\":\"network\",\"line\":1,\"column\":51395},\"reflowTime\":0.281},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/js/main.js\",\"urlProvider\":\"network\",\"line\":286,\"column\":47},\"reflowTime\":3.967},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/js/main.js\",\"urlProvider\":\"network\",\"line\":299,\"column\":22},\"reflowTime\":0.121},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/js/utils.js\",\"urlProvider\":\"network\",\"line\":638,\"column\":72},\"reflowTime\":4.379},{\"source\":{\"type\":\"source-location\",\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"urlProvider\":\"network\",\"line\":0,\"column\":2443},\"reflowTime\":0.502}]}]"
+              },
+              {
+                "id": "lcp-discovery-insight",
+                "title": "LCP request discovery",
+                "score": 0,
+                "details": "[{\"type\":\"checklist\",\"items\":{\"priorityHinted\":{\"label\":\"fetchpriority=high should be applied\",\"value\":false},\"requestDiscoverable\":{\"label\":\"Request is discoverable in initial document\",\"value\":true},\"eagerlyLoaded\":{\"label\":\"LCP resources shouldn’t use loading=lazy\",\"value\":true}}},{\"type\":\"node\",\"lhId\":\"page-0-IMG\",\"path\":\"1,HTML,1,BODY,1,DIV,0,DIV,0,PICTURE,0,IMG\",\"selector\":\"div#loading-box > div.loading-bg > picture.responsive-image > img.loading-img\",\"boundingRect\":{\"top\":362,\"bottom\":462,\"left\":156,\"right\":256,\"width\":100,\"height\":100},\"snippet\":\"<img class=\\\"loading-img\\\" src=\\\"/img/logo.svg\\\" alt=\\\"\\\" loading=\\\"eager\\\" decoding=\\\"async\\\" data-original=\\\"/img/logo.svg\\\">\",\"nodeLabel\":\"div#loading-box > div.loading-bg > picture.responsive-image > img.loading-img\"}]"
+              },
+              {
+                "id": "network-dependency-tree-insight",
+                "title": "Network dependency tree",
+                "score": 0,
+                "details": "[{\"type\":\"list-section\",\"value\":{\"type\":\"network-tree\",\"chains\":{\"EFA7E225D4EE5BEF1CF1D529B5BA94B6\":{\"url\":\"http://127.0.0.1:4399/collections/field-notes/\",\"navStartToEndTime\":20,\"transferSize\":10170,\"isLongest\":true,\"children\":{\"5341.5\":{\"url\":\"http://127.0.0.1:4399/icon/font.css\",\"navStartToEndTime\":36,\"transferSize\":2261,\"isLongest\":true,\"children\":{\"5341.44\":{\"url\":\"http://127.0.0.1:4399/icon/fonts/icomoon.woff?aavezc\",\"navStartToEndTime\":101,\"transferSize\":49227,\"isLongest\":true,\"children\":{}}}},\"5341.42\":{\"url\":\"http://127.0.0.1:4399/manifest.json\",\"navStartToEndTime\":92,\"transferSize\":546,\"children\":{}},\"5341.2\":{\"url\":\"http://127.0.0.1:4399/_astro/ClientRouter.astro_astro_type_script_index_0_lang.Dl5zeXL3.js\",\"navStartToEndTime\":38,\"transferSize\":2104,\"children\":{\"5341.43\":{\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"navStartToEndTime\":92,\"transferSize\":4657,\"children\":{}}}},\"5341.29\":{\"url\":\"http://127.0.0.1:4399/js/activity.js\",\"navStartToEndTime\":56,\"transferSize\":2528,\"children\":{}},\"5341.20\":{\"url\":\"http://127.0.0.1:4399/css/post-copyright-one.css\",\"navStartToEndTime\":56,\"transferSize\":1929,\"children\":{}},\"5341.17\":{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"navStartToEndTime\":55,\"transferSize\":3209,\"children\":{}},\"5341.16\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"navStartToEndTime\":49,\"transferSize\":5536,\"children\":{}},\"5341.10\":{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"navStartToEndTime\":49,\"transferSize\":3526,\"children\":{}},\"5341.8\":{\"url\":\"http://127.0.0.1:4399/css/i18n.css\",\"navStartToEndTime\":48,\"transferSize\":1681,\"children\":{}},\"5341.12\":{\"url\":\"http://127.0.0.1:4399/css/read-mode.css\",\"navStartToEndTime\":48,\"transferSize\":1544,\"children\":{}},\"5341.11\":{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"navStartToEndTime\":48,\"transferSize\":838,\"children\":{}},\"5341.4\":{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"navStartToEndTime\":48,\"transferSize\":25437,\"children\":{}},\"5341.9\":{\"url\":\"http://127.0.0.1:4399/css/custom.css\",\"navStartToEndTime\":41,\"transferSize\":337,\"children\":{}},\"5341.3\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"navStartToEndTime\":38,\"transferSize\":2724,\"children\":{}},\"5341.7\":{\"url\":\"http://127.0.0.1:4399/dist/css/post.css\",\"navStartToEndTime\":37,\"transferSize\":12875,\"children\":{}},\"5341.6\":{\"url\":\"http://127.0.0.1:4399/dist/css/collection.css\",\"navStartToEndTime\":36,\"transferSize\":1361,\"children\":{}}}}},\"longestChain\":{\"duration\":101}}},{\"type\":\"list-section\",\"title\":\"Preconnected origins\",\"description\":\"[preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints help the browser establish a connection earlier in the page load, saving time when the first request for that origin is made. The following are the origins that the page preconnected to.\",\"value\":{\"type\":\"text\",\"value\":\"No origins were preconnected\"}},{\"type\":\"list-section\",\"title\":\"Preconnect candidates\",\"description\":\"Add [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints to your most important origins, but try to use no more than 4\",\"value\":{\"type\":\"text\",\"value\":\"No additional origins are good candidates for preconnecting\"}}]"
+              },
+              {
+                "id": "render-blocking-insight",
+                "title": "Render-blocking requests",
+                "score": 0,
+                "display": "Est savings of 690 ms",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"totalBytes\":3209,\"wastedMs\":155},{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"totalBytes\":3526,\"wastedMs\":155},{\"url\":\"http://127.0.0.1:4399/css/i18n.css\",\"totalBytes\":1681,\"wastedMs\":305},{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"totalBytes\":5536,\"wastedMs\":305},{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"totalBytes\":25437,\"wastedMs\":755}]"
+              }
+            ],
+            "warnings": []
+          }
+        },
+        {
+          "name": "chinese-home",
+          "route": "/zh-CN/",
+          "performanceRange": [
+            100,
+            100
+          ],
+          "allScores": [
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            }
+          ],
+          "representative": {
+            "file": "chinese-home-2.report.html",
+            "categories": {
+              "performance": 100,
+              "accessibility": 100,
+              "best-practices": 100,
+              "seo": 100
+            },
+            "lighthouseVersion": "13.6.0",
+            "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+            "configSettings": {
+              "output": [
+                "json",
+                "html"
+              ],
+              "maxWaitForFcp": 30000,
+              "maxWaitForLoad": 45000,
+              "pauseAfterFcpMs": 1000,
+              "pauseAfterLoadMs": 1000,
+              "networkQuietThresholdMs": 1000,
+              "cpuQuietThresholdMs": 1000,
+              "formFactor": "mobile",
+              "throttling": {
+                "rttMs": 150,
+                "throughputKbps": 1638.4,
+                "requestLatencyMs": 562.5,
+                "downloadThroughputKbps": 1474.5600000000002,
+                "uploadThroughputKbps": 675,
+                "cpuSlowdownMultiplier": 4
+              },
+              "throttlingMethod": "simulate",
+              "screenEmulation": {
+                "mobile": true,
+                "width": 412,
+                "height": 823,
+                "deviceScaleFactor": 1.75,
+                "disabled": false
+              },
+              "emulatedUserAgent": "Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Mobile Safari/537.36",
+              "auditMode": false,
+              "gatherMode": false,
+              "clearStorageTypes": [
+                "file_systems",
+                "shader_cache",
+                "service_workers",
+                "cache_storage"
+              ],
+              "disableStorageReset": false,
+              "debugNavigation": false,
+              "channel": "cli",
+              "usePassiveGathering": false,
+              "disableFullPageScreenshot": false,
+              "skipAboutBlank": false,
+              "blankPage": "about:blank",
+              "ignoreStatusCode": false,
+              "locale": "en-US",
+              "blockedUrlPatterns": null,
+              "additionalTraceCategories": null,
+              "extraHeaders": null,
+              "precomputedLanternData": null,
+              "onlyAudits": null,
+              "onlyCategories": [
+                "performance",
+                "accessibility",
+                "best-practices",
+                "seo"
+              ],
+              "skipAudits": null
+            },
+            "metrics": {
+              "first-contentful-paint": {
+                "value": 1359.6603,
+                "display": "1.4 s"
+              },
+              "largest-contentful-paint": {
+                "value": 1359.6603,
+                "display": "1.4 s"
+              },
+              "total-blocking-time": {
+                "value": 0,
+                "display": "0 ms"
+              },
+              "cumulative-layout-shift": {
+                "value": 8.888425491178679e-05,
+                "display": "0"
+              },
+              "speed-index": {
+                "value": 1359.6603,
+                "display": "1.4 s"
+              }
+            },
+            "findings": [
+              {
+                "id": "first-contentful-paint",
+                "title": "First Contentful Paint",
+                "score": 0.98,
+                "display": "1.4 s",
+                "details": "[]"
+              },
+              {
+                "id": "unminified-javascript",
+                "title": "Minify JavaScript",
+                "score": 0.5,
+                "display": "Est savings of 10 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/js/utils.js\",\"totalBytes\":11505,\"wastedBytes\":4284,\"wastedPercent\":37.23575546668052},{\"url\":\"http://127.0.0.1:4399/js/bundle.js\",\"totalBytes\":11222,\"wastedBytes\":4172,\"wastedPercent\":37.17945003042507},{\"url\":\"http://127.0.0.1:4399/js/tw_cn.js\",\"totalBytes\":13218,\"wastedBytes\":2246,\"wastedPercent\":16.989935956084167}]"
+              },
+              {
+                "id": "unused-css-rules",
+                "title": "Reduce unused CSS",
+                "score": 0,
+                "display": "Est savings of 20 KiB",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"wastedBytes\":20848,\"wastedPercent\":82.92480601375706,\"totalBytes\":25141}]"
+              },
+              {
+                "id": "network-dependency-tree-insight",
+                "title": "Network dependency tree",
+                "score": 0,
+                "details": "[{\"type\":\"list-section\",\"value\":{\"type\":\"network-tree\",\"chains\":{\"1CF89EEAAC1656013400279838608D08\":{\"url\":\"http://127.0.0.1:4399/zh-CN/\",\"navStartToEndTime\":22,\"transferSize\":12084,\"isLongest\":true,\"children\":{\"5954.5\":{\"url\":\"http://127.0.0.1:4399/icon/font.css\",\"navStartToEndTime\":38,\"transferSize\":2261,\"isLongest\":true,\"children\":{\"5954.39\":{\"url\":\"http://127.0.0.1:4399/icon/fonts/icomoon.woff?aavezc\",\"navStartToEndTime\":100,\"transferSize\":49227,\"isLongest\":true,\"children\":{}}}},\"5954.2\":{\"url\":\"http://127.0.0.1:4399/_astro/ClientRouter.astro_astro_type_script_index_0_lang.Dl5zeXL3.js\",\"navStartToEndTime\":31,\"transferSize\":2104,\"children\":{\"5954.38\":{\"url\":\"http://127.0.0.1:4399/_astro/client.Dzux6Bk7.js\",\"navStartToEndTime\":93,\"transferSize\":4657,\"children\":{}}}},\"5954.37\":{\"url\":\"http://127.0.0.1:4399/manifest.json\",\"navStartToEndTime\":92,\"transferSize\":546,\"children\":{}},\"5954.26\":{\"url\":\"http://127.0.0.1:4399/js/activity.js\",\"navStartToEndTime\":47,\"transferSize\":2528,\"children\":{}},\"5954.18\":{\"url\":\"http://127.0.0.1:4399/_astro/PostCards.astro_astro_type_script_index_0_lang.d67CEGOn.js\",\"navStartToEndTime\":47,\"transferSize\":689,\"children\":{}},\"5954.17\":{\"url\":\"http://127.0.0.1:4399/_astro/RecentTop.astro_astro_type_script_index_0_lang.BglHJ69_.js\",\"navStartToEndTime\":47,\"transferSize\":692,\"children\":{}},\"5954.19\":{\"url\":\"http://127.0.0.1:4399/_astro/Pagination.astro_astro_type_script_index_0_lang.CtK9aAxl.js\",\"navStartToEndTime\":43,\"transferSize\":761,\"children\":{}},\"5954.15\":{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"navStartToEndTime\":43,\"transferSize\":3209,\"children\":{}},\"5954.9\":{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"navStartToEndTime\":43,\"transferSize\":3526,\"children\":{}},\"5954.8\":{\"url\":\"http://127.0.0.1:4399/css/custom.css\",\"navStartToEndTime\":41,\"transferSize\":337,\"children\":{}},\"5954.14\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.C18an8L7.css\",\"navStartToEndTime\":41,\"transferSize\":5536,\"children\":{}},\"5954.10\":{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"navStartToEndTime\":41,\"transferSize\":838,\"children\":{}},\"5954.4\":{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"navStartToEndTime\":40,\"transferSize\":25437,\"children\":{}},\"5954.6\":{\"url\":\"http://127.0.0.1:4399/dist/css/index.css\",\"navStartToEndTime\":35,\"transferSize\":3583,\"children\":{}},\"5954.7\":{\"url\":\"http://127.0.0.1:4399/css/i18n.css\",\"navStartToEndTime\":34,\"transferSize\":1681,\"children\":{}},\"5954.3\":{\"url\":\"http://127.0.0.1:4399/_astro/SiteLayout.astro_astro_type_script_index_0_lang.CJs_Rd0_.js\",\"navStartToEndTime\":31,\"transferSize\":2724,\"children\":{}}}}},\"longestChain\":{\"duration\":100}}},{\"type\":\"list-section\",\"title\":\"Preconnected origins\",\"description\":\"[preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints help the browser establish a connection earlier in the page load, saving time when the first request for that origin is made. The following are the origins that the page preconnected to.\",\"value\":{\"type\":\"text\",\"value\":\"No origins were preconnected\"}},{\"type\":\"list-section\",\"title\":\"Preconnect candidates\",\"description\":\"Add [preconnect](https://developer.chrome.com/docs/lighthouse/performance/uses-rel-preconnect/) hints to your most important origins, but try to use no more than 4\",\"value\":{\"type\":\"text\",\"value\":\"No additional origins are good candidates for preconnecting\"}}]"
+              },
+              {
+                "id": "render-blocking-insight",
+                "title": "Render-blocking requests",
+                "score": 0,
+                "display": "Est savings of 680 ms",
+                "details": "[{\"url\":\"http://127.0.0.1:4399/css/activity.css\",\"totalBytes\":3526,\"wastedMs\":305},{\"url\":\"http://127.0.0.1:4399/_astro/_..DWXDZmU8.css\",\"totalBytes\":3209,\"wastedMs\":155},{\"url\":\"http://127.0.0.1:4399/css/custom.css\",\"totalBytes\":337,\"wastedMs\":305},{\"url\":\"http://127.0.0.1:4399/dist/css/base.css\",\"totalBytes\":25437,\"wastedMs\":755},{\"url\":\"http://127.0.0.1:4399/libs/snackbar/snackbar.min.css\",\"totalBytes\":838,\"wastedMs\":155}]"
+              }
+            ],
+            "warnings": []
+          }
+        }
+      ]
+    }
+  ]
+}

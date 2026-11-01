@@ -4,12 +4,12 @@ Approved scope: implement the Lighthouse/image plan, resolve Actions version ann
 
 ## Work items
 
-- [ ] Theme runtime: remove unnecessary libraries from initial pages; build-time code highlighting; load page capabilities safely through ClientRouter; remove duplicated global/page CSS; fix observed accessibility and SEO findings.
-- [ ] Images: unify Markdown picture output, dimensions and sizes; honor AVIF configuration; improve component coverage without discarding originals; verify temporal LCP evidence before changing loading priority.
-- [ ] Actions: inspect actual annotations, update incompatible/deprecated official actions and pin runner OS where relevant; identify external runner notices separately.
-- [ ] Studio: update application identifier and references; document application-data identity implications; verify all platform builds remotely.
-- [ ] npm: separate theme version/tag from Studio, dry-run package validation, version checks and trusted publishing, document required npm-side configuration. Do not publish a public package during validation.
-- [ ] Review, push, run CI and Lighthouse against the changed SHA, compare the same production demo pages and preserve regression evidence.
+- [x] Theme runtime: remove unnecessary libraries from initial pages; build-time code highlighting; load page capabilities safely through ClientRouter; remove duplicated global/page CSS; fix observed accessibility and SEO findings.
+- [x] Images: unify Markdown picture output, dimensions and sizes; honor AVIF configuration; improve component coverage without discarding originals; verify temporal LCP evidence before changing loading priority.
+- [x] Actions: inspect actual annotations, update incompatible/deprecated official actions and pin runner OS where relevant; identify external runner notices separately.
+- [x] Studio: update application identifier and references; document application-data identity implications; verify all platform builds remotely.
+- [x] npm: separate theme version/tag from Studio, dry-run package validation, version checks and trusted publishing, document required npm-side configuration. Do not publish a public package during validation.
+- [x] Review, push, run CI and Lighthouse against the changed SHA, compare the same production demo pages and preserve regression evidence.
 
 ## Verification
 
@@ -18,3 +18,7 @@ Behavior tests cover escaped/unknown code, language transitions and toolbar inte
 ## Review focus
 
 ClientRouter first-load vs subsequent navigation ordering; vendor dependencies and late callbacks after navigation; no content XSS from build-time highlighting/images; responsive source and cache consistency; npm publishing from an immutable matching tag only, without turning manual verification into publishing; old desktop application data remains untouched after the identifier change.
+
+## Outcome
+
+All scoped implementation and remote validation completed. See [results](performance-release-results-2026-11-01.md) for actual measurements, CI runs, annotations, external npm setup and retained limitations.
