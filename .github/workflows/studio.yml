@@ -37,7 +37,7 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   VITE_STUDIO_GITHUB_CLIENT_ID: ${{ vars.STUDIO_GITHUB_CLIENT_ID }}
-  VITE_STUDIO_CNB_CLIENT_ID: ${{ vars.STUDIO_CNB_CLIENT_ID }}
+  VITE_STUDIO_CNB_CLIENT_ID: ${{ vars.STUDIO_CNB_LOGIN_ENABLED == 'true' && vars.STUDIO_CNB_CLIENT_ID || '' }}
   VITE_STUDIO_RELEASE_REPOSITORY: ${{ github.repository }}
   VITE_STUDIO_IOS_UPDATE_URL: ${{ vars.STUDIO_IOS_UPDATE_URL }}
 jobs:
@@ -236,9 +236,9 @@ jobs:
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      - name: Signed APK and AAB
+      - name: Signed APK
         if: needs.prepare.outputs.release == 'true'
-        run: npm exec -w @wondershine/studio -- tauri android build --ci --apk --aab
+        run: npm exec -w @wondershine/studio -- tauri android build --ci --apk
         env:
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}

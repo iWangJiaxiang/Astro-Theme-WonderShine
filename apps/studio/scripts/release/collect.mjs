@@ -30,7 +30,7 @@ async function visit(path) {
 }
 await visit(process.env.STUDIO_BUNDLE_DIR);
 if (!assets.length) throw new Error(`No installable output found for ${platform}`);
-if (platform === 'android' && process.env.STUDIO_RELEASE === 'true' && (!assets.some(n => n.endsWith('.apk')) || !assets.some(n => n.endsWith('.aab')) || assets.some(n => /unsigned|debug/.test(n)))) throw new Error('Release requires signed APK and AAB outputs');
+if (platform === 'android' && process.env.STUDIO_RELEASE === 'true' && (!assets.some(n => n.endsWith('.apk')) || assets.some(n => /unsigned|debug/.test(n)))) throw new Error('Release requires signed APK outputs');
 if (platform === 'ios' && process.env.STUDIO_RELEASE === 'true' && !assets.some(n => n.endsWith('.ipa'))) throw new Error('Release requires an IPA');
 const files = await Promise.all(assets.sort().map(async name => ({ name, sha256: createHash('sha256').update(await readFile(join(output, name))).digest('hex') })));
 await writeFile(join(output, `${platform}.json`), JSON.stringify({ platform, version: process.env.STUDIO_VERSION, source: process.env.STUDIO_SOURCE, files }, null, 2));

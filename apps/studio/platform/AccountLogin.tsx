@@ -52,9 +52,10 @@ export default function AccountLogin({ onSelect, disabled }: { onSelect: (accoun
     } catch { if (!signal.aborted) setError('无法读取仓库，请检查授权权限'); }
     finally { if (!signal.aborted) setBusy(false); }
   }
+  if (!Object.values(clientIds).some(id => id.trim())) return null;
   return <div className="account-login">
     <div className="account-login-buttons">
-      {(['github', 'cnb'] as const).map(id => <button key={id} type="button" className="secondary" disabled={disabled} onClick={() => void start(id)}>{t('使用 {provider} 登录', { provider: id === 'github' ? 'GitHub' : 'CNB' })}</button>)}
+      {(['github', 'cnb'] as const).filter(id => clientIds[id].trim()).map(id => <button key={id} type="button" className="secondary" disabled={disabled} onClick={() => void start(id)}>{t('使用 {provider} 登录', { provider: id === 'github' ? 'GitHub' : 'CNB' })}</button>)}
     </div>
     {provider && <dialog ref={dialog} className="selection-dialog oauth-dialog" onCancel={reset} onClose={reset}>
       <section className="selection-panel"><header className="card-heading"><h2>{account ? t('选择仓库') : t('登录 {provider}', { provider: provider === 'github' ? 'GitHub' : 'CNB' })}</h2><button type="button" className="text-button" onClick={() => dialog.current?.close()}>{t('取消')}</button></header>

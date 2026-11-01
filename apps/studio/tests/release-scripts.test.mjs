@@ -99,13 +99,14 @@ test('collector refuses empty outputs and debug Android artifacts for a release'
     const collect = () => execFileSync(process.execPath, [script('collect')], { cwd: root, env, stdio: 'pipe' });
     assert.throws(collect, /No installable output/);
     await writeFile(join(root, 'bundle/app-debug.apk'), 'debug');
-    assert.throws(collect, /signed APK and AAB/);
+    assert.throws(collect, /signed APK/);
     await rm(join(root, 'bundle/app-debug.apk'));
     await writeFile(join(root, 'bundle/app-release.apk'), 'signed fixture apk');
-    await writeFile(join(root, 'bundle/app-release.aab'), 'signed fixture aab');
+    // APK-only distribution must not require an App Bundle.
     collect();
     const manifest = JSON.parse(await readFile(join(root, 'temp/studio-artifacts/android.json')));
-    assert.equal(manifest.files.length, 2);
+    assert.equal(manifest.files.length, 1);
+    assert.match(manifest.files[0].name, /\.apk$/);
     assert.match(manifest.files[0].sha256, /^[0-9a-f]{64}$/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
@@ -152,7 +153,7 @@ else if (args[1] === 'upload') {
     for (const platform of platforms) {
       await rm(join(root, 'bundle'), { recursive: true });
       await mkdir(join(root, 'bundle'));
-      const files = platform === 'android' ? ['app-release.apk', 'app-release.aab'] : platform === 'ios' ? ['app.ipa'] : platform.startsWith('linux') ? ['app.deb'] : platform.startsWith('macos') ? ['app.dmg'] : ['app.exe'];
+      const files = platform === 'android' ? ['app-release.apk'] : platform === 'ios' ? ['app.ipa'] : platform.startsWith('linux') ? ['app.deb'] : platform.startsWith('macos') ? ['app.dmg'] : ['app.exe'];
       for (const file of files) await writeFile(join(root, 'bundle', file), `${platform} fixture`);
       env.STUDIO_PLATFORM = platform;
       run('collect');
