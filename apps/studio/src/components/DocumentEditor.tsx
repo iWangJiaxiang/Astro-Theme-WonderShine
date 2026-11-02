@@ -1,4 +1,5 @@
 import SaveButton from "./SaveButton";
+import { createDraftBackup } from "../draft-backup";
 import { saveContext } from "../save-preferences";
 import type { SaveMode } from "../../shared/save";
 import { prepareEditorIcons } from "../editor-assets";
@@ -543,18 +544,33 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         emit("dirty", documentDirty || configurationDirty || pendingBranch),
       { flush: "sync" },
     );
-    watch(
-      [body, values],
-      () => {
-        if (forgotten || !ready.value || !dirty.value) return;
-        try {
-          localStorage.setItem(storageKey, snapshot());
-        } catch {
-          message.value = "浏览器草稿备份不可用，请及时保存或下载。";
-        }
-      },
-      { deep: true },
-    );
+    const backup = createDraftBackup(() => {
+      if (forgotten || !ready.value || !dirty.value) return;
+      try {
+        localStorage.setItem(storageKey, snapshot());
+      } catch {
+        message.value = "浏览器草稿备份不可用，请及时保存或下载。";
+      }
+    });
+    // Track nested metadata separately: deep watching body serializes the entire
+    // document synchronously on every keystroke before scheduling its backup.
+    const scheduleBackup = () => {
+      if (!forgotten && ready.value && dirty.value) backup.schedule();
+    };
+    watch(body, scheduleBackup);
+    watch(values, scheduleBackup, { deep: true });
+    onMounted(() => {
+      const hidden = () => {
+        if (document.visibilityState === "hidden") flush();
+      };
+      document.addEventListener("visibilitychange", hidden);
+      window.addEventListener("pagehide", flush);
+      removeBackupListeners = () => {
+        document.removeEventListener("visibilitychange", hidden);
+        window.removeEventListener("pagehide", flush);
+      };
+    });
+    let removeBackupListeners = () => {};
     async function loadDocument() {
       loading.value = true;
       error.value = "";
@@ -631,6 +647,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       }
     }
     function discardBackup() {
+      backup.cancel();
       try {
         localStorage.removeItem(storageKey);
       } catch {
@@ -638,16 +655,14 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       }
       recovery.value = false;
     }
-    function flush() {
-      if (forgotten) return;
+    function syncRichBody() {
+      if (forgotten || !alive) return;
       if (editor && richReady)
         body.value = richEditorBody(body.value, editor.getValue());
-      if (ready.value && dirty.value)
-        try {
-          localStorage.setItem(storageKey, snapshot());
-        } catch {
-          /* Optional local backup. */
-        }
+    }
+    function flush() {
+      syncRichBody();
+      backup.flush();
     }
     function destroyEditor(sync = true) {
       if (sync) flush();
@@ -658,7 +673,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       old?.destroy();
     }
     function readRichSoon() {
-      queueMicrotask(flush);
+      queueMicrotask(syncRichBody);
     }
     function forget() {
       forgotten = true;
@@ -853,12 +868,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         if (!dirty.value) {
           discardBackup();
           aiChoiceMade.value = false;
-        } else
-          try {
-            localStorage.setItem(storageKey, snapshot());
-          } catch {
-            /* Optional local storage. */
-          }
+        } else backup.flush();
         if (!result.branchPending) emit("saved", props.path);
         return true;
       } catch (e) {
@@ -909,7 +919,9 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       if (mode.value === "rich") void changeMode("rich");
     });
     onBeforeUnmount(() => {
+      removeBackupListeners();
       flush();
+      backup.cancel();
       alive = false;
       destroyEditor(false);
       emit("dirty", false);
