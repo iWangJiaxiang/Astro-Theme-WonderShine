@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {readFileSync} from 'node:fs';
 import assert from 'node:assert/strict';
 import { publicationDateDraft, publicationDateValue } from '../src/publication-date.js';
 
@@ -17,6 +18,15 @@ test('publication editing rejects incomplete or invalid timestamps required by t
   for (const change of [{ time: '' }, { date: '' }, { date: '2026-02-30' }, { time: '25:00' }, { zone: '' }, { zone: '+25:00' }]) {
     assert.equal(publicationDateValue({ ...draft, ...change }), null);
   }
+});
+
+test('publication summary shows seconds while inputs retain millisecond precision', () => {
+  const source = readFileSync(new URL('../src/components/PublicationDateField.tsx', import.meta.url), 'utf8');
+  assert.ok(source.includes('parts.value.time.slice(0, 8)'));
+  assert.ok(source.includes('step: "0.001"'));
+  assert.ok(source.includes('zone(parts.value.zone)'));
+  const value = '2026-10-27T09:12:34.123+05:30';
+  assert.equal(publicationDateValue(publicationDateDraft(value)), value);
 });
 
 test('legacy dates can be explicitly applied as complete UTC timestamps', () => {

@@ -84,7 +84,7 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
                   ? element(
                       "small",
                       null,
-                      parts.value.time.slice(0, 5),
+                      parts.value.time.slice(0, 8).padEnd(8, ':00'),
                       " ",
                       element("span", null, zone(parts.value.zone)),
                     )

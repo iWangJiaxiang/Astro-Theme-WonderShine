@@ -2,14 +2,14 @@
 import ResponsiveImage from './ResponsiveImage.astro';
 import References from './References.astro';
 import TopicLinks from './TopicLinks.astro';
-import {formatDate} from '../lib/queries';
+import {formatDateTime} from '../lib/queries';
 import {t,localizeConfig} from '../lib/locale';
 const {site,document:thread,lang,detail=false,listing=false}=Astro.props;
 const config=localizeConfig(site,lang);
 const tr=(key:string)=>t(key,lang,site,'activity');
 ---
 <article class:list={['thread-card',{'thread-card--listing':listing}]} data-thread-id={thread.extra.id}>
-<header class="thread-author"><ResponsiveImage site={site} src={config.extra.site.author.avatar} alt="" width="36" height="36" sizes="36px" pictureStyle={listing?'display:block':undefined}/><strong>{config.author}</strong>{listing&&<span class="thread-kind">{tr('thread')}</span>}<time datetime={thread.date}>{formatDate(thread.date,lang)}</time></header>
+<header class="thread-author"><ResponsiveImage site={site} src={config.extra.site.author.avatar} alt="" width="36" height="36" sizes="36px" pictureStyle={listing?'display:block':undefined}/><strong>{config.author}</strong>{listing&&<span class="thread-kind">{tr('thread')}</span>}<time datetime={thread.date}>{formatDateTime(thread.date,lang)}</time></header>
 {thread.title&&<h2 class="thread-title"><a href={thread.url}>{thread.title}</a></h2>}
 {thread.extra.ai_translation&&<span class="ai-translation-label">{tr('ai_translation')}</span>}
 <div class="thread-body" set:html={thread.html}/>

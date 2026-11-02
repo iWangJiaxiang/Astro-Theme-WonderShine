@@ -1,0 +1,35 @@
+---
+import {activitySummary,formatDateTime,plain} from '../lib/queries';
+import {localeHome,t} from '../lib/locale';
+const {site,lang}=Astro.props;
+const summary=activitySummary(site,lang),home=localeHome(lang,site);
+const tr=(key:string)=>t(key,lang,site,'activity');
+---
+<section class="activity-overview" aria-label={tr('public_overview')}>
+  <h2>{tr('overview')}</h2>
+  <div class="activity-counts">
+    <a href={`${home}archives/`}><strong>{summary.articleCount}</strong>{tr('article')}</a>
+    <a href={`${home}threads/`}><strong>{summary.threadCount}</strong>{tr('threads')}</a>
+    <a href={`${home}topics/`}><strong>{summary.topics.length}</strong>{tr('topics')}</a>
+  </div>
+  <h3>{tr('recent')}</h3>
+  {summary.recent.length ? <ul class="activity-recent">{summary.recent.map(thread=><li><a href={thread.url}>{thread.title||plain(thread.html).slice(0,80)||tr('thread')}</a><time datetime={thread.date}>{formatDateTime(thread.date,lang)}</time></li>)}</ul> : <p>{tr('empty')}</p>}
+  <h3>{tr('topics')}</h3>
+  {summary.topics.length ? <ul class="activity-topic-counts">{summary.topics.map(({topic,count})=><li><a href={topic.url}>#{topic.title}<span>{count} {tr('entries')}</span></a></li>)}</ul> : <p>{tr('empty_topics')}</p>}
+  <nav class="activity-subscriptions" aria-label={tr('subscribe')}><a href={`${home}threads.xml`}>{tr('threads')} RSS ↗</a><a href={`${home}timeline.xml`}>{tr('timeline')} RSS ↗</a></nav>
+</section>
+<style>
+.activity-overview { margin-top:20px; border-top:1px solid var(--wjx-card-border); padding-top:16px; min-width:0; }
+.activity-overview h3 { font-size:15px; margin:18px 0 8px; }
+.activity-counts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; text-align:center; }
+.activity-counts a { display:flex; flex-direction:column; font-size:13px; }
+.activity-counts strong { font-size:20px; }
+.activity-overview ul { list-style:none; padding:0; margin:0; }
+.activity-recent li { margin-bottom:12px; overflow-wrap:anywhere; }
+.activity-recent a { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.activity-recent time { display:block; font-size:11px; color:var(--wjx-secondtext); }
+.activity-topic-counts a { display:flex; justify-content:space-between; gap:12px; overflow-wrap:anywhere; }
+.activity-topic-counts span { flex-shrink:0; color:var(--wjx-secondtext); font-size:12px; }
+.activity-subscriptions { display:flex; flex-wrap:wrap; gap:8px 16px; margin-top:16px; font-size:13px; }
+@media(max-width:900px) { .activity-overview { margin-top:12px; padding-top:12px; } .activity-recent li { margin-bottom:8px; } }
+</style>

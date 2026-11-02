@@ -1,6 +1,7 @@
 ---
 import ResponsiveImage from './ResponsiveImage.astro';
 import ThreadCard from './ThreadCard.astro';
+import ActivitySidebar from './ActivitySidebar.astro';
 import TimelineEvent from './TimelineEvent.astro';
 import Comments from './Comments.astro';
 import Pagination from './Pagination.astro';
@@ -32,5 +33,5 @@ return <article class="topic-card" data-activity-item data-kind="topic" data-id=
 {!isThreads&&<nav class="activity-pagination" data-activity-pagination aria-label={tr('pages')} hidden><button type="button" data-activity-previous>← {tr('previous')}</button><span data-activity-page aria-live="polite"></span><button type="button" data-activity-next>{tr('next')} →</button></nav>}
 </div>
 <aside class="activity-aside">{isThreads?<><ResponsiveImage site={site} class="activity-avatar" src={config.extra.site.author.avatar} alt={config.author}/><h2>{config.author}</h2><p>{config.description}</p></>:isTopic?<><h2>{tr('topic_record')}</h2><dl class="topic-dates"><dt>{tr('created')}</dt><dd>{formatDate(document.date,lang)}</dd><dt>{tr('metadata_updated')}</dt><dd>{formatDate(document.updated||document.date,lang)}</dd><dt>{tr('last_activity')}</dt><dd>{lastActivity(items)?formatDate(new Date(lastActivity(items)*1000).toISOString(),lang):tr('no_activity')}</dd></dl><p>{items.length} {tr('entries')}</p></>:<><h2>{title}</h2><p>{tr(isTopics?'topics_aside':'timeline_intro')}</p></>}
-<a href={url(isTopics?'/threads/':'/topics/')}>{isTopics?tr('threads'):`# ${tr('topics')}`} →</a>{!isThreads&&!isTopics&&!isTopic&&<><hr/><a href={`${localeHome(lang,site)}timeline.xml`}>RSS ↗</a></>}
+<a href={url(isTopics?'/threads/':'/topics/')}>{isTopics?tr('threads'):`# ${tr('topics')}`} →</a>{(isThreads||type==='timeline')&&<ActivitySidebar site={site} lang={lang}/>}
 </aside></main>}

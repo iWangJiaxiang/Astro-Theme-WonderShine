@@ -445,8 +445,15 @@
     padding:0 20px
   }
   .activity-aside{
-    display:none
+    display:block;
+    position:static;
+    margin-top:24px;
+    padding-top:16px;
+    border-top:1px solid var(--wjx-card-border)
   }
+  .activity-aside .activity-avatar{width:48px;height:48px}
+  .thread-author{flex-wrap:wrap}
+  .thread-author time{font-size:12px}
   .activity-detail{
     padding:0 16px
   }

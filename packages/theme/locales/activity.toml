@@ -1,4 +1,6 @@
 ["zh-CN"]
+overview = "内容概览"
+public_overview = "公开内容概览"
 ai_translation = "AI 翻译"
 threads = "动态"
 timeline = "时间线"
@@ -41,6 +43,8 @@ filter = "内容类型"
 pages = "分页"
 unavailable = "这条内容尚未公开。"
 [en]
+overview = "Overview"
+public_overview = "Public activity overview"
 ai_translation = "AI translation"
 threads = "Threads"
 timeline = "Timeline"
