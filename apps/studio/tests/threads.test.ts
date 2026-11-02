@@ -124,13 +124,13 @@ test('malformed threads stay visible while other independent threads remain edit
 
 test('thread saves reject layout and route overrides in both new and existing frontmatter', async t => {
   const { content, repo } = await fixture(t);
-  await assert.rejects(() => content.saveDocument('content/threads/layout/index.md', { ...thread('layout'), layout: 'post' }, 'Hidden through another layout', null), /threads/);
+  await assert.rejects(() => content.saveDocument('content/threads/layout/index.md', { ...thread('layout'), layout: 'post' }, 'Hidden through another layout', null), /thread 模板/);
   await assert.rejects(() => content.saveDocument('content/threads/path/index.md', { ...thread('path'), path: 'elsewhere' }, 'Hidden through another route', null), /公开路径/);
   assert.equal(await repo.read('content/threads/layout/index.md'), null);
   assert.equal(await repo.read('content/threads/path/index.md'), null);
   const { updateDocument } = await import('../server/content.js');
   const cases: [string, unknown, RegExp][] = [
-    ['layout', 'post', /threads/], ['layout', false, /threads/],
+    ['layout', 'post', /thread 模板/], ['layout', false, /thread 模板/],
     ['path', '/elsewhere/', /公开路径/], ['path', false, /公开路径/],
     ['slug', 'elsewhere', /slug/], ['slug', 7, /slug/],
   ];

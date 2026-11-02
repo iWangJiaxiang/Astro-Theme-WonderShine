@@ -33,7 +33,7 @@ export function threadRouteChanges(path: string, current: string | undefined, ch
   const canonical = canonicalNativeThreadRoute(location.id, location.lang, languages.defaultLanguage);
   if (changes.path && route(String(changes.path)) !== canonical) throw new StudioError(400, '动态文件 {path} 不允许自定义公开路径', { path });
   const metadata = current ? threadMetadata({ path, text: current }) : {};
-  if (metadata.path !== undefined && (typeof metadata.path !== 'string' || route(metadata.path) !== canonical)) throw new StudioError(400, '动态文件 {path} 不允许自定义公开路径', { path });
+  if (metadata.path !== undefined && metadata.path !== '' && (typeof metadata.path !== 'string' || route(metadata.path) !== canonical)) throw new StudioError(400, '动态文件 {path} 不允许自定义公开路径', { path });
   return { path: canonical.slice(1, -1) };
 }
 
