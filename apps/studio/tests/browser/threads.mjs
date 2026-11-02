@@ -80,24 +80,24 @@ try {
   assert.equal(translatedTopic.draft, true);
 
   await click('动态'); await click('发动态'); await page.waitForSelector('.markdown-source');
-  assert.equal(await page.$('.title-field'), null, 'note creation must not require a title');
-  assert.equal(await page.evaluate(() => document.body.innerText.includes('继续写一条')), false, 'notes have no continuation controls');
-  const notePath = await path(); assert.match(notePath, /^content\/notes\/[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\/index\.md$/);
+  assert.equal(await page.$('.title-field'), null, 'thread creation must not require a title');
+  assert.equal(await page.evaluate(() => document.body.innerText.includes('继续写一条')), false, 'threads have no continuation controls');
+  const threadPath = await path(); assert.match(threadPath, /^content\/threads\/[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\/index\.md$/);
   await fill('.markdown-source', '记录一个独立的想法。'); await choose('extra.topics', initialTopic.extra.id);
   await click('保存草稿'); await saved();
-  const note = await metadata(notePath);
-  assert.equal(note.draft, true); assert.equal(note.extra.kind, 'note');
-  assert.deepEqual(note.extra.topics, [initialTopic.extra.id]);
-  assert.equal(note.extra.thread_root, undefined); assert.equal(note.extra.reply_to, undefined);
-  await click('本地保存 · 可发布'); await saved(); assert.equal((await metadata(notePath)).draft, false);
+  const thread = await metadata(threadPath);
+  assert.equal(thread.draft, true); assert.equal(thread.extra.kind, 'thread');
+  assert.deepEqual(thread.extra.topics, [initialTopic.extra.id]);
+  assert.equal(thread.extra.thread_root, undefined); assert.equal(thread.extra.reply_to, undefined);
+  await click('本地保存 · 可发布'); await saved(); assert.equal((await metadata(threadPath)).draft, false);
   await click('en · 创建译文草稿'); await page.waitForFunction(() => document.querySelector('.path-label')?.textContent.endsWith('index.en.md'));
   assert.equal(await page.$eval('.markdown-source', input => input.value), '记录一个独立的想法。');
   await fill('.markdown-source', 'An independent thought.'); await click('保存草稿'); await saved();
   const translated = await metadata(await path());
-  assert.equal(translated.extra.id, note.extra.id); assert.equal(String(translated.date), String(note.date));
+  assert.equal(translated.extra.id, thread.extra.id); assert.equal(String(translated.date), String(thread.date));
   assert.deepEqual(translated.extra.topics, [initialTopic.extra.id]); assert.equal(translated.draft, true);
   assert.match(await page.$eval('[data-field="extra.topics"]', node => node.textContent), /Writing over time.*草稿/s);
-  await page.screenshot({ path: join(screenshots, 'notes-editor-desktop.png'), fullPage: true });
+  await page.screenshot({ path: join(screenshots, 'threads-editor-desktop.png'), fullPage: true });
 
   await click('文章'); await click('新建文章');
   await fill('.modal input[placeholder="给它取个名字"]', '文章关联话题');
@@ -108,7 +108,7 @@ try {
   await click('合集管理'); await page.waitForSelector('.content-library');
   assert.match(await page.$eval('.page-heading', node => node.textContent), /文章按系列整理，音乐按专辑整理/);
   assert.deepEqual(errors, []);
-  console.log('Topics browser flow passed: topic create/edit/publish/translate; independent note and article associations; note translation.');
+  console.log('Topics browser flow passed: topic create/edit/publish/translate; independent thread and article associations; thread translation.');
 } finally {
   await browser?.close(); server.kill('SIGTERM'); await rm(base, { recursive: true, force: true });
 }

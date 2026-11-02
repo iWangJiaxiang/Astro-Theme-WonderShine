@@ -1,5 +1,5 @@
 import type { Document, Site } from './types';
-import { activeTimestamp, byDate, events, isPublic, notes, plain, taxonomyDocuments, taxonomySlug } from './queries';
+import { activeTimestamp, byDate, events, isPublic, threads, plain, taxonomyDocuments, taxonomySlug } from './queries';
 import { localeConfig } from './content';
 
 export const xml = (value: unknown) => String(value ?? '').replace(/[<>&"']/g, char => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[char]!));
@@ -10,20 +10,20 @@ function filenames(site: Site, lang: string): string[] {
 }
 function articleFeedItems(site: Site, lang: string, supplied?: Document[]): Document[] {
   // Existing article feeds also contain dated collection chapters and music works.
-  return (supplied || site.documents).filter(doc => doc.lang === lang && doc.date && !['note', 'topic'].includes(doc.kind) && isPublic(doc, site)).sort(byDate);
+  return (supplied || site.documents).filter(doc => doc.lang === lang && doc.date && !['thread', 'topic'].includes(doc.kind) && isPublic(doc, site)).sort(byDate);
 }
 
 export function feeds(site: Site): Feed[] {
   const result = new Map<string, Feed>();
   const addScope = (prefix: string, lang: string, items: Document[], metadata: Pick<Feed, 'titleSuffix' | 'sectionPath'> = {}) => {
     for (const filename of filenames(site, lang)) {
-      if (!['atom.xml', 'rss.xml', 'notes.xml', 'timeline.xml'].includes(filename)) throw new Error(`Unsupported feed layout: ${filename}`);
+      if (!['atom.xml', 'rss.xml', 'threads.xml', 'timeline.xml'].includes(filename)) throw new Error(`Unsupported feed layout: ${filename}`);
       const kind = filename.slice(0, -4);
       const pathname = `${prefix}${kind}`;
       if (result.has(pathname)) throw new Error(`Duplicate feed route: ${pathname}.xml`);
       // The legacy custom templates intentionally use the full locale activity set,
       // including when Zola invokes them at a taxonomy or section feed URL.
-      const entries = kind === 'notes' ? notes(site, lang) : kind === 'timeline' ? events(site, lang) : articleFeedItems(site, lang, items);
+      const entries = kind === 'threads' ? threads(site, lang) : kind === 'timeline' ? events(site, lang) : articleFeedItems(site, lang, items);
       result.set(pathname, { path: pathname, lang, kind, items: entries, ...metadata });
     }
   };
@@ -69,8 +69,8 @@ export function renderFeed(site: Site, feed: Feed): string {
   const eligible = feed.items.filter(doc => isPublic(doc, site));
   const limit = Number.isInteger(config.feed_limit) && config.feed_limit >= 0 ? config.feed_limit : eligible.length;
   const items = eligible.slice(0, limit);
-  const custom = feed.kind === 'notes' || feed.kind === 'timeline';
-  const title = `${config.title || ''}${custom ? feed.kind === 'notes' ? ' · Notes' : ' · Timeline' : feed.titleSuffix ? ` - ${feed.titleSuffix}` : ''}`;
+  const custom = feed.kind === 'threads' || feed.kind === 'timeline';
+  const title = `${config.title || ''}${custom ? feed.kind === 'threads' ? ' · Threads' : ' · Timeline' : feed.titleSuffix ? ` - ${feed.titleSuffix}` : ''}`;
   const link = absolute(feed.sectionPath || (feed.lang === site.defaultLanguage ? '/' : `/${feed.lang}/`));
   const self = absolute(`/${feed.path}.xml`);
   const updated = new Date(Math.max(0, ...items.map(doc => activeTimestamp(doc) * 1000))).toISOString();

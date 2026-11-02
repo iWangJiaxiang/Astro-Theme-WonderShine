@@ -26,8 +26,8 @@ cover = "cover.svg"
 
 - `index.md` 是默认语言，`index.zh-CN.md` 是对应译文；`_index.md` 是目录设置。
 - `layout` 选择 Astro 页面布局，`child_layout` 设置目录下内容的默认布局。
-- 支持 `index`、`post`、`archives`、`notes`、`note`、`timeline`、`topics`、`topic`、`collection-list`、`collection-category`、`collection-detail`、`collection-content`、`empty`、`about`、`friends`、`equipment`、`music`、`wechat`。
-- 动态源码在 `content/notes/<UUID>/index.md`；公开地址为 `/thread/<UUID>/`，由 Studio 维护。
+- 支持 `index`、`post`、`archives`、`threads`、`thread`、`timeline`、`topics`、`topic`、`collection-list`、`collection-category`、`collection-detail`、`collection-content`、`empty`、`about`、`friends`、`equipment`、`music`、`wechat`。
+- 动态源码在 `content/threads/<UUID>/index.md`；公开地址为 `/threads/<UUID>/`，由 Studio 维护。
 - 话题是独立内容，标签与分类仍在 `taxonomies` 下。系列是有章节的目录，音乐专辑仍可使用系列组件配置展示。
 - 草稿不公开。未来日期是否公开由配置控制；静态网站到期后仍须重新构建。
 - `extra.references` 的站内文章引用按内容路径保存，渲染时优先当前语言。

@@ -30,7 +30,7 @@ const mockAi = async (url, init) => {
 };
 async function put(path, text) { await mkdir(dirname(join(site, path)), { recursive: true }); await writeFile(join(site, path), text); }
 const article = (title, body = 'Saved content.') => `+++\ntitle="${title}"\ndate=2026-10-01\ndraft=true\n+++\n${body}\n`;
-const note = (title, id, extra = '') => `+++\ntitle="${title}"\ndate=2026-10-01\ndraft=true\n[extra]\nkind="note"\nid="${id}"\n${extra}\n+++\nSaved note.\n`;
+const thread = (title, id, extra = '') => `+++\ntitle="${title}"\ndate=2026-10-01\ndraft=true\n[extra]\nkind="thread"\nid="${id}"\n${extra}\n+++\nSaved thread.\n`;
 try {
   await put('config.toml', 'title="Delete fixture"\nbase_url="https://example.com"\ndefault_language="zh-CN"\n[languages.en]\n');
   await put('data.toml', '[post]\ntags=[]\ncategories=[]\n');
@@ -42,10 +42,10 @@ try {
   await put('public/uploads/2025/cover.webp', sampleImage);
   await put('content/articles/referenced/index.md', article('Referenced article'));
   await put('content/articles/stale/index.md', article('Stale article'));
-  await put('content/notes/n_reference/index.md', note('Reference note', 'n_reference', 'references=[{kind="internal",path="articles/referenced/index.md"}]'));
-  await put('content/notes/n_delete/index.md', note('Delete this note', 'n_delete'));
-  await put('content/notes/n_delete/index.en.md', note('Keep English note', 'n_delete'));
-  await put('content/notes/n_delete/photo.png', 'note-asset-to-retain');
+  await put('content/threads/n_reference/index.md', thread('Reference thread', 'n_reference', 'references=[{kind="internal",path="articles/referenced/index.md"}]'));
+  await put('content/threads/n_delete/index.md', thread('Delete this thread', 'n_delete'));
+  await put('content/threads/n_delete/index.en.md', thread('Keep English thread', 'n_delete'));
+  await put('content/threads/n_delete/photo.png', 'thread-asset-to-retain');
   const reservation = reservePort();
   await new Promise(resolve => reservation.listen(0, '127.0.0.1', resolve));
   const port = reservation.address().port;

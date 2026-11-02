@@ -2,14 +2,14 @@ import { isLibraryItem } from "../../shared/library";
 import type { ArticleSummary, Json } from "../../shared/types";
 import { api, errorMessage } from "../api";
 import {
-  newNote,
+  newThread,
   newTopic,
   unclassifiedContentErrors,
   type ContentLanguages,
   type LocalizedKind,
 } from "../content-model";
 import { locale, t, type Message } from "../i18n";
-import "../note-detail.css";
+import "../thread-detail.css";
 import {
   classes,
   component,
@@ -25,7 +25,7 @@ import { computed, onMounted, ref, watch } from "../reactivity";
 import DeleteContentDialog from "./DeleteContentDialog";
 import Icon from "./Icon";
 import LoadingState from "./LoadingState";
-import NoteComposer from "./NoteComposer";
+import ThreadComposer from "./ThreadComposer";
 import SelectionField from "./SelectionField";
 
 type Props = { kind: LocalizedKind };
@@ -136,7 +136,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
     }
     function create() {
       if (!languages.value) return;
-      const draft = (props.kind === "topic" ? newTopic : newNote)(
+      const draft = (props.kind === "topic" ? newTopic : newThread)(
         language.value,
         languages.value.defaultLanguage,
       );
@@ -195,16 +195,16 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
               : null,
           ),
         ),
-        props.kind === "note"
-          ? element(NoteComposer, {
+        props.kind === "thread"
+          ? element(ThreadComposer, {
               ref: domRef(composer),
               onDirty: changed satisfies EventHandler<
-                typeof NoteComposer,
+                typeof ThreadComposer,
                 "onDirty"
               >,
               onSaved: (() => {
                 load();
-              }) satisfies EventHandler<typeof NoteComposer, "onSaved">,
+              }) satisfies EventHandler<typeof ThreadComposer, "onSaved">,
             })
           : null,
         error.value
@@ -230,7 +230,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
               "section",
               {
                 "aria-label": t("需要检查"),
-                className: classes("card note-repair-list"),
+                className: classes("card thread-repair-list"),
               },
               element(
                 "div",
@@ -287,7 +287,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
           { className: classes("card") },
           element(
             "div",
-            { className: classes("library-toolbar note-toolbar") },
+            { className: classes("library-toolbar thread-toolbar") },
             element(
               "div",
               { className: classes("search-box") },
@@ -308,7 +308,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
             languages.value
               ? element(SelectionField, {
                   modelValue: language.value,
-                  name: "note-language",
+                  name: "thread-language",
                   label: t("内容语言"),
                   options: languages.value.languages.map((value) => ({
                     value,
@@ -324,7 +324,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
               : null,
             element(SelectionField, {
               modelValue: status.value,
-              name: "note-status",
+              name: "thread-status",
               label: t("筛选状态"),
               options: [
                 { value: "all", label: t("全部状态") },
@@ -436,7 +436,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
                 ),
                 element(Icon, { name: "arrow" }),
               ),
-              props.kind === "note"
+              props.kind === "thread"
                 ? element(
                     "div",
                     { className: classes("library-item-actions") },

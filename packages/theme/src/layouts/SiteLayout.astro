@@ -32,7 +32,7 @@ const fontStyles=configuredFont&&/^[\p{L}\p{N} ,"'_-]+$/u.test(configuredFont)
 const abstractMode=/^[a-z0-9-]+$/i.test(e.post.abstract?.mode||'')?e.post.abstract.mode:'local';
 const articleURLs=articles(site,lang).map(item=>item.url);
 const isPost=htmlType==='post';
-const hasCode=Boolean(e.code.enable && (/<pre[\s>]/.test(doc?.html || '') || ['notes','taxonomy'].includes(pageType) && site.documents.some(item => item.lang===lang && item.kind==='note' && /<pre[\s>]/.test(item.html))));
+const hasCode=Boolean(e.code.enable && (/<pre[\s>]/.test(doc?.html || '') || ['threads','taxonomy'].includes(pageType) && site.documents.some(item => item.lang===lang && item.kind==='thread' && /<pre[\s>]/.test(item.html))));
 const hasMath=Boolean(e.lib?.katex && doc && /(?:\$[^$]+\$|\\\(|\\\[|class=["'][^"']*\b(?:math|katex)\b)/.test(doc.body));
 const hasToc=Boolean(e.other.toc_enable && isPost && doc?.toc.length);
 const splitStyles=e.style.package_type==='split';

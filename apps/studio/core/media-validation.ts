@@ -84,7 +84,7 @@ function validateSvg(data: Uint8Array) {
 }
 
 export function validateUpload(directory: string, name: string, data: Uint8Array): void {
-  if (typeof directory !== 'string' || !/^(?:public(?:\/[^/]+)*|content\/(?:articles|pages|collections|notes|topics)\/.+)$/.test(directory)
+  if (typeof directory !== 'string' || !/^(?:public(?:\/[^/]+)*|content\/(?:articles|pages|collections|threads|topics)\/.+)$/.test(directory)
     || directory.split('/').some(part => ['node_modules', 'processed_images', 'dist'].includes(part))
     || typeof name !== 'string' || !name.trim() || new TextEncoder().encode(name).byteLength > 200 || /[/\\]/.test(name))
     throw new StudioError(400, '上传目录或文件名无效');

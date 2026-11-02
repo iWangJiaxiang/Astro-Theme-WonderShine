@@ -1,4 +1,4 @@
 +++
 title = "Threads"
-layout = "notes"
+layout = "threads"
 +++

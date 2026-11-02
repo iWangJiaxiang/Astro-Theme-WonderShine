@@ -42,22 +42,22 @@ test('localized topics share a stable identity and creation date while Studio ma
   assert.equal(items.find(item => item.lang === 'zh')?.updated, '2026-10-27T02:00:00.000Z');
 });
 
-test('articles and independent notes associate with stable topic IDs across drafts and missing translations', async t => {
+test('articles and independent threads associate with stable topic IDs across drafts and missing translations', async t => {
   const { content, repo } = await fixture(t);
   await content.saveDocument('content/topics/research/index.md', topic('research'), 'Draft topic', null);
-  const notePath = 'content/notes/english/index.en.md';
-  await content.saveDocument(notePath, { 'extra.kind': 'note', 'extra.id': 'english', 'extra.topics': ['research'], draft: false }, 'English note linked to an untranslated draft topic', null);
+  const threadPath = 'content/threads/english/index.en.md';
+  await content.saveDocument(threadPath, { 'extra.kind': 'thread', 'extra.id': 'english', 'extra.topics': ['research'], draft: false }, 'English thread linked to an untranslated draft topic', null);
   await content.saveDocument('content/articles/article/index.md', { title: 'Article', 'extra.topics': ['research'] }, 'Article', null);
   const items = await content.list();
-  assert.deepEqual(items.find(item => item.path === notePath)?.topics, ['research']);
+  assert.deepEqual(items.find(item => item.path === threadPath)?.topics, ['research']);
   assert.deepEqual(items.find(item => item.kind === 'article')?.topics, ['research']);
   await assert.rejects(() => content.saveDocument('content/articles/invalid/index.md', { title: 'Invalid', 'extra.topics': ['missing'] }, '', null), /关联话题.*不存在/);
   assert.equal(await repo.read('content/articles/invalid/index.md'), null);
-  const note = await content.document(notePath);
+  const thread = await content.document(threadPath);
   for (const value of [['research', 'research'], [17], ['../research'], [{ id: 'research' }]]) {
-    await assert.rejects(() => content.saveDocument(note.path, { 'extra.topics': value }, note.body, note.revision), /话题关联/);
+    await assert.rejects(() => content.saveDocument(thread.path, { 'extra.topics': value }, thread.body, thread.revision), /话题关联/);
   }
-  assert.equal((await content.document(notePath)).revision, note.revision);
+  assert.equal((await content.document(threadPath)).revision, thread.revision);
 });
 
 test('only the last topic translation is protected by associations and stale revisions never delete it', async t => {
@@ -99,7 +99,7 @@ test('topic identity and routing stay fixed, while unknown metadata and translat
   const { content, repo, setNow } = await fixture(t);
   for (const [id, changes, message] of [
     ['empty', { title: ' ' }, /话题标题/],
-    ['bad-kind', { 'extra.kind': 'note' }, /kind.*topic/],
+    ['bad-kind', { 'extra.kind': 'thread' }, /kind.*topic/],
     ['bad-id', { 'extra.id': 'different' }, /目录一致/],
     ['bad-template', { layout: 'post' }, /topic/],
     ['bad-path', { path: 'outside' }, /公开路径/],

@@ -114,7 +114,7 @@ export async function loadSite(options: LoadSiteOptions = {}): Promise<Site> {
       if (info.lang !== defaultLanguage) normalizedSegments.unshift(info.lang);
       publicPath = canonicalPath(normalizedSegments.join('/'));
     }
-    const kind = isSection ? 'section' : relativePath.startsWith('articles/') ? 'article' : frontmatter.extra?.kind === 'note' || relativePath.startsWith('notes/') ? 'note' : relativePath.startsWith('topics/') ? 'topic' : 'page';
+    const kind = isSection ? 'section' : relativePath.startsWith('articles/') ? 'article' : frontmatter.extra?.kind === 'thread' || relativePath.startsWith('threads/') ? 'thread' : relativePath.startsWith('topics/') ? 'topic' : 'page';
     const taxonomies: Record<string, string[]> = {};
     for (const [name, values] of Object.entries(frontmatter.taxonomies || {})) taxonomies[name] = Array.isArray(values) ? values.map(String) : [];
     return {

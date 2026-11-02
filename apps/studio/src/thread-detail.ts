@@ -48,7 +48,7 @@ export interface DetailReference {
   language?: string; draft?: boolean; missing?: boolean;
 }
 
-export function noteReferences(value: Json | undefined, items: ArticleSummary[], language: string, defaultLanguage: string): DetailReference[] {
+export function threadReferences(value: Json | undefined, items: ArticleSummary[], language: string, defaultLanguage: string): DetailReference[] {
   if (!Array.isArray(value)) return [];
   const result: DetailReference[] = [];
   for (const reference of value) {

@@ -9,7 +9,7 @@ const item = (path: string, title = '', extra: Partial<ArticleSummary> = {}): Ar
 test('library omits structural roots without discarding real sections or document bundles', () => {
   assert.equal(isLibraryItem(item('content/articles/2026/_index.md', '', { kind: 'article' })), false);
   assert.equal(isLibraryItem(item('content/pages/_index.md', '', { kind: 'page' })), false);
-  for (const [kind, directory] of [['note', 'notes'], ['topic', 'topics']] as const) {
+  for (const [kind, directory] of [['thread', 'threads'], ['topic', 'topics']] as const) {
     assert.equal(isLibraryItem(item(`content/${directory}/_index.en.md`, '', { kind })), false);
     assert.equal(isLibraryItem(item(`content/${directory}/real/index.en.md`, '', { kind })), true);
   }

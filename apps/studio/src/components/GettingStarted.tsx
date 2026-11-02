@@ -66,7 +66,7 @@ const GettingStarted: StudioComponent<Props, Events> = component<Props, Events>(
           "创建文章，选择标签和分类，保存草稿；准备好后再设为已发布。",
       },
       {
-        view: "note",
+        view: "thread",
         icon: "pen",
         title: "记录一条动态",
         description:

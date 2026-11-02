@@ -27,8 +27,8 @@ import { api, session, reauthentication, errorMessage } from "./api";
 import LoginView from "./components/LoginView";
 import SettingsView from "./components/SettingsView";
 import ContentLibrary from "./components/ContentLibrary";
-import NoteComposer from "./components/NoteComposer";
-import NoteDetail from "./components/NoteDetail";
+import ThreadComposer from "./components/ThreadComposer";
+import ThreadDetail from "./components/ThreadDetail";
 import DocumentEditor from "./components/DocumentEditor";
 import LocalizedContentLibrary from "./components/LocalizedContentLibrary";
 import Icon from "./components/Icon";
@@ -100,7 +100,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
     const navigation = [
       { id: "home", label: "工作台", icon: "home" },
       { id: "article", label: "文章", icon: "pen" },
-      { id: "note", label: "动态", icon: "pen" },
+      { id: "thread", label: "动态", icon: "pen" },
       { id: "topic", label: "话题管理", icon: "tag" },
       { id: "collection", label: "合集管理", icon: "book" },
       { id: "page", label: "页面", icon: "file" },
@@ -254,7 +254,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         path,
         initial,
         initialBody,
-        mode: !initial && path.startsWith("content/notes/") ? "detail" : "edit",
+        mode: !initial && path.startsWith("content/threads/") ? "detail" : "edit",
       };
       dirty.value = false;
       return true;
@@ -284,7 +284,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
     }
     function editorBack() {
       if (
-        document.value?.path.startsWith("content/notes/") &&
+        document.value?.path.startsWith("content/threads/") &&
         !document.value.initial
       )
         open(document.value.path);
@@ -581,27 +581,27 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                         )
                       : null,
                     document.value?.mode === "detail"
-                      ? element(NoteDetail, {
+                      ? element(ThreadDetail, {
                           ref: domRef(editorView),
                           key: `detail:${document.value.path}`,
                           path: document.value.path,
                           siteUrl: siteUrl.value || undefined,
                           onBack: (() => {
-                            navigate("note");
+                            navigate("thread");
                           }) satisfies EventHandler<
-                            typeof NoteDetail,
+                            typeof ThreadDetail,
                             "onBack"
                           >,
                           onEdit: edit satisfies EventHandler<
-                            typeof NoteDetail,
+                            typeof ThreadDetail,
                             "onEdit"
                           >,
                           onOpen: open satisfies EventHandler<
-                            typeof NoteDetail,
+                            typeof ThreadDetail,
                             "onOpen"
                           >,
                           onDeleted: removed satisfies EventHandler<
-                            typeof NoteDetail,
+                            typeof ThreadDetail,
                             "onDeleted"
                           >,
                         })
@@ -611,7 +611,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                             key: `edit:${document.value.path}`,
                             backLabel:
                               document.value.path.startsWith(
-                                "content/notes/",
+                                "content/threads/",
                               ) && !document.value.initial
                                 ? "← 返回动态详情"
                                 : undefined,
@@ -666,18 +666,18 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                   t("开始创作"),
                                 ),
                               ),
-                              element(NoteComposer, {
+                              element(ThreadComposer, {
                                 ref: domRef(editorView),
                                 onDirty: (($event) => {
                                   dirty.value = $event;
                                 }) satisfies EventHandler<
-                                  typeof NoteComposer,
+                                  typeof ThreadComposer,
                                   "onDirty"
                                 >,
                                 onSaved: (() => {
                                   loadArticles();
                                 }) satisfies EventHandler<
-                                  typeof NoteComposer,
+                                  typeof ThreadComposer,
                                   "onSaved"
                                 >,
                               }),
@@ -692,7 +692,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                   },
                                   {
                                     name: t("动态"),
-                                    kind: "note",
+                                    kind: "thread",
                                     icon: "pen",
                                   },
                                   {
@@ -887,7 +887,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                 t("已发布的内容会在下次网站部署后上线。"),
                               ),
                             )
-                          : view.value === "note" || view.value === "topic"
+                          : view.value === "thread" || view.value === "topic"
                             ? element(LocalizedContentLibrary, {
                                 ref: domRef(editorView),
                                 key: view.value,

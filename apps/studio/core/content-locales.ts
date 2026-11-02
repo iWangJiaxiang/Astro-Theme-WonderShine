@@ -1,10 +1,10 @@
 import { posix } from './portable.js';
 import { parse } from 'smol-toml';
 import type { Repository, RepositoryWrite, WriteGuard } from '../shared/repository.js';
-import { noteLanguages } from './notes.js';
+import { threadLanguages } from './threads.js';
 import { translationLocation } from '../shared/translation.js';
 import { removeTomlFields, splitDocument } from './content.js';
-import { taxonomyNames } from './note-taxonomies.js';
+import { taxonomyNames } from './thread-taxonomies.js';
 import { StudioError } from './errors.js';
 
 // Translated ancestor sections retain the same structural options in the content model.
@@ -12,7 +12,7 @@ import { StudioError } from './errors.js';
 export async function localeSectionWrites(repository: Repository, path: string): Promise<{ entries: RepositoryWrite[]; guard: WriteGuard }> {
   const configFile = await repository.read('config.toml');
   const config = configFile ? parse(configFile.text) : {};
-  const languages = noteLanguages(config);
+  const languages = threadLanguages(config);
   const language = translationLocation(path, languages.defaultLanguage, languages).sourceLanguage;
   const entries: RepositoryWrite[] = [];
   const sources: { path: string; revision: string }[] = [];

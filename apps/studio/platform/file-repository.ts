@@ -68,7 +68,7 @@ export class FileRepository implements Repository {
   }
   async list(): Promise<FileSnapshot[]> {
     const paths: string[] = [];
-    for (const kind of ['articles', 'pages', 'collections', 'notes', 'topics']) {
+    for (const kind of ['articles', 'pages', 'collections', 'threads', 'topics']) {
       const result = await this.walk('content/' + kind, isRepositoryPath);
       if (result.truncated) throw new StudioError(413, '仓库文件过多，请缩小工作区');
       paths.push(...result.paths);

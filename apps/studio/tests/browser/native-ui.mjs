@@ -192,7 +192,7 @@ try {
   await screenshot('dashboard-desktop'); await noOverflow('desktop dashboard');
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('dashboard-mobile'); await noOverflow('mobile dashboard');
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
-  for (const [label, name, ready] of [['动态', 'notes', '.note-composer textarea'], ['话题管理', 'topics', '.localized-library'], ['站点信息', 'site-settings', '.settings-grid']]) {
+  for (const [label, name, ready] of [['动态', 'threads', '.thread-composer textarea'], ['话题管理', 'topics', '.localized-library'], ['站点信息', 'site-settings', '.settings-grid']]) {
     await click(label); await heading(label);
     if (name !== 'topics') await page.waitForSelector(ready);
     await screenshot(name + '-desktop'); await noOverflow(name + ' desktop');
@@ -251,8 +251,8 @@ try {
   await click('站点信息'); await page.waitForSelector('.settings-grid');
   assert.equal(await page.$eval('.save-button-main', e => e.textContent), 'Git 分支保存', 'default persists across editors');
   await page.reload({waitUntil:'networkidle0'}); await heading('连接创作工作区'); await click('打开工作区'); await heading('今天，写点什么？');
-  await page.waitForSelector('.note-composer .save-button-main');
-  assert.equal(await page.$eval('.note-composer .save-button-main', e => e.textContent), '分支保存 · 可发布', 'default persists across app reload');
+  await page.waitForSelector('.thread-composer .save-button-main');
+  assert.equal(await page.$eval('.thread-composer .save-button-main', e => e.textContent), '分支保存 · 可发布', 'default persists across app reload');
   await page.evaluate(() => [...document.querySelectorAll('.content-row')].find(node => node.textContent.includes('离线文章示例')).click());
   await page.waitForSelector('.markdown-source');
   await click('可视化编辑'); await page.waitForSelector('.vditor-ir [contenteditable="true"]', { timeout: 20000 });

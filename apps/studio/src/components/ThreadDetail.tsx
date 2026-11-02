@@ -15,11 +15,11 @@ import { locale, t, type Message } from "../i18n";
 import {
   isPublishedContent,
   metadataValue,
-  noteReferences,
+  threadReferences,
   previewLink,
   publicContentUrl,
-} from "../note-detail";
-import "../note-detail.css";
+} from "../thread-detail";
+import "../thread-detail.css";
 import {
   classes,
   component,
@@ -42,8 +42,8 @@ type Events = {
   open: [path: string];
   deleted: [path: string];
 };
-const NoteDetail: StudioComponent<Props, Events> = component<Props, Events>(
-  "NoteDetail",
+const ThreadDetail: StudioComponent<Props, Events> = component<Props, Events>(
+  "ThreadDetail",
   (props, emit, expose) => {
     const document = ref<Article>(),
       items = ref<ArticleSummary[]>([]),
@@ -74,7 +74,7 @@ const NoteDetail: StudioComponent<Props, Events> = component<Props, Events>(
     const versions = computed(() =>
       items.value.filter(
         (item) =>
-          item.kind === "note" &&
+          item.kind === "thread" &&
           item.translationKey === summary.value?.translationKey &&
           !item.error,
       ),
@@ -92,7 +92,7 @@ const NoteDetail: StudioComponent<Props, Events> = component<Props, Events>(
       ),
     );
     const references = computed(() =>
-      noteReferences(
+      threadReferences(
         meta("extra.references"),
         items.value,
         language.value,
@@ -191,7 +191,7 @@ const NoteDetail: StudioComponent<Props, Events> = component<Props, Events>(
     return () =>
       element(
         "section",
-        { className: classes("note-detail-page") },
+        { className: classes("thread-detail-page") },
         element(
           "div",
           { className: classes("page-heading") },
@@ -331,16 +331,16 @@ const NoteDetail: StudioComponent<Props, Events> = component<Props, Events>(
                   ),
                   element(
                     "div",
-                    { className: classes("note-detail-layout") },
+                    { className: classes("thread-detail-layout") },
                     element(
                       "article",
-                      { className: classes("card note-reading-card") },
+                      { className: classes("card thread-reading-card") },
                       element(
                         "header",
-                        { className: classes("note-reading-header") },
+                        { className: classes("thread-reading-header") },
                         element(
                           "span",
-                          { className: classes("detail-note-icon") },
+                          { className: classes("detail-thread-icon") },
                           element(Icon, { name: "pen" }),
                         ),
                         element(
@@ -362,7 +362,7 @@ const NoteDetail: StudioComponent<Props, Events> = component<Props, Events>(
                       meta("title")
                         ? element(
                             "h2",
-                            { className: classes("note-reading-title") },
+                            { className: classes("thread-reading-title") },
                             meta("title"),
                           )
                         : null,
@@ -379,12 +379,12 @@ const NoteDetail: StudioComponent<Props, Events> = component<Props, Events>(
                         ? element("div", {
                             dangerouslySetInnerHTML: { __html: preview.value },
                             className: classes(
-                              "markdown-preview note-reading-body",
+                              "markdown-preview thread-reading-body",
                             ),
                           })
                         : element(
                             "p",
-                            { className: classes("muted note-reading-body") },
+                            { className: classes("muted thread-reading-body") },
                             t("这条动态没有正文。"),
                           ),
                       references.value.length
@@ -392,7 +392,7 @@ const NoteDetail: StudioComponent<Props, Events> = component<Props, Events>(
                             "section",
                             {
                               "aria-label": t("引用文章"),
-                              className: classes("note-detail-references"),
+                              className: classes("thread-detail-references"),
                             },
                             element(
                               "h3",
@@ -501,7 +501,7 @@ const NoteDetail: StudioComponent<Props, Events> = component<Props, Events>(
                       tags.value.length || topics.value.length
                         ? element(
                             "footer",
-                            { className: classes("note-reading-footer") },
+                            { className: classes("thread-reading-footer") },
                             tags.value.length
                               ? element(
                                   "div",
@@ -552,7 +552,7 @@ const NoteDetail: StudioComponent<Props, Events> = component<Props, Events>(
                     ),
                     element(
                       "aside",
-                      { className: classes("note-detail-aside") },
+                      { className: classes("thread-detail-aside") },
                       element(
                         "section",
                         { className: classes("card detail-properties") },
@@ -657,4 +657,4 @@ const NoteDetail: StudioComponent<Props, Events> = component<Props, Events>(
   },
   {},
 );
-export default NoteDetail;
+export default ThreadDetail;

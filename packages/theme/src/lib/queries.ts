@@ -8,7 +8,7 @@ export const byDate = (a: Document, b: Document) => timestamp(b.date) - timestam
 /** One public-content boundary for lists, feeds, references, and generated routes. */
 export function isPublic(doc: Document, site: Site, now = Date.now()): boolean {
   if (doc.draft || doc.render === false) return false;
-  if (['note', 'topic'].includes(doc.kind) && !site.config.extra?.activity?.enable) return false;
+  if (['thread', 'topic'].includes(doc.kind) && !site.config.extra?.activity?.enable) return false;
   if (doc.date) {
     const date = Date.parse(doc.date);
     if (!Number.isFinite(date) || date > now) return false;
@@ -23,9 +23,9 @@ export function activeTimestamp(doc: Document, now = Date.now()): number {
 }
 
 export const articles = (site: Site, lang: string) => site.documents.filter(d => d.lang === lang && d.kind === 'article' && isPublic(d, site)).sort(byDate);
-export const notes = (site: Site, lang: string) => site.documents.filter(d => d.lang === lang && d.kind === 'note' && isPublic(d, site)).sort((a,b) => activeTimestamp(b) - activeTimestamp(a) || byDate(a,b));
+export const threads = (site: Site, lang: string) => site.documents.filter(d => d.lang === lang && d.kind === 'thread' && isPublic(d, site)).sort((a,b) => activeTimestamp(b) - activeTimestamp(a) || byDate(a,b));
 export const topics = (site: Site, lang: string) => site.documents.filter(d => d.lang === lang && d.kind === 'topic' && isPublic(d, site));
-export const events = (site: Site, lang: string) => [...articles(site,lang), ...notes(site,lang)].sort(byDate);
+export const events = (site: Site, lang: string) => [...articles(site,lang), ...threads(site,lang)].sort(byDate);
 export const topicItems = (site: Site, topic: Document) => isPublic(topic, site) && topic.extra.id ? events(site,topic.lang).filter(d => Array.isArray(d.extra.topics) && d.extra.topics.includes(topic.extra.id)) : [];
 
 export function cover(doc: Document, site: Site, fallback = true): string {

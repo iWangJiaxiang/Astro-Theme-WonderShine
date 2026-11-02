@@ -3,8 +3,8 @@ import type { Json } from '../shared/types.js';
 import { translationLocation, type TranslationRequest, type TranslationResult, type TranslationSettings } from '../shared/translation.js';
 import { type Repository, validatePath } from '../shared/repository.js';
 import { getValue, splitDocument, removeTomlFields, updateDocument } from './content.js';
-import { noteLanguages, noteWriteGuard, noteRouteChanges } from './notes.js';
-import { taxonomyNames, validateNoteTaxonomies } from './note-taxonomies.js';
+import { threadLanguages, threadWriteGuard, threadRouteChanges } from './threads.js';
+import { taxonomyNames, validateThreadTaxonomies } from './thread-taxonomies.js';
 import { validateContentRelations } from './content-relations.js';
 import { StudioError } from './errors.js';
 import { localeSectionWrites } from './content-locales.js';
@@ -93,7 +93,7 @@ export class TranslationService {
     validatePath(input.path);
     const configFile = await this.repository.read('config.toml');
     const config = configFile ? parse(configFile.text) : {};
-    const languages = noteLanguages(config);
+    const languages = threadLanguages(config);
     let target: ReturnType<typeof translationLocation>;
     try { target = translationLocation(input.path, input.language, languages); } catch (e) { throw new StudioError(400, (e as Error).message); }
     if (target.sourceLanguage === input.language) throw new StudioError(400, '请选择不同的目标语言');
@@ -116,15 +116,13 @@ export class TranslationService {
     }
     const names = taxonomyNames(config, input.language);
     const removedTaxonomies = Object.keys(metadata.taxonomies || {}).filter(name => !names.has(name)).map(name => `taxonomies.${name}`);
-    const header = removeTomlFields(doc.header, ['path', 'aliases', 'updated', 'extra.thread_root', 'extra.reply_to', ...removedTaxonomies]);
+    const header = removeTomlFields(doc.header, ['path', 'aliases', 'updated', 'extra.thread_root', 'extra.reply_to', ...(input.path.startsWith('content/threads/') ? ['extra.comment_path'] : []), ...removedTaxonomies]);
     const changes: Record<string, Json> = { title: translated.title, description: translated.description, draft: true };
     if (ai) Object.assign(changes, { 'extra.ai_translation': true, 'extra.translation_reviewed': false, 'extra.translation_source': input.path });
     else if (getValue(metadata, 'extra.ai_translation') === true || getValue(metadata, 'extra.translation_source')) Object.assign(changes, { 'extra.translation_reviewed': false, 'extra.translation_source': input.path });
     if (input.path.startsWith('content/topics/')) changes.updated = new Date().toISOString();
-    if (target.path.startsWith('content/notes/') && !/\/_index(?:\.[A-Za-z0-9-]+)?\.md$/.test(target.path)) {
-      Object.assign(changes, noteRouteChanges(target.path, undefined, {}, languages));
-      const sourceRoute = noteRouteChanges(input.path, source.text, {}, languages);
-      if (sourceRoute['extra.comment_path']) changes['extra.comment_path'] = sourceRoute['extra.comment_path'];
+    if (target.path.startsWith('content/threads/') && !/\/_index(?:\.[A-Za-z0-9-]+)?\.md$/.test(target.path)) {
+      Object.assign(changes, threadRouteChanges(target.path, undefined, {}, languages));
     }
     const text = updateDocument(`+++\n${header}\n+++\n`, changes, translated.body);
     const sections = await localeSectionWrites(this.repository, target.path);
@@ -133,9 +131,9 @@ export class TranslationService {
       if ((await repository.read(input.path))?.revision !== input.revision) throw new StudioError(409, '原文已更新，请重新加载后翻译');
       const latestConfig = await repository.read('config.toml');
       if ((latestConfig?.revision ?? null) !== (configFile?.revision ?? null)) throw new StudioError(409, '站点语言配置已更新，请重新加载后翻译');
-      if (target.path.startsWith('content/notes/') && !/\/_index(?:\.[A-Za-z0-9-]+)?\.md$/.test(target.path)) {
-        await noteWriteGuard(target.path, text)(repository);
-        validateNoteTaxonomies(target.path, text, config);
+      if (target.path.startsWith('content/threads/') && !/\/_index(?:\.[A-Za-z0-9-]+)?\.md$/.test(target.path)) {
+        await threadWriteGuard(target.path, text)(repository);
+        validateThreadTaxonomies(target.path, text, config);
       }
       await validateContentRelations(repository, target.path, text);
     });

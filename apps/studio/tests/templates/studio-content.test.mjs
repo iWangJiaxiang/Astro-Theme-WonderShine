@@ -23,7 +23,7 @@ taxonomies=[{name="tags"},{name="categories"}]
 enable=true
 `);
   const repository = new LocalRepository(root), service = new ContentService(repository);
-  for (const [directory, layout] of [['', 'index'], ['articles/', 'archives'], ['notes/', 'notes'], ['topics/', 'topics'], ['collections/', 'collection-list']]) {
+  for (const [directory, layout] of [['', 'index'], ['articles/', 'archives'], ['threads/', 'threads'], ['topics/', 'topics'], ['collections/', 'collection-list']]) {
     await repository.write(`content/${directory}_index.md`, `+++\ntitle="${layout}"\nlayout="${layout}"\n+++\n`, null);
   }
   return { root, repository, service, translations: new TranslationService(repository) };
@@ -31,7 +31,7 @@ enable=true
 
 const id = 'fecc309a-5b6a-4a9d-bcd0-01f833edfa33';
 const article = 'content/articles/compatibility/index.md';
-const note = `content/notes/${id}/index.md`;
+const thread = `content/threads/${id}/index.md`;
 
 test('Studio writes multilingual content that Astro routes, links and filters consistently', async t => {
   const { root, repository, service, translations } = await fixture(t);
@@ -49,14 +49,14 @@ test('Studio writes multilingual content that Astro routes, links and filters co
   const topicTranslation = await translations.createManual({ path: topic, revision: topicSource.revision, language: 'en' });
   const topicEnglish = await service.document(topicTranslation.path);
   await service.saveDocument(topicTranslation.path, { title: 'Topic', draft: false }, 'Topic description', topicEnglish.revision);
-  await service.saveDocument(note, { draft: false, date: '2020-01-01T00:00:00Z', 'extra.kind': 'note', 'extra.id': id,
+  await service.saveDocument(thread, { draft: false, date: '2020-01-01T00:00:00Z', 'extra.kind': 'thread', 'extra.id': id,
     'taxonomies.tags': ['tech'], 'extra.topics': ['t_compatibility'], 'extra.disable_comment': true,
     'extra.references': [{ kind: 'internal', path: article.slice(8) }, { kind: 'external', title: 'External article', url: 'https://example.org/article' }],
   }, '中文动态\n\n![公共图片](/uploads/shared.svg)', null);
-  const originalNote = await service.document(note);
-  const translatedNote = await translations.createManual({ path: note, revision: originalNote.revision, language: 'en' });
-  const noteEnglish = await service.document(translatedNote.path);
-  await service.saveDocument(translatedNote.path, { draft: false }, 'English note', noteEnglish.revision);
+  const originalThread = await service.document(thread);
+  const translatedThread = await translations.createManual({ path: thread, revision: originalThread.revision, language: 'en' });
+  const threadEnglish = await service.document(translatedThread.path);
+  await service.saveDocument(translatedThread.path, { draft: false }, 'English thread', threadEnglish.revision);
   await service.saveDocument('content/articles/private/index.md', { title: 'Draft article', draft: true }, 'Private', null);
   await service.saveDocument('content/articles/future/index.md', { title: 'Future article', draft: false, date: '2999-01-01' }, 'Future', null);
   await service.saveDocument('content/collections/series/_index.md', { title: 'Series', draft: false, layout: 'collection-detail', child_layout: 'collection-content' }, 'Series introduction', null);
@@ -68,7 +68,7 @@ test('Studio writes multilingual content that Astro routes, links and filters co
     if (doc && isPublic(doc, site)) assert.equal(item.publicPath, doc.url, item.path);
   }
   assert.ok(available.some(route => route.path === '/en/'));
-  assert.ok(available.some(route => route.path === `/en/thread/${id}/`));
+  assert.ok(available.some(route => route.path === `/en/threads/${id}/`));
   assert.ok(available.some(route => route.path === '/en/tags/tech/'));
   assert.ok(!available.some(route => /\/(private|future)\//.test(route.path)));
   assert.equal(internalReference(site, article.slice(8), 'en')?.title, 'English article');
@@ -76,11 +76,11 @@ test('Studio writes multilingual content that Astro routes, links and filters co
   assert.equal(cover(englishArticle, site), '/en/articles/compatibility/cover.svg');
   assert.ok(site.assets.some(asset => asset.path === cover(englishArticle, site)));
   assert.match(englishArticle.html, /src="\/en\/articles\/compatibility\/cover.svg"/);
-  const englishNote = site.documents.find(doc => doc.relativePath === translatedNote.path.slice(8));
-  assert.equal(englishNote.extra.disable_comment, true);
-  assert.equal(englishNote.extra.references.length, 2);
+  const englishThread = site.documents.find(doc => doc.relativePath === translatedThread.path.slice(8));
+  assert.equal(englishThread.extra.disable_comment, true);
+  assert.equal(englishThread.extra.references.length, 2);
   const englishTopic = site.documents.find(doc => doc.relativePath === topicTranslation.path.slice(8));
-  assert.ok(topicItems(site, englishTopic).some(doc => doc === englishNote));
+  assert.ok(topicItems(site, englishTopic).some(doc => doc === englishThread));
   assert.equal(site.documents.find(doc => doc.title === 'Chapter')?.layout, 'collection-content');
   // Deleting one language preserves its sibling and reference fallback.
   await service.removeDocument(translated.path, (await service.document(translated.path)).revision);
@@ -88,9 +88,9 @@ test('Studio writes multilingual content that Astro routes, links and filters co
   assert.equal(internalReference(site, article.slice(8), 'en')?.title, '中文文章');
   assert.ok(!routes(site).some(route => route.path === '/en/articles/compatibility/'));
   await assert.rejects(service.removeDocument(article, source.revision), /引用/);
-  await service.removeDocument(translatedNote.path, (await service.document(translatedNote.path)).revision);
-  assert.ok(!routes(await loadSite({ root })).some(route => route.path === `/en/thread/${id}/`));
-  assert.ok(await repository.read(note));
+  await service.removeDocument(translatedThread.path, (await service.document(translatedThread.path)).revision);
+  assert.ok(!routes(await loadSite({ root })).some(route => route.path === `/en/threads/${id}/`));
+  assert.ok(await repository.read(thread));
 });
 
 test('Studio localized navigation and page settings use the Astro locale overlays', async t => {

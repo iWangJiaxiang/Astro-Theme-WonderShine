@@ -3,20 +3,20 @@ import { parse } from 'smol-toml';
 import type { FileSnapshot, Json } from '../shared/types.js';
 import type { Repository } from '../shared/repository.js';
 import { getValue, patchToml, removeTomlFields, splitDocument } from './content.js';
-import { noteLanguages, notePath, noteMetadata } from './notes.js';
+import { threadLanguages, threadPath, threadMetadata } from './threads.js';
 import { StudioError } from './errors.js';
 import { translationLocation } from '../shared/translation.js';
 
 export function taxonomyNames(config: Record<string, unknown>, language: string): Set<string> {
-  const owner = language === noteLanguages(config).defaultLanguage ? config : getValue(config, `languages.${language}`);
+  const owner = language === threadLanguages(config).defaultLanguage ? config : getValue(config, `languages.${language}`);
   const configured = getValue(owner, 'taxonomies');
   return new Set(Array.isArray(configured) ? configured.flatMap(value => typeof value?.name === 'string' ? [value.name] : []) : []);
 }
 function taxonomyError(language: string, name: string): never {
   throw new StudioError(400, '语言 {language} 的分类 {name} 未配置，请先配置或移除此分类', { language, name });
 }
-export function validateNoteTaxonomies(path: string, text: string, config: Record<string, unknown>): void {
-  const { lang } = notePath(path, noteLanguages(config));
+export function validateThreadTaxonomies(path: string, text: string, config: Record<string, unknown>): void {
+  const { lang } = threadPath(path, threadLanguages(config));
   const names = taxonomyNames(config, lang);
   const metadata = parse(splitDocument(text).header);
   const taxonomies = metadata.taxonomies;
@@ -25,21 +25,21 @@ export function validateNoteTaxonomies(path: string, text: string, config: Recor
   }
 }
 
-export async function prepareNoteTaxonomies(repository: Repository, path: string, current: FileSnapshot | null, changes: Record<string, Json>) {
+export async function prepareThreadTaxonomies(repository: Repository, path: string, current: FileSnapshot | null, changes: Record<string, Json>) {
   const configFile = await repository.read('config.toml');
   const config = configFile ? parse(configFile.text) : {};
-  const languages = noteLanguages(config), location = notePath(path, languages);
+  const languages = threadLanguages(config), location = threadPath(path, languages);
   const names = taxonomyNames(config, location.lang);
   const defaults = Object.fromEntries(['tags', 'categories'].filter(name => names.has(name)).map(name => [`taxonomies.${name}`, []]));
   const filtered = { ...changes };
-  const originalMetadata = current ? noteMetadata(current) : {};
+  const originalMetadata = current ? threadMetadata(current) : {};
   const candidate = parse(patchToml(current ? splitDocument(current.text).header : '', changes));
   const taxonomies = candidate.taxonomies;
   const removed: string[] = [];
-  const siblings = !current ? (await repository.list()).filter(file => file.path.startsWith(`content/notes/${location.id}/index`) && file.path !== path) : [];
+  const siblings = !current ? (await repository.list()).filter(file => file.path.startsWith(`content/threads/${location.id}/index`) && file.path !== path) : [];
   if (taxonomies && typeof taxonomies === 'object') for (const [name, value] of Object.entries(taxonomies)) {
     if (names.has(name)) continue;
-    const inherited = siblings.some(file => isDeepStrictEqual(getValue(noteMetadata(file), `taxonomies.${name}`), value));
+    const inherited = siblings.some(file => isDeepStrictEqual(getValue(threadMetadata(file), `taxonomies.${name}`), value));
     if ((!Array.isArray(value) || value.length > 0) && !inherited) taxonomyError(location.lang, name);
     delete filtered[`taxonomies.${name}`];
     if (getValue(originalMetadata, `taxonomies.${name}`) !== undefined) removed.push(`taxonomies.${name}`);
@@ -55,7 +55,7 @@ export async function prepareNoteTaxonomies(repository: Repository, path: string
 export async function prepareLocalizedTaxonomies(repository: Repository, path: string, current: FileSnapshot | null, changes: Record<string, Json>) {
   const configFile = await repository.read('config.toml');
   const config = configFile ? parse(configFile.text) : {};
-  const languages = noteLanguages(config), language = translationLocation(path, languages.defaultLanguage, languages).sourceLanguage;
+  const languages = threadLanguages(config), language = translationLocation(path, languages.defaultLanguage, languages).sourceLanguage;
   if (language === languages.defaultLanguage) return undefined;
   const names = taxonomyNames(config, language);
   const filtered = { ...changes }, document = current ? splitDocument(current.text) : undefined;
@@ -71,7 +71,7 @@ export async function prepareLocalizedTaxonomies(repository: Repository, path: s
 }
 
 export function validateLocalizedTaxonomies(path: string, text: string, config: Record<string, unknown>): void {
-  const languages = noteLanguages(config), language = translationLocation(path, languages.defaultLanguage, languages).sourceLanguage;
+  const languages = threadLanguages(config), language = translationLocation(path, languages.defaultLanguage, languages).sourceLanguage;
   if (language === languages.defaultLanguage) return;
   const names = taxonomyNames(config, language), metadata = parse(splitDocument(text).header);
   for (const name of Object.keys(metadata.taxonomies || {})) if (!names.has(name)) taxonomyError(language, name);

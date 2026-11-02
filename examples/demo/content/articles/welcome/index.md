@@ -2,7 +2,7 @@
 title = "A small place for big ideas"
 layout = "post"
 date = "2026-01-01"
-description = "Welcome to your own corner of the web. Publish long stories and quick notes, in every language you write."
+description = "Welcome to your own corner of the web. Publish long stories and quick threads, in every language you write."
 
 [taxonomies]
 tags = [ "design" ]

@@ -1,6 +1,6 @@
 /** Filter the complete public set before paging; keep ties stable across navigation. */
 export function selectActivity(items, { kind = 'all', page = 1, pageSize = 12, sort = 'published' } = {}) {
-  const selectedKind = ['article', 'note'].includes(kind) ? kind : 'all';
+  const selectedKind = ['article', 'thread'].includes(kind) ? kind : 'all';
   const size = Number.isInteger(pageSize) && pageSize > 0 ? pageSize : 12;
   const key = sort === 'active' ? 'active' : 'published';
   const matching = items.filter(item => selectedKind === 'all' || item.kind === selectedKind)

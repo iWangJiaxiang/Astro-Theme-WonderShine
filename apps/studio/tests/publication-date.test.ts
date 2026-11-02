@@ -12,7 +12,7 @@ test('publication editing preserves original precision and timezone until the co
   assert.equal(publicationDateValue({ ...draft, date: '2026-10-29' }), '2026-10-29T09:12:34.123456+08:00');
 });
 
-test('publication editing rejects incomplete or invalid timestamps required by notes', () => {
+test('publication editing rejects incomplete or invalid timestamps required by threads', () => {
   const draft = publicationDateDraft('2026-10-27T00:00:00Z');
   for (const change of [{ time: '' }, { date: '' }, { date: '2026-02-30' }, { time: '25:00' }, { zone: '' }, { zone: '+25:00' }]) {
     assert.equal(publicationDateValue({ ...draft, ...change }), null);

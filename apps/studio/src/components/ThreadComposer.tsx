@@ -1,13 +1,13 @@
 import { translationLocation } from "../../shared/translation";
 import type { ContentLanguages, Json } from "../../shared/types";
 import { api, errorMessage, session } from "../api";
-import { contentLabel, newNote } from "../content-model";
+import { contentLabel, newThread } from "../content-model";
 import { t, type Message } from "../i18n";
 import {
-  retainNoteDraft,
-  retargetNoteDraft,
-  type NoteDraft as Draft,
-} from "../note-session";
+  retainThreadDraft,
+  retargetThreadDraft,
+  type ThreadDraft as Draft,
+} from "../thread-session";
 import {
   classes,
   combineEvents,
@@ -28,8 +28,8 @@ import LoadingState from "./LoadingState";
 
 type Props = {};
 type Events = { dirty: [value: boolean]; saved: [path: string] };
-const NoteComposer: StudioComponent<Props, Events> = component<Props, Events>(
-  "NoteComposer",
+const ThreadComposer: StudioComponent<Props, Events> = component<Props, Events>(
+  "ThreadComposer",
   (props, emit, expose) => {
     const languages = ref<ContentLanguages>(),
       document = ref<Draft>(),
@@ -39,7 +39,7 @@ const NoteComposer: StudioComponent<Props, Events> = component<Props, Events>(
       firstLanguage = ref(""),
       error = ref<Message>(""),
       host = ref<HTMLElement>();
-    const storageKey = `studio-note-session:${session.value?.identity.method}:${session.value?.identity.id}`;
+    const storageKey = `studio-thread-session:${session.value?.identity.method}:${session.value?.identity.id}`;
     const draftsKey = `${storageKey}:unsaved`,
       drafts = ref<Draft[]>([]);
     function rememberDrafts() {
@@ -65,7 +65,7 @@ const NoteComposer: StudioComponent<Props, Events> = component<Props, Events>(
           /* Keep the existing draft pointer when a backup is unreadable. */
         }
       if (snapshot) {
-        drafts.value = retainNoteDraft(drafts.value, {
+        drafts.value = retainThreadDraft(drafts.value, {
           path: document.value.path,
           ...snapshot,
         });
@@ -119,7 +119,7 @@ const NoteComposer: StudioComponent<Props, Events> = component<Props, Events>(
     function create() {
       if (!languages.value || !canLeave()) return;
       keepUnsaved();
-      document.value = newNote(
+      document.value = newThread(
         firstLanguage.value || languages.value.defaultLanguage,
         languages.value.defaultLanguage,
       );
@@ -135,7 +135,7 @@ const NoteComposer: StudioComponent<Props, Events> = component<Props, Events>(
         languages.value,
       ).path;
       document.value = snapshot
-        ? retargetNoteDraft(path, snapshot, dirty.value)
+        ? retargetThreadDraft(path, snapshot, dirty.value)
         : { ...document.value, path };
       remember();
     }
@@ -163,7 +163,7 @@ const NoteComposer: StudioComponent<Props, Events> = component<Props, Events>(
       editor.value?.forget();
       changed(false);
       document.value = languages.value
-        ? newNote(
+        ? newThread(
             firstLanguage.value || languages.value.defaultLanguage,
             languages.value.defaultLanguage,
           )
@@ -196,7 +196,7 @@ const NoteComposer: StudioComponent<Props, Events> = component<Props, Events>(
           ) as Draft | null;
           if (
             stored &&
-            /^content\/notes\/[a-zA-Z0-9][a-zA-Z0-9_-]*\/index(?:\.[A-Za-z0-9-]+)?\.md$/.test(
+            /^content\/threads\/[a-zA-Z0-9][a-zA-Z0-9_-]*\/index(?:\.[A-Za-z0-9-]+)?\.md$/.test(
               stored.path,
             )
           ) {
@@ -217,7 +217,7 @@ const NoteComposer: StudioComponent<Props, Events> = component<Props, Events>(
           /* Start a new session if a stored pointer is unavailable. */
         }
         if (!document.value)
-          document.value = newNote(
+          document.value = newThread(
             firstLanguage.value,
             languages.value.defaultLanguage,
           );
@@ -234,7 +234,7 @@ const NoteComposer: StudioComponent<Props, Events> = component<Props, Events>(
         {
           ref: domRef(host),
           "aria-label": t("写动态"),
-          className: classes("card note-composer"),
+          className: classes("card thread-composer"),
         },
         element(
           "div",
@@ -396,4 +396,4 @@ const NoteComposer: StudioComponent<Props, Events> = component<Props, Events>(
   },
   {},
 );
-export default NoteComposer;
+export default ThreadComposer;

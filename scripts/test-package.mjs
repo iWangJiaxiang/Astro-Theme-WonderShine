@@ -21,7 +21,7 @@ try {
  await writeFile(path.join(site,'package.json'),JSON.stringify(p,null,2));
  run(['install','--no-audit','--no-fund','--fetch-retries=1','--fetch-timeout=30000'],site);
  run(['run','build'],site);
- for(const page of ['index.html','zh-CN/index.html','articles/welcome/index.html','zh-CN/articles/welcome/index.html','thread/11111111-2222-4333-8444-555555555555/index.html','collections/field-notes/first/index.html','sitemap.xml'])assert.ok((await readFile(path.join(site,'dist',page))).length,page);
+ for(const page of ['index.html','zh-CN/index.html','articles/welcome/index.html','zh-CN/articles/welcome/index.html','threads/11111111-2222-4333-8444-555555555555/index.html','collections/field-notes/first/index.html','sitemap.xml'])assert.ok((await readFile(path.join(site,'dist',page))).length,page);
  const html=await readFile(path.join(site,'dist/index.html'),'utf8');assert.match(html,/Make room/);assert.doesNotMatch(html,/blog\.jiaxiang\.wang|89889813571729408/);
  await mkdir('temp',{recursive:true});await cp(path.join(temporary,packed.filename),path.join('temp',packed.filename));
  console.log(JSON.stringify({package:packed.filename,files:names.length,bytes:packed.size,installedBuild:'passed',languages:['en','zh-CN']},null,2));

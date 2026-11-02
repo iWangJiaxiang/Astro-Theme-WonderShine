@@ -61,7 +61,7 @@ try {
   await page.setViewport({width:1440,height:1000});console.log('Captured '+name);
  };
  await page.goto(origin,{waitUntil:'networkidle0'});await capture('login');
- await page.type('[name=username]','owner');await page.type('[name=password]','studio-form-test-2026');await click('进入创作中心');await page.waitForSelector('.note-composer textarea');await capture('dashboard');
+ await page.type('[name=username]','owner');await page.type('[name=password]','studio-form-test-2026');await click('进入创作中心');await page.waitForSelector('.thread-composer textarea');await capture('dashboard');
  for(const schema of settingsSchemas){await click(schema.title);await page.waitForFunction(title=>document.querySelector('.settings-page h1')?.textContent===title,{},schema.title);await page.waitForSelector('.settings-grid');await capture('settings-'+schema.id,{expand:true});}
  for(const [kind,newLabel]of [['文章','新建文章'],['页面','新建页面'],['合集管理','新建内容']]){
   await click(kind);await page.waitForSelector('.content-library');await click(newLabel);await page.waitForSelector('.modal');await capture('create-'+({'文章':'article','页面':'page','合集管理':'collection'}[kind]));
@@ -73,12 +73,12 @@ try {
  await page.waitForSelector('.metadata-card input[name="date-time"]');
  if(!await page.$eval('.metadata-card input[name="date-time"]',e=>e.value))throw new Error('New articles need a complete publication timestamp');
  await capture('new-article-editor',{expand:true});
- await click('动态');await page.waitForSelector('.note-composer textarea');await capture('notes',{expand:true});
- await page.click('.note-composer button[name="extra.topics"]');await page.waitForSelector('dialog[open]');await capture('select-topics');await page.type('dialog[open] input[type=search]', '新话题');await capture('create-topic-inline');await closeDialog();
+ await click('动态');await page.waitForSelector('.thread-composer textarea');await capture('threads',{expand:true});
+ await page.click('.thread-composer button[name="extra.topics"]');await page.waitForSelector('dialog[open]');await capture('select-topics');await page.type('dialog[open] input[type=search]', '新话题');await capture('create-topic-inline');await closeDialog();
  await click('引用文章');await page.waitForSelector('dialog[open]');await capture('reference-internal');await click('外部文章');await capture('reference-external');await closeDialog();
- await click('发布设置');await page.waitForSelector('.note-properties-heading');await capture('note-publishing');
- await page.click('.note-composer .note-date-trigger');await page.waitForSelector('.publication-date-dialog[open]');await capture('publication-date');await closeDialog();
- await click('详情');await page.waitForSelector('.note-detail-page');await capture('note-detail');await click('编辑动态');await page.waitForSelector('.note-editor');await capture('note-editor',{expand:true});
+ await click('发布设置');await page.waitForSelector('.thread-properties-heading');await capture('thread-publishing');
+ await page.click('.thread-composer .thread-date-trigger');await page.waitForSelector('.publication-date-dialog[open]');await capture('publication-date');await closeDialog();
+ await click('详情');await page.waitForSelector('.thread-detail-page');await capture('thread-detail');await click('编辑动态');await page.waitForSelector('.thread-editor');await capture('thread-editor',{expand:true});
  await click('话题管理');await click('新建话题');await page.waitForSelector('.editor-page');await capture('topic-editor',{expand:true});
  await click('文章');await page.waitForSelector('.content-row[data-path="content/articles/welcome/index.md"]');await page.click('.content-row[data-path="content/articles/welcome/index.md"]');await page.waitForSelector('.markdown-source');await capture('article-editor',{expand:true});
  await click('＋ 添加语言');await page.waitForSelector('.language-version-create');await capture('add-language');await click('＋ 添加语言');

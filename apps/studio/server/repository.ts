@@ -48,7 +48,7 @@ export class LocalRepository implements Repository {
         else if (entry.name.endsWith('.md')) { const file = await this.read(path); if (file) files.push(file); }
       }
     };
-    for (const kind of ['articles', 'pages', 'collections', 'notes', 'topics']) {
+    for (const kind of ['articles', 'pages', 'collections', 'threads', 'topics']) {
       // Check the top directory too, so a symlink cannot be used to list secrets.
       await this.safePath(`content/${kind}/placeholder.md`);
       await walk(`content/${kind}`);

@@ -21,7 +21,7 @@ const secondaryMenus = (data.menu?.nav_menu || []).filter(isSecondary);
         {menu.href ? <a class="site-page nav-item" href={localizeUrl(menu.href,lang,site)} target={menu.target} rel={menu.rel}><span>{menu.name}</span></a> : <button class="site-page nav-item"><span>{menu.name}</span></button>}
         <MenuTree menu={menu} site={site} lang={lang}/>
       </div>
-      {index === 0 && config.extra.activity?.enable && <><div class="menus_item"><a class="site-page nav-item" href={`${localeHome(lang,site)}notes/`}>{t('notes',lang,site,'activity')}</a></div><div class="menus_item"><a class="site-page nav-item" href={`${localeHome(lang,site)}timeline/`}>{t('timeline',lang,site,'activity')}</a></div></>}
+      {index === 0 && config.extra.activity?.enable && <><div class="menus_item"><a class="site-page nav-item" href={`${localeHome(lang,site)}threads/`}>{t('threads',lang,site,'activity')}</a></div><div class="menus_item"><a class="site-page nav-item" href={`${localeHome(lang,site)}timeline/`}>{t('timeline',lang,site,'activity')}</a></div></>}
     </>)}
     {secondaryMenus.length > 0 && <details class="compact-more"><summary>{tr('ui_more')} <span aria-hidden="true">⌄</span></summary><div class="compact-more-panel">{secondaryMenus.map((menu:any)=>menu.menus?.length?<details><summary>{menu.name}</summary><MenuTree menu={menu} site={site} lang={lang}/></details>:<a class="site-page nav-item" href={localizeUrl(menu.href,lang,site)} target={menu.target} rel={menu.rel}>{menu.name}</a>)}</div></details>}
   </div></div>

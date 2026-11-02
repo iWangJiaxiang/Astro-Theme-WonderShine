@@ -13,7 +13,7 @@ const demo = {
   siteRoot: path.join(workspace, 'examples/demo'),
   pages: [
     ['home', '/'], ['article', '/articles/welcome/'],
-    ['thread', '/thread/11111111-2222-4333-8444-555555555555/'],
+    ['thread', '/threads/11111111-2222-4333-8444-555555555555/'],
     ['series', '/collections/field-notes/'], ['tags', '/tags/design/'], ['timeline', '/timeline/'],
     ['chinese', '/zh-CN/'],
   ],

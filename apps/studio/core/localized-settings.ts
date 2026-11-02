@@ -1,7 +1,7 @@
 import { parse } from 'smol-toml';
 import type { FileSnapshot, SettingsSchema } from '../shared/types.js';
 import { getValue } from './content.js';
-import { noteLanguages } from './notes.js';
+import { threadLanguages } from './threads.js';
 import type { Repository, WriteGuard } from '../shared/repository.js';
 import { revisionOf } from './portable.js';
 import { StudioError } from './errors.js';
@@ -21,7 +21,7 @@ export async function settingsSource(repository: Repository, schema: SettingsSch
   const base = await repository.read(schema.file);
   const baseData = parseFile(base);
   const config = language ? schema.file === 'config.toml' ? base : await repository.read('config.toml') : null;
-  const languages = noteLanguages(config ? parse(config.text) : {});
+  const languages = threadLanguages(config ? parse(config.text) : {});
   if (language && (!/^[A-Za-z0-9][A-Za-z0-9-]*$/.test(language) || !languages.languages.includes(language))) throw new StudioError(400, '目标语言未在站点中配置');
   if (!language) return {
     path: schema.file, file: base, data: baseData, revision: base?.revision ?? '',
