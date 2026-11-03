@@ -74,7 +74,14 @@ export class ContentService {
     const [files, configFile] = await Promise.all([this.repository.list(), this.repository.read('config.toml')]);
     const config = configFile ? asJson(parse(configFile.text)) as Record<string, Json> : {};
     const languages = threadLanguages(config);
-    const summaries: ArticleSummary[] = files.map(file => {
+    // Timer tasks (not microtasks) let the native WebView handle input and paint.
+    let sliceStarted = performance.now(), sliceItems = 0;
+    const shouldYield = () => ++sliceItems >= 32 || performance.now() - sliceStarted >= 8;
+    const yieldToUI = async () => {
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+      sliceStarted = performance.now(); sliceItems = 0;
+    };
+    const summarize = (file: (typeof files)[number]): ArticleSummary => {
       const kind = file.path.startsWith('content/articles/') ? 'article' : file.path.startsWith('content/pages/') ? 'page' : file.path.startsWith('content/threads/') ? 'thread' : file.path.startsWith('content/topics/') ? 'topic' : 'collection';
       try {
         const document = splitDocument(file.text);
@@ -96,8 +103,29 @@ export class ContentService {
         try { lang = kind === 'thread' || kind === 'topic' ? (kind === 'topic' ? topicPath : threadPath)(file.path, languages).lang : translationLocation(file.path, languages.defaultLanguage, languages).sourceLanguage; } catch { /* Unknown or malformed paths remain visible for repair. */ }
         return { path: file.path, title: file.path, date: '', draft: false, kind, tags: [], categories: [], lang, error: 'TOML 格式需要检查' } satisfies ArticleSummary;
       }
-    });
-    return summaries.map(item => ({ ...item, availableLanguages: item.translationKey ? summaries.filter(other => other.translationKey === item.translationKey && other.lang).map(other => other.lang!).sort() : [] }));
+    };
+    const summaries: ArticleSummary[] = [];
+    const languageGroups = new Map<string, string[]>();
+    for (const file of files) {
+      const item = summarize(file);
+      summaries.push(item);
+      if (item.translationKey && item.lang) {
+        let group = languageGroups.get(item.translationKey);
+        if (!group) languageGroups.set(item.translationKey, group = []);
+        group.push(item.lang);
+      }
+      if (shouldYield()) await yieldToUI();
+    }
+    for (const group of languageGroups.values()) {
+      group.sort();
+      if (shouldYield()) await yieldToUI();
+    }
+    for (const item of summaries) {
+      // Keep independent arrays and duplicate languages, as in the previous API.
+      item.availableLanguages = item.translationKey ? [...(languageGroups.get(item.translationKey) ?? [])] : [];
+      if (shouldYield()) await yieldToUI();
+    }
+    return summaries;
   }
   async document(path: string): Promise<Article> {
     documentPath(path);

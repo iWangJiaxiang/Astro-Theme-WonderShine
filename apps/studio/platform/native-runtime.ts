@@ -37,11 +37,15 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
   await local.recover();
   const repository = Object.assign(local, { mode: 'git' as const, workspace: git });
   const ai = new NativeAiController(repository, (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }), localStorage, profile.id);
-  const dispose = () => { ai.dispose(); token = ''; setMediaResolver(); setApiTransport(); };
+  let disposed = false;
+  const dispose = () => { if (disposed) return; disposed = true; ai.dispose(); token = ''; setMediaResolver(); setApiTransport(); };
   const transport = createContentTransport(repository, { ai, identity: { id: profile.id, name: profile.authorName || profile.label }, onLogout: () => {
     dispose(); onDisconnect();
   } });
   setMediaResolver((path, version) => { validateMediaPath(path); return convertFileSrc(root + '/' + path) + `?v=${version}`; });
-  setApiTransport((path, init) => transport(new Request(new URL('/api' + path, 'https://studio.local'), init)));
+  setApiTransport((path, init) => {
+    if (disposed) return Promise.reject(new Error('连接已更换，请重试'));
+    return transport(new Request(new URL('/api' + path, 'https://studio.local'), init));
+  });
   return dispose;
 }

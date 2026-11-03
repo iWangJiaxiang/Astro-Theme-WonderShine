@@ -1,10 +1,13 @@
+import { legacyRecovery } from './legacy-recovery';
+
 /** Native-only HTTPS transport. Cookies stay in memory and never enter localStorage. */
-export function createRemoteTransport(address: string, requestFetch: typeof fetch, disconnected: () => void = () => {}) {
+export function createRemoteTransport(address: string, requestFetch: typeof fetch, disconnected: () => void = () => {}, workspaceId?: string) {
   const origin = new URL(address);
   if (origin.protocol !== 'https:' || origin.username || origin.password || origin.search || origin.hash || origin.pathname !== '/') throw new Error('请输入不含路径的 HTTPS 创作中心地址');
   let cookie = '';
   const lifetime = new AbortController();
-  const dispose = () => { cookie = ''; lifetime.abort(); };
+  let recoveryContext: typeof legacyRecovery.value = null;
+  const dispose = () => { if (legacyRecovery.value === recoveryContext) legacyRecovery.value = null; cookie = ''; lifetime.abort(); };
   const transport = async (path: string, init: RequestInit): Promise<Response> => {
     if (!path.startsWith('/') || path.startsWith('//')) throw new Error('接口地址无效');
     const target = new URL('/api' + path, origin);
@@ -24,6 +27,7 @@ export function createRemoteTransport(address: string, requestFetch: typeof fetc
       await response.body?.cancel().catch(() => {});
       throw new Error('创作中心请求不允许重定向');
     }
+    if (response.status === 401 && legacyRecovery.value === recoveryContext) legacyRecovery.value = null;
     const setCookie = response.headers.get('set-cookie');
     if (setCookie) {
       const match = /(?:^|,\s*)(__Host-studio-session)=([^;\s,]*)/.exec(setCookie);
@@ -40,7 +44,15 @@ export function createRemoteTransport(address: string, requestFetch: typeof fetc
       signal.throwIfAborted();
       // Browser OIDC redirects require a separate app callback flow, not WebView navigation.
       if (path === '/auth/config') data.oidc = null;
-      if (data.identity?.id) data.identity.id = `remote:${origin.origin}:${data.identity.id}`;
+      if (data.identity?.id) {
+        const legacyId = `remote:${origin.origin}:${data.identity.id}`;
+        data.identity.id = `remote:${workspaceId ? workspaceId + ':' : ''}${origin.origin}:${data.identity.id}`;
+        if (workspaceId && ['/auth/session', '/auth/login'].includes(path) && typeof data.identity.method === 'string') {
+          recoveryContext = { legacy: { id: legacyId, method: data.identity.method }, current: { id: data.identity.id, method: data.identity.method } };
+          legacyRecovery.value = recoveryContext;
+          recoveryContext = legacyRecovery.value;
+        }
+      }
       return new Response(JSON.stringify(data), { status: response.status, headers: { 'Content-Type': 'application/json' } });
     }
     return response;

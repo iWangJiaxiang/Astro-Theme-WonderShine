@@ -24,6 +24,7 @@ let allowOAuthHttp = false, oauthApproved = false;
 let allowCloneHttp = false, failNextHttp = false, failNextBranchWrite = false;
 let releaseDownload = () => {}, releaseCheckout = () => {};
 let downloadGate = Promise.resolve(), checkoutGate = Promise.resolve();
+let writeGate = Promise.resolve(), releaseWrite = () => {};
 const requests = new Map(), responses = new Map();
 let nextResource = 1;
 try {
@@ -79,7 +80,8 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error' && /Content Security Policy|Refused to/.test(message.text())) cspErrors.push(message.text()); });
   page.on('response', response => { if (response.status() >= 400 && !response.url().endsWith('/favicon.ico')) failedResources.push(`${response.status()} ${response.url()}`); });
-  page.on('dialog', dialog => dialog.accept());
+  let dismissNextDialog = false;
+  page.on('dialog', dialog => { if (dismissNextDialog) { dismissNextDialog = false; void dialog.dismiss(); } else void dialog.accept(); });
   await page.setRequestInterception(true);
   page.on('request', request => request.url().startsWith(origin + '/') || request.url().startsWith('data:') || request.url().startsWith('blob:') ? request.continue() : request.abort());
   const commands = new Set();
@@ -91,6 +93,7 @@ try {
       else if (command === 'plugin:path|resolve_directory') value = appData;
       else if (command === 'plugin:fs|write_file') {
         const path = confined(decodeURIComponent(options.headers.path));
+        await writeGate;
         if (failNextBranchWrite && path.includes('/.git/objects/')) { throw new Error('Simulated branch write failure'); }
         if (path.includes('.clone-') && path.endsWith('/config.toml')) await checkoutGate;
         await fs.writeFile(path, new Uint8Array(args));
@@ -174,7 +177,7 @@ try {
   });
   await page.evaluateOnNewDocument(profile => {
     Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN'] });
-    if (!localStorage.getItem('wondershine.native.workspaces.v1')) localStorage.setItem('wondershine.native.workspaces.v1', JSON.stringify([profile]));
+    if (!localStorage.getItem('wondershine.native.workspaces.v1')) localStorage.setItem('wondershine.native.workspaces.v1', JSON.stringify([profile, { id: 'a6347560-bbe9-4c35-9d89-b0429108882b', source: 'service', label: 'Saved Studio', address: 'https://studio.example.test' }]));
     window.__TAURI_INTERNALS__ = {
       invoke: async (command, args = {}, options) => {
         const value = args instanceof Uint8Array ? Array.from(args) : args;
@@ -187,6 +190,9 @@ try {
     };
   }, profile);
   const click = async text => {
+    if (text === '打开工作区' && !await page.$('.connection-form-fields')) {
+      await page.evaluate(() => document.querySelector('.workspace-record button')?.click());
+    }
     await page.waitForFunction(text => [...document.querySelectorAll('button')].some(button => button.textContent.trim() === text && !button.disabled), {}, text);
     await page.evaluate(text => [...document.querySelectorAll('button')].find(button => button.textContent.trim() === text && !button.disabled).click(), text);
   };
@@ -199,6 +205,33 @@ try {
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.goto(origin, { waitUntil: 'networkidle0' }); await heading('连接创作工作区');
   assert.equal(runtimeChunks.some(name => loadedScripts.has(name)), false, 'Connection screen must not load the Git/content runtime before opening a workspace');
+  assert.equal(await page.$$('.workspace-record').then(records => records.length), 2, 'Git and service records share the initial chooser');
+  assert.equal(await page.$('.connection-form-fields'), null, 'saved workspaces start at the chooser');
+  await page.evaluate(() => [...document.querySelectorAll('.workspace-record')].find(record => record.textContent.includes('Saved Studio')).querySelector('button').click());
+  assert.equal(await page.$eval('input[placeholder="https://studio.example.com"]', input => input.value), 'https://studio.example.test');
+  const recordAction = async (id, text) => {
+    await page.evaluate(({ id, text }) => {
+      const record = document.querySelector(`[data-workspace-id="${id}"]`);
+      const button = [...record.querySelectorAll('button')].find(button => button.textContent.trim() === text);
+      if (!button || button.disabled) throw new Error('Missing record action: ' + text);
+      button.click();
+    }, { id, text });
+  };
+  const recoveryKey = `studio-draft:password:${profile.id}:content/articles/recovery/index.md`;
+  await page.evaluate(key => localStorage.setItem(key, JSON.stringify({ body: 'Archive recovery fixture' })), recoveryKey);
+  for (const id of ['a6347560-bbe9-4c35-9d89-b0429108882b', profile.id]) {
+    await recordAction(id, '归档记录');
+    await page.waitForSelector(`.archived-workspaces [data-workspace-id="${id}"]`);
+    assert.equal(await page.$(`.workspace-record[data-workspace-id="${id}"]`), null);
+    await page.reload({waitUntil:'networkidle0'});
+    await page.click('.archived-workspaces summary');
+    await recordAction(id, '恢复记录');
+    await page.waitForSelector(`.workspace-record[data-workspace-id="${id}"]`);
+  }
+  assert.equal(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).body, recoveryKey), 'Archive recovery fixture', 'archive/restore retains the original draft identity');
+  assert.ok(await fs.stat(root), 'archive/restore retains the original checkout');
+  const restored = await page.evaluate(() => JSON.parse(localStorage.getItem('wondershine.native.workspaces.v1')));
+  assert.deepEqual(restored.find(record => record.id === profile.id), profile, 'restore preserves the complete original record and recovery ID');
   await screenshot('connection-git-desktop'); await noOverflow('desktop connection');
   await click('本地文件夹'); await screenshot('connection-folder-desktop');
   await page.click('.folder-picker');
@@ -212,7 +245,9 @@ try {
   assert.ok(runtimeChunks.some(name => loadedScripts.has(name)), 'Opening a workspace loads the deferred native runtime');
   await click('工作区同步'); await page.waitForSelector('.workspace-status-grid');
   assert.equal(await page.$$eval('button', buttons => buttons.find(b => b.textContent.trim() === '同步 Git').disabled), true, 'local repository without a remote disables sync');
-  await page.click('[aria-label="退出登录"]'); await heading('连接创作工作区');
+  await click('切换工作区'); await heading('连接创作工作区');
+  assert.equal(await page.$('.studio-shell'), null, 'switch tears down the previous App before choosing another workspace');
+  assert.equal(await page.$$('.workspace-record').then(records => records.length), 3, 'local, clone and service records coexist');
   await click('远程仓库');
 
   await click('连接自建创作中心'); await page.waitForSelector('input[placeholder="https://studio.example.com"]'); await screenshot('connection-remote-desktop');
@@ -235,7 +270,14 @@ try {
   await heading('离线文章示例'); await page.waitForSelector('.markdown-source');
   await page.focus('.markdown-source'); await page.$eval('.markdown-source', element => element.select());
   await page.type('.markdown-source', '# Native UI saved\n\nOffline source editing.\n');
-  await click('本地保存'); await page.waitForSelector('.notice.success');
+  dismissNextDialog = true;
+  await click('切换工作区');
+  assert.ok(await page.$('.markdown-source'), 'cancelled dirty-workspace switch keeps the editor mounted');
+  writeGate = new Promise(resolve => { releaseWrite = resolve; });
+  await click('本地保存');
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].find(button => button.textContent.trim() === '切换工作区')?.disabled);
+  assert.ok(await page.$('.markdown-source'), 'pending writes block switching without unmounting the editor');
+  releaseWrite(); await page.waitForSelector('.notice.success');
   const savedArticle = await fs.readFile(join(root, 'content/articles/example/index.md'), 'utf8');
   assert.match(savedArticle, /Native UI saved/); assert.doesNotMatch(savedArticle, /Native UI fixture\./);
   const originalHead = git(['rev-parse', 'HEAD']);
@@ -411,7 +453,7 @@ try {
   if (browser) { const pages = await browser.pages(); await pages.at(-1)?.screenshot({ path: join(screenshots, 'failure.png'), fullPage: true }); }
   throw error;
 } finally {
-  releaseDownload(); releaseCheckout();
+  releaseDownload(); releaseCheckout(); releaseWrite();
   await browser?.close();
   if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   await fs.rm(base, { recursive: true, force: true });

@@ -1,3 +1,4 @@
+import { LegacyRecovery } from "../platform/LegacyRecovery";
 import { configureSaving } from "./save-preferences";
 import type { SaveCapabilities } from "../shared/save";
 import { NativeAiSettings } from "../platform/NativeAiSettings";
@@ -23,7 +24,7 @@ import { mediaUploading } from "./media-store";
 import { t, type Message } from "./i18n";
 import { ref, watch, onMounted, onBeforeUnmount, computed } from "./reactivity";
 import type { Json, ArticleSummary } from "../shared/types";
-import { api, session, reauthentication, errorMessage } from "./api";
+import { api, session, reauthentication, errorMessage, pendingMutations } from "./api";
 import LoginView from "./components/LoginView";
 import SettingsView from "./components/SettingsView";
 import ContentLibrary from "./components/ContentLibrary";
@@ -42,7 +43,7 @@ import {
   sortLibrary,
 } from "../shared/library";
 
-type Props = {};
+type Props = { workspaceSwitcher?: boolean };
 type Events = {};
 const App: StudioComponent<Props, Events> = component<Props, Events>(
   "App",
@@ -209,8 +210,10 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       }
     });
     onMounted(async () => {
+      const current = generation;
       try {
-        session.value = await api("/auth/session");
+        const result = await api<NonNullable<typeof session.value>>("/auth/session");
+        if (current === generation) session.value = result;
       } catch {
         /* Login is shown for an absent session. */
       } finally {
@@ -218,7 +221,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       }
     });
     function leave() {
-      if (libraryBusy.value || editorView.value?.isBusy?.()) {
+      if (pendingMutations.value || libraryBusy.value || editorView.value?.isBusy?.()) {
         alert(t("正在保存或生成译文，请稍候。"));
         return false;
       }
@@ -307,6 +310,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       editorView.value?.flush();
       if (
         dirty.value ||
+        pendingMutations.value > 0 ||
         libraryBusy.value ||
         mediaUploading.value ||
         editorView.value?.isBusy?.()
@@ -316,9 +320,10 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       }
     }
     window.addEventListener("beforeunload", beforeUnload);
-    onBeforeUnmount(() =>
-      window.removeEventListener("beforeunload", beforeUnload),
-    );
+    onBeforeUnmount(() => {
+      generation++;
+      window.removeEventListener("beforeunload", beforeUnload);
+    });
     return () =>
       element(
         Fragment,
@@ -433,6 +438,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                       ),
                     ),
                   ),
+                  element(LegacyRecovery, null),
                   element(
                     "div",
                     { className: classes("sidebar-bottom") },
@@ -519,6 +525,10 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                     element(
                       "div",
                       { className: classes("row topbar-actions") },
+                      props.workspaceSwitcher ? element("button", {
+                        onClick: domEvent(() => { void logout(); }),
+                        disabled: pendingMutations.value > 0,
+                      }, t("切换工作区")) : null,
                       element(LanguageSwitcher, null),
                       data.value
                         ? element(

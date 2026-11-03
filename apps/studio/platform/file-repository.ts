@@ -73,7 +73,17 @@ export class FileRepository implements Repository {
       if (result.truncated) throw new StudioError(413, '仓库文件过多，请缩小工作区');
       paths.push(...result.paths);
     }
-    return (await Promise.all(paths.map(path => this.read(path)))).filter((value): value is FileSnapshot => !!value);
+    const snapshots: FileSnapshot[] = [];
+    // Bound native filesystem/crypto work without bypassing read() safety checks.
+    // Drain each batch before rejecting so no reads outlive a failed listing.
+    for (let offset = 0; offset < paths.length; offset += 8) {
+      const batch = await Promise.allSettled(paths.slice(offset, offset + 8).map(path => this.read(path)));
+      for (const result of batch) {
+        if (result.status === 'rejected') throw result.reason;
+        if (result.value) snapshots.push(result.value);
+      }
+    }
+    return snapshots;
   }
   async listMedia(): Promise<MediaListing> {
     const result: MediaListing = { items: [], truncated: false, maxFileSize: MAX_UPLOAD_SIZE };

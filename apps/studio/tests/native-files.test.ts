@@ -54,6 +54,56 @@ test('native files reject traversal, symlinks, unsafe uploads and interrupted Gi
   const blocked = new FileRepository(nativeFiles, root, state, async () => { throw new Error('sync interrupted'); });
   await assert.rejects(blocked.write('config.toml', 'title="test"', null), /sync interrupted/);
 }));
+test('native listing bounds in-flight reads, preserves walk order and filters vanished files', async () => fixture(async (_repo, root, state) => {
+  await fs.mkdir(root + '/content/articles', { recursive: true });
+  const paths = Array.from({ length: 25 }, (_, i) => `content/articles/story-${String(i).padStart(2, '0')}.md`);
+  for (const file of paths) await fs.writeFile(root + '/' + file, file);
+  let active = 0, peak = 0;
+  const repository = new FileRepository(nativeFiles, root, state);
+  const read = repository.read.bind(repository);
+  repository.read = async file => {
+    active++; peak = Math.max(peak, active);
+    try {
+      // Complete out of order while exercising the real safety/revision path.
+      await new Promise(resolve => setTimeout(resolve, file.endsWith('00.md') ? 10 : 0));
+      if (file === paths[3]) await fs.unlink(root + '/' + file);
+      return await read(file);
+    } finally { active--; }
+  };
+  const listed = await repository.list();
+  assert.ok(peak > 1 && peak <= 8, `peak reads: ${peak}`);
+  assert.equal(active, 0);
+  assert.deepEqual(listed.map(file => file.path), paths.filter(file => file !== paths[3]));
+  assert.equal(listed[0].revision, (await read(paths[0]))!.revision);
+}));
+
+test('native listing drains failed batches and retains size, UTF-8 and symlink checks', async () => fixture(async (_repo, root, state) => {
+  await fs.mkdir(root + '/content/articles', { recursive: true });
+  const paths = Array.from({ length: 17 }, (_, i) => `content/articles/story-${String(i).padStart(2, '0')}.md`);
+  for (const file of paths) await fs.writeFile(root + '/' + file, 'valid');
+  for (const fault of ['size', 'utf8', 'symlink']) {
+    let active = 0, started = 0;
+    const repository = new FileRepository(nativeFiles, root, state);
+    const read = repository.read.bind(repository);
+    repository.read = async file => {
+      active++; started++;
+      try {
+        if (file === paths[0]) {
+          if (fault === 'size') await fs.writeFile(root + '/' + file, 'x'.repeat(1024 * 1024 + 1));
+          else if (fault === 'utf8') await fs.writeFile(root + '/' + file, new Uint8Array([0xff]));
+          else { await fs.unlink(root + '/' + file); await fs.symlink(root + '/' + paths[1], root + '/' + file); }
+        }
+        return await read(file);
+      } finally { active--; }
+    };
+    await assert.rejects(repository.list(), fault === 'size' ? /限制/ : fault === 'symlink' ? /符号链接/ : /encoded data|encoding/i);
+    assert.equal(active, 0, 'failed listings must drain outstanding reads');
+    assert.equal(started, 8, 'do not schedule later batches after failure');
+    await fs.unlink(root + '/' + paths[0]);
+    await fs.writeFile(root + '/' + paths[0], 'valid');
+  }
+}));
+
 test('all hosting providers support explicit Git remotes without pretending API discovery exists', () => {
   assert.equal(hostingProviders.length, 7);
   for (const provider of hostingProviders) { assert.equal(provider.validateRemote('https://git.example/team/site.git').host, 'git.example'); assert.equal(provider.capabilities.discovery, false); }

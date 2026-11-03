@@ -22,6 +22,23 @@ test('switching backend during JSON decoding cannot return the previous session'
   Reflect.deleteProperty(globalThis, 'localStorage');
 });
 
+test('pending Git sync blocks logout and logout blocks new writes', async () => {
+  const { api, setApiTransport, pendingMutations } = await import('../src/api');
+  let release!: () => void;
+  setApiTransport(() => new Promise(resolve => { release = () => resolve(new Response('{}')); }));
+  try {
+    const sync = api('/workspace/sync', 'POST', {});
+    assert.equal(pendingMutations.value, 1);
+    await assert.rejects(api('/auth/logout', 'POST'), /正在保存/);
+    release(); await sync;
+    assert.equal(pendingMutations.value, 0);
+    const logout = api('/auth/logout', 'POST');
+    await assert.rejects(api('/content', 'POST', {}), /正在保存/);
+    release(); await logout;
+    assert.equal(pendingMutations.value, 0);
+  } finally { setApiTransport(); }
+});
+
 test('native autosave preferences persist without WebView cookies', async () => {
   const storage = new Map<string, string>();
   Object.defineProperty(globalThis, 'window', { configurable:true, value:{__TAURI_INTERNALS__:{}} });
