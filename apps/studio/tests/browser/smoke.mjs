@@ -2,6 +2,7 @@ import { prepareBrowserFixture } from './site-fixture.mjs';
 import { buildAstro } from '../astro-build.ts';
 import puppeteer from 'puppeteer-core';
 import { checkLoading } from './loading.mjs';
+import { checkNavigationAccessibility } from './navigation-accessibility.mjs';
 import { checkLanguages } from './languages.mjs';
 import { checkOnboarding } from './onboarding.mjs';
 import { checkMedia } from './media.mjs';
@@ -68,6 +69,7 @@ try {
  await checkOnboarding({ page, click, heading, screenshots });
  await page.waitForFunction(()=>Number(document.querySelector('.stat-card strong')?.textContent)>0);
  await page.screenshot({path:screenshots+'/dashboard-desktop.png'});
+  await checkNavigationAccessibility({ page, screenshots });
  const dashboardTitle = await page.$eval('.home-grid .content-row strong', node => node.textContent);
  await page.waitForSelector('.thread-composer .markdown-source');
  await fill('.thread-composer .markdown-source', 'Keep this unsaved dashboard draft.');

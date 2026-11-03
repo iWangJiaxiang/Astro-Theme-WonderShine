@@ -69,6 +69,33 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       dirty = ref(false),
       menuOpen = ref(false),
       dark = ref(false);
+    const mobileNavigation = ref(window.matchMedia("(max-width: 760px)").matches);
+    let navigationFrame = 0;
+    watch(menuOpen, (open) => {
+      window.cancelAnimationFrame(navigationFrame);
+      navigationFrame = window.requestAnimationFrame(() => {
+        const selector = open ? '.sidebar .navigation-close' : '.mobile-menu';
+        if (mobileNavigation.value) window.document.querySelector<HTMLButtonElement>(selector)?.focus();
+      });
+    });
+    onMounted(() => {
+      const media = window.matchMedia("(max-width: 760px)");
+      const resize = () => { mobileNavigation.value = media.matches; menuOpen.value = false; };
+      const keydown = (event: KeyboardEvent) => {
+        if (!mobileNavigation.value || !menuOpen.value) return;
+        if (event.key === 'Escape') { event.preventDefault(); menuOpen.value = false; }
+        if (event.key !== 'Tab') return;
+        const items = [...window.document.querySelectorAll<HTMLElement>('.sidebar button:not(:disabled), .sidebar a[href], .sidebar summary')].filter(node => node.getClientRects().length);
+        const first = items[0], last = items.at(-1);
+        if (event.shiftKey && window.document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && window.document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      };
+      media.addEventListener('change', resize);
+      window.document.addEventListener('keydown', keydown);
+      navigationCleanup = () => { media.removeEventListener('change', resize); window.document.removeEventListener('keydown', keydown); window.cancelAnimationFrame(navigationFrame); };
+    });
+    let navigationCleanup = () => {};
+    onBeforeUnmount(() => navigationCleanup());
     const articles = ref<ArticleSummary[]>([]),
       document = ref<{
         path: string;
@@ -349,7 +376,12 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                   : null,
                 element(
                   "aside",
-                  { className: classes("sidebar", { open: menuOpen.value }) },
+                  { id: "studio-navigation", inert: mobileNavigation.value && !menuOpen.value, className: classes("sidebar", { open: menuOpen.value }) },
+                  element("button", {
+                    className: classes("icon-button navigation-close"),
+                    "aria-label": t("关闭导航"),
+                    onClick: domEvent(() => { menuOpen.value = false; }),
+                  }, element(Icon, { name: "close" })),
                   element(
                     "div",
                     { className: classes("brand") },
@@ -389,6 +421,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                           "button",
                           {
                             key: item.id,
+                            "aria-current": view.value === item.id ? "page" : undefined,
                             className: classes({
                               active: view.value === item.id,
                             }),
@@ -425,6 +458,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                           "button",
                           {
                             key: group.id,
+                            "aria-current": view.value === group.id ? "page" : undefined,
                             className: classes({
                               active: view.value === group.id,
                             }),
@@ -474,7 +508,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                 ),
                 element(
                   "div",
-                  { className: classes("main-shell") },
+                  { inert: mobileNavigation.value && menuOpen.value, className: classes("main-shell") },
                   element(
                     "header",
                     { className: classes("topbar") },
@@ -485,6 +519,8 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                         "button",
                         {
                           "aria-label": t("打开导航"),
+                          "aria-expanded": menuOpen.value,
+                          "aria-controls": "studio-navigation",
                           className: classes("icon-button mobile-menu"),
                           onClick: domEvent(($event: Event) => {
                             menuOpen.value = !menuOpen.value;

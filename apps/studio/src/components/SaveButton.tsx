@@ -26,9 +26,13 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
     };
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); setOpen(false); trigger.current?.focus(); } };
     place(); panel.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
+    const focusOutside = (event: FocusEvent) => {
+      if (!panel.current?.contains(event.target as Node) && !trigger.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('focusin', focusOutside);
     document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
     window.addEventListener('resize', place); window.addEventListener('scroll', place, true);
-    return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+    return () => { document.removeEventListener('focusin', focusOutside); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
   }, [open]);
   useEffect(() => { if (busy) setOpen(false); }, [busy]);
   return <div className="save-button">
@@ -49,7 +53,7 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
           <span className="save-mode-check" aria-hidden="true">{mode === choice ? '✓' : ''}</span><span>{t(saveModeLabel[choice])}</span>{context.defaultMode === choice && <small>{t('默认')}</small>}
         </button>)}
       </div>
-      <button type="button" className="save-mode-default" disabled={mode === context.defaultMode} onClick={() => { if (rememberSaveMode(mode)) setOpen(false); else setError(true); }}>{t('将当前方式设为默认')}</button>
+      <button type="button" className="save-mode-default" disabled={mode === context.defaultMode} onClick={() => { if (rememberSaveMode(mode)) { setOpen(false); trigger.current?.focus(); } else setError(true); }}>{t('将当前方式设为默认')}</button>
       {error && <p role="alert">{t('无法记住偏好，请检查本地存储权限')}</p>}
     </div>, document.body)}
   </div>;

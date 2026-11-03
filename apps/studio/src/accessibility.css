@@ -1,0 +1,21 @@
+/* Shared browser and app interaction floor; desktop keeps its compact rhythm. */
+.navigation-close { display: none; }
+.save-mode-menu { max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
+@media (max-width: 760px) {
+  .sidebar .navigation-close { display: inline-flex; align-self: flex-end; min-width: 44px; min-height: 44px; }
+  body:has(.sidebar.open) { overflow: hidden; }
+  .studio-shell :is(button, select, summary),
+  .native-connect :is(button, select, summary) { min-height: 44px; }
+  .studio-shell :is(.icon-button, .save-button-toggle) { min-width: 44px; }
+  .studio-shell :is(input:not([type=checkbox]):not([type=radio]):not([type=color]), textarea, select),
+  .native-connect :is(input:not([type=checkbox]):not([type=radio]), textarea, select) { font-size: 16px; }
+  .studio-shell .field input:not([type=checkbox]):not([type=radio]):not([type=color]) { min-height: 44px; }
+  .thread-composer :is(.composer-mode-tabs button, .composer-tool, .choice-compact .choice-trigger, .reference-heading > button, .composer-recovery .text-button, .composer-publish .primary, .composer-initial-language select) { min-height: 44px; }
+  .composer-publish { flex-wrap: wrap; }
+  .topbar-actions { flex-wrap: wrap !important; }
+  .selection-footer { flex-wrap: wrap; }
+  .selection-footer > small { min-width: 0; overflow-wrap: anywhere; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sidebar { transition: none; }
+}
