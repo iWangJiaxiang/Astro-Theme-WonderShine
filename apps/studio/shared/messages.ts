@@ -1,5 +1,14 @@
 // Application copy only. Site content and stored configuration values are never translated.
 export const english: Record<string, string> = {
+  "切换工作区": "Switch workspace",
+  "工作区": "Workspaces",
+  "选择工作区": "Select workspace",
+  "添加工作区": "Add workspace",
+  "重命名": "Rename",
+  "移除记录": "Remove record",
+  "仅移除工作区记录，不删除文件或草稿。确定继续吗？": "Remove only this workspace record? Files and drafts will not be deleted.",
+  "无法读取工作区记录，请检查存储权限或恢复备份。": "Unable to read workspace records. Check storage permissions or restore a backup.",
+  "无法保存工作区记录，请检查存储权限。": "Unable to save workspace records. Check storage permissions.",
   "提交并同步": "Commit and synchronize",
   "本次托管文件范围": "Managed files included in this commit",
   "确认 Git 操作": "Confirm Git operation",

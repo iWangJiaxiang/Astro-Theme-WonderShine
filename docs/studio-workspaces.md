@@ -2,6 +2,18 @@
 
 The existing HTTP API and cloud-function deployment remain supported. No WebSocket or Rust/WASM server runtime is required.
 
+## Native App workspace chooser (desktop and iOS)
+
+The App starts with a single list of saved local Git repositories, downloaded remote Git repositories, and HTTPS Studio service connections. Select a record to open its connection form; use **Add workspace** for another repository, or the self-hosted Studio connection action for a service. Only one workspace is active at a time. Desktop supports selecting existing Git folders. iOS/Android do not offer the desktop folder picker; they use clones or remote services.
+
+**Rename** changes the display label. **Remove record** removes only the connection record: it never removes checkout files, unpushed commits, recovery drafts, or AppData. Keep a backup before removing records: reconnecting a removed clone creates a new ID rather than automatically rediscovering an orphaned checkout. The existing `wondershine.native.workspaces.v1` registry is extended without changing native IDs, checkout directories or native draft identity scopes. Invalid/unreadable registries block record writes and show an error rather than silently overwriting the old data. Storage write errors also remain visible; a clone may already exist on disk even if its record could not be saved.
+
+Use **Switch workspace** in the App header. It uses the existing dirty-editor confirmation and logout lifecycle, disposes the old runtime, then returns to the chooser. Pending API writes (including Git commit/sync) block switching, and new requests are blocked while logout is pending. No concurrent live workspace swap or multi-tenant server is introduced. A failed service logout leaves the current connection in place so it can be retried.
+
+Service records contain only an ID, display label and HTTPS origin (no path, query, embedded password or token). Password login is still required on each connection; OIDC remains browser-only. Service draft identities include the workspace record ID and origin; authentication cookies and CSRF values are not rewritten. Earlier unsaved service recovery drafts scoped only by origin are not automatically migrated to these new per-record scopes. Git tokens, service cookies and client API keys remain session-only and are not reused on switching.
+
+Registry and transport isolation tests and native production-browser chooser, dirty-switch cancellation and pending-write coverage are included in source. They require remote CI execution; these additions have not been locally executed or validated on physical devices.
+
 ## Choose storage deliberately
 
 - `STUDIO_SITE_ROOT`: edit an existing local site directory. Saving writes files; Studio does not manage Git for this mode.

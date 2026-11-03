@@ -7,7 +7,7 @@ import { createRemoteTransport } from './remote-transport';
 import { readRemoteMedia } from './remote-media';
 
 /** Remote mode has no repository checkout; only editor recovery drafts live locally. */
-export async function connectRemoteWorkspace(address: string, onDisconnect: () => void): Promise<() => void> {
+export async function connectRemoteWorkspace(address: string, onDisconnect: () => void, workspaceId?: string): Promise<() => void> {
   const images = new Map<string, string>();
   const imageVersion = ref(0);
   let generation = 0;
@@ -18,7 +18,7 @@ export async function connectRemoteWorkspace(address: string, onDisconnect: () =
     if (disposed) return;
     disposed = true; transport.dispose(); clear(); setMediaResolver(); setApiTransport();
   };
-  const transport = createRemoteTransport(address, (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }), () => { dispose(); onDisconnect(); });
+  const transport = createRemoteTransport(address, (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }), () => { dispose(); onDisconnect(); }, workspaceId);
   try {
     const response = await transport('/auth/config', { method: 'GET' });
     const auth = await response.json();

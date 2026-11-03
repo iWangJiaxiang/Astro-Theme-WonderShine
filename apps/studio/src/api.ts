@@ -8,7 +8,18 @@ export class ApiError extends Error { constructor(message: string, public status
 export type ApiTransport = (path: string, init: RequestInit) => Promise<Response>;
 let transport: ApiTransport = (path, init) => fetch(`/api${path}`, init);
 export function setApiTransport(next?: ApiTransport) { transport = next || ((path, init) => fetch(`/api${path}`, init)); }
+export const pendingMutations = ref(0);
+let loggingOut = false;
 export async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
+  const mutation = method !== 'GET';
+  const logout = path === '/auth/logout';
+  if (loggingOut || (logout && pendingMutations.value > 0)) throw new ApiError('正在保存或生成译文，请稍候。', 409);
+  if (logout) loggingOut = true;
+  if (mutation) pendingMutations.value++;
+  try { return await request<T>(path, method, body); }
+  finally { if (mutation) pendingMutations.value--; if (logout) loggingOut = false; }
+}
+async function request<T>(path: string, method: string, body?: unknown): Promise<T> {
   const binary = body instanceof Blob;
   let response: Response;
   const activeTransport = transport;

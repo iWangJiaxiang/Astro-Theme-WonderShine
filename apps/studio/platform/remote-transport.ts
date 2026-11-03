@@ -1,5 +1,5 @@
 /** Native-only HTTPS transport. Cookies stay in memory and never enter localStorage. */
-export function createRemoteTransport(address: string, requestFetch: typeof fetch, disconnected: () => void = () => {}) {
+export function createRemoteTransport(address: string, requestFetch: typeof fetch, disconnected: () => void = () => {}, workspaceId?: string) {
   const origin = new URL(address);
   if (origin.protocol !== 'https:' || origin.username || origin.password || origin.search || origin.hash || origin.pathname !== '/') throw new Error('请输入不含路径的 HTTPS 创作中心地址');
   let cookie = '';
@@ -40,7 +40,7 @@ export function createRemoteTransport(address: string, requestFetch: typeof fetc
       signal.throwIfAborted();
       // Browser OIDC redirects require a separate app callback flow, not WebView navigation.
       if (path === '/auth/config') data.oidc = null;
-      if (data.identity?.id) data.identity.id = `remote:${origin.origin}:${data.identity.id}`;
+      if (data.identity?.id) data.identity.id = `remote:${workspaceId ? workspaceId + ':' : ''}${origin.origin}:${data.identity.id}`;
       return new Response(JSON.stringify(data), { status: response.status, headers: { 'Content-Type': 'application/json' } });
     }
     return response;

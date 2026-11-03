@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import App from '../src/App';
-import { session } from '../src/api';
+import { session, reauthentication, pendingMutations } from '../src/api';
 import { t } from '../src/i18n';
 import { useSignals } from '../src/reactivity';
 import { NativeConnection } from './NativeConnection';
@@ -10,6 +10,6 @@ export default function NativeShell() {
   const [connected, setConnected] = useState(false);
   const dispose = useRef<() => void>(() => {});
   useEffect(() => () => dispose.current(), []);
-  function disconnect() { dispose.current(); dispose.current = () => {}; session.value = null; setConnected(false); }
-  return <>{connected ? <>{!session.value && <button className="native-change-connection" onClick={disconnect}>{t('更换连接')}</button>}<App /></> : <NativeConnection onConnected={cleanup => { dispose.current = cleanup; setConnected(true); }} onDisconnect={disconnect} />}<NativeUpdates /></>;
+  function disconnect() { dispose.current(); dispose.current = () => {}; session.value = null; reauthentication.value = false; setConnected(false); }
+  return <>{connected ? <>{!session.value && <button className="native-change-connection" disabled={pendingMutations.value > 0} onClick={disconnect}>{t('切换工作区')}</button>}<App workspaceSwitcher /></> : <NativeConnection onConnected={cleanup => { dispose.current = cleanup; setConnected(true); }} onDisconnect={disconnect} />}<NativeUpdates /></>;
 }
