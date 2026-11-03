@@ -147,4 +147,5 @@ export async function checkNavigationAccessibility({ page, screenshots }) {
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await waitForDesktopNavigation(page);
   assert.equal(await page.$eval('.sidebar button[aria-current="page"]', node => node.textContent.trim()), '工作台');
+  console.log('PASS: navigation drawer focus, inert isolation, keyboard containment and breakpoint focus migration.');
 }
