@@ -110,7 +110,7 @@ if(doc?.html.trim()&&!styles.includes('post'))styles.push('post');
     <slot/>
     {pageType!=='wechat'&&<Footer site={site} lang={lang}/>}
   </div>
-  <Chrome site={site} lang={lang} pageType={pageType}/>
+  <Chrome site={site} lang={lang} pageType={pageType} document={doc}/>
   {e.tool.nav_music?.enable&&<div class="needEndHide" id="nav-music"><a id="nav-music-hoverTips" onclick="wjx.musicToggle()">{lang.startsWith('zh')?'播放音乐':'Play music'}</a><div id="console-music-bg"/><meting-js data-lazy transition:persist="nav-music-player" id={e.tool.nav_music.id} server={e.tool.nav_music.server} type="playlist" mutex="true" preload="none" theme="var(--wjx-main)" data-lrctype="0" order="random"/></div>}
   {e.tool.nav_music?.enable&&<script is:inline defer src="/js/nav-music.js"/>}
   {pageType==='music'&&<><script is:inline defer src="/libs/aplayer/APlayer.min.js"/><script is:inline defer src="/libs/aplayer/Meting2.min.js"/></>}

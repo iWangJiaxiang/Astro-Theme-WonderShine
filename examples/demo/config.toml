@@ -21,6 +21,13 @@ name = "tags"
 [[languages.zh-CN.taxonomies]]
 name = "categories"
 
+# Render comment areas without contacting a live provider in the demo.
+[extra.comments]
+enable = true
+
+[extra.locale.zh-CN.comments]
+enable = false
+
 [extra.activity]
 enable = true
 

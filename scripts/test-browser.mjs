@@ -103,6 +103,32 @@ export async function checkBrowser(options = demo) {
       }
     }
     if (options === demo) {
+      const thread = '/threads/11111111-2222-4333-8444-555555555555/';
+      const commentRoutes = [['/threads/', false], [thread, true], ['/zh-CN/threads/', false], ['/zh-CN' + thread, false], ['/articles/welcome/', true], ['/timeline/', false], [thread, true]];
+      const checkCommentJump = async (route, expected) => {
+        assert.equal(await page.$$eval('#post-comment', nodes => nodes.length), Number(expected), route + ': comment area');
+        assert.equal(await page.$$eval('#to_comment', nodes => nodes.length), Number(expected), route + ': jump matches area');
+        if (expected) {
+          assert.equal(await page.$eval('#to_comment', node => node.getAttribute('href')), '#post-comment');
+          assert.notEqual(await page.$eval('#to_comment', node => getComputedStyle(node).display), 'none', route + ': available comments are not hidden');
+        }
+      };
+      // Check emitted HTML before any scripts, then first loads and repeated ClientRouter swaps.
+      for (const [route, expected] of commentRoutes) {
+        const html = await (await fetch(origin + route)).text();
+        assert.equal(html.includes('id="to_comment"'), expected, route + ': static HTML jump');
+        await page.goto(origin + route, {waitUntil:'networkidle0'}); await settled();
+        await checkCommentJump(route, expected);
+      }
+      await page.evaluate(() => {window.__commentNavigationProbe = true;});
+      for (const [route, expected] of commentRoutes) {
+        await page.evaluate(route => window.pjax.loadUrl(route), route);
+        await page.waitForFunction(route => location.pathname === route, {}, route); await settled();
+        assert.equal(await page.evaluate(() => window.__commentNavigationProbe), true);
+        await checkCommentJump(route, expected);
+      }
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.screenshot({path:path.join(screenshots,'blog-comment-jump.png')});
       await page.goto(origin, {waitUntil:'networkidle0'}); await settled();
       await page.evaluate(() => {window.__codeNavigationProbe = true; window.pjax.loadUrl('/code-check/');});
       await page.waitForFunction(() => location.pathname === '/code-check/');

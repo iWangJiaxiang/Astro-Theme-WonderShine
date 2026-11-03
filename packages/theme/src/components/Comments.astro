@@ -1,5 +1,6 @@
 ---
 import {t,localizeConfig,localizeUrl} from '../lib/locale';
+import {commentsEnabled} from '../lib/comments';
 const {site,lang,document}=Astro.props;
 const config=localizeConfig(site,lang);
 const comments=config.extra.comments;
@@ -7,7 +8,7 @@ const thread=document?.kind==='thread';
 const commentPath=thread?(document.extra.id?`/threads/${document.extra.id}/`:document.url):document?.extra.comment_path;
 const visitorMail=comments?.visitor_mail?.enable?String(comments.visitor_mail.mail||''):undefined;
 ---
-{comments?.enable && !document?.extra.disable_comment && <div id="post-comment" class:list={{'activity-comments':thread}} data-comment-path={commentPath}>
+{commentsEnabled(config,document) && <div id="post-comment" class:list={{'activity-comments':thread}} data-comment-path={commentPath}>
   {thread?<h2>{t('comments',lang,site,'activity')} {comments.system==='twikoo'&&<span id="twikoo-count"></span>}</h2>:<>
   <div class="comment-head"><div class="comment-headline"><i class="icon-chat--fill"></i> <span>{t('comments',lang,site)}</span></div><div class="comment-randomInfo">{visitorMail!==undefined&&<button type="button" onclick="wjx.addRandomCommentInfo()">{t('ui_anonymous_comments',lang,site)}</button>}<a href={localizeUrl('/privacy',lang,site)}>{t('ui_privacy_policy',lang,site)}</a></div><div class="comment-tips" id="comment-tips"><span>{t('ui_keep_blank_lines_for_the_best_comment_formatting',lang,site)}</span></div></div>
   </>}
