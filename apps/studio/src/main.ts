@@ -8,6 +8,7 @@ import './forms.css';
 import './composer.css';
 import './workspace.css';
 import './creation-tools.css';
+import './accessibility.css';
 const NativeShell = lazy(() => import('../platform/NativeShell'));
 const native = '__TAURI_INTERNALS__' in window;
 if (native) {

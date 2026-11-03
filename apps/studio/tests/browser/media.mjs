@@ -12,9 +12,28 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   await writeFile(base + '/site/public/img/preview.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><script>parent.mediaScriptExecuted=true</script><rect width="32" height="32" fill="#425aef"/></svg>');
   const chooseImage = async (name, path, confirm = true) => {
     await revealField(page, `[data-image-field="${name}"]`);
-    await page.waitForSelector(`[data-image-field="${name}"] .secondary`);
-    await page.click(`[data-image-field="${name}"] .secondary`);
-    await page.waitForSelector('dialog.media-dialog[open]');
+    const selector = `[data-image-field="${name}"] .secondary`;
+    // Unlike page.click, locators wait for an enabled, visible target with a
+    // stable bounding box after scrolling the long metadata form into view.
+    await page.locator(selector).click();
+    try {
+      await page.waitForSelector('dialog.media-dialog[open]');
+    } catch (error) {
+      const state = await page.$eval(selector, button => {
+        const rect = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        return {
+          rect: rect.toJSON(), disabled: button.disabled,
+          inert: !!button.closest('[inert]'),
+          focused: document.activeElement?.outerHTML.slice(0, 500),
+          hit: hit?.outerHTML.slice(0, 500),
+          viewport: { width: innerWidth, height: innerHeight },
+          scroll: { x: scrollX, y: scrollY },
+        };
+      });
+      console.error(`Media picker did not open for ${name}: ${JSON.stringify(state)}`);
+      throw error;
+    }
     await fill('dialog.media-dialog[open] [aria-label="搜索仓库图片"]', path.split('/').at(-1));
     await page.waitForSelector(`dialog.media-dialog[open] [data-media-path="${path}"]`);
     await page.click(`dialog.media-dialog[open] [data-media-path="${path}"]`);

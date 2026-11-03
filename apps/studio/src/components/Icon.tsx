@@ -31,6 +31,7 @@ const Icon: StudioComponent<Props, Events> = component<Props, Events>(
       search: "M16 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0ZM15 15l6 6",
       lock: "M6 10h12v11H6ZM8 10V7a4 4 0 0 1 8 0v3M12 14v3",
       check: "m5 12 4 4L19 6",
+      close: "M6 6l12 12M18 6 6 18",
     };
     return () =>
       element(
