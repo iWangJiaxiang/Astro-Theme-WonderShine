@@ -1,5 +1,6 @@
 import SaveButton from "./SaveButton";
 import { createDraftBackup } from "../draft-backup";
+import { createRichEditorSync } from "../rich-editor-sync";
 import { saveContext } from "../save-preferences";
 import type { SaveMode } from "../../shared/save";
 import { prepareEditorIcons } from "../editor-assets";
@@ -655,17 +656,22 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       }
       recovery.value = false;
     }
-    function syncRichBody() {
-      if (forgotten || !alive) return;
-      if (editor && richReady)
-        body.value = richEditorBody(body.value, editor.getValue());
-    }
+    const richSync = createRichEditorSync(
+      () =>
+        !forgotten && alive && editor && richReady
+          ? editor.getValue()
+          : undefined,
+      (value) => {
+        body.value = richEditorBody(body.value, value);
+      },
+    );
     function flush() {
-      syncRichBody();
+      richSync.flush();
       backup.flush();
     }
     function destroyEditor(sync = true) {
       if (sync) flush();
+      richSync.cancel();
       generation++;
       richReady = false;
       const old = editor;
@@ -673,7 +679,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       old?.destroy();
     }
     function readRichSoon() {
-      queueMicrotask(syncRichBody);
+      richSync.schedule();
     }
     function forget() {
       forgotten = true;
@@ -758,7 +764,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
           ],
           input: (value) => {
             if (alive && generation === instance && richReady)
-              body.value = richEditorBody(body.value, value);
+              richSync.accept(value);
           },
           after: () => {
             if (generation === instance) richReady = true;
