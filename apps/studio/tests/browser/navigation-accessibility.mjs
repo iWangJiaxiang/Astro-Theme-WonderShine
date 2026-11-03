@@ -8,7 +8,9 @@ export async function checkNavigationAccessibility({ page, screenshots }) {
     await page.waitForFunction(() => document.activeElement?.classList.contains('navigation-close'));
     assert.equal(await page.$eval('.main-shell', node => node.inert), true);
     assert.equal(await page.$eval('.mobile-menu', node => node.getAttribute('aria-expanded')), 'true');
-    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.down('Shift');
+    try { await page.keyboard.press('Tab'); }
+    finally { await page.keyboard.up('Shift'); }
     assert.equal(await page.evaluate(() => !!document.activeElement.closest('.sidebar')), true);
     await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => document.activeElement.classList.contains('navigation-close')), true);
