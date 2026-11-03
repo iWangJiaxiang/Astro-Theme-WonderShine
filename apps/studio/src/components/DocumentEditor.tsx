@@ -393,12 +393,12 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         value = String(values.value[path] ?? "");
       return translateOptions(options.filter((option) => option.value !== ""));
     }
-    async function loadChoices() {
+    async function loadChoices(refresh = false) {
       choicesLoading.value = true;
       choicesError.value = "";
       try {
         const [items, languages] = await Promise.all([
-          api<ArticleSummary[]>("/content"),
+          api<ArticleSummary[]>("/content" + (refresh ? "?refresh=1" : "")),
           api<ContentLanguages>("/content-languages"),
         ]);
         topicItems.value = items;
@@ -1259,7 +1259,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                               {
                                 className: classes("text-button"),
                                 onClick: domEvent(($event: Event) => {
-                                  loadChoices();
+                                  loadChoices(true);
                                 }),
                               },
                               t("重试"),
@@ -1851,7 +1851,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                             {
                               className: classes("text-button"),
                               onClick: domEvent(($event: Event) => {
-                                loadChoices();
+                                loadChoices(true);
                               }),
                             },
                             t("重试选项"),

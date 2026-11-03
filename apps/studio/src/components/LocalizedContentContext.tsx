@@ -91,12 +91,12 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
         preparing.value ||
         !!error.value,
     );
-    async function load() {
+    async function load(refresh = false) {
       loading.value = true;
       error.value = "";
       try {
         const [content, config, ai] = await Promise.all([
-          api<ArticleSummary[]>("/content"),
+          api<ArticleSummary[]>("/content" + (refresh ? "?refresh=1" : "")),
           api<ContentLanguages>("/content-languages"),
           api<TranslationCapabilities>("/translation/config"),
         ]);
@@ -140,7 +140,7 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
     });
     watch(preparing, (value) => emit("working", value), { flush: "sync" });
     onMounted(load);
-    watch(() => props.revision, load);
+    watch(() => props.revision, () => load());
     return () =>
       element(
         "section",
@@ -218,7 +218,7 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
                 {
                   className: classes("text-button"),
                   onClick: domEvent(($event: Event) => {
-                    load();
+                    load(true);
                   }),
                 },
                 t("重试"),

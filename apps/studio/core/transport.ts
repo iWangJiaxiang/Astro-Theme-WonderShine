@@ -36,11 +36,37 @@ export function createContentTransport(repository: Repository, options: ContentT
     csrf: crypto.randomUUID(), expires: Number.MAX_SAFE_INTEGER,
   };
   let connected = true;
+  // Only derived summaries are cached, never repository reads or revision checks.
+  let generation = 0, mutations = 0;
+  let summaries: Promise<Awaited<ReturnType<ContentService['list']>>> | undefined;
+  const invalidate = () => { generation++; summaries = undefined; };
+  const list = () => {
+    if (summaries) return summaries;
+    const current = generation;
+    const pending = content.list();
+    if (!mutations) summaries = pending;
+    void pending.catch(() => {
+      if (generation === current && summaries === pending) summaries = undefined;
+    });
+    return pending;
+  };
   return async request => {
+    let mutating = false;
     try {
       const url = new URL(request.url), path = url.pathname, method = request.method;
       if (path === '/api/auth/config' && method === 'GET') return json({ password: false, oidc: null, local: true });
       if (!connected) throw new StudioError(401, '请先连接本地工作区');
+      // Invalidate on both boundaries, including partial failures. Reads while a
+      // mutation is pending cannot become a reusable snapshot.
+      mutating = (path === '/api/document' && ['PUT', 'DELETE'].includes(method))
+        || (path.startsWith('/api/settings/') && method === 'PUT')
+        || (['/api/translation', '/api/translation/manual', '/api/workspace/sync', '/api/auth/logout'].includes(path) && method === 'POST');
+      if (mutating) { mutations++; invalidate(); }
+      if (method === 'GET' && url.searchParams.get('refresh') === '1'
+        && ['/api/content', '/api/bootstrap'].includes(path)) {
+        invalidate();
+        repository.clearReadCache?.();
+      }
       if (path === '/api/auth/session' && method === 'GET') return json(session);
       if (path === '/api/auth/logout' && method === 'POST') { options.ai?.dispose(); await options.onLogout?.(); connected = false; return json({ ok: true }); }
       // Bound request bodies even for in-process callers. ContentService validates fields.
@@ -49,7 +75,6 @@ export function createContentTransport(repository: Repository, options: ContentT
         return JSON.parse(new TextDecoder().decode(bytes)) as T;
       };
       if (path === '/api/bootstrap' && method === 'GET') {
-        if (url.searchParams.get('refresh') === '1') repository.clearReadCache?.();
         const [site, appearance] = await Promise.all([content.settings('site'), content.settings('appearance')]);
         return json({ site: site.values, appearance: appearance.values, saveScope: session.identity.id, saveCapabilities: saveCapabilities(repository), mode: repository.mode, workspace: !!repository.workspace, nativeAi: !!options.ai,
           groups: settingsSchemas.map(({ id, title, description }) => ({ id, title, description })) });
@@ -74,8 +99,8 @@ export function createContentTransport(repository: Repository, options: ContentT
       }
       if (path === '/api/content-languages' && method === 'GET') return json(await content.languages());
       if (path === '/api/content' && method === 'GET') {
-        if (url.searchParams.get('refresh') === '1') repository.clearReadCache?.();
-        return json(await content.list());
+        // Serialize for each caller: Response bodies are single-use streams.
+        return json(await list());
       }
       if (path === '/api/document') {
         if (method === 'GET') return json(await content.document(url.searchParams.get('path') || ''));
@@ -122,6 +147,8 @@ export function createContentTransport(repository: Repository, options: ContentT
       if (error instanceof StudioError) return json({ error: error.message, messageKey: error.message, params: error.params }, error.status);
       if (error instanceof SyntaxError || error instanceof URIError) return json({ error: '内容格式不正确，请检查输入' }, 400);
       return json({ error: '操作失败，请检查本地工作区；未确认的更改请保留草稿' }, 500);
+    } finally {
+      if (mutating) { mutations--; invalidate(); }
     }
   };
 }

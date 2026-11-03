@@ -75,11 +75,11 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       loading: relationsLoading,
       error: relationsError,
     });
-    async function loadRelations() {
+    async function loadRelations(refresh = false) {
       relationsLoading.value = true;
       relationsError.value = "";
       try {
-        const items = await api<ArticleSummary[]>("/content");
+        const items = await api<ArticleSummary[]>("/content" + (refresh ? "?refresh=1" : ""));
         unresolvedItems.value = items.filter((item) => item.linkWarning);
         postItems.value = items.filter(
           (item) =>
@@ -315,6 +315,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           sessionStorage.removeItem(storageKey);
         } catch {}
         void load();
+        void loadRelations(true);
       }
     }
     async function save() {
@@ -442,7 +443,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                       {
                         className: classes("text-button"),
                         onClick: domEvent(($event: Event) => {
-                          loadRelations();
+                          loadRelations(true);
                         }),
                       },
                       t("重试选项"),
