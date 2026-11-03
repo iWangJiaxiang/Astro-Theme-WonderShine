@@ -87,7 +87,9 @@ Setup 中选择你的独立站点目录，并设置登录账号。App 的本地�
 | --- | --- |
 | 新建博客，发布第一篇文章 | [从零搭建](docs/getting-started.md) |
 | 保留 Zola 内容与历史链接 | [迁移指南](docs/migration.md) |
-| 调整导航、页面与多语言内容 | [配置与内容格式](docs/configuration.md) |
+| 调整导航、页面与多语言内容 | [配置与内容格式](docs/configuration.md) · [导航配置](docs/configuration.md#导航配置) |
+| 配置动态、引用和订阅 | [动态与订阅](docs/configuration.md#动态与订阅) |
+| 更新已有 Astro 博客的主题 | [主题升级与回退](docs/upgrading.md) |
 | 部署博客或创作中心 | [部署指南](docs/deployment.md) |
 | 了解保存、分支与同步 | [工作区说明](docs/studio-workspaces.md) |
 
