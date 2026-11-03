@@ -8,6 +8,7 @@ import Icon from '../src/components/Icon';
 import { t } from '../src/i18n';
 import { useSignals } from '../src/reactivity';
 import './native.css';
+import AccountLogin from './AccountLogin';
 const storageKey = 'wondershine.native.workspaces.v1';
 function savedProfiles(): WorkspaceProfile[] {
   try { const value: unknown = JSON.parse(localStorage.getItem(storageKey) || '[]'); return Array.isArray(value) ? value.filter(item => { try { validateProfile(item); return true; } catch { return false; } }) : []; } catch { return []; }
@@ -33,7 +34,7 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
   const progressValue = progress?.total && progress.total > 0 ? Math.min(100, Math.max(0, Math.floor(progress.loaded / progress.total * 100))) : undefined;
   const existing = profiles.some(item => item.id === profile.id);
   const local = connection === 'local';
-  function field(key: keyof WorkspaceProfile, value: string) { setProfile(current => ({ ...current, [key]: value })); }
+  function field(key: keyof WorkspaceProfile, value: string) { if (key === 'url' || key === 'provider') setToken(''); setProfile(current => ({ ...current, [key]: value })); }
   function switchConnection(value: Connection) {
     if (value === 'local' && !folderAvailable) value = 'clone';
     setConnection(value); setError(''); setToken('');
@@ -74,6 +75,11 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
       <button disabled={busy} aria-pressed={connection === 'clone'} onClick={() => switchConnection('clone')}><Icon name="link" size={19} />{t('远程仓库')}</button>
     </div>
     {error && <p className="notice error" role="alert">{t(error)}</p>}
+    {connection === 'clone' && <AccountLogin disabled={busy} onSelect={(account, repository) => {
+      const previous = profiles.find(item => item.url === repository.url && item.source !== 'local');
+      setProfile(previous || { ...blank(), provider: account.provider, url: repository.url, branch: repository.branch, label: repository.name, username: account.username, authorName: account.name, authorEmail: account.email });
+      setToken(account.token); setError('');
+    }} />}
     <form onSubmit={connect}><fieldset disabled={busy} className="connection-form-fields">
       {connection === 'remote' ? <label className="field"><span>{t('创作中心地址')}</span><input type="url" required placeholder="https://studio.example.com" value={address} onChange={event => setAddress(event.target.value)} /></label> : <>
         {profiles.some(item => local ? item.source === 'local' : item.source !== 'local') && <label className="field"><span>{t('最近使用')}</span><select value={existing ? profile.id : ''} onChange={event => { setProfile(profiles.find(item => item.id === event.target.value) || blank()); setToken(''); setError(''); }}><option value="">{t('添加仓库')}</option>{profiles.filter(item => local ? item.source === 'local' : item.source !== 'local').map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}

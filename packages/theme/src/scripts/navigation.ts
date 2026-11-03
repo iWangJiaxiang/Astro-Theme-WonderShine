@@ -63,11 +63,14 @@ document.addEventListener('astro:before-preparation', event => {
 });
 document.addEventListener('astro:before-swap', event => {
   const transition = event as TransitionBeforeSwapEvent;
-  // Close when the destination DOM is ready, without waiting for third-party scripts.
-  transition.viewTransition.updateCallbackDone.then(
-    () => finishLoading(transition.signal),
-    () => finishLoading(transition.signal),
-  );
+  // Keep the overlay above the old snapshot until the destination is painted.
+  // Waiting for DOM replacement alone can expose the outgoing transition image.
+  void Promise.allSettled([
+    transition.viewTransition.updateCallbackDone,
+    transition.viewTransition.finished,
+  ]).then(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => finishLoading(transition.signal)));
+  });
   const incoming = transition.newDocument;
   const next = incoming.documentElement;
   const current = document.documentElement;

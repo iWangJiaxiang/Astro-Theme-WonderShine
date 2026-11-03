@@ -235,7 +235,26 @@ document.addEventListener('scroll', btf.throttle(function () {
 }, 200))
 
 // 初始化博客
-const initBlog = runOnce('initBlog')(() => {
+const pendingInitializers = new WeakSet();
+const initBlog = () => {
+    const dependencies = [
+        ['/js/bundle.js', typeof window.getTimeState === 'function'],
+        ['/js/rightmenu.js', !GLOBAL_CONFIG.rightMenuEnable || typeof window.addRightMenuClickEvent === 'function'],
+    ];
+    const pending = dependencies.filter(([, ready]) => !ready);
+    if (pending.length) {
+        for (const [url] of pending) {
+            const script = document.querySelector('script[src="' + url + '"]');
+            if (script && !pendingInitializers.has(script)) {
+                pendingInitializers.add(script);
+                script.addEventListener('load', initBlog, {once: true});
+            }
+        }
+        return;
+    }
+    initializeBlogOnce();
+};
+const initializeBlogOnce = runOnce('initBlog')(() => {
     // 图片主色
     wjx.addNavBackgroundInit(),
         wjx.darkModeStatus(),

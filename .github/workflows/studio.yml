@@ -36,6 +36,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'release' && !inputs.publish }}
 env:
   CARGO_TERM_COLOR: always
+  VITE_STUDIO_GITHUB_CLIENT_ID: ${{ vars.STUDIO_GITHUB_CLIENT_ID }}
+  VITE_STUDIO_CNB_CLIENT_ID: ${{ vars.STUDIO_CNB_LOGIN_ENABLED == 'true' && vars.STUDIO_CNB_CLIENT_ID || '' }}
   VITE_STUDIO_RELEASE_REPOSITORY: ${{ github.repository }}
   VITE_STUDIO_IOS_UPDATE_URL: ${{ vars.STUDIO_IOS_UPDATE_URL }}
 jobs:
@@ -100,11 +102,15 @@ jobs:
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - run: npm run build:app -w @wondershine/studio
+        env:
+          VITE_STUDIO_GITHUB_CLIENT_ID: studio-ci-github
+          VITE_STUDIO_CNB_CLIENT_ID: studio-ci-cnb
       - run: npm run test:native-browser -w @wondershine/studio
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - run: node apps/studio/tests/browser/native-ui.mjs
         env:
+          STUDIO_TEST_OAUTH: fixture
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - uses: actions/upload-artifact@v7.0.2
         if: always()
@@ -153,6 +159,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf rpm
       - run: npm ci
       - run: node apps/studio/scripts/release/version.mjs
+      - run: node apps/studio/scripts/release/icons.mjs desktop
       - name: Build desktop installers
         run: npm exec -w @wondershine/studio -- tauri build --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
       - name: Native permissions regression
@@ -217,6 +224,7 @@ jobs:
       - run: npm ci
       - run: node apps/studio/scripts/release/version.mjs
       - run: npm exec -w @wondershine/studio -- tauri android init --ci
+      - run: node apps/studio/scripts/release/icons.mjs android
       - name: Debug APK
         if: needs.prepare.outputs.release != 'true'
         run: npm exec -w @wondershine/studio -- tauri android build --ci --debug --apk
@@ -228,9 +236,9 @@ jobs:
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      - name: Signed APK and AAB
+      - name: Signed APK
         if: needs.prepare.outputs.release == 'true'
-        run: npm exec -w @wondershine/studio -- tauri android build --ci --apk --aab
+        run: npm exec -w @wondershine/studio -- tauri android build --ci --apk
         env:
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -301,9 +309,19 @@ jobs:
       - run: npm ci
       - run: node apps/studio/scripts/release/version.mjs
       - run: npm exec -w @wondershine/studio -- tauri ios init --ci
+      - run: node apps/studio/scripts/release/icons.mjs ios
       - name: Simulator app (no distribution credentials)
         if: needs.prepare.outputs.iosRelease != 'true'
         run: npm exec -w @wondershine/studio -- tauri ios build --ci --debug --target aarch64-sim --no-sign
+      - name: Inspect and launch iOS simulator app
+        if: needs.prepare.outputs.iosRelease != 'true'
+        run: node apps/studio/scripts/release/simulator-smoke.mjs
+      - uses: actions/upload-artifact@v7.0.2
+        if: always() && needs.prepare.outputs.iosRelease != 'true'
+        with:
+          name: studio-ios-screenshots
+          path: apps/studio/test-results/ios-simulator/
+          retention-days: 7
       - name: Signed App Store IPA
         if: needs.prepare.outputs.iosRelease == 'true'
         run: npm exec -w @wondershine/studio -- tauri ios build --ci --target aarch64 --export-method app-store-connect
@@ -315,7 +333,7 @@ jobs:
       - run: node apps/studio/scripts/release/collect.mjs
         env:
           STUDIO_BUNDLE_DIR: apps/studio/src-tauri/gen/apple/build
-      - name: Verify SDK embedded in signed IPA
+      - name: Verify SDK and encryption declaration in signed IPA
         if: needs.prepare.outputs.iosRelease == 'true'
         run: node apps/studio/scripts/release/verify-ios-sdk.mjs
       - uses: actions/upload-artifact@v7.0.2

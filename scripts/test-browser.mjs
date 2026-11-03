@@ -127,11 +127,26 @@ export async function checkBrowser(options = demo) {
     await page.goto(origin, { waitUntil: 'networkidle0' });
     await settled();
     await page.evaluate(() => { window.__navigationProbe = 'persistent'; });
+    await page.evaluate(() => {
+      document.addEventListener('astro:before-swap', event => {
+        const style = event.newDocument.createElement('style');
+        style.textContent = '::view-transition-old(root), ::view-transition-new(root) { animation-duration: 450ms !important; }';
+        event.newDocument.head.append(style);
+        window.__loadingTiming = {};
+        event.viewTransition.updateCallbackDone.then(() => {
+          window.__loadingTiming.afterSwap = !document.getElementById('loading-box')?.classList.contains('loaded');
+        });
+        event.viewTransition.finished.then(() => {
+          window.__loadingTiming.atFinished = !document.getElementById('loading-box')?.classList.contains('loaded');
+        });
+      }, {once:true});
+    });
     const navigation = options.navigation;
     await page.locator(`a[href="${navigation.path}"]`).click();
     await page.waitForFunction(expected => location.pathname === expected, {}, navigation.path);
     await settled();
     assert.equal(await page.evaluate(() => window.__navigationProbe), 'persistent', 'ClientRouter must preserve document');
+    assert.deepEqual(await page.evaluate(() => window.__loadingTiming), {afterSwap:true, atFinished:true}, 'Loading stays visible through DOM replacement and the outgoing snapshot');
     await page.locator('details.nav-language-switch summary').click();
     await page.locator(`.nav-language-option[hreflang="${navigation.language}"]`).click();
     await page.waitForFunction(expected => location.pathname === expected, {}, navigation.translatedPath);

@@ -91,7 +91,7 @@ if(doc?.html.trim()&&!styles.includes('post'))styles.push('post');
   <slot name="head"/>
 </head>
 <body>
-  <div id="loading-box" hidden={!e.other.loading_box?.enable} transition:persist="navigation-loading" transition:animate="none" onclick="window.preloader.endLoading()" role="status" aria-label={lang.startsWith('zh')?'页面加载中':'Loading page'}><div class="loading-bg"><ResponsiveImage site={site} class="loading-img" src={e.other.loading_box?.img||e.site.logo} alt="" loading="eager" sizes="80px"/><div class="loading-image-dot"/></div></div>
+  <div id="loading-box" hidden={!e.other.loading_box?.enable} transition:persist="navigation-loading" transition:animate="none" role="status" aria-label={lang.startsWith('zh')?'页面加载中':'Loading page'}><div class="loading-bg"><ResponsiveImage site={site} class="loading-img" src={e.other.loading_box?.img||e.site.logo} alt="" loading="eager" sizes="80px"/><div class="loading-image-dot"/></div></div>
   <noscript><style is:inline>#loading-box{display:none!important}</style></noscript>
   <script is:inline>
     (()=>{

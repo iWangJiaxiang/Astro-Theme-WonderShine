@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { stableVersion, releaseContext } from '../scripts/release/context.mjs';
-import { validateIOSSdk } from '../scripts/release/verify-ios-sdk.mjs';
+import { validateIOSSdk, validateIOSExportCompliance } from '../scripts/release/verify-ios-sdk.mjs';
 import { validateSigningConfiguration } from '../scripts/release/signing-preflight.mjs';
 
 const script = name => fileURLToPath(new URL(`../scripts/release/${name}.mjs`, import.meta.url));
@@ -77,12 +77,13 @@ test('version injection changes only Studio versions in runner fixtures', async 
   const root = await mkdtemp(join(tmpdir(), 'studio-release-version-'));
   try {
     await mkdir(join(root, 'apps/studio/src-tauri'), { recursive: true });
-    for (const file of ['apps/studio/package.json', 'apps/studio/src-tauri/tauri.conf.json']) await writeFile(join(root, file), JSON.stringify({ version: '0.1.0' }));
+    for (const file of ['apps/studio/package.json', 'apps/studio/src-tauri/tauri.conf.json']) await writeFile(join(root, file), JSON.stringify({ version: '0.1.0', ...(file.endsWith('tauri.conf.json') ? { bundle: { iOS: { infoPlist: 'Info.ios.plist' } } } : {}) }));
     await writeFile(join(root, 'package-lock.json'), JSON.stringify({ version: '9.9.9', packages: { 'apps/studio': { version: '0.1.0' }, 'packages/theme': { version: '9.9.9' } } }));
     for (const file of ['Cargo.toml', 'Cargo.lock']) await writeFile(join(root, 'apps/studio/src-tauri', file), 'name = "wondershine-studio"\nversion = "0.1.0"\n\nname = "other"\nversion = "2.0.0"\n');
     execFileSync(process.execPath, [script('version')], { cwd: root, env: { ...process.env, STUDIO_VERSION: '10.2.3', GITHUB_RUN_NUMBER: '123', GITHUB_RUN_ATTEMPT: '2' } });
     for (const file of ['apps/studio/package.json', 'apps/studio/src-tauri/tauri.conf.json']) assert.equal(JSON.parse(await readFile(join(root, file))).version, '10.2.3');
     assert.equal(JSON.parse(await readFile(join(root, 'apps/studio/src-tauri/tauri.conf.json'))).bundle.iOS.bundleVersion, '123.2');
+    assert.equal(JSON.parse(await readFile(join(root, 'apps/studio/src-tauri/tauri.conf.json'))).bundle.iOS.infoPlist, 'Info.ios.plist');
     const lock = JSON.parse(await readFile(join(root, 'package-lock.json')));
     assert.equal(lock.packages['apps/studio'].version, '10.2.3');
     assert.equal(lock.packages['packages/theme'].version, '9.9.9');
@@ -99,13 +100,15 @@ test('collector refuses empty outputs and debug Android artifacts for a release'
     const collect = () => execFileSync(process.execPath, [script('collect')], { cwd: root, env, stdio: 'pipe' });
     assert.throws(collect, /No installable output/);
     await writeFile(join(root, 'bundle/app-debug.apk'), 'debug');
-    assert.throws(collect, /signed APK and AAB/);
+    assert.throws(collect, /signed APK/);
     await rm(join(root, 'bundle/app-debug.apk'));
     await writeFile(join(root, 'bundle/app-release.apk'), 'signed fixture apk');
-    await writeFile(join(root, 'bundle/app-release.aab'), 'signed fixture aab');
+    // Ignore stale App Bundles even when present alongside an APK.
+    await writeFile(join(root, 'bundle/app-release.aab'), 'not published');
     collect();
     const manifest = JSON.parse(await readFile(join(root, 'temp/studio-artifacts/android.json')));
-    assert.equal(manifest.files.length, 2);
+    assert.equal(manifest.files.length, 1);
+    assert.match(manifest.files[0].name, /\.apk$/);
     assert.match(manifest.files[0].sha256, /^[0-9a-f]{64}$/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
@@ -152,7 +155,7 @@ else if (args[1] === 'upload') {
     for (const platform of platforms) {
       await rm(join(root, 'bundle'), { recursive: true });
       await mkdir(join(root, 'bundle'));
-      const files = platform === 'android' ? ['app-release.apk', 'app-release.aab'] : platform === 'ios' ? ['app.ipa'] : platform.startsWith('linux') ? ['app.deb'] : platform.startsWith('macos') ? ['app.dmg'] : ['app.exe'];
+      const files = platform === 'android' ? ['app-release.apk'] : platform === 'ios' ? ['app.ipa'] : platform.startsWith('linux') ? ['app.deb'] : platform.startsWith('macos') ? ['app.dmg'] : ['app.exe'];
       for (const file of files) await writeFile(join(root, 'bundle', file), `${platform} fixture`);
       env.STUDIO_PLATFORM = platform;
       run('collect');
@@ -177,6 +180,14 @@ else if (args[1] === 'upload') {
 test('signed IPA SDK validation rejects old, simulator and missing metadata', () => {
   for (const value of ['', 'iphoneos18.5', 'iphonesimulator26.2', 'iphoneos26junk', '26']) assert.throws(() => validateIOSSdk(value));
   for (const value of ['iphoneos26', 'iphoneos26.2', 'iphoneos27.0']) assert.equal(validateIOSSdk(value), value);
+});
+
+test('signed IPA export declaration must be the boolean false', () => {
+  for (const value of [undefined, null, true, 'false', 'NO', 0]) {
+    assert.throws(() => validateIOSExportCompliance({ ITSAppUsesNonExemptEncryption: value }), /ITSAppUsesNonExemptEncryption/);
+  }
+  assert.throws(() => validateIOSExportCompliance({}), /ITSAppUsesNonExemptEncryption/);
+  assert.doesNotThrow(() => validateIOSExportCompliance({ ITSAppUsesNonExemptEncryption: false }));
 });
 
 test('TestFlight requires explicit Apple success even with exit zero, and always removes API keys', async () => {
