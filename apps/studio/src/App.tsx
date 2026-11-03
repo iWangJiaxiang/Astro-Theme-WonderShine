@@ -80,7 +80,29 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
     });
     onMounted(() => {
       const media = window.matchMedia("(max-width: 760px)");
-      const resize = () => { mobileNavigation.value = media.matches; menuOpen.value = false; };
+      const resize = () => {
+        const focused = window.document.activeElement;
+        // Only migrate controls that this breakpoint hides or makes inert.
+        const needsFocus = media.matches
+          ? focused?.closest('.sidebar')
+          : focused?.closest('.mobile-menu, .navigation-close, .sidebar-backdrop');
+        mobileNavigation.value = media.matches;
+        menuOpen.value = false;
+        // Replace any drawer-open/close focus request with the breakpoint target.
+        window.cancelAnimationFrame(navigationFrame);
+        if (!needsFocus) return;
+        navigationFrame = window.requestAnimationFrame(() => {
+          const active = window.document.activeElement;
+          // Do not override a new focus choice made while React commits the layout.
+          if (active !== focused && active !== window.document.body) return;
+          const selector = mobileNavigation.value
+            ? '.mobile-menu'
+            : '.sidebar nav button[aria-current="page"], .sidebar nav button';
+          const targets = [...window.document.querySelectorAll<HTMLButtonElement>(selector)];
+          const target = targets.find(node => node.hasAttribute('aria-current')) || targets[0];
+          if (target && !target.closest('[inert]') && target.getClientRects().length) target.focus();
+        });
+      };
       const keydown = (event: KeyboardEvent) => {
         if (!mobileNavigation.value || !menuOpen.value) return;
         if (event.key === 'Escape') { event.preventDefault(); menuOpen.value = false; }

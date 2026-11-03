@@ -26,6 +26,72 @@ async function assertFocusedControl(page, selector) {
   }), true, `${selector} must own focus and be visible and unobscured`);
 }
 
+async function waitForDesktopNavigation(page) {
+  await page.waitForFunction(() => {
+    const sidebar = document.querySelector('.sidebar');
+    return sidebar && !sidebar.inert && !sidebar.classList.contains('open') &&
+      Math.abs(sidebar.getBoundingClientRect().left) < 0.5 &&
+      !document.querySelector('.main-shell')?.inert;
+  });
+  // Include queued focus migration, even when no drawer state changed.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+async function checkBreakpointFocus(page) {
+  const current = '.sidebar nav button[aria-current="page"]';
+  const content = '.main-content .page-heading .primary';
+  for (const [desktop, mobile] of [[761, 760], [1440, 390]]) {
+    const resize = width => page.setViewport({ width, height: 1000, deviceScaleFactor: 1 });
+    await resize(desktop);
+    await waitForDesktopNavigation(page);
+    await page.focus(current);
+    await resize(mobile);
+    await waitForDrawer(page, false);
+    await page.waitForFunction(() => document.activeElement?.matches('.mobile-menu'));
+    await assertFocusedControl(page, '.mobile-menu');
+
+    // A focused close button disappears when the open drawer becomes desktop navigation.
+    await page.keyboard.press('Enter');
+    await waitForDrawer(page, true);
+    await page.waitForFunction(() => document.activeElement?.matches('.navigation-close'));
+    await resize(desktop);
+    await waitForDesktopNavigation(page);
+    await assertFocusedControl(page, current);
+    await page.keyboard.press('Tab');
+    await assertFocusedControl(page, '.sidebar nav button[aria-current="page"] + button');
+
+    // A drawer navigation item stays usable on desktop and must retain focus.
+    await resize(mobile);
+    await waitForDrawer(page, false);
+    await page.waitForFunction(() => document.activeElement?.matches('.mobile-menu'));
+    await page.keyboard.press('Enter');
+    await waitForDrawer(page, true);
+    await page.waitForFunction(() => document.activeElement?.matches('.navigation-close'));
+    await page.keyboard.press('Tab');
+    await assertFocusedControl(page, current);
+    await resize(desktop);
+    await waitForDesktopNavigation(page);
+    await assertFocusedControl(page, current);
+
+    // The closed drawer trigger also disappears on desktop.
+    await resize(mobile);
+    await waitForDrawer(page, false);
+    await page.waitForFunction(() => document.activeElement?.matches('.mobile-menu'));
+    await resize(desktop);
+    await waitForDesktopNavigation(page);
+    await assertFocusedControl(page, current);
+
+    // Ordinary content focus must survive both directions without being stolen.
+    await page.focus(content);
+    await resize(mobile);
+    await waitForDrawer(page, false);
+    await assertFocusedControl(page, content);
+    await resize(desktop);
+    await waitForDesktopNavigation(page);
+    await assertFocusedControl(page, content);
+  }
+}
+
 export async function checkNavigationAccessibility({ page, screenshots }) {
   for (const width of [320, 390, 760]) {
     await page.setViewport({ width, height: 844, deviceScaleFactor: 1 });
@@ -67,7 +133,8 @@ export async function checkNavigationAccessibility({ page, screenshots }) {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `No horizontal overflow at ${width}`);
     await page.screenshot({ path: `${screenshots}/navigation-${width}.png`, fullPage: true });
   }
+  await checkBreakpointFocus(page);
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
-  await page.waitForFunction(() => !document.querySelector('.sidebar')?.inert && Math.abs(document.querySelector('.sidebar').getBoundingClientRect().left) < 0.5);
+  await waitForDesktopNavigation(page);
   assert.equal(await page.$eval('.sidebar button[aria-current="page"]', node => node.textContent.trim()), '工作台');
 }
