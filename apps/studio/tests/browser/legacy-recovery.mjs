@@ -26,7 +26,7 @@ window.ready = (async () => {
   const existingSource = source.replace('a.md', 'existing.md');
   const existingTarget = target.replace('a.md', 'existing.md');
   const unrelated = source.replace('studio.example', 'other.example');
-  const seed = { [source]: 'legacy', [existingSource]: 'older', [existingTarget]: 'newer', [unrelated]: 'private' };
+  const seed = { 'studio-language': 'zh-CN', [source]: 'legacy', [existingSource]: 'older', [existingTarget]: 'newer', [unrelated]: 'private' };
   try {
     // A routed origin enables real localStorage without contacting a service.
     await page.setRequestInterception(true);
