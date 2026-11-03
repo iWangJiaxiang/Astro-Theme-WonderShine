@@ -11,12 +11,14 @@ export interface WorkspaceStatus {
   remoteHead: string | null;
   lastSync: string | null;
   canSync?: boolean;
+  managedChanges?: string[];
+  confirmation?: string;
 }
 
 /** Save, local commit, and remote synchronization are distinct operations. */
 export interface WorkspaceControl {
   saveBranch?(key: string, files: BranchFile[]): Promise<BranchSave>;
   status(): Promise<WorkspaceStatus>;
-  commit(message: string): Promise<WorkspaceStatus>;
-  sync(): Promise<WorkspaceStatus>;
+  commit(message: string, confirmation?: string): Promise<WorkspaceStatus>;
+  sync(confirmation?: string): Promise<WorkspaceStatus>;
 }

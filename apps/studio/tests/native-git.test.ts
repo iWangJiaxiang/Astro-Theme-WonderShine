@@ -114,7 +114,13 @@ test('native Git persists offline commits, fast-forwards safely, preserves rejec
   await nodeFiles.writeFile(join(root, article), 'Offline writing');
   engine = create(); await engine.open(); assert.equal((await engine.status()).dirty, true);
   await assert.rejects(engine.sync(), /先提交/);
-  const local = await engine.commit('docs(content): offline draft');
+  const preview = await engine.status();
+  assert.ok(preview.confirmation);
+  assert.ok(preview.managedChanges?.length);
+  await assert.rejects(engine.commit('stale', 'stale'), /重新确认/);
+  assert.equal((await engine.status()).head, preview.head);
+  const local = await engine.commit('docs(content): offline draft', preview.confirmation);
+  await assert.rejects(engine.sync(preview.confirmation), /重新确认/);
   assert.equal(local.ahead, 1); assert.equal(requests, initialRequests);
   await assert.rejects(engine.sync(), /本地文件和提交已保留/);
   assert.equal(run(['--git-dir=remote.git', 'rev-parse', 'main']), initialHead);

@@ -99,10 +99,15 @@ export function createApp(options: AppOptions) {
   };
   app.get('/api/workspace', async c => c.json(await workspace().status()));
   app.post('/api/workspace/commit', async c => {
-    const input = await c.req.json<{ message: string }>();
-    return c.json(await workspace().commit(input?.message));
+    const input = await c.req.json<{ message: string; confirmation?: string }>();
+    return c.json(await workspace().commit(input?.message, input?.confirmation));
   });
-  app.post('/api/workspace/sync', async c => c.json(await workspace().sync()));
+  app.post('/api/workspace/sync', async c => {
+    const control = workspace();
+    const body = await c.req.text();
+    const input = body ? JSON.parse(body) as { confirmation?: string } : undefined;
+    return c.json(await control.sync(input?.confirmation));
+  });
   app.get('/api/settings/:id', async c => c.json(await content.settings(c.req.param('id'), c.req.query('language'))));
   app.put('/api/settings/:id', async c => {
     const input = await c.req.json<{ revision: string | null; changes: unknown; saveMode?: unknown }>();

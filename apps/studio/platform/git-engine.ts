@@ -6,6 +6,7 @@ import { StudioError } from '../core/errors.js';
 import { validateMediaPath } from '../core/media-validation.js';
 import { validatePath } from '../shared/repository.js';
 import type { WorkspaceControl, WorkspaceStatus } from '../shared/workspace.js';
+import { confirmationMatches, workspaceChanged, workspaceConfirmation } from '../shared/workspace-confirmation.js';
 import { ensureDirectory, missingFile, parentPath, type WorkspaceFiles } from './filesystem.js';
 import { validateBranch, validateProfile, validateRemote, type WorkspaceProfile } from './hosting.js';
 import { withWorkspaceLock } from './queue.js';
@@ -124,10 +125,16 @@ export class NativeGitEngine implements WorkspaceControl {
     let lastSync: string | null = null;
     try { lastSync = String(await this.files.readFile(this.stateRoot + '/last-sync', 'utf8')); }
     catch (error) { if (!missingFile(error)) throw error; }
-    const changes = (await this.rows()).length;
+    const rows = await this.rows();
+    const managedChanges = rows.filter(([path]) => managed(path)).map(([path]) => path);
+    const confirmation = await workspaceConfirmation(this.profile.branch, head, rows.filter(([path]) => managed(path)), async path => {
+      await this.safeFile(path);
+      return new Uint8Array(await this.files.readFile(this.root + '/' + path) as Uint8Array);
+    });
+    const changes = rows.length;
     let canSync = true;
     try { validateRemote(this.profile.url); } catch { canSync = false; }
-    return { branch: this.profile.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, canSync };
+    return { branch: this.profile.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, canSync, managedChanges, confirmation };
   }
 
   saveBranch(key: string, files: BranchFile[]): Promise<BranchSave> {
@@ -142,9 +149,10 @@ export class NativeGitEngine implements WorkspaceControl {
     });
   }
 
-  commit(message: string): Promise<WorkspaceStatus> {
+  commit(message: string, confirmation?: string): Promise<WorkspaceStatus> {
     return withWorkspaceLock(this.root, async () => {
       await this.openUnlocked(); await this.assertWritable();
+      if (confirmation !== undefined && !confirmationMatches(confirmation, await this.statusUnlocked())) throw new StudioError(409, workspaceChanged);
       if (!this.profile.authorName.trim() || !this.profile.authorEmail.trim()) throw new StudioError(400, '请在连接设置中填写提交者名称和邮箱');
       if (typeof message !== 'string' || !message.trim() || message.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)) throw new StudioError(400, '请输入不超过 500 字的提交说明');
       const rows = await this.rows();
@@ -162,9 +170,10 @@ export class NativeGitEngine implements WorkspaceControl {
     });
   }
 
-  sync(): Promise<WorkspaceStatus> {
+  sync(confirmation?: string): Promise<WorkspaceStatus> {
     return withWorkspaceLock(this.root, async () => {
       await this.openUnlocked(); await this.assertWritable();
+      if (confirmation !== undefined && !confirmationMatches(confirmation, await this.statusUnlocked())) throw new StudioError(409, workspaceChanged);
       try { validateRemote(this.profile.url); } catch { throw new StudioError(400, 'App 同步需要 HTTPS 远端；本地保存和提交仍可使用'); }
       if ((await this.rows()).length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
       try {
