@@ -153,13 +153,13 @@ const ThreadDetail: StudioComponent<Props, Events> = component<Props, Events>(
             timeStyle: "short",
           }).format(time);
     }
-    async function load() {
+    async function load(refresh = false) {
       loading.value = true;
       error.value = "";
       try {
         const [doc, content, config] = await Promise.all([
           api<Article>(`/document?path=${encodeURIComponent(props.path)}`),
-          api<ArticleSummary[]>("/content"),
+          api<ArticleSummary[]>("/content" + (refresh ? "?refresh=1" : "")),
           api<ContentLanguages>("/content-languages"),
         ]);
         if (!alive) return;
@@ -267,7 +267,7 @@ const ThreadDetail: StudioComponent<Props, Events> = component<Props, Events>(
                   {
                     className: classes("text-button"),
                     onClick: domEvent(($event: Event) => {
-                      load();
+                      load(true);
                     }),
                   },
                   t("重试"),
