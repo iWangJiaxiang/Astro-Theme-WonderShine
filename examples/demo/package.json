@@ -10,7 +10,7 @@
     "check": "astro check"
   },
   "dependencies": {
-    "@wondershine/theme": "0.1.2",
+    "@wondershine/theme": "0.2.1",
     "astro": "7.4.4"
   }
 }

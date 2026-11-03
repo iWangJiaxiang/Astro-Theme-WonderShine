@@ -36,7 +36,7 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 .library-item-actions .danger { color: var(--studio-muted); }
 .library-item-actions .danger:hover { color: #c63b4a; }
 .collection-navigation { margin-bottom: 14px; }
-.editor-page:not(.embedded-note-editor) > .page-heading { align-items: flex-start; }
+.editor-page:not(.embedded-thread-editor) > .page-heading { align-items: flex-start; }
 .editor-page > .page-heading > .row { flex-shrink: 0; justify-content: flex-end; gap: 8px; }
 .editor-page > .page-heading h1 { font-size: 24px; overflow-wrap: anywhere; }
 .editor-page > .page-heading .primary, .editor-page > .page-heading .secondary { padding: 8px 12px; min-height: 38px; font-size: 12px; }
@@ -84,7 +84,7 @@ h1 { font-size: 26px; margin-bottom: 8px; }
   .editor-page > .page-heading > .row { max-width: 48%; }
 }
 @media (min-width: 761px) and (max-width: 1180px) {
-  .editor-page:not(.embedded-note-editor) > .page-heading { flex-direction: column; align-items: stretch; }
+  .editor-page:not(.embedded-thread-editor) > .page-heading { flex-direction: column; align-items: stretch; }
   .editor-page > .page-heading > .row { width: 100%; justify-content: flex-start; }
 }
 @media (min-width: 1680px) {

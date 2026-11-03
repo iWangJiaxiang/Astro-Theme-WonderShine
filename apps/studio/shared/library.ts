@@ -7,7 +7,7 @@ export const sectionDirectory = (path: string) => path.replace(/_index(?:\.[A-Za
 
 export function contentLabel(item: ArticleSummary): string {
   if (item.kind === 'collection') return !isSection(item) ? '章节' : item.render === false ? '目录分组' : item.layout === 'collection-list' ? '专栏' : '合集';
-  return item.kind === 'article' ? '文章' : item.kind === 'note' ? '动态' : '页面';
+  return item.kind === 'article' ? '文章' : item.kind === 'thread' ? '动态' : '页面';
 }
 
 export function displayTitle(item: ArticleSummary): string {
@@ -32,7 +32,7 @@ export function sectionTrail(path: string, items: ArticleSummary[]): ArticleSumm
 export function sortLibrary(items: ArticleSummary[], kind: ArticleSummary['kind']): ArticleSummary[] {
   return [...items].sort((a, b) => {
     if (kind === 'collection') return Number(isSection(b)) - Number(isSection(a)) || (a.weight || 0) - (b.weight || 0) || displayTitle(a).localeCompare(displayTitle(b), 'zh-CN', { numeric: true });
-    if ((kind === 'article' || kind === 'note') && a.date !== b.date) return (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0);
+    if ((kind === 'article' || kind === 'thread') && a.date !== b.date) return (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0);
     return displayTitle(a).localeCompare(displayTitle(b), 'zh-CN', { numeric: true });
   });
 }

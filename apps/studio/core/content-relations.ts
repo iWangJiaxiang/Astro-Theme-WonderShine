@@ -2,7 +2,7 @@ import { parse } from 'smol-toml';
 import type { FileSnapshot } from '../shared/types.js';
 import type { Repository } from '../shared/repository.js';
 import { getValue, splitDocument } from './content.js';
-import { noteLanguages } from './notes.js';
+import { threadLanguages } from './threads.js';
 import { topicPath, validateTopic } from './topics.js';
 import { StudioError } from './errors.js';
 import { validateArticleReferences } from './article-references.js';
@@ -22,7 +22,7 @@ function topicIds(file: Pick<FileSnapshot, 'path' | 'text'>): string[] {
 // Called inside Repository.write's lock, so association writes cannot race topic mutations.
 export async function validateContentRelations(repository: Repository, path: string, text: string | null): Promise<void> {
   const configFile = await repository.read('config.toml');
-  const languages = noteLanguages(configFile ? parse(configFile.text) : {});
+  const languages = threadLanguages(configFile ? parse(configFile.text) : {});
   await validateArticleReferences(repository, path, text, languages);
   if (text === null && !isTopic(path)) return;
   if (text === null) {

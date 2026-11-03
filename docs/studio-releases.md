@@ -4,6 +4,8 @@ Studio 使用 `.github/workflows/studio.yml`。**构建、打包、单元测试�
 
 Release 标题统一为 `WonderShine Studio X.Y.Z`，例如 `WonderShine Studio 0.2.0`；版本标签使用 `studio-vX.Y.Z`。
 
+所有新发行（包括稳定版、预发布及 TestFlight 发布）仅允许从远端 `main` 的已验证提交创建。必须先合入发行代码和版本变更、通过对应远程验证，再创建 `studio-v*` tag 和 GitHub Release（target 为 `main`），或从 `main` 启动 TestFlight 发布。禁止从 feature 或其他非 main 分支创建新发行。非 main 分支可以执行不发布的构建与验证；已发布 tag 和发行不可移动、覆盖或重发。此规则与主题发行一致。
+
 应用的 Tauri bundle ID 为 `wang.jiaxiang.wondershine-studio`。iOS 使用此 ID；Tauri 的 Android 生成器会把连字符转成下划线，因此 Android applicationId 为 `wang.jiaxiang.wondershine_studio`。注册 App Store Connect / Play Console 应用、签名或配置更新时，应使用对应平台的 ID。
 
 ### 从旧开发包迁移

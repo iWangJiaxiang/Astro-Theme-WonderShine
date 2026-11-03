@@ -3,7 +3,7 @@ export interface FileSnapshot { path: string; text: string; revision: string }
 export interface SaveResult { revision: string; commit?: string; branch?: string; branchPending?: boolean; message: string }
 export type ArticleReference = { kind: 'internal'; path: string } | { kind: 'external'; url: string; title: string };
 export interface ArticleSummary {
-  path: string; title: string; date: string; draft: boolean; kind: 'article' | 'page' | 'collection' | 'note' | 'topic';
+  path: string; title: string; date: string; draft: boolean; kind: 'article' | 'page' | 'collection' | 'thread' | 'topic';
   tags: string[]; categories: string[]; displayTags?: string[]; layout?: string; error?: string;
   id?: string; topics?: string[]; updated?: string; lang?: string; availableLanguages?: string[];
   translationKey?: string; references?: ArticleReference[];

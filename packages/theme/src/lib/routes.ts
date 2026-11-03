@@ -1,5 +1,5 @@
 import type { Document, Site } from './types';
-import { articles, descendants, isPublic, notes, taxonomyDocuments, taxonomyName, taxonomySlug } from './queries';
+import { articles, descendants, isPublic, threads, taxonomyDocuments, taxonomyName, taxonomySlug } from './queries';
 
 export interface Route { path:string; lang:string; type:string; title:string; document?:Document; items?:Document[]; page?:number; pages?:number; base?:string; taxonomy?:string; term?:string; redirect?:string; }
 
@@ -20,7 +20,7 @@ export function routes(site: Site): Route[] {
     const route: Route = { path: document.url, lang: document.lang, type, title: document.title, document };
     const paginatePath = document.frontmatter.paginate_path || 'page';
     if (type === 'index') paginate(route, articles(site, document.lang), document.paginateBy || 8, paginatePath);
-    else if (type === 'notes') paginate(route, notes(site, document.lang), document.paginateBy || 12, paginatePath);
+    else if (type === 'threads') paginate(route, threads(site, document.lang), document.paginateBy || 12, paginatePath);
     else if (type === 'archives' && document.paginateBy) paginate(route, articles(site, document.lang), document.paginateBy, paginatePath);
     else if (document.paginateBy) paginate(route, descendants(site, document), document.paginateBy, paginatePath);
     else add(route);

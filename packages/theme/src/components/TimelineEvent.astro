@@ -2,21 +2,21 @@
 import ResponsiveImage from './ResponsiveImage.astro';
 import References from './References.astro';
 import TopicLinks from './TopicLinks.astro';
-import {cover,formatDate,plain,timestamp} from '../lib/queries';
+import {cover,formatDate,formatDateTime,plain,timestamp} from '../lib/queries';
 import {t} from '../lib/locale';
 const {site,document:item,lang}=Astro.props;
-const kind=item.kind==='note'?'note':'article';
+const kind=item.kind==='thread'?'thread':'article';
 const image=kind==='article'?cover(item,site,false):'';
 const published=timestamp(item.date),updated=timestamp(item.updated);
 const tr=(key:string)=>t(key,lang,site,'activity');
 ---
 <article class="timeline-event" data-activity-item data-kind={kind} data-published={published} data-active={updated>published&&updated<=Date.now()/1000?updated:published} data-id={item.url}>
-<div class="timeline-date"><time datetime={item.date}>{formatDate(item.date,lang)}</time><span class="event-kind">{tr(kind)}</span></div>
+<div class="timeline-date"><time datetime={item.date}>{kind==='thread'?formatDateTime(item.date,lang):formatDate(item.date,lang)}</time><span class="event-kind">{tr(kind)}</span></div>
 <div class:list={['timeline-content',{'timeline-content--covered':!!image}]}><div class="timeline-copy">
 {item.extra.ai_translation&&<span class="ai-translation-label">{tr('ai_translation')}</span>}
 {item.title&&<h2 class="timeline-title" data-overflow-fade><a href={item.url}>{item.title}</a></h2>}
 <p class="timeline-summary" data-overflow-fade>{item.description||plain(item.html)}</p>
-{kind==='note'&&<References site={site} document={item} lang={lang}/>}
+{kind==='thread'&&<References site={site} document={item} lang={lang}/>}
 <TopicLinks site={site} document={item} lang={lang}/><a class="timeline-read" href={item.url}>{tr('read')} →</a>
 </div>{image&&<a class="timeline-cover" href={item.url} aria-label={item.title}><ResponsiveImage site={site} src={image} alt="" loading="lazy" sizes="(max-width: 600px) 112px, 210px"/></a>}</div>
 </article>

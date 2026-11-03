@@ -12,7 +12,7 @@ const {site,document:doc,lang}=Astro.props;
 const config=localizeConfig(site,lang),tr=(key:string)=>t(key,lang,site);
 const posts=articles(site,lang),index=posts.findIndex(p=>p.id===doc.id),older=posts[index+1],newer=posts[index-1];
 const category=doc.taxonomies.categories?.[0],quantity=config.extra.post.recommendQuantity;
-const related=category&&['two','six'].includes(quantity)?taxonomyDocuments(site,lang,'categories').filter(p=>p.id!==doc.id&&p.kind!=='note'&&p.taxonomies.categories.includes(category)).slice(0,quantity==='two'?2:6):[];
+const related=category&&['two','six'].includes(quantity)?taxonomyDocuments(site,lang,'categories').filter(p=>p.id!==doc.id&&p.kind!=='thread'&&p.taxonomies.categories.includes(category)).slice(0,quantity==='two'?2:6):[];
 const abstract=config.extra.post.abstract;
 const summary=doc.extra.abstract||doc.description||(lang.startsWith('zh')?'本文章还没有摘要哦~':'No summary has been added yet.');
 const structuredData={'@context':'https://schema.org','@type':'Article',headline:doc.title,author:{'@type':'Person',name:config.author,url:new URL('/about/',config.base_url).href},publisher:{'@type':'Organization',name:config.title,logo:{'@type':'ImageObject',url:new URL(config.extra.site.logo,config.base_url).href}},mainEntityOfPage:new URL(doc.url,config.base_url).href,image:new URL(cover(doc,site),config.base_url).href,datePublished:doc.date,dateModified:doc.updated||doc.date,description:doc.description};

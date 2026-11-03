@@ -13,7 +13,7 @@ const demo = {
   siteRoot: path.join(workspace, 'examples/demo'),
   pages: [
     ['home', '/'], ['article', '/articles/welcome/'],
-    ['thread', '/thread/11111111-2222-4333-8444-555555555555/'],
+    ['thread', '/threads/11111111-2222-4333-8444-555555555555/'],
     ['series', '/collections/field-notes/'], ['tags', '/tags/design/'], ['timeline', '/timeline/'],
     ['chinese', '/zh-CN/'],
   ],
@@ -72,6 +72,28 @@ export async function checkBrowser(options = demo) {
       const response = await page.goto(origin + route, { waitUntil: 'networkidle0' });
       assert.equal(response.status(), 200, route);
       await settled();
+      if (options === demo && ['thread', 'timeline'].includes(name)) {
+        const times = await page.$$eval('.thread-author time, .timeline-event[data-kind="thread"] .timeline-date time', nodes => nodes.map(node => ({text:node.textContent,date:node.getAttribute('datetime')})));
+        assert.ok(times.length, 'Thread publication times are present');
+        for (const time of times) {
+          assert.match(time.text, /\d{2}:\d{2}:\d{2} \(UTC\+08:00\)/);
+          assert.ok(Number.isFinite(Date.parse(time.date)), 'Machine timestamp remains intact');
+        }
+      }
+      if (options === demo && name === 'timeline') {
+        assert.equal(await page.$$eval('.activity-subscriptions a', links => links.length), 2);
+        assert.equal(await page.$$eval('.activity-counts a', links => links.length), 3);
+        assert.ok(await page.$$eval('.activity-recent li', items => items.length <= 4));
+        await page.setViewport({width:390,height:844});
+        const layout = await page.evaluate(() => {
+          const main = document.querySelector('.activity-main').getBoundingClientRect();
+          const aside = document.querySelector('.activity-aside').getBoundingClientRect();
+          return {after:aside.top >= main.bottom, visible:aside.height > 0, overflow:document.documentElement.scrollWidth > innerWidth};
+        });
+        assert.deepEqual(layout,{after:true,visible:true,overflow:false});
+        await page.screenshot({path:path.join(screenshots,'blog-activity-mobile.png')});
+        await page.setViewport({width:1440,height:900});
+      }
       await page.screenshot({ path: path.join(screenshots, `blog-${name}.png`) });
       const broken = await page.$$eval('img', images => images.filter(image => image.offsetParent && image.complete && !image.naturalWidth && image.src.startsWith(location.origin)).map(image => image.src));
       assert.deepEqual(broken, [], route);
@@ -81,6 +103,32 @@ export async function checkBrowser(options = demo) {
       }
     }
     if (options === demo) {
+      const thread = '/threads/11111111-2222-4333-8444-555555555555/';
+      const commentRoutes = [['/threads/', false], [thread, true], ['/zh-CN/threads/', false], ['/zh-CN' + thread, false], ['/articles/welcome/', true], ['/timeline/', false], [thread, true]];
+      const checkCommentJump = async (route, expected) => {
+        assert.equal(await page.$$eval('#post-comment', nodes => nodes.length), Number(expected), route + ': comment area');
+        assert.equal(await page.$$eval('#to_comment', nodes => nodes.length), Number(expected), route + ': jump matches area');
+        if (expected) {
+          assert.equal(await page.$eval('#to_comment', node => node.getAttribute('href')), '#post-comment');
+          assert.notEqual(await page.$eval('#to_comment', node => getComputedStyle(node).display), 'none', route + ': available comments are not hidden');
+        }
+      };
+      // Check emitted HTML before any scripts, then first loads and repeated ClientRouter swaps.
+      for (const [route, expected] of commentRoutes) {
+        const html = await (await fetch(origin + route)).text();
+        assert.equal(html.includes('id="to_comment"'), expected, route + ': static HTML jump');
+        await page.goto(origin + route, {waitUntil:'networkidle0'}); await settled();
+        await checkCommentJump(route, expected);
+      }
+      await page.evaluate(() => {window.__commentNavigationProbe = true;});
+      for (const [route, expected] of commentRoutes) {
+        await page.evaluate(route => window.pjax.loadUrl(route), route);
+        await page.waitForFunction(route => location.pathname === route, {}, route); await settled();
+        assert.equal(await page.evaluate(() => window.__commentNavigationProbe), true);
+        await checkCommentJump(route, expected);
+      }
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.screenshot({path:path.join(screenshots,'blog-comment-jump.png')});
       await page.goto(origin, {waitUntil:'networkidle0'}); await settled();
       await page.evaluate(() => {window.__codeNavigationProbe = true; window.pjax.loadUrl('/code-check/');});
       await page.waitForFunction(() => location.pathname === '/code-check/');

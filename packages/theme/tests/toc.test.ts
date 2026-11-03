@@ -80,7 +80,7 @@ test('missing TOC library, omitted widget and heading-free chapters preserve sub
 });
 
 test('theme document classes remain independent from route-specific behavior', () => {
-  for (const route of ['index', 'archives', 'taxonomy', 'taxonomy-list', 'about', 'equipment', 'links', 'wechat', 'music', 'collection-list', 'notes', 'timeline', '404']) {
+  for (const route of ['index', 'archives', 'taxonomy', 'taxonomy-list', 'about', 'equipment', 'links', 'wechat', 'music', 'collection-list', 'threads', 'timeline', '404']) {
     const config = browserConfig(site, 'zh-CN', route, 'Page');
     assert.equal(config.htmlType, 'page', route);
     assert.equal(config.isHome, route === 'index', route);

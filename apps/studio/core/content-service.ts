@@ -11,10 +11,10 @@ import { stringValues } from '../shared/choices.js';
 import { dateParts } from '../shared/form-fields.js';
 import { contentLink } from '../shared/content-links.js';
 import { fillFieldDefaults } from '../shared/form-defaults.js';
-import { prepareNoteTaxonomies, validateNoteTaxonomies, prepareLocalizedTaxonomies, validateLocalizedTaxonomies } from './note-taxonomies.js';
+import { prepareThreadTaxonomies, validateThreadTaxonomies, prepareLocalizedTaxonomies, validateLocalizedTaxonomies } from './thread-taxonomies.js';
 import { validateContentRelations } from './content-relations.js';
 import { topicPath, topicChanges } from './topics.js';
-import { noteLanguages, notePath, noteWriteGuard, noteRouteChanges } from './notes.js';
+import { threadLanguages, threadPath, threadWriteGuard, threadRouteChanges } from './threads.js';
 import { pageSettingsSchemas } from '../shared/page-settings.js';
 import { translationLocation } from '../shared/translation.js';
 import { localeSectionWrites } from './content-locales.js';
@@ -68,20 +68,20 @@ export class ContentService {
   }
   async languages() {
     const file = await this.repository.read('config.toml');
-    return noteLanguages(file ? parse(file.text) : {});
+    return threadLanguages(file ? parse(file.text) : {});
   }
   async list(): Promise<ArticleSummary[]> {
     const [files, configFile] = await Promise.all([this.repository.list(), this.repository.read('config.toml')]);
     const config = configFile ? asJson(parse(configFile.text)) as Record<string, Json> : {};
-    const languages = noteLanguages(config);
+    const languages = threadLanguages(config);
     const summaries: ArticleSummary[] = files.map(file => {
-      const kind = file.path.startsWith('content/articles/') ? 'article' : file.path.startsWith('content/pages/') ? 'page' : file.path.startsWith('content/notes/') ? 'note' : file.path.startsWith('content/topics/') ? 'topic' : 'collection';
+      const kind = file.path.startsWith('content/articles/') ? 'article' : file.path.startsWith('content/pages/') ? 'page' : file.path.startsWith('content/threads/') ? 'thread' : file.path.startsWith('content/topics/') ? 'topic' : 'collection';
       try {
         const document = splitDocument(file.text);
         const metadata = parse(document.header);
-        const localized = (kind === 'note' || kind === 'topic') && !/\/_index(?:\.[^.]+)?\.md$/.test(file.path) ? (kind === 'topic' ? topicPath : notePath)(file.path, languages) : undefined;
+        const localized = (kind === 'thread' || kind === 'topic') && !/\/_index(?:\.[^.]+)?\.md$/.test(file.path) ? (kind === 'topic' ? topicPath : threadPath)(file.path, languages) : undefined;
         const locale = translationLocation(file.path, languages.defaultLanguage, languages);
-        return { path: file.path, title: String(metadata.title || (kind === 'note' && localized ? document.body.replace(/[#*`>\[\]]/g, '').trim().slice(0, 80) : '') || file.path.split('/').slice(-2).join('/')), date: metadata.date instanceof Date ? metadata.date.toISOString() : typeof metadata.date === 'string' ? metadata.date : '',
+        return { path: file.path, title: String(metadata.title || (kind === 'thread' && localized ? document.body.replace(/[#*`>\[\]]/g, '').trim().slice(0, 80) : '') || file.path.split('/').slice(-2).join('/')), date: metadata.date instanceof Date ? metadata.date.toISOString() : typeof metadata.date === 'string' ? metadata.date : '',
           lang: locale.sourceLanguage, translationKey: locale.translationKey,
           ...(localized ? { id: String(getValue(metadata, 'extra.id') || '') } : {}),
           references: (getValue(metadata, 'extra.references') || []) as ArticleReference[],
@@ -93,7 +93,7 @@ export class ContentService {
           weight: typeof metadata.weight === 'number' ? metadata.weight : 0 } satisfies ArticleSummary;
       } catch {
         let lang: string | undefined;
-        try { lang = kind === 'note' || kind === 'topic' ? (kind === 'topic' ? topicPath : notePath)(file.path, languages).lang : translationLocation(file.path, languages.defaultLanguage, languages).sourceLanguage; } catch { /* Unknown or malformed paths remain visible for repair. */ }
+        try { lang = kind === 'thread' || kind === 'topic' ? (kind === 'topic' ? topicPath : threadPath)(file.path, languages).lang : translationLocation(file.path, languages.defaultLanguage, languages).sourceLanguage; } catch { /* Unknown or malformed paths remain visible for repair. */ }
         return { path: file.path, title: file.path, date: '', draft: false, kind, tags: [], categories: [], lang, error: 'TOML 格式需要检查' } satisfies ArticleSummary;
       }
     });
@@ -119,38 +119,42 @@ export class ContentService {
       if (!parents.some(Boolean)) throw new StudioError(400, '请先创建上级专栏或合集');
     }
     const isSection = /\/_index(?:\.[^.]+)?\.md$/.test(path);
-    const isNote = path.startsWith('content/notes/') && !isSection;
+    const isThread = path.startsWith('content/threads/') && !isSection;
     const isTopic = path.startsWith('content/topics/') && !isSection;
-    const noteTaxonomies = isNote ? await prepareNoteTaxonomies(this.repository, path, current, changes) : !isTopic ? await prepareLocalizedTaxonomies(this.repository, path, current, changes) : undefined;
-    const contentChanges = isTopic ? await topicChanges(this.repository, path, current, changes, this.now()) : noteTaxonomies?.changes ?? changes;
+    const threadTaxonomies = isThread ? await prepareThreadTaxonomies(this.repository, path, current, changes) : !isTopic ? await prepareLocalizedTaxonomies(this.repository, path, current, changes) : undefined;
+    const contentChanges = isTopic ? await topicChanges(this.repository, path, current, changes, this.now()) : threadTaxonomies?.changes ?? changes;
     const effectiveChanges = translationReviewChanges(current?.text, contentChanges, body);
-    if (isNote) Object.assign(effectiveChanges, noteRouteChanges(path, current?.text, contentChanges, await this.languages()));
-    const defaults = { draft: true, ...(path.startsWith('content/pages/') ? { layout: 'empty', 'extra.type': 'page' } : {}), ...(isSection && path.startsWith('content/collections/') ? { 'extra.cover': '/img/default-cover.svg', 'extra.tags': [] } : {}), ...(isSection ? {} : { date: this.now().toISOString(), ...(isTopic ? {} : noteTaxonomies?.defaults ?? { 'taxonomies.tags': [], 'taxonomies.categories': [] }) }) };
-    let base = noteTaxonomies?.base ?? current?.text ?? `+++\n${patchToml('', defaults)}+++\n`;
-    if (isNote && current) {
+    if (isThread) {
+      Object.assign(effectiveChanges, threadRouteChanges(path, current?.text, contentChanges, await this.languages()));
+      delete effectiveChanges.aliases;
+      delete effectiveChanges['extra.comment_path'];
+    }
+    const defaults = { draft: true, ...(path.startsWith('content/pages/') ? { layout: 'empty', 'extra.type': 'page' } : {}), ...(isSection && path.startsWith('content/collections/') ? { 'extra.cover': '/img/default-cover.svg', 'extra.tags': [] } : {}), ...(isSection ? {} : { date: this.now().toISOString(), ...(isTopic ? {} : threadTaxonomies?.defaults ?? { 'taxonomies.tags': [], 'taxonomies.categories': [] }) }) };
+    let base = threadTaxonomies?.base ?? current?.text ?? `+++\n${patchToml('', defaults)}+++\n`;
+    if (isThread && current) {
       const document = splitDocument(base);
-      base = base.slice(0, document.start) + removeTomlFields(document.header, ['extra.thread_root', 'extra.reply_to']) + base.slice(document.end);
+      base = base.slice(0, document.start) + removeTomlFields(document.header, ['aliases', 'extra.comment_path', 'extra.thread_root', 'extra.reply_to']) + base.slice(document.end);
     }
     const text = updateDocument(base, effectiveChanges, body);
     const metadata = parse(splitDocument(text).header);
     const needsDate = (!isSection && !path.startsWith('content/pages/')) || ['post', 'collection-content'].includes(String(metadata.layout)) || (isSection && !!metadata.updated);
     if (needsDate && !metadata.date && (effectiveChanges.date === '' || (isSection && !!effectiveChanges.updated))) throw new StudioError(400, '这类内容需要发布时间，请选择日期后保存');
-    if (!isNote && (!metadata.title || typeof metadata.title !== 'string')) throw new StudioError(400, '请填写标题');
+    if (!isThread && (!metadata.title || typeof metadata.title !== 'string')) throw new StudioError(400, '请填写标题');
     const sections = await localeSectionWrites(this.repository, path);
     return saveBatch(this.repository, [{ path, text, expectedRevision: revision || null }, ...sections.entries], async repository => {
       await sections.guard(repository);
       if (!current && path.startsWith('content/collections/') && !/^content\/collections\/_index(?:\.[A-Za-z0-9-]+)?\.md$/.test(path)) {
         const parent = /\/(?:_?index)(?:\.[A-Za-z0-9-]+)?\.md$/.test(path) ? posix.dirname(posix.dirname(path)) : posix.dirname(path);
         const configuration = await repository.read('config.toml');
-        const languages = noteLanguages(configuration ? parse(configuration.text) : {});
+        const languages = threadLanguages(configuration ? parse(configuration.text) : {});
         const parents = await Promise.all(languages.languages.map(language => repository.read(translationLocation(`${parent}/_index.md`, language, languages).path)));
         if (!parents.some(Boolean)) throw new StudioError(409, '上级内容已更新，请重新加载后保存');
       }
       const config = await repository.read('config.toml');
       validateLocalizedTaxonomies(path, text, config ? parse(config.text) : {});
-      if (isNote) {
-        validateNoteTaxonomies(path, text, config ? parse(config.text) : {});
-        await noteWriteGuard(path, text)(repository);
+      if (isThread) {
+        validateThreadTaxonomies(path, text, config ? parse(config.text) : {});
+        await threadWriteGuard(path, text)(repository);
       }
       await validateContentRelations(repository, path, text);
     }, saveMode);

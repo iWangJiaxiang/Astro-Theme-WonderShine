@@ -68,7 +68,7 @@
 .activity-languages a{
   color:var(--wjx-theme,#425aef)
 }
-.note-card{
+.thread-card{
   background:var(--wjx-card-bg,#fff);
   border:1px solid var(--activity-line);
   border-radius:16px;
@@ -76,14 +76,14 @@
   margin:0 0 20px;
   overflow:hidden
 }
-.note-author{
+.thread-author{
   display:flex;
   align-items:center;
   gap:12px;
   font-size:14px;
   margin-bottom:22px
 }
-.activity-layout .note-author img,.activity-detail .note-author img{
+.activity-layout .thread-author img,.activity-detail .thread-author img{
   width:36px;
   height:36px;
   min-width:36px;
@@ -93,65 +93,65 @@
   border-radius:50%;
   object-fit:cover
 }
-.note-author>time{
+.thread-author>time{
   margin-left:auto;
   font-size:12px;
   color:var(--activity-muted)
 }
-.note-meta{
+.thread-meta{
   font-size:12px;
   display:flex;
   gap:14px;
   color:var(--activity-muted);
   margin:0 0 9px
 }
-.note-title{
+.thread-title{
   font-size:20px;
   margin:12px 0
 }
-.note-body{
+.thread-body{
   font-size:16px;
   line-height:1.85;
   overflow-wrap:anywhere
 }
-.note-body p{
+.thread-body p{
   margin:0 0 14px
 }
-.note-body p:last-child{
+.thread-body p:last-child{
   margin-bottom:0
 }
-.note-body a,.timeline-read,.note-card footer a{
+.thread-body a,.timeline-read,.thread-card footer a{
   color:var(--wjx-theme,#425aef)
 }
-.note-body a{
+.thread-body a{
   text-decoration:underline;
   text-underline-offset:3px
 }
-.note-body img,.note-body video{
+.thread-body img,.thread-body video{
   max-width:100%;
   max-height:420px;
   object-fit:contain;
   border-radius:10px;
   height:auto
 }
-.note-body pre{
+.thread-body pre{
   overflow:auto;
   background:var(--wjx-background,#f4f5f8);
   border-radius:8px;
   padding:16px
 }
-.note-body blockquote{
+.thread-body blockquote{
   border-left:3px solid var(--activity-line);
   padding-left:16px;
   margin-left:0;
   color:var(--activity-muted)
 }
-.note-body table{
+.thread-body table{
   display:block;
   max-width:100%;
   overflow-x:auto
 }
-.note-card footer{
+.thread-card footer{
   display:flex;
   gap:24px;
   margin-top:20px;
@@ -268,7 +268,7 @@
 .activity-comments h2{
   font-size:20px
 }
-.activity-home-hero,.home-notes{
+.activity-home-hero,.home-threads{
   display:none
 }
 @media(min-width:1200px){
@@ -354,7 +354,7 @@
   .home-featured:hover>img{
     transform:scale(1.03)
   }
-  .home-notes{
+  .home-threads{
     display:flex;
     align-items:center;
     gap:28px;
@@ -365,7 +365,7 @@
     border-radius:14px;
     background:var(--wjx-card-bg,#fff)
   }
-  .home-notes-label{
+  .home-threads-label{
     display:flex;
     align-items:center;
     gap:8px;
@@ -373,7 +373,7 @@
     font-weight:600;
     font-size:14px
   }
-  .home-notes-label>span:last-child{
+  .home-threads-label>span:last-child{
     margin-left:12px;
     color:var(--wjx-secondtext,#6b7280)
   }
@@ -383,23 +383,23 @@
     background:var(--wjx-theme,#425aef);
     border-radius:50%
   }
-  .home-notes-items{
+  .home-threads-items{
     display:flex;
     gap:24px;
     flex:1;
     min-width:0
   }
-  .home-note{
+  .home-thread{
     flex:1;
     min-width:0;
     padding-left:24px;
     border-left:1px solid var(--wjx-card-border,#e3e6ed)
   }
-  .home-note time{
+  .home-thread time{
     font-size:11px;
     color:var(--wjx-secondtext,#6b7280)
   }
-  .home-note p{
+  .home-thread p{
     font-size:13px;
     line-height:1.6;
     margin:4px 0 0;
@@ -408,7 +408,7 @@
     -webkit-box-orient:vertical;
     overflow:hidden
   }
-  .home-notes-empty{
+  .home-threads-empty{
     font-size:13px;
     color:var(--wjx-secondtext,#6b7280);
     margin:0
@@ -445,12 +445,19 @@
     padding:0 20px
   }
   .activity-aside{
-    display:none
+    display:block;
+    position:static;
+    margin-top:24px;
+    padding-top:16px;
+    border-top:1px solid var(--wjx-card-border)
   }
+  .activity-aside .activity-avatar{width:48px;height:48px}
+  .thread-author{flex-wrap:wrap}
+  .thread-author time{font-size:12px}
   .activity-detail{
     padding:0 16px
   }
-  .note-card{
+  .thread-card{
     padding:22px 18px
   }
   .timeline-event{
@@ -498,7 +505,7 @@
 .topic-dates{margin:0}.topic-dates dt{font-size:12px;color:var(--activity-muted);margin-top:18px}.topic-dates dd{margin:4px 0;font-size:14px}
 .topic-intro{margin-bottom:32px}.topic-cover{display:block;width:100%;max-height:320px;object-fit:cover;border-radius:16px;margin-bottom:24px}
 
-.note-author>strong,.note-author>time{white-space:nowrap}
+.thread-author>strong,.thread-author>time{white-space:nowrap}
 
 .ai-translation-label{display:inline-block;padding:3px 8px;margin:6px 0;border:1px solid currentColor;border-radius:5px;font-size:12px;line-height:1.5;opacity:.8}
 

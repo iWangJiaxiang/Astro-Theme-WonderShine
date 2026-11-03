@@ -86,26 +86,26 @@ test('translation config is optional and validates endpoint without reflecting s
 test('localized paths keep dotted article filenames and detect actual translatable edits', () => {
   const config = { defaultLanguage: 'zh-CN', languages: ['zh-CN', 'en'] };
   assert.equal(translationLocation('content/articles/my.story.md', 'en', config).path, 'content/articles/my.story.en.md');
-  assert.equal(translationLocation('content/notes/n_one/index.en.md', 'zh-CN', config).path, 'content/notes/n_one/index.md');
+  assert.equal(translationLocation('content/threads/n_one/index.en.md', 'zh-CN', config).path, 'content/threads/n_one/index.md');
   assert.equal(translationLocation('content/articles/_index.md', 'en', config).path, 'content/articles/_index.en.md');
   assert.equal(translationTextChanged({ title: 'A', weight: 1 }, { title: 'A', weight: 2 }, 'B', 'B'), false);
   assert.equal(translationTextChanged({ title: 'A' }, { title: 'C' }, 'B', 'B'), true);
 });
 
-test('note and topic translations preserve identity, dates and configured target taxonomies', async t => {
+test('thread and topic translations preserve identity, dates and configured target taxonomies', async t => {
   const { repo, content, service } = await fixture(t);
   await writeFile(join(repo.root, 'config.toml'), 'default_language="zh-CN"\ntaxonomies=[{name="tags"},{name="categories"}]\n[languages.en]\ntaxonomies=[{name="tags"}]\n');
-  for (const kind of ['note', 'topic'] as const) {
-    const path = `content/${kind === 'note' ? 'notes' : 'topics'}/example/index.md`;
+  for (const kind of ['thread', 'topic'] as const) {
+    const path = `content/${kind === 'thread' ? 'threads' : 'topics'}/example/index.md`;
     await content.saveDocument(path, { title: '你好', date: '2020-01-01T00:00:00Z', 'extra.kind': kind, 'extra.id': 'example', ...(kind === 'topic' ? { layout: 'topic' } : { 'taxonomies.tags': ['keep'], 'taxonomies.categories': ['omit'] }) }, '你好', null);
     const source = await content.document(path);
     const saved = await service.create({ path, revision: source.revision, language: 'en' });
     const doc = await content.document(saved.path);
     assert.equal((doc.metadata.extra as Record<string, unknown>).id, 'example');
     assert.equal(doc.metadata.date, source.metadata.date);
-    if (kind === 'note') {
+    if (kind === 'thread') {
       assert.deepEqual(doc.metadata.taxonomies, { tags: ['keep'] });
-      assert.equal(doc.metadata.path, 'en/thread/example');
+      assert.equal(doc.metadata.path, 'en/threads/example');
       assert.equal(doc.metadata.aliases, undefined);
     }
     await content.saveDocument(saved.path, { 'extra.translation_reviewed': true, draft: false }, doc.body, doc.revision);

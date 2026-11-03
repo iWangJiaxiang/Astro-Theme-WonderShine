@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { forgetDeletedContent } from '../src/deleted-content.js';
 
 const identity = { method: 'password' as const, id: 'owner' };
-const path = 'content/notes/n_one/index.md';
-const translated = 'content/notes/n_one/index.en.md';
-const sessionKey = 'studio-note-session:password:owner';
+const path = 'content/threads/n_one/index.md';
+const translated = 'content/threads/n_one/index.en.md';
+const sessionKey = 'studio-thread-session:password:owner';
 const backupKey = (path: string) => `studio-draft:password:owner:${path}`;
 const draft = (path: string) => ({ path, initial: { draft: true }, initialBody: 'Unsaved work' });
 
@@ -15,8 +15,8 @@ function memory(entries: Record<string, string>) {
 }
 
 test('deleting from a list or detail removes recoverable copies of only the exact language and account', () => {
-  const otherPath = 'content/notes/n_other/index.md';
-  const otherSession = 'studio-note-session:oidc:owner';
+  const otherPath = 'content/threads/n_other/index.md';
+  const otherSession = 'studio-thread-session:oidc:owner';
   const otherBackup = `studio-draft:oidc:owner:${path}`;
   const storage = memory({
     [backupKey(path)]: 'deleted backup', [backupKey(translated)]: 'English backup', [backupKey(otherPath)]: 'Other backup',

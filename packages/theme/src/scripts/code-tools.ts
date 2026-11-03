@@ -24,7 +24,7 @@ function initializeCodeTools() {
   const options = host.GLOBAL_CONFIG?.prism;
   if (!options?.enable) return;
   const chinese = document.documentElement.lang.startsWith('zh');
-  for (const code of document.querySelectorAll<HTMLElement>('#article-container pre > code, .post-content pre > code, .note-body pre > code')) {
+  for (const code of document.querySelectorAll<HTMLElement>('#article-container pre > code, .post-content pre > code, .thread-body pre > code')) {
     const pre = code.parentElement!;
     if (pre.dataset.codeReady) continue;
     pre.dataset.codeReady = 'true';

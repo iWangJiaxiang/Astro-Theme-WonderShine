@@ -7,7 +7,7 @@ export function validatePath(path: string): void {
   if (typeof path !== 'string' || path.length > 500 || path.includes('\\') || /[\x00-\x1f\x7f%]/.test(path)
     || path.split('/').some(p => !p || p.startsWith('.'))
     || !(/^(config\.toml|data(?:\.[A-Za-z0-9-]+)?\.toml|public\/data\/friends(?:\.[A-Za-z0-9-]+)?\.json)$/.test(path)
-      || /^content\/(articles|pages|collections|notes|topics)\/.+\.md$/.test(path) || /^content\/_index(?:\.[A-Za-z0-9-]+)?\.md$/.test(path))) {
+      || /^content\/(articles|pages|collections|threads|topics)\/.+\.md$/.test(path) || /^content\/_index(?:\.[A-Za-z0-9-]+)?\.md$/.test(path))) {
     throw new StudioError(400, '不允许访问此文件路径');
   }
 }

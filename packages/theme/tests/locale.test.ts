@@ -33,7 +33,7 @@ test('language menu falls back to home for missing or unpublished translations',
   assert.equal(destinations[1].url,'/en/');assert.equal(destinations[1].translated,false);
 });
 test('language links never expose future, hidden or disabled activity translations',()=>{
-  for(const overrides of [{date:'2999-01-01'}, {render:false}, {kind:'note' as const}]) {
+  for(const overrides of [{date:'2999-01-01'}, {render:false}, {kind:'thread' as const}]) {
     const original=document(), translation=document({id:'translation',lang:'en',url:'/en/private/',...overrides});
     original.translations=[translation];
     const source=site({documents:[original,translation]});

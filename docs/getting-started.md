@@ -92,7 +92,7 @@ export default defineConfig({ integrations: [wondershine()] });
 | `config.toml` | 站名、作者、正式域名、语言、主题功能 |
 | `data.toml`、`data.<语言>.toml` | 导航、标签、分类和对应语言的展示数据 |
 | `content/articles/` | 文章 |
-| `content/notes/` | 动态；公开网址使用 `/thread/<UUID>/` |
+| `content/threads/` | 动态；公开网址使用 `/threads/<UUID>/` |
 | `content/topics/` | 连接文章与动态的话题 |
 | `content/collections/` | 系列与章节等分组内容 |
 | `content/pages/` | 关于等独立页面 |
@@ -136,7 +136,7 @@ This is my first post.
 2. 将 `data.toml` 的英文数据移到 `data.en.toml`，将 `data.zh-CN.toml` 的中文数据作为 `data.toml`。
 3. 配置 `default_language = "zh-CN"` 和 `[languages.en]`。把原 `[languages.zh-CN]` 及其子表改为英语配置，填写英文标题、简介、taxonomy；同步检查 `extra.locale` 中的语言覆盖。
 4. 更新数据文件中的导航地址：中文 `data.toml` 的 `/zh-CN/articles/` 等地址去掉 `/zh-CN`；英文 `data.en.toml` 中的本站导航加上 `/en`，例如 `/en/articles/`。
-5. 更新内容 frontmatter 顶层的显式 `path`：中文关于页由 `zh-CN/about` 改为 `about`，中文动态由 `zh-CN/thread/<UUID>` 改为 `thread/<UUID>`；英文对应版本改为 `en/about`、`en/thread/<UUID>`。显式路径不会自动随默认语言改变，其他手写 URL 和 `aliases` 也应逐项核对。**不要批量替换 `extra.references[].path`**，其中 `articles/welcome/index.md` 是内容源引用，不是公开网址。
+5. 更新内容 frontmatter 顶层的显式 `path`：中文关于页由 `zh-CN/about` 改为 `about`，中文动态由 `zh-CN/threads/<UUID>` 改为 `threads/<UUID>`；英文对应版本改为 `en/about`、`en/threads/<UUID>`。显式路径不会自动随默认语言改变，其他手写 URL 和 `aliases` 也应逐项核对。**不要批量替换 `extra.references[].path`**，其中 `articles/welcome/index.md` 是内容源引用，不是公开网址。
 6. 构建后核对 `/`、`/en/`、两种语言的关于页、文章、动态、导航和语言切换，再开始正式写作。
 
 已有公开站点更换默认语言可能改变 URL；迁移时优先保留旧语言设置。更多规则见 [配置与内容格式](configuration.md)。

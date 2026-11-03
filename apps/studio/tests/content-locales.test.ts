@@ -17,7 +17,7 @@ async function fixture(t: { after(fn: () => Promise<void>): void }) {
   const repo = new LocalRepository(root);
   return { repo, content: new ContentService(repo), translations: new TranslationService(repo) };
 }
-const note = { 'extra.kind': 'note', 'extra.id': 'n_one', draft: true };
+const thread = { 'extra.kind': 'thread', 'extra.id': 'n_one', draft: true };
 
 test('manual translations preserve full source metadata and create translated ancestor scaffolds in one batch', async t => {
   const { repo, content, translations } = await fixture(t);
@@ -70,10 +70,10 @@ test('all content kinds support English-first creation, translated sections and 
 
 test('failed validation and stale batches leave no translated sections or content behind', async t => {
   const { repo, content } = await fixture(t);
-  await repo.write('content/notes/_index.md', '+++\ntitle="Notes"\n+++\n', null);
-  await assert.rejects(content.saveDocument('content/notes/n_one/index.en.md', { ...note, 'extra.references': [{ kind: 'internal', path: 'articles/missing.md' }] }, 'Missing reference', null));
-  assert.equal(await repo.read('content/notes/_index.en.md'), null);
-  assert.equal(await repo.read('content/notes/n_one/index.en.md'), null);
+  await repo.write('content/threads/_index.md', '+++\ntitle="Threads"\n+++\n', null);
+  await assert.rejects(content.saveDocument('content/threads/n_one/index.en.md', { ...thread, 'extra.references': [{ kind: 'internal', path: 'articles/missing.md' }] }, 'Missing reference', null));
+  assert.equal(await repo.read('content/threads/_index.en.md'), null);
+  assert.equal(await repo.read('content/threads/n_one/index.en.md'), null);
   await repo.write('content/pages/existing.md', 'Original', null);
   await assert.rejects(repo.writeBatch([
     { path: 'content/pages/new.md', text: 'New', expectedRevision: null },
@@ -85,12 +85,12 @@ test('failed validation and stale batches leave no translated sections or conten
 
 test('article references resolve logical identities, survive translation, reject unsafe data and protect last translations', async t => {
   const { content, translations } = await fixture(t);
-  const article = 'content/articles/first/index.en.md', notePath = 'content/notes/n_one/index.md';
+  const article = 'content/articles/first/index.en.md', threadPath = 'content/threads/n_one/index.md';
   await content.saveDocument(article, { title: 'English-only article' }, 'Text', null);
   const refs = [{ kind: 'internal', path: 'articles/first/index.md' }, { kind: 'external', url: 'https://example.com/article', title: 'External article' }];
-  await content.saveDocument(notePath, { ...note, 'extra.references': refs }, 'Referenced', null);
-  const source = await content.document(notePath);
-  const result = await translations.createManual({ path: notePath, revision: source.revision, language: 'en' });
+  await content.saveDocument(threadPath, { ...thread, 'extra.references': refs }, 'Referenced', null);
+  const source = await content.document(threadPath);
+  const result = await translations.createManual({ path: threadPath, revision: source.revision, language: 'en' });
   assert.deepEqual((await content.document(result.path)).metadata.extra, { ...source.metadata.extra as object });
   for (const references of [
     [{ kind: 'internal', path: 'articles/first/index.en.md' }],
@@ -98,7 +98,7 @@ test('article references resolve logical identities, survive translation, reject
     [{ kind: 'external', url: 'javascript:alert(1)', title: '' }],
     [{ kind: 'external', url: 'https://user:pass@example.com', title: '' }],
     [refs[0], refs[0]], Array.from({ length: 13 }, (_, index) => ({ kind: 'external', url: `https://example.com/${index}`, title: '' })),
-  ]) await assert.rejects(content.saveDocument(notePath, { 'extra.references': references }, 'Unsafe', source.revision));
+  ]) await assert.rejects(content.saveDocument(threadPath, { 'extra.references': references }, 'Unsafe', source.revision));
   const articleSource = await content.document(article);
   await assert.rejects(content.removeDocument(article, articleSource.revision), /仍被.*引用/);
   const second = await translations.createManual({ path: article, revision: articleSource.revision, language: 'zh' });
@@ -114,17 +114,17 @@ test('concurrent article deletion and reference creation never leave dangling re
   const source = await content.document(article);
   const outcomes = await Promise.allSettled([
     content.removeDocument(article, source.revision),
-    content.saveDocument('content/notes/n_one/index.md', { ...note, 'extra.references': [{ kind: 'internal', path: 'articles/race.md' }] }, 'Reference', null),
+    content.saveDocument('content/threads/n_one/index.md', { ...thread, 'extra.references': [{ kind: 'internal', path: 'articles/race.md' }] }, 'Reference', null),
   ]);
   assert.equal(outcomes.filter(result => result.status === 'fulfilled').length, 1);
-  assert.ok(!await repo.read('content/notes/n_one/index.md') || await repo.read(article));
+  assert.ok(!await repo.read('content/threads/n_one/index.md') || await repo.read(article));
 });
-test('notes reject empty submissions but allow title-only and reference-only content', async t => {
+test('threads reject empty submissions but allow title-only and reference-only content', async t => {
   const { content, repo } = await fixture(t);
-  const path = 'content/notes/n_one/index.md';
-  await assert.rejects(content.saveDocument(path, note, '  \n', null), /正文、标题或引用文章/);
+  const path = 'content/threads/n_one/index.md';
+  await assert.rejects(content.saveDocument(path, thread, '  \n', null), /正文、标题或引用文章/);
   assert.equal(await repo.read(path), null);
-  await content.saveDocument(path, { ...note, title: 'A short thought' }, '', null);
+  await content.saveDocument(path, { ...thread, title: 'A short thought' }, '', null);
   const source = await content.document(path);
   await content.saveDocument(path, { title: '', 'extra.references': [{ kind: 'external', url: 'https://example.com/story', title: 'Story' }] }, '', source.revision);
   assert.equal((await content.document(path)).body, '');
@@ -134,8 +134,8 @@ test('series chapters can be referenced across languages while album tracks and 
   await repo.write('content/collections/column/series/_index.md', '+++\ntitle="Series"\n+++\n', null);
   await repo.write('content/collections/column/series/chapter.en.md', '+++\ntitle="Chapter"\n+++\nText', null);
   await repo.write('content/collections/album/song.md', '+++\ntitle="Track"\n+++\n', null);
-  const path = 'content/notes/n_one/index.md';
-  await content.saveDocument(path, { ...note, 'extra.references': [{ kind: 'internal', path: 'collections/column/series/chapter.md' }] }, '', null);
+  const path = 'content/threads/n_one/index.md';
+  await content.saveDocument(path, { ...thread, 'extra.references': [{ kind: 'internal', path: 'collections/column/series/chapter.md' }] }, '', null);
   const saved = await content.document(path);
   for (const target of ['collections/column/series/_index.md', 'collections/album/song.md']) await assert.rejects(content.saveDocument(path, { 'extra.references': [{ kind: 'internal', path: target }] }, '', saved.revision));
   const chapter = await content.document('content/collections/column/series/chapter.en.md');

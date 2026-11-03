@@ -13,6 +13,8 @@
 
 手动执行入口只有 dry-run，没有隐藏的正式发布开关。整个流程在 GitHub-hosted Ubuntu runner 上执行，不在开发电脑上构建或打包。
 
+正式发行必须先将代码及版本变更合入远端 `main`，确认该提交通过远程验证，再从 `main` 的已验证提交创建 `theme-v*` tag 和 GitHub Release，Release target 指定为 `main`。禁止直接从 feature 分支打 tag 或发布。已发布 tag 和 npm 版本不可移动、覆盖或重发。
+
 正式 Release 的 tag 必须与 `packages/theme/package.json` 的 version 完全一致，GitHub 的 prerelease 复选框也必须与 SemVer 一致。构建元信息（如 `+build`）和非规范版本被拒绝。发布前同时更新 `package-lock.json` 中主题 workspace 的版本；不要改 Studio 的版本来发布主题。
 
 验证 job 缓存 `.astro/image-cache` 中的图片编码结果；key 隔离操作系统、lockfile 和编码器源码，并按提交保存快照。生成器仍对源图内容与完整编码 recipe 计算 hash，所以恢复旧缓存不会跳过变化图片的重新生成。发布 job 不恢复缓存，也不安装项目依赖；`dist` 与 `node_modules` 不进入这个缓存。

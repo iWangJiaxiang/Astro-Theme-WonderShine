@@ -2,7 +2,7 @@ import { parse } from 'smol-toml';
 import type { ContentLanguages, FileSnapshot, Json } from '../shared/types.js';
 import type { Repository } from '../shared/repository.js';
 import { formDocumentMetadata, splitDocument, getValue } from './content.js';
-import { noteLanguages } from './notes.js';
+import { threadLanguages } from './threads.js';
 import { StudioError } from './errors.js';
 
 export function topicPath(path: string, languages: ContentLanguages) {
@@ -19,7 +19,7 @@ export function topicMetadata(file: Pick<FileSnapshot, 'path' | 'text'>): Record
 
 export async function topicChanges(repository: Repository, path: string, current: FileSnapshot | null, changes: Record<string, Json>, now: Date): Promise<Record<string, Json>> {
   const config = await repository.read('config.toml');
-  const languages = noteLanguages(config ? parse(config.text) : {});
+  const languages = threadLanguages(config ? parse(config.text) : {});
   const location = topicPath(path, languages);
   const existing = current ? topicMetadata(current) : undefined;
   const siblings = current ? [] : (await repository.list()).filter(file => file.path !== path && file.path.startsWith(`content/topics/${location.id}/index`));

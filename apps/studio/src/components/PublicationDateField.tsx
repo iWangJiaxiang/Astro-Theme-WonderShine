@@ -56,7 +56,7 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
     return () =>
       element(
         "div",
-        { className: classes("note-date-field") },
+        { className: classes("thread-date-field") },
         element("span", { id: `${id}-label` }, t("发布时间")),
         element(
           "button",
@@ -68,7 +68,7 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
             "aria-describedby": `${id}-value`,
             "aria-haspopup": "dialog",
             "aria-expanded": opened.value,
-            className: classes("note-date-trigger", {
+            className: classes("thread-date-trigger", {
               "date-missing": !parts.value,
             }),
             onClick: domEvent(($event: Event) => {
@@ -78,13 +78,13 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
           parts.value
             ? element(
                 "span",
-                { id: `${id}-value`, className: classes("note-date-value") },
+                { id: `${id}-value`, className: classes("thread-date-value") },
                 parts.value.date.replaceAll("-", "/"),
                 parts.value.time
                   ? element(
                       "small",
                       null,
-                      parts.value.time.slice(0, 5),
+                      parts.value.time.slice(0, 8).padEnd(8, ':00'),
                       " ",
                       element("span", null, zone(parts.value.zone)),
                     )
@@ -93,7 +93,7 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
             : element("span", { id: `${id}-value` }, t("设置发布时间")),
           element(
             "span",
-            { className: classes("note-date-edit") },
+            { className: classes("thread-date-edit") },
             element(Icon, { name: "pen", size: 13 }),
             t("修改"),
           ),

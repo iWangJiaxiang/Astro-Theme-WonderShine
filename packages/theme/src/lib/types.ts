@@ -1,5 +1,5 @@
 /** Site content contracts shared by the Astro renderer and content adapters. */
-export type ContentKind = 'article' | 'note' | 'topic' | 'page' | 'section';
+export type ContentKind = 'article' | 'thread' | 'topic' | 'page' | 'section';
 export type DataRecord = Record<string, any>;
 
 export interface TocEntry {

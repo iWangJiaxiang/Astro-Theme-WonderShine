@@ -1,7 +1,7 @@
 import type { Json } from './types.js';
 import { translationLocation } from './translation.js';
-import { canonicalNativeNoteRoute } from './note-routes.js';
-export { canonicalNativeNoteRoute } from './note-routes.js';
+import { canonicalNativeThreadRoute } from './thread-routes.js';
+export { canonicalNativeThreadRoute } from './thread-routes.js';
 
 // A front-matter path is absolute, including translated pages (legacy URL compatibility).
 export function contentLink(file: string, metadata: Record<string, Json>, config: Record<string, Json>): { publicPath?: string; linkWarning?: string } {
@@ -10,8 +10,8 @@ export function contentLink(file: string, metadata: Record<string, Json>, config
   const localized = translationLocation(file, defaultLanguage, { defaultLanguage, languages });
   file = localized.translationKey;
   const prefix = localized.sourceLanguage === defaultLanguage ? '' : '/' + localized.sourceLanguage;
-  const note = file.match(/^content\/(notes|topics)\/([^/]+)\/index(?:\.([A-Za-z0-9-]+))?\.md$/);
-  if (note?.[1] === 'notes') return { publicPath: canonicalNativeNoteRoute(note[2], localized.sourceLanguage, defaultLanguage) };
+  const thread = file.match(/^content\/(threads|topics)\/([^/]+)\/index(?:\.([A-Za-z0-9-]+))?\.md$/);
+  if (thread?.[1] === 'threads') return { publicPath: canonicalNativeThreadRoute(thread[2], localized.sourceLanguage, defaultLanguage) };
   const path = metadata.path;
   if (typeof path === 'string' && path) return { publicPath: '/' + path.replace(/^\/+|\/+$/g, '') + '/' };
   // Topics use ordinary content paths, including the configured slugify strategy.

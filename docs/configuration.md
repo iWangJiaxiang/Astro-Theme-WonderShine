@@ -26,8 +26,8 @@ cover = "cover.svg"
 
 - `index.md` 是默认语言，`index.zh-CN.md` 是对应译文；`_index.md` 是目录设置。
 - `layout` 选择 Astro 页面布局，`child_layout` 设置目录下内容的默认布局。
-- 支持 `index`、`post`、`archives`、`notes`、`note`、`timeline`、`topics`、`topic`、`collection-list`、`collection-category`、`collection-detail`、`collection-content`、`empty`、`about`、`friends`、`equipment`、`music`、`wechat`。
-- 动态源码在 `content/notes/<UUID>/index.md`；公开地址为 `/thread/<UUID>/`，由 Studio 维护。
+- 支持 `index`、`post`、`archives`、`threads`、`thread`、`timeline`、`topics`、`topic`、`collection-list`、`collection-category`、`collection-detail`、`collection-content`、`empty`、`about`、`friends`、`equipment`、`music`、`wechat`。
+- 动态源码在 `content/threads/<UUID>/index.md`；公开地址为 `/threads/<UUID>/`，由 Studio 维护。
 - 话题是独立内容，标签与分类仍在 `taxonomies` 下。系列是有章节的目录，音乐专辑仍可使用系列组件配置展示。
 - 草稿不公开。未来日期是否公开由配置控制；静态网站到期后仍须重新构建。
 - `extra.references` 的站内文章引用按内容路径保存，渲染时优先当前语言。
@@ -41,3 +41,5 @@ cover = "cover.svg"
 搜索默认关闭。现有界面支持配置 Meilisearch 或 Algolia；本次没有新增本地搜索服务或自动 Pagefind 索引。评论、音乐和统计同样需配置自己的服务，不继承维护者的生产配置。
 
 主题保留 ClientRouter、首次加载与导航 loading、中等/移动宽度布局、深浅色与语言持久化。`extra.nav.compact_paths` 可指定中等宽度收纳到“更多”的菜单地址。
+
+桌面与移动导航共用 `menu.nav_menu`。启用动态功能后，未配置的 `/threads/`、`/timeline/` 入口默认插入第一个菜单之后；如果任意层级的菜单已显式配置对应地址（含语言前缀及有无尾斜杠），则不再重复插入该入口。可将时间线放在动态菜单的子项中。移动导航的无子项菜单直接跳转，有子项菜单使用原生折叠控件；设置了 `href` 的分组在展开后提供主链接，紧凑导航的“更多”分组同样保留主链接。

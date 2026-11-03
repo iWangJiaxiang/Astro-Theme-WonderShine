@@ -122,7 +122,7 @@ npm run preview -- --host 127.0.0.1 --port 4325
 
 迁移时保留旧 `default_language`、`languages`、文件语言后缀和 `data.<语言>.toml`。默认语言的 `index.md` 与译文 `index.en.md` 属于同一组内容，不能仅改站点默认语言而不调整文件。
 
-动态源码继续放在 `content/notes/<ID>/`；新建动态由 Studio 使用 UUID，并生成 `/thread/<UUID>/` 公开路径。迁移工具不自动给旧动态重新编号，也不批量改写其 `path`。应逐条核对已有动态地址，避免为了统一目录名称破坏旧链接。
+动态统一使用 `content/threads/<ID>/index.md`、列表 `/threads/`、详情 `/threads/<ID>/` 和订阅 `threads.xml`；类型及布局为 `thread` / `threads`，译文按语言添加前缀。Studio 新建动态使用 UUID，保存和翻译不生成旧动态 aliases，也不保留旧 `extra.comment_path`。未上线站点应直接迁移动态目录、元数据与链接，不创建 `/notes/` 或 `/thread/` 重定向。文章及其他内容的历史兼容行为保持不变。
 
 原有 `taxonomies.tags` 与 `taxonomies.categories` 继续使用。话题是独立内容，文章系列和音乐专辑等分组不会自动转换成话题。站内引用、多语言引用回退、系列上下章链接都需要在新站中验证。
 

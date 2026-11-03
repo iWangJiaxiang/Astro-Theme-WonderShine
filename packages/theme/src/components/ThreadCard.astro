@@ -1,0 +1,45 @@
+---
+import ResponsiveImage from './ResponsiveImage.astro';
+import References from './References.astro';
+import TopicLinks from './TopicLinks.astro';
+import {formatDateTime} from '../lib/queries';
+import {t,localizeConfig} from '../lib/locale';
+const {site,document:thread,lang,detail=false,listing=false}=Astro.props;
+const config=localizeConfig(site,lang);
+const tr=(key:string)=>t(key,lang,site,'activity');
+---
+<article class:list={['thread-card',{'thread-card--listing':listing}]} data-thread-id={thread.extra.id}>
+<header class="thread-author"><ResponsiveImage site={site} src={config.extra.site.author.avatar} alt="" width="36" height="36" sizes="36px" pictureStyle={listing?'display:block':undefined}/><strong>{config.author}</strong>{listing&&<span class="thread-kind">{tr('thread')}</span>}<time datetime={thread.date}>{formatDateTime(thread.date,lang)}</time></header>
+{thread.title&&<h2 class="thread-title"><a href={thread.url}>{thread.title}</a></h2>}
+{thread.extra.ai_translation&&<span class="ai-translation-label">{tr('ai_translation')}</span>}
+<div class="thread-body" set:html={thread.html}/>
+<References site={site} document={thread} lang={lang}/><TopicLinks site={site} document={thread} lang={lang}/>
+{!detail&&<footer><a href={thread.url}>{tr('read_thread')} →</a>{config.extra.comments.enable&&!thread.extra.disable_comment&&<a href={`${thread.url}#post-comment`}>{tr('comments')}</a>}</footer>}
+</article>
+<style is:global>
+/* Taxonomies share the thread component while keeping a compact list presentation. */
+#recent-posts > .thread-card--listing { --activity-line:var(--wjx-card-border); --activity-muted:var(--wjx-secondtext); flex:0 0 100%; width:100%; min-width:0; padding:20px 24px; margin:0 0 20px; border:var(--style-border); border-radius:12px; }
+.thread-card--listing .thread-author { display:grid; grid-template-columns:36px auto 1fr auto; gap:10px; align-items:center; margin-bottom:12px; }
+.thread-card--listing .thread-author > picture { width:36px; height:36px; }
+.thread-card--listing .thread-author img { width:36px; height:36px; min-width:36px; max-width:36px; margin:0; border-radius:50%; object-fit:cover; }
+.thread-card--listing .thread-author > strong { color:var(--wjx-fontcolor); }
+.thread-card--listing .thread-kind { justify-self:start; padding:2px 8px; border-radius:6px; background:var(--wjx-theme-op); color:var(--wjx-theme); font-size:12px; line-height:20px; }
+.thread-card--listing .thread-title { margin:0 0 8px; font-size:18px; line-height:1.5; }
+.thread-card--listing .thread-body { max-height:9rem; overflow:hidden; font-size:15px; line-height:1.75; }
+.thread-card--listing .article-references { gap:8px; margin:14px 0 0; }
+.thread-card--listing .article-reference { padding:12px; gap:6px; background:var(--wjx-background); }
+.thread-card--listing .article-reference:has(.reference-cover) { grid-template-columns:92px minmax(0,1fr); gap:14px; }
+.thread-card--listing .reference-copy { justify-content:center; gap:4px; }
+.thread-card--listing .article-reference strong { font-size:15px; line-height:1.5; }
+.thread-card--listing .reference-description,.thread-card--listing .reference-action { display:none; }
+.thread-card--listing .content-topics { margin:12px 0 0; }
+.thread-card--listing footer { margin-top:14px; padding-top:10px; gap:20px; }
+.thread-card--listing footer a:focus-visible { outline:2px solid var(--wjx-theme); outline-offset:3px; }
+@media(max-width:600px) {
+  #recent-posts > .thread-card--listing { padding:16px; }
+  .thread-card--listing .thread-author { grid-template-columns:36px auto 1fr; gap:2px 10px; }
+  .thread-card--listing .thread-author > picture { grid-row:1 / 3; }
+  .thread-card--listing .thread-author > time { grid-column:2 / -1; margin:0; justify-self:start; }
+  .thread-card--listing .article-reference:has(.reference-cover) { grid-template-columns:72px minmax(0,1fr); gap:10px; }
+}
+</style>

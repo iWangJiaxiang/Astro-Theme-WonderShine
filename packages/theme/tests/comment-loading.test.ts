@@ -5,11 +5,11 @@ import test from 'node:test';
 
 const source = readFileSync(new URL('../assets/js/comment/twikoo.js', import.meta.url), 'utf8');
 async function load(lang: string, connected = true, installed = false) {
-  const page = { isConnected: connected, dataset: { commentPath: '/thread/example/' } };
+  const page = { isConnected: connected, dataset: { commentPath: '/threads/example/' } };
   const container = { textContent: '', setAttribute() {} };
   runInNewContext(source, {
     document: { documentElement: { lang }, getElementById: (id: string) => id === 'post-comment' ? page : container },
-    location: { pathname: '/thread/example/' },
+    location: { pathname: '/threads/example/' },
     GLOBAL_CONFIG: { source: { comments: { lazyload: false }, twikoo: { js: 'https://sdk.invalid/twikoo.js', twikooUrl: 'https://comments.invalid' } } },
     getScript: () => Promise.reject(new Error('Network unavailable')),
     ...(installed ? { twikoo: { init: () => Promise.reject(new Error('Service unavailable')) } } : {}),
@@ -33,14 +33,14 @@ test('SDK initialization failure is handled too', async () => {
 
 test('an available SDK initializes once and updates the comment count', async () => {
   let initialized = 0;
-  const page = { isConnected: true, dataset: { commentPath: '/thread/example/' } };
+  const page = { isConnected: true, dataset: { commentPath: '/threads/example/' } };
   const container = { textContent: '', innerText: '' };
   runInNewContext(source, {
     document: { documentElement: { lang: 'en' }, getElementById: (id: string) => id === 'post-comment' ? page : container },
-    location: { pathname: '/thread/example/' },
+    location: { pathname: '/threads/example/' },
     GLOBAL_CONFIG: { source: { comments: { lazyload: false }, twikoo: { twikooUrl: 'https://comments.invalid' } } },
     twikoo: {
-      init: async (options: { path: string }) => { assert.equal(options.path, '/thread/example/'); initialized++; },
+      init: async (options: { path: string }) => { assert.equal(options.path, '/threads/example/'); initialized++; },
       getCommentsCount: async () => [{ count: 3 }],
     },
   });

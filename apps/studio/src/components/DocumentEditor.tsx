@@ -1,4 +1,5 @@
 import SaveButton from "./SaveButton";
+import { createDraftBackup } from "../draft-backup";
 import { saveContext } from "../save-preferences";
 import type { SaveMode } from "../../shared/save";
 import { prepareEditorIcons } from "../editor-assets";
@@ -38,7 +39,7 @@ import {
   type ContentLanguages,
 } from "../content-model";
 import { locale, t, translateOptions, type Message } from "../i18n";
-import { richEditorBody, unsavedNoteChanged } from "../note-session";
+import { richEditorBody, unsavedThreadChanged } from "../thread-session";
 import {
   classes,
   component,
@@ -223,12 +224,12 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
     const choices = ref<Record<string, Choice[]>>({}),
       choicesLoading = ref(true),
       choicesError = ref<Message>("");
-    const isNote = props.path.startsWith("content/notes/");
+    const isThread = props.path.startsWith("content/threads/");
     const isTopic = props.path.startsWith("content/topics/");
-    const isLocalized = isNote || isTopic;
+    const isLocalized = isThread || isTopic;
     const supportsTranslation =
-      /^content\/(articles|pages|collections|notes|topics)\//.test(props.path);
-    const noteAdvanced = ref(false),
+      /^content\/(articles|pages|collections|threads|topics)\//.test(props.path);
+    const threadAdvanced = ref(false),
       translating = ref(false),
       creatingTopic = ref(false);
     watch(
@@ -240,7 +241,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
     const isCollection = props.path.startsWith("content/collections/");
     const isSection = /\/_index(?:\.[^.]+)?\.md$/.test(props.path);
     const supportsTopics =
-      isNote ||
+      isThread ||
       props.path.startsWith("content/articles/") ||
       (isCollection && !isSection);
     const topicItems = ref<ArticleSummary[]>([]),
@@ -327,7 +328,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
             "extra.references",
           ].includes(field.path) &&
           (!isTopic || field.path === "extra.cover") &&
-          (!isNote ||
+          (!isThread ||
             ["date", "taxonomies.tags", "extra.disable_comment"].includes(
               field.path,
             )) &&
@@ -449,7 +450,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
     const pristineValues = ref("");
     const dirty = computed(() =>
       !revision.value && props.embedded
-        ? unsavedNoteChanged(
+        ? unsavedThreadChanged(
             props.initialBody,
             body.value,
             values.value,
@@ -543,18 +544,33 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         emit("dirty", documentDirty || configurationDirty || pendingBranch),
       { flush: "sync" },
     );
-    watch(
-      [body, values],
-      () => {
-        if (forgotten || !ready.value || !dirty.value) return;
-        try {
-          localStorage.setItem(storageKey, snapshot());
-        } catch {
-          message.value = "浏览器草稿备份不可用，请及时保存或下载。";
-        }
-      },
-      { deep: true },
-    );
+    const backup = createDraftBackup(() => {
+      if (forgotten || !ready.value || !dirty.value) return;
+      try {
+        localStorage.setItem(storageKey, snapshot());
+      } catch {
+        message.value = "浏览器草稿备份不可用，请及时保存或下载。";
+      }
+    });
+    // Track nested metadata separately: deep watching body serializes the entire
+    // document synchronously on every keystroke before scheduling its backup.
+    const scheduleBackup = () => {
+      if (!forgotten && ready.value && dirty.value) backup.schedule();
+    };
+    watch(body, scheduleBackup);
+    watch(values, scheduleBackup, { deep: true });
+    onMounted(() => {
+      const hidden = () => {
+        if (document.visibilityState === "hidden") flush();
+      };
+      document.addEventListener("visibilitychange", hidden);
+      window.addEventListener("pagehide", flush);
+      removeBackupListeners = () => {
+        document.removeEventListener("visibilitychange", hidden);
+        window.removeEventListener("pagehide", flush);
+      };
+    });
+    let removeBackupListeners = () => {};
     async function loadDocument() {
       loading.value = true;
       error.value = "";
@@ -631,6 +647,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       }
     }
     function discardBackup() {
+      backup.cancel();
       try {
         localStorage.removeItem(storageKey);
       } catch {
@@ -638,16 +655,14 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       }
       recovery.value = false;
     }
-    function flush() {
-      if (forgotten) return;
+    function syncRichBody() {
+      if (forgotten || !alive) return;
       if (editor && richReady)
         body.value = richEditorBody(body.value, editor.getValue());
-      if (ready.value && dirty.value)
-        try {
-          localStorage.setItem(storageKey, snapshot());
-        } catch {
-          /* Optional local backup. */
-        }
+    }
+    function flush() {
+      syncRichBody();
+      backup.flush();
     }
     function destroyEditor(sync = true) {
       if (sync) flush();
@@ -658,7 +673,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       old?.destroy();
     }
     function readRichSoon() {
-      queueMicrotask(flush);
+      queueMicrotask(syncRichBody);
     }
     function forget() {
       forgotten = true;
@@ -709,7 +724,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
           cdn: `${location.origin}/vendor/vditor`,
           mode: "ir",
           value: body.value,
-          height: props.embedded ? 180 : isNote ? 360 : 560,
+          height: props.embedded ? 180 : isThread ? 360 : 560,
           lang: locale.value === "zh-CN" ? "zh_CN" : "en_US",
           cache: { enable: false },
           counter: { enable: false },
@@ -771,7 +786,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         return false;
       flush();
       if (
-        isNote &&
+        isThread &&
         !body.value.trim() &&
         !String(values.value.title || "").trim() &&
         !(
@@ -853,12 +868,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         if (!dirty.value) {
           discardBackup();
           aiChoiceMade.value = false;
-        } else
-          try {
-            localStorage.setItem(storageKey, snapshot());
-          } catch {
-            /* Optional local storage. */
-          }
+        } else backup.flush();
         if (!result.branchPending) emit("saved", props.path);
         return true;
       } catch (e) {
@@ -909,7 +919,9 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       if (mode.value === "rich") void changeMode("rich");
     });
     onBeforeUnmount(() => {
+      removeBackupListeners();
       flush();
+      backup.cancel();
       alive = false;
       destroyEditor(false);
       emit("dirty", false);
@@ -949,7 +961,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
               "section",
               {
                 className: classes("editor-page", {
-                  "note-editor": isNote,
+                  "thread-editor": isThread,
                   "embedded-editor": props.embedded,
                 }),
               },
@@ -973,7 +985,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       element(
                         "h1",
                         null,
-                        isNote
+                        isThread
                           ? contentLabel(body.value, values.value.title) ||
                               t("新动态")
                           : values.value.title || t("未命名内容"),
@@ -1135,8 +1147,8 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                 ? element(LocalizedContentContext, {
                     kind: isTopic
                       ? "topic"
-                      : isNote
-                        ? "note"
+                      : isThread
+                        ? "thread"
                         : isCollection
                           ? "collection"
                           : isPage
@@ -1291,7 +1303,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                 element(
                   "div",
                   { className: classes("card writing-card") },
-                  !isNote
+                  !isThread
                     ? element(
                         "label",
                         {
@@ -1310,7 +1322,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                         }),
                       )
                     : null,
-                  !isNote
+                  !isThread
                     ? element(
                         "div",
                         { className: classes("field summary-field") },
@@ -1464,7 +1476,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                             className: classes("markdown-preview"),
                           }),
                         ),
-                  isNote && !props.embedded
+                  isThread && !props.embedded
                     ? element(ArticleReferences, {
                         modelValue: values.value["extra.references"],
                         items: topicItems.value,
@@ -1495,7 +1507,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       {
                         display:
                           !props.embedded ||
-                          noteAdvanced.value ||
+                          threadAdvanced.value ||
                           trackedTranslation.value
                             ? undefined
                             : "none",
@@ -1506,7 +1518,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     "div",
                     {
                       className: classes("card metadata-card", {
-                        "note-properties-panel": props.embedded,
+                        "thread-properties-panel": props.embedded,
                       }),
                     },
                     !props.embedded ? element("h2", null, t("内容属性")) : null,
@@ -1545,22 +1557,22 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                             },
                             t(values.value.draft ? "草稿" : "已发布"),
                           ),
-                          isNote && !props.embedded
+                          isThread && !props.embedded
                             ? element(
                                 "button",
                                 {
-                                  "aria-expanded": noteAdvanced.value,
+                                  "aria-expanded": threadAdvanced.value,
                                   className: classes(
-                                    "text-button note-advanced",
+                                    "text-button thread-advanced",
                                   ),
                                   onClick: domEvent(($event: Event) => {
-                                    noteAdvanced.value = !noteAdvanced.value;
+                                    threadAdvanced.value = !threadAdvanced.value;
                                   }),
                                 },
                                 t("更多属性"),
                               )
                             : null,
-                          isNote && noteAdvanced.value
+                          isThread && threadAdvanced.value
                             ? element(
                                 "label",
                                 { className: classes("field field-inline") },
@@ -1583,12 +1595,12 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                           null,
                           element(
                             "div",
-                            { className: classes("note-properties-heading") },
+                            { className: classes("thread-properties-heading") },
                             element("h3", null, t("发布设置")),
                             element(
                               "span",
                               {
-                                className: classes("note-properties-state", {
+                                className: classes("thread-properties-state", {
                                   draft: values.value.draft,
                                 }),
                               },
@@ -1599,28 +1611,28 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                               "button",
                               {
                                 type: "button",
-                                "aria-expanded": noteAdvanced.value,
+                                "aria-expanded": threadAdvanced.value,
                                 className: classes("text-button"),
                                 onClick: domEvent(($event: Event) => {
-                                  noteAdvanced.value = !noteAdvanced.value;
+                                  threadAdvanced.value = !threadAdvanced.value;
                                 }),
                               },
-                              t(noteAdvanced.value ? "收起设置" : "展开设置"),
+                              t(threadAdvanced.value ? "收起设置" : "展开设置"),
                               element(
                                 "span",
                                 { "aria-hidden": "true" },
-                                noteAdvanced.value ? "⌃" : "⌄",
+                                threadAdvanced.value ? "⌃" : "⌄",
                               ),
                             ),
                           ),
                           element(
                             "div",
                             {
-                              className: classes("note-properties-fields"),
+                              className: classes("thread-properties-fields"),
                               style: Object.assign(
                                 {},
                                 {
-                                  display: noteAdvanced.value
+                                  display: threadAdvanced.value
                                     ? undefined
                                     : "none",
                                 },
@@ -1630,7 +1642,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                               "label",
                               {
                                 className: classes(
-                                  "field field-inline note-title-field",
+                                  "field field-inline thread-title-field",
                                 ),
                               },
                               element("span", null, t("标题")),
@@ -1658,11 +1670,11 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                           element(
                             "div",
                             {
-                              className: classes("note-properties-switches"),
+                              className: classes("thread-properties-switches"),
                               style: Object.assign(
                                 {},
                                 {
-                                  display: noteAdvanced.value
+                                  display: threadAdvanced.value
                                     ? undefined
                                     : "none",
                                 },
@@ -1672,7 +1684,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                               "label",
                               {
                                 className: classes(
-                                  "field checkbox-field form-switch note-property-toggle",
+                                  "field checkbox-field form-switch thread-property-toggle",
                                 ),
                               },
                               element("input", {
@@ -1692,7 +1704,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                               "label",
                               {
                                 className: classes(
-                                  "field checkbox-field form-switch note-property-toggle",
+                                  "field checkbox-field form-switch thread-property-toggle",
                                 ),
                               },
                               element("input", {
@@ -1895,7 +1907,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                         })
                       : null,
                     renderList(
-                      isNote && !noteAdvanced.value
+                      isThread && !threadAdvanced.value
                         ? []
                         : visibleFields.value.filter(
                             (field) =>
@@ -1948,7 +1960,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                                   "onUpdateModelValue"
                                 >,
                               })
-                            : isNote && field.path === "date"
+                            : isThread && field.path === "date"
                               ? element(PublicationDateField, {
                                   modelValue: values.value.date,
                                   disabled: busy.value,
@@ -2087,14 +2099,14 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       element(
                         "button",
                         {
-                          "aria-expanded": noteAdvanced.value,
+                          "aria-expanded": threadAdvanced.value,
                           className: classes("composer-tool"),
                           onClick: domEvent(($event: Event) => {
-                            noteAdvanced.value = !noteAdvanced.value;
+                            threadAdvanced.value = !threadAdvanced.value;
                           }),
                         },
                         element(Icon, { name: "sliders", size: 16 }),
-                        t(noteAdvanced.value ? "收起设置" : "发布设置"),
+                        t(threadAdvanced.value ? "收起设置" : "发布设置"),
                       ),
                     ),
                     element(
@@ -2143,7 +2155,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     ),
                   )
                 : null,
-              props.embedded && noteAdvanced.value
+              props.embedded && threadAdvanced.value
                 ? element(
                     "div",
                     { className: classes("composer-secondary-actions") },

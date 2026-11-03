@@ -1,6 +1,6 @@
 ---
 import ResponsiveImage from './ResponsiveImage.astro';
-import NoteCard from './NoteCard.astro';
+import ThreadCard from './ThreadCard.astro';
 import {cover,taxonomyName,taxonomySlug,plain} from '../lib/queries';
 import {t,localizeUrl,localizeConfig} from '../lib/locale';
 import type {Site,Document} from '../lib/types';
@@ -11,7 +11,7 @@ const cardWidth=layout.post.columns==='col1'?1000:layout.post.columns==='col3'?3
 const coverWidth=layout.post.cover_position==='top'?cardWidth:Math.round(cardWidth*.45);
 const coverSizes=compactHome?`(max-width:374px) 82px, (max-width:767px) 96px, (max-width:1199px) 230px, ${coverWidth}px`:`(min-width:1200px) ${coverWidth}px, 100vw`;
 ---
-{items.map((post,index)=>post.kind==='note'?<NoteCard site={site} document={post} lang={lang} listing/>:<div class:list={['recent-post-item',layout.post.columns,layout.post.cover_position,index%2?'even':'odd',{'pinned-post-item':post.extra.pinned,'card-polish':layout.card.polish_effect,'card-no-hover':layout.card.hover_animation===false,'card-no-shadow':layout.card.shadow_effect===false}]} data-post-url={post.url}>
+{items.map((post,index)=>post.kind==='thread'?<ThreadCard site={site} document={post} lang={lang} listing/>:<div class:list={['recent-post-item',layout.post.columns,layout.post.cover_position,index%2?'even':'odd',{'pinned-post-item':post.extra.pinned,'card-polish':layout.card.polish_effect,'card-no-hover':layout.card.hover_animation===false,'card-no-shadow':layout.card.shadow_effect===false}]} data-post-url={post.url}>
 <div class="post_cover left_radius"><a title={post.title} href={post.url}><ResponsiveImage site={site} class="post_bg" src={cover(post,site)} alt={post.title} width={800} sizes={coverSizes}/></a></div>
 <div class="recent-post-info"><div class="recent-post-info-top"><div class="recent-post-info-top-tips">{post.extra.pinned&&<span class="sticky-warp sticky">{t('ui_pinned',lang,site)}</span>}{(post.taxonomies.categories||[]).map(term=><a class="original" href={taxUrl('categories',term)} title={taxonomyName(site,'categories',term,lang)}>{taxonomyName(site,'categories',term,lang)}</a>)}<a class="unvisited-post" href={post.url} title={post.title}>{t('unread',lang,site)}</a></div><a class="article-title" title={post.title} href={post.url}>{post.title}</a><div class="content">{post.description||plain(post.html).slice(0,300)}</div></div>
 <div class="article-meta-wrap">{post.taxonomies.tags?.length>0&&<span class="article-meta tags">{post.taxonomies.tags.map(term=><a class="article-meta__tags" href={taxUrl('tags',term)} title={taxonomyName(site,'tags',term,lang)}><span class="tags-punctuation">{taxonomyName(site,'tags',term,lang)}</span></a>)}</span>}<span class="post-meta-date"><i class="far fa-calendar-alt"/><time style="display:inline" class="post-meta-date-publish" datetime={post.date?.slice(0,10)} title={post.date?.slice(0,10)}>{post.date?.slice(0,10)}</time></span></div></div>

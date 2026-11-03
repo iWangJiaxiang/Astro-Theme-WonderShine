@@ -18,7 +18,7 @@ export async function checkOnboarding({ page, click, heading, screenshots }) {
   assert.equal(await page.$('.getting-started'), null);
   await page.reload({ waitUntil: 'networkidle0' });
   await heading('What will you write today?');
-  await page.waitForSelector('.note-composer');
+  await page.waitForSelector('.thread-composer');
   assert.equal(await page.$('.getting-started'), null, 'dismissal survives reload');
   await page.setViewport({ width: 1440, height: 1000 });
   await click('User guide'); await heading('User guide');
