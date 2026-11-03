@@ -1,6 +1,6 @@
 {
   "name": "@wondershine/theme",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "WonderShine: an Astro theme for articles, threads and multilingual publishing",
   "type": "module",
   "license": "AGPL-3.0-or-later",
