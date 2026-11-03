@@ -1,8 +1,11 @@
 /* Shared browser and app interaction floor; desktop keeps its compact rhythm. */
-.navigation-close { display: none; }
+/* Hide breakpoint-only controls after the media change handler captures focus,
+   not during the browser's earlier media-query style recalculation. */
+.sidebar .navigation-close { display: inline-flex; align-self: flex-end; min-width: 44px; min-height: 44px; }
+.mobile-menu { display: inline-flex; }
+.sidebar .navigation-close[hidden], .mobile-menu[hidden] { display: none; }
 .save-mode-menu { max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
 @media (max-width: 760px) {
-  .sidebar .navigation-close { display: inline-flex; align-self: flex-end; min-width: 44px; min-height: 44px; }
   body:has(.sidebar.open) { overflow: hidden; }
   .studio-shell :is(button, select, summary),
   .native-connect :is(button, select, summary) { min-height: 44px; }

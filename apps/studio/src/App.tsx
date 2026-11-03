@@ -401,6 +401,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                   { id: "studio-navigation", inert: mobileNavigation.value && !menuOpen.value, className: classes("sidebar", { open: menuOpen.value }) },
                   element("button", {
                     className: classes("icon-button navigation-close"),
+                    hidden: !mobileNavigation.value,
                     "aria-label": t("关闭导航"),
                     onClick: domEvent(() => { menuOpen.value = false; }),
                   }, element(Icon, { name: "close" })),
@@ -544,6 +545,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                           "aria-expanded": menuOpen.value,
                           "aria-controls": "studio-navigation",
                           className: classes("icon-button mobile-menu"),
+                          hidden: !mobileNavigation.value,
                           onClick: domEvent(($event: Event) => {
                             menuOpen.value = !menuOpen.value;
                           }),

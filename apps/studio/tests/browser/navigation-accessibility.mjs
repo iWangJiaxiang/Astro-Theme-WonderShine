@@ -17,13 +17,23 @@ async function waitForDrawer(page, open) {
 }
 
 async function assertFocusedControl(page, selector) {
-  assert.equal(await page.$eval(selector, node => {
+  const state = await page.$eval(selector, node => {
     const rect = node.getBoundingClientRect();
-    return document.activeElement === node && !node.closest('[inert]') &&
-      rect.width > 0 && rect.height > 0 && rect.left >= 0 && rect.top >= 0 &&
-      rect.right <= innerWidth && rect.bottom <= innerHeight &&
-      node.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2));
-  }), true, `${selector} must own focus and be visible and unobscured`);
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return {
+      focused: document.activeElement === node,
+      interactive: !node.closest('[inert]'),
+      visible: rect.width > 0 && rect.height > 0 && rect.left >= 0 && rect.top >= 0 &&
+        rect.right <= innerWidth && rect.bottom <= innerHeight,
+      unobscured: node.contains(hit),
+      activeElement: document.activeElement?.outerHTML.slice(0, 500),
+      hitElement: hit?.outerHTML.slice(0, 500),
+      rect: rect.toJSON(),
+      viewport: { width: innerWidth, height: innerHeight },
+    };
+  });
+  assert.equal(state.focused && state.interactive && state.visible && state.unobscured,
+    true, `${selector} must own focus and be visible and unobscured: ${JSON.stringify(state)}`);
 }
 
 async function waitForDesktopNavigation(page) {
