@@ -10,6 +10,7 @@ import { safeMediaPath, validateMediaPath } from './media-files.js';
 import { validateUpload } from './media-upload.js';
 import { gitHttp, validateGitOptions, type GitOptions } from './git-repository.js';
 import { StudioError } from './errors.js';
+import { confirmationMatches, workspaceChanged, workspaceConfirmation } from '../shared/workspace-confirmation.js';
 
 function managed(path: string): boolean {
   try { validatePath(path); return true; } catch { /* Try media paths next. */ }
@@ -51,8 +52,8 @@ export class GitWorkspaceRepository implements Repository {
         return commitBranchSnapshot({ ...this.gitOptions, author: { name: this.options.name, email: this.options.email } }, key, files);
       }),
       status: () => this.run(() => this.status()),
-      commit: message => this.run(() => this.commit(message)),
-      sync: () => this.run(() => this.sync()),
+      commit: (message, confirmation) => this.run(() => this.commit(message, confirmation)),
+      sync: confirmation => this.run(() => this.sync(confirmation)),
     };
   }
 
@@ -135,12 +136,19 @@ export class GitWorkspaceRepository implements Repository {
     }
     let lastSync: string | null = null;
     try { lastSync = await readFile(join(this.root, '.git', 'wondershine-last-sync'), 'utf8'); } catch { /* Never synchronized yet. */ }
-    const changes = (await this.rows()).length;
-    return { branch: this.options.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync };
+    const rows = await this.rows();
+    const managedChanges = rows.filter(([path]) => managed(path)).map(([path]) => path);
+    const confirmation = await workspaceConfirmation(this.options.branch, head, rows.filter(([path]) => managed(path)), async path => {
+      await safeMediaPath(this.root, path);
+      return readFile(join(this.root, path));
+    });
+    const changes = rows.length;
+    return { branch: this.options.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, managedChanges, confirmation };
   }
 
-  private async commit(message: string): Promise<WorkspaceStatus> {
+  private async commit(message: string, confirmation?: string): Promise<WorkspaceStatus> {
     await this.mutable();
+    if (confirmation !== undefined && !confirmationMatches(confirmation, await this.status())) throw new StudioError(409, workspaceChanged);
     if (typeof message !== 'string' || !message.trim() || message.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)) throw new StudioError(400, '请输入不超过 500 字的提交说明');
     const rows = await this.rows();
     if ((await git.listFiles(this.gitOptions)).some(internal)) throw new StudioError(409, 'Git 暂存区包含创作中心备份文件，请先在 Git 工具中处理');
@@ -157,8 +165,9 @@ export class GitWorkspaceRepository implements Repository {
     return this.status();
   }
 
-  private async sync(): Promise<WorkspaceStatus> {
+  private async sync(confirmation?: string): Promise<WorkspaceStatus> {
     await this.mutable();
+    if (confirmation !== undefined && !confirmationMatches(confirmation, await this.status())) throw new StudioError(409, workspaceChanged);
     if ((await this.rows()).length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
     try {
       await git.fetch({ ...this.gitOptions, http: this.http, url: this.options.url, remote: 'origin', ref: this.options.branch, singleBranch: true, onAuth: this.auth });

@@ -1,5 +1,13 @@
 // Application copy only. Site content and stored configuration values are never translated.
 export const english: Record<string, string> = {
+  "提交并同步": "Commit and synchronize",
+  "本次托管文件范围": "Managed files included in this commit",
+  "确认 Git 操作": "Confirm Git operation",
+  "确认执行": "Confirm and proceed",
+  "工作区已变化，请刷新并重新确认提交范围": "The workspace changed. Refresh and confirm the commit scope again.",
+  "只包含已保存的托管文件，可能包含其他文章和草稿。同步会推送当前分支已有提交，不推送保存分支，也不代表网站已部署。": "Only saved managed files are included, possibly including other articles and drafts. Synchronization pushes existing commits on the current branch, not save branches, and does not confirm website deployment.",
+  "存在托管范围以外的修改，请先在 Git 工具中处理再同步。": "Changes outside the managed scope exist. Resolve them in a Git tool before synchronizing.",
+  "请核对以上文件范围与待推送提交。未保存的编辑不会包含在内；失败时本地文件和提交会保留。": "Review the file scope and pending commits above. Unsaved edits are not included. Local files and commits are retained on failure.",
   "使用 {provider} 登录": "Sign in with {provider}",
   "登录 {provider}": "Sign in to {provider}",
   "选择仓库": "Choose a repository",
@@ -195,6 +203,8 @@ export const english: Record<string, string> = {
   "同步 Git": "Sync Git",
   "处理中…": "Working\u2026",
   "同步不会覆盖未提交的修改，也不会强制推送。": "Sync preserves uncommitted changes and never force-pushes.",
+  "已提交到设备。": "Committed locally.",
+  "本地提交已保留；远端同步结果尚未确认，请核实远端状态后再继续。": "The local commit is preserved; the remote sync outcome is unconfirmed. Verify the remote status before continuing.",
   "已提交到设备，尚未推送到远端。": "Committed locally. Not pushed to the remote yet.",
   "已与 Git 远端同步；网站上线状态请以部署平台为准。": "Synced with Git. Check your deployment platform for the website status.",
   "连接创作工作区": "Connect your workspace",

@@ -1,4 +1,6 @@
 import test from 'node:test';
+import { StudioError } from '../core/errors.js';
+import { createContentTransport } from '../core/transport.js';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn, execFileSync } from 'node:child_process';
@@ -80,7 +82,13 @@ test('persistent workspaces retain offline edits, recover on reopen and synchron
   assert.equal((await reopened.workspace.status()).changes, 1, 'history backups are not content changes');
   await assert.rejects(workspace.write(articlePath, 'stale', first.revision), /已更新/);
   await assert.rejects(workspace.workspace.sync(), /先提交/);
-  const committed = await reopened.workspace.commit('docs(content): offline edit');
+  const preview = await reopened.workspace.status();
+  assert.deepEqual(preview.managedChanges, [articlePath]);
+  assert.ok(preview.confirmation);
+  await assert.rejects(reopened.workspace.commit('stale confirmation', 'stale'), /重新确认/);
+  assert.equal((await reopened.workspace.status()).head, preview.head);
+  const committed = await reopened.workspace.commit('docs(content): offline edit', preview.confirmation);
+  await assert.rejects(reopened.workspace.sync(preview.confirmation), /重新确认/);
   assert.equal(committed.ahead, 1);
   assert.equal(committed.dirty, false);
   await assert.rejects(reopened.workspace.sync(), /本地文件和提交已保留/);
@@ -204,8 +212,8 @@ test('workspace status requires authentication and commits/sync require CSRF', a
   const status = { branch: 'main', dirty: false, changes: 0, ahead: 0, behind: 0, diverged: false, head: null, remoteHead: null, lastSync: null };
   const repository = Object.assign(new LocalRepository(root), { workspace: {
     status: async () => status,
-    commit: async (message: string) => { assert.equal(message, 'save content'); commits++; return status; },
-    sync: async () => { syncs++; return status; },
+    commit: async (message: string, confirmation?: string) => { assert.equal(message, 'save content'); if (confirmation !== 'preview') throw new StudioError(409, '工作区已变化，请刷新并重新确认提交范围'); commits++; return status; },
+    sync: async (confirmation?: string) => { if (confirmation !== 'committed') throw new StudioError(409, '工作区已变化，请刷新并重新确认提交范围'); syncs++; return status; },
   } });
   const config = { origin: 'http://localhost:5173', secureCookies: false, sessionSecret: 'x'.repeat(32), sessionSeconds: 3600, username: 'owner', passwordHash: await hashPassword('workspace-test-password') };
   const app = createApp({ config, repository, state: new FileState(join(root, '.state')) });
@@ -221,10 +229,28 @@ test('workspace status requires authentication and commits/sync require CSRF', a
     assert.equal((await app.request(endpoint, { method: 'POST', headers: { cookie, origin: config.origin }, body: '{}' })).status, 403);
     assert.equal((await app.request(endpoint, { method: 'POST', headers: { ...headers, origin: 'https://evil.example' }, body: '{}' })).status, 403);
   }
+  const native = createContentTransport(repository);
+  for (const request of [
+    (endpoint: string, body?: string) => app.request(endpoint, { method: 'POST', headers, body }),
+    (endpoint: string, body?: string) => native(new Request('http://studio.local' + endpoint, { method: 'POST', body })),
+  ]) {
+    for (const endpoint of ['/api/workspace/commit', '/api/workspace/sync']) {
+      assert.equal((await request(endpoint)).status, 400, 'empty body must not bypass confirmation');
+      for (const confirmation of [undefined, null, '', '  ', 42, {}]) {
+        assert.equal((await request(endpoint, JSON.stringify({ message: 'save content', confirmation }))).status, 400);
+      }
+      assert.equal((await request(endpoint, JSON.stringify({ message: 'save content', confirmation: 'stale' }))).status, 409);
+    }
+  }
   assert.equal(commits, 0); assert.equal(syncs, 0);
-  assert.equal((await app.request('/api/workspace/commit', { method: 'POST', headers, body: JSON.stringify({ message: 'save content' }) })).status, 200);
-  assert.equal((await app.request('/api/workspace/sync', { method: 'POST', headers })).status, 200);
-  assert.equal(commits, 1); assert.equal(syncs, 1);
+  assert.equal((await native(new Request('http://studio.local/api/workspace/commit', { method: 'POST', body: JSON.stringify({ message: 'save content', confirmation: 'preview' }) }))).status, 200);
+  assert.equal((await native(new Request('http://studio.local/api/workspace/sync', { method: 'POST', body: JSON.stringify({ confirmation: 'committed' }) }))).status, 200);
+  assert.equal((await app.request('/api/workspace/commit', { method: 'POST', headers, body: JSON.stringify({ message: 'save content', confirmation: 'preview' }) })).status, 200);
+  assert.equal((await app.request('/api/workspace/sync', { method: 'POST', headers, body: JSON.stringify({ confirmation: 'committed' }) })).status, 200);
+  assert.equal(commits, 2); assert.equal(syncs, 2);
   const localApp = createApp({ config, repository: new LocalRepository(root), state: new FileState(join(root, '.state')) });
   assert.equal((await localApp.request('/api/workspace', { headers })).status, 404);
+  for (const endpoint of ['/api/workspace/commit', '/api/workspace/sync']) {
+    assert.equal((await localApp.request(endpoint, { method: 'POST', headers, body: JSON.stringify({ message: 'save content', confirmation: 'preview' }) })).status, 404);
+  }
 });

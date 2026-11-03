@@ -204,3 +204,10 @@ git submodule add https://github.com/iWangJiaxiang/Astro-Theme-WonderShine.git t
 submodule 记录源码版本，`package.json` 和 `package-lock.json` 记录博客实际安装的主题版本。切换 submodule 不会自动更新 npm 依赖；两者需要分别管理。
 
 示例 Starter 没有 `theme:sync`、`studio:setup` 或 `verify` 这类个人博客脚本；本文使用主题仓库实际提供的命令。
+
+## 下一步
+
+- 修改菜单与移动端分组：[导航配置](configuration.md#导航配置)。
+- 创建动态、引用文章、开启动态订阅：[动态与订阅](configuration.md#动态与订阅)。Starter 默认订阅为 `atom.xml`，动态订阅需另行配置。
+- 配置托管平台：[部署指南](deployment.md)。
+- 更新主题依赖并保留站点数据：[主题升级与回退](upgrading.md)。

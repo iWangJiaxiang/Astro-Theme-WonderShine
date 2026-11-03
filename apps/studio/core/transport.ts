@@ -1,3 +1,4 @@
+import { requireWorkspaceConfirmation } from '../shared/workspace-confirmation.js';
 import { saveCapabilities } from './save.js';
 import { ContentService } from './content-service.js';
 import { TranslationService } from './translation.js';
@@ -55,10 +56,14 @@ export function createContentTransport(repository: Repository, options: ContentT
       }
       if (path === '/api/workspace' && method === 'GET' && repository.workspace) return json(await repository.workspace.status());
       if (path === '/api/workspace/commit' && method === 'POST' && repository.workspace) {
-        const body = await input<{ message: string }>();
-        return json(await repository.workspace.commit(body.message));
+        const body = await input<{ message: string; confirmation?: string }>();
+        return json(await repository.workspace.commit(body?.message, requireWorkspaceConfirmation(body?.confirmation)));
       }
-      if (path === '/api/workspace/sync' && method === 'POST' && repository.workspace) return json(await repository.workspace.sync());
+      if (path === '/api/workspace/sync' && method === 'POST' && repository.workspace) {
+        const text = new TextDecoder().decode(await readUploadBody(request, 1024 * 1024));
+        const body = text ? JSON.parse(text) as { confirmation?: string } : undefined;
+        return json(await repository.workspace.sync(requireWorkspaceConfirmation(body?.confirmation)));
+      }
       if (path.startsWith('/api/settings/')) {
         const id = decodeURIComponent(path.slice('/api/settings/'.length)), language = url.searchParams.get('language') ?? undefined;
         if (method === 'GET') return json(await content.settings(id, language));

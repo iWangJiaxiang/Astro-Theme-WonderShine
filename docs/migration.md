@@ -37,10 +37,11 @@ export BLOG_SITE="$HOME/Sites/my-astro-blog"
 npm ci
 mkdir -p temp/theme-pack
 npm pack ./packages/theme --pack-destination temp/theme-pack
-export THEME_ARCHIVE="$WONDERSHINE_SOURCE/temp/theme-pack/wondershine-theme-0.1.0.tgz"
+export THEME_VERSION="$(node -p "require('./packages/theme/package.json').version")"
+export THEME_ARCHIVE="$WONDERSHINE_SOURCE/temp/theme-pack/wondershine-theme-$THEME_VERSION.tgz"
 ```
 
-当前主题包版本是 `0.1.0`；其他版本使用打包输出的实际文件名。主题尚未发布到 npm，迁移不需要先发布。
+主题已发布到 npm；当前源码的主题版本为 `0.2.1`。这里仍使用源码打包，是因为迁移工具的 `--theme` 参数要求一个**已存在的本地 tgz 路径**，不能直接传入 npm 包名或版本号。上述命令从包元数据读取版本，请核对打包输出的实际文件名。迁移完成后可继续固定本地包，或按 [主题升级指南](upgrading.md) 切换到 npm 版本。
 
 `ZOLA_SITE` 指向旧站或整理好的迁移输入副本。`BLOG_SITE` 必须在旧站目录之外，并且**尚不存在**；它的父目录需要先建立：
 
