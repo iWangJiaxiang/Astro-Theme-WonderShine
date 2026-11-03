@@ -40,12 +40,16 @@ Authenticated HTTP endpoints:
 | Endpoint | Behavior |
 | --- | --- |
 | `GET /api/workspace` | Local status and the last known remote tip; does not fetch |
-| `POST /api/workspace/commit` with `{ "message": "docs(content): update posts" }` | Commit changed managed content and media locally |
-| `POST /api/workspace/sync` | Fetch remote changes, fast-forward when safe, push local commits without force |
+| `POST /api/workspace/commit` with `{ "message": "docs(content): update posts", "confirmation": "<status token>" }` | Commit changed managed content and media locally |
+| `POST /api/workspace/sync` with `{ "confirmation": "<status token>" }` | Fetch remote changes, fast-forward when safe, push local commits without force |
+
+HTTP and native in-process transport mutations require a nonempty string `confirmation` from the reviewed workspace status (400 if missing/invalid). Engines compare it against fresh status under the workspace lock and reject stale tokens with 409 before mutation. After committing, use the returned status token for sync, not the pre-commit token. Only trusted internal engine/test callers retain optional token omission for compatibility; this is not supported by user-facing transports.
+
+During commit-and-sync, local commit success confirms only the local step. If the sync response is lost or fails, the local commit is preserved but the remote outcome needs verification; refreshing local status is not proof that a push did not happen.
 
 Mutation endpoints use the same Origin and CSRF protections as existing writes. `/api/bootstrap` exposes `workspace: true` only when this capability is available. Other connection modes return 404 for workspace endpoints.
 
-The status includes `branch`, `dirty`, `changes`, `ahead`, `behind`, `diverged`, `head`, `remoteHead`, and `lastSync`. Ahead/behind reflect the **last fetched** state. They are not a live remote health check. Synchronizing successfully means Git is up to date; it does not confirm a website deployment.
+The status includes `branch`, `dirty`, `changes`, `ahead`, `behind`, `diverged`, `head`, `remoteHead`, `lastSync`, `managedChanges`, and `confirmation`. Ahead/behind reflect the **last fetched** state. They are not a live remote health check. Synchronizing successfully means Git is up to date; it does not confirm a website deployment.
 
 Revision checks still reject stale saves. Sync refuses uncommitted changes; committing refuses unrelated staged implementation files. Git history backups are never automatically committed. Push failures retain local commits, and retrying synchronization fetches the remote before pushing again.
 

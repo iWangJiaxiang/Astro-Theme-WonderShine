@@ -19,6 +19,9 @@ export interface WorkspaceStatus {
 export interface WorkspaceControl {
   saveBranch?(key: string, files: BranchFile[]): Promise<BranchSave>;
   status(): Promise<WorkspaceStatus>;
+  /** Optional only for trusted internal/test callers. HTTP/native transports must require a nonempty token.
+   * Implementations compare supplied tokens against fresh status inside the workspace lock. */
   commit(message: string, confirmation?: string): Promise<WorkspaceStatus>;
+  /** Same internal-only omission policy as commit; user-facing callers must supply confirmation. */
   sync(confirmation?: string): Promise<WorkspaceStatus>;
 }

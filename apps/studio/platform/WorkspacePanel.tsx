@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { workspaceCommitNotice } from './workspace-notice';
 import type { WorkspaceStatus } from '../shared/workspace';
 import { api, errorMessage } from '../src/api';
 import { t, type Message } from '../src/i18n';
@@ -15,6 +16,7 @@ export function WorkspacePanel() {
   const [pending, setPending] = useState<'commit' | 'sync' | 'commit-sync' | null>(null);
   async function action(kind: 'refresh' | 'commit' | 'sync' | 'commit-sync') {
     setBusy(true); setError(''); setNotice('');
+    let committed = false;
     try {
       let current = status;
       if (kind === 'refresh') current = await api<WorkspaceStatus>('/workspace');
@@ -23,7 +25,8 @@ export function WorkspacePanel() {
         if (kind === 'commit' || kind === 'commit-sync') {
           current = await api<WorkspaceStatus>('/workspace/commit', 'POST', { message, confirmation: current.confirmation });
           setStatus(current);
-          setNotice('已提交到设备，尚未推送到远端。');
+          committed = true;
+          setNotice(workspaceCommitNotice(kind === 'commit-sync' ? 'pending' : 'none'));
         }
         if (kind === 'sync' || kind === 'commit-sync') {
           current = await api<WorkspaceStatus>('/workspace/sync', 'POST', { confirmation: current.confirmation });
@@ -33,7 +36,11 @@ export function WorkspacePanel() {
       setStatus(current);
       if (kind === 'commit') setNotice('已提交到设备，尚未推送到远端。');
       if (kind === 'sync') setNotice('已与 Git 远端同步；网站上线状态请以部署平台为准。');
-    } catch (reason) { setError(errorMessage(reason)); try { setStatus(await api('/workspace')); } catch { /* Keep the last known status. */ } }
+    } catch (reason) {
+      if (committed && kind === 'commit-sync') setNotice(workspaceCommitNotice('unconfirmed'));
+      setError(errorMessage(reason));
+      try { setStatus(await api('/workspace')); } catch { /* Keep the last known status; it cannot confirm a remote outcome. */ }
+    }
     finally { setBusy(false); setPending(null); }
   }
   return <section className="settings-page workspace-panel">

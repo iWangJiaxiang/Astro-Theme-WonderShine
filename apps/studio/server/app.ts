@@ -1,4 +1,5 @@
 import { revisionOf as scopeHash } from '../core/portable.js';
+import { requireWorkspaceConfirmation } from '../shared/workspace-confirmation.js';
 import { saveCapabilities } from '../core/save.js';
 import { TranslationService } from './translation.js';
 import { AiService } from './ai.js';
@@ -100,13 +101,13 @@ export function createApp(options: AppOptions) {
   app.get('/api/workspace', async c => c.json(await workspace().status()));
   app.post('/api/workspace/commit', async c => {
     const input = await c.req.json<{ message: string; confirmation?: string }>();
-    return c.json(await workspace().commit(input?.message, input?.confirmation));
+    return c.json(await workspace().commit(input?.message, requireWorkspaceConfirmation(input?.confirmation)));
   });
   app.post('/api/workspace/sync', async c => {
     const control = workspace();
     const body = await c.req.text();
     const input = body ? JSON.parse(body) as { confirmation?: string } : undefined;
-    return c.json(await control.sync(input?.confirmation));
+    return c.json(await control.sync(requireWorkspaceConfirmation(input?.confirmation)));
   });
   app.get('/api/settings/:id', async c => c.json(await content.settings(c.req.param('id'), c.req.query('language'))));
   app.put('/api/settings/:id', async c => {

@@ -1,6 +1,13 @@
+import { StudioError } from '../core/errors.js';
 import type { WorkspaceStatus } from './workspace.js';
 
 export const workspaceChanged = '工作区已变化，请刷新并重新确认提交范围';
+
+/** User-facing transports must require a token; engines compare it under their lock. */
+export function requireWorkspaceConfirmation(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) throw new StudioError(400, workspaceChanged);
+  return value;
+}
 
 /** Include file bytes, not just Git status flags: a second edit can have identical flags. */
 export async function workspaceConfirmation(

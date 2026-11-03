@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { checkWorkspaceNotice } from './workspace-notice.mjs';
 import { existsSync } from 'node:fs';
 import { build } from 'esbuild';
 import puppeteer from 'puppeteer-core';
@@ -50,6 +51,7 @@ const executablePath = process.env.STUDIO_TEST_BROWSER || ['/Applications/Google
 if (!executablePath) throw new Error('Set STUDIO_TEST_BROWSER to Chrome/Chromium.');
 const browser = await puppeteer.launch({ headless: true, executablePath });
 try {
+  await checkWorkspaceNotice(browser);
   const page = await browser.newPage(), errors = [], warnings = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') warnings.push(message.text()); });

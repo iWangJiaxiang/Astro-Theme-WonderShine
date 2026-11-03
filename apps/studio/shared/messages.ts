@@ -203,6 +203,8 @@ export const english: Record<string, string> = {
   "同步 Git": "Sync Git",
   "处理中…": "Working\u2026",
   "同步不会覆盖未提交的修改，也不会强制推送。": "Sync preserves uncommitted changes and never force-pushes.",
+  "已提交到设备。": "Committed locally.",
+  "本地提交已保留；远端同步结果尚未确认，请核实远端状态后再继续。": "The local commit is preserved; the remote sync outcome is unconfirmed. Verify the remote status before continuing.",
   "已提交到设备，尚未推送到远端。": "Committed locally. Not pushed to the remote yet.",
   "已与 Git 远端同步；网站上线状态请以部署平台为准。": "Synced with Git. Check your deployment platform for the website status.",
   "连接创作工作区": "Connect your workspace",
