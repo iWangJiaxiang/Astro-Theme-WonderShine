@@ -15,6 +15,17 @@ test('v1 native IDs survive mixed registry round trips and only allowed fields p
   writeWorkspaces(storage, [{ ...service, label: 'Renamed' }]);
   assert.equal(readWorkspaces(storage)[0].id, service.id);
 });
+test('archive round trips preserve full sanitized records and restore the exact ID', () => {
+  let json = '';
+  const storage = { getItem: () => json, setItem: (_key: string, value: string) => { json = value; } };
+  const records = [profile, { ...profile, id: 'b6347560-bbe9-4c35-9d89-b0429108882b', source: 'local' as const, localPath: '/sites/blog' }, { id: 'a6347560-bbe9-4c35-9d89-b0429108882b', source: 'service' as const, label: 'Studio', address: 'https://studio.example' }];
+  writeWorkspaces(storage, records.map(record => ({ ...record, archived: true, token: 'secret' })));
+  const archived = readWorkspaces(storage);
+  assert.ok(archived.every(record => record.archived));
+  assert.equal(json.includes('secret'), false);
+  writeWorkspaces(storage, archived.map(record => ({ ...record, archived: false })));
+  assert.deepEqual(readWorkspaces(storage), records);
+});
 test('invalid storage and write failures are not silently replaced', () => {
   assert.throws(() => readWorkspaces({ getItem: () => '{' }));
   assert.throws(() => readWorkspaces({ getItem: () => JSON.stringify([profile, profile]) }));

@@ -28,7 +28,7 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
   const folderAvailable = !/Android|iPhone|iPad|iPod/.test(navigator.userAgent) && !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const [initial] = useState(savedProfiles);
   const [records, setRecords] = useState(initial.records);
-  const profiles = records.filter((item): item is WorkspaceProfile => item.source !== 'service');
+  const profiles = records.filter((item): item is WorkspaceProfile => !item.archived && item.source !== 'service');
   const [service, setService] = useState<ServiceWorkspace | null>(null);
   const [showForm, setShowForm] = useState(!initial.records.length);
   function persist(next: SavedWorkspace[]) {
@@ -48,8 +48,8 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
     catch (reason) { setError((reason as Error).message); }
   }
   function removeWorkspace(item: SavedWorkspace) {
-    if (!confirm(t('仅移除工作区记录，不删除文件或草稿。确定继续吗？'))) return;
-    try { persist(records.filter(record => record.id !== item.id)); setToken(''); setShowForm(false); }
+    if (!confirm(t('归档仅隐藏记录，保留原编号、文件和草稿，可随时恢复。确定继续吗？'))) return;
+    try { persist(records.map(record => record.id === item.id ? { ...record, archived: true } : record)); setToken(''); setShowForm(false); }
     catch (reason) { setError((reason as Error).message); }
   }
   const [profile, setProfile] = useState<WorkspaceProfile>(() => (folderAvailable ? profiles[0] : profiles.find(item => item.source !== 'local')) || blank());
@@ -91,6 +91,7 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
         if (!mounted.current) { dispose(); return; }
         setToken(''); onConnected(dispose); return;
       }
+      if (records.some(item => item.archived && item.id === profile.id)) throw new Error('此工作区已归档，请先从已归档工作区恢复记录。');
       const nextProfile = { ...profile, url: profile.url.trim(), branch: profile.branch.trim(), label: profile.label.trim() || profile.url.trim().split('/').at(-1)?.replace(/\.git$/, '') || 'Blog' };
       const { connectNativeWorkspace } = await import('./native-runtime');
       const dispose = await connectNativeWorkspace(nextProfile, token, onDisconnect, progress => { if (mounted.current) setProgress(progress); });
@@ -109,10 +110,19 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
     </div>
     {(error || initial.error) && <p className="notice error" role="alert">{t(error || initial.error)}</p>}
     <section className="workspace-chooser" aria-label={t('工作区')}>
-      {records.map(item => <div className="workspace-record" key={item.id}>
+      {records.filter(item => !item.archived).map(item => <div className="workspace-record" data-workspace-id={item.id} key={item.id}>
         <strong>{item.label}</strong><small>{item.source === 'service' ? item.address : item.source === 'local' ? item.localPath : item.url}</small>
-        <div className="row"><button disabled={busy || (item.source === 'local' && !folderAvailable)} onClick={() => selectWorkspace(item)}>{t('选择工作区')}</button><button disabled={busy} onClick={() => renameWorkspace(item)}>{t('重命名')}</button><button disabled={busy} onClick={() => removeWorkspace(item)}>{t('移除记录')}</button></div>
+        <div className="row"><button disabled={busy || (item.source === 'local' && !folderAvailable)} onClick={() => selectWorkspace(item)}>{t('选择工作区')}</button><button disabled={busy} onClick={() => renameWorkspace(item)}>{t('重命名')}</button><button disabled={busy} onClick={() => removeWorkspace(item)}>{t('归档记录')}</button></div>
       </div>)}
+      {records.some(item => item.archived) && <details className="archived-workspaces"><summary>{t('已归档工作区')}</summary>
+        {records.filter(item => item.archived).map(item => <div key={item.id} data-workspace-id={item.id}>
+          <strong>{item.label}</strong><small>{item.source === 'service' ? item.address : item.source === 'local' ? item.localPath : item.url}</small>
+          <button disabled={busy} onClick={() => {
+            try { persist(records.map(record => record.id === item.id ? { ...record, archived: false } : record)); setError(''); }
+            catch (reason) { setError((reason as Error).message); }
+          }}>{t('恢复记录')}</button>
+        </div>)}
+      </details>}
       <button disabled={busy} onClick={() => { setProfile(blank()); setService(null); setAddress(''); setToken(''); setError(''); setConnection(folderAvailable ? 'local' : 'clone'); setShowForm(true); }}>{t('添加工作区')}</button>
     </section>
     {showForm && <>

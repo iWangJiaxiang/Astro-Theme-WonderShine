@@ -1,3 +1,4 @@
+import { LegacyRecovery } from "../platform/LegacyRecovery";
 import { configureSaving } from "./save-preferences";
 import type { SaveCapabilities } from "../shared/save";
 import { NativeAiSettings } from "../platform/NativeAiSettings";
@@ -437,6 +438,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                       ),
                     ),
                   ),
+                  element(LegacyRecovery, null),
                   element(
                     "div",
                     { className: classes("sidebar-bottom") },

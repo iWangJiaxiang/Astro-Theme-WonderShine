@@ -209,11 +209,29 @@ try {
   assert.equal(await page.$('.connection-form-fields'), null, 'saved workspaces start at the chooser');
   await page.evaluate(() => [...document.querySelectorAll('.workspace-record')].find(record => record.textContent.includes('Saved Studio')).querySelector('button').click());
   assert.equal(await page.$eval('input[placeholder="https://studio.example.com"]', input => input.value), 'https://studio.example.test');
-  await click('移除记录');
-  assert.ok(await fs.stat(root), 'removing a registry record never deletes its checkout');
-  // Restore the native record for the remaining offline editing coverage.
-  await page.evaluate(profile => { const records = JSON.parse(localStorage.getItem('wondershine.native.workspaces.v1')); localStorage.setItem('wondershine.native.workspaces.v1', JSON.stringify([profile, ...records])); }, profile);
-  await page.reload({waitUntil:'networkidle0'});
+  const recordAction = async (id, text) => {
+    await page.evaluate(({ id, text }) => {
+      const record = document.querySelector(`[data-workspace-id="${id}"]`);
+      const button = [...record.querySelectorAll('button')].find(button => button.textContent.trim() === text);
+      if (!button || button.disabled) throw new Error('Missing record action: ' + text);
+      button.click();
+    }, { id, text });
+  };
+  const recoveryKey = `studio-draft:password:${profile.id}:content/articles/recovery/index.md`;
+  await page.evaluate(key => localStorage.setItem(key, JSON.stringify({ body: 'Archive recovery fixture' })), recoveryKey);
+  for (const id of ['a6347560-bbe9-4c35-9d89-b0429108882b', profile.id]) {
+    await recordAction(id, '归档记录');
+    await page.waitForSelector(`.archived-workspaces [data-workspace-id="${id}"]`);
+    assert.equal(await page.$(`.workspace-record[data-workspace-id="${id}"]`), null);
+    await page.reload({waitUntil:'networkidle0'});
+    await page.click('.archived-workspaces summary');
+    await recordAction(id, '恢复记录');
+    await page.waitForSelector(`.workspace-record[data-workspace-id="${id}"]`);
+  }
+  assert.equal(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).body, recoveryKey), 'Archive recovery fixture', 'archive/restore retains the original draft identity');
+  assert.ok(await fs.stat(root), 'archive/restore retains the original checkout');
+  const restored = await page.evaluate(() => JSON.parse(localStorage.getItem('wondershine.native.workspaces.v1')));
+  assert.deepEqual(restored.find(record => record.id === profile.id), profile, 'restore preserves the complete original record and recovery ID');
   await screenshot('connection-git-desktop'); await noOverflow('desktop connection');
   await click('本地文件夹'); await screenshot('connection-folder-desktop');
   await page.click('.folder-picker');
