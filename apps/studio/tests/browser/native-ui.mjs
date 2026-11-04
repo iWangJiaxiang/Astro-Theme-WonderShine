@@ -413,7 +413,31 @@ try {
     allowOAuthHttp = false;
     await click('远程仓库');
   }
-  await page.waitForSelector('.connection-url input');await screenshot('connection-first-launch-mobile');
+  await page.waitForSelector('.connection-url input');
+  for (const [width, height, name] of [[390, 844, 'iphone'], [430, 932, 'iphone-large'], [768, 1024, 'ipad'], [844, 390, 'landscape'], [375, 667, 'compact']]) {
+    await page.setViewport({ width, height, isMobile: true, hasTouch: true });
+    await page.waitForFunction(height => Math.abs(parseFloat(document.documentElement.style.getPropertyValue('--native-visible-height')) - height) < 1, {}, height);
+    await page.evaluate(() => scrollTo(0, 0));
+    const layout = await page.evaluate(() => {
+      const main = document.querySelector('.native-connect');
+      const card = document.querySelector('.connection-card').getBoundingClientRect();
+      const footer = document.querySelector('.native-update-footer').getBoundingClientRect();
+      const padding = parseFloat(getComputedStyle(main).paddingTop);
+      return { top: card.top, padding, footerBottom: footer.bottom, height: document.documentElement.scrollHeight, viewport: innerHeight };
+    });
+    assert.ok(Math.abs(layout.top - layout.padding) <= 1, name + ': connection card starts at safe-area padding, without a centering gap');
+    if (height >= 844) {
+      assert.ok(layout.height <= layout.viewport + 1, name + ': first launch does not add a footer beyond the viewport');
+      assert.ok(layout.footerBottom <= layout.viewport + 1, name + ': updates stay visible without scrolling');
+    } else {
+      await page.$eval('.native-update-footer button', node => node.scrollIntoView({ block: 'end' }));
+      assert.ok(await page.$eval('.native-update-footer button', node => node.getBoundingClientRect().bottom <= innerHeight + 1), name + ': short screens retain access to updates');
+      await page.evaluate(() => scrollTo(0, 0));
+    }
+    await screenshot('connection-first-launch-' + name); await noOverflow(name + ' first launch');
+  }
+  await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+  await screenshot('connection-first-launch-mobile');
   await page.click('.connection-options summary');await screenshot('connection-options-mobile');await noOverflow('mobile connection options');
   await page.select('.language-switcher select','en');await screenshot('connection-options-en-mobile');await noOverflow('English connection options');
   // Download an actual temporary Git repository through the native HTTP adapter.

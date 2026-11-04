@@ -4,9 +4,24 @@ html[data-native-mobile] body { overscroll-behavior-y: none; }
 html[data-native-mobile] :is(input, textarea, select, [contenteditable=true]) { font-size: 16px !important; }
 html[data-native-mobile] :is(button, select, summary, input:not([type=checkbox]):not([type=radio]), .sidebar nav a) { min-height: 44px !important; }
 html[data-native-mobile] :is(.icon-button, .text-button) { min-width: 44px !important; }
-html[data-native-mobile] .native-connect {
+/* Keep first-run content and updates in one viewport, not one viewport each. */
+html[data-native-mobile]:has(.native-shell-connecting) { overscroll-behavior-y: none; }
+html[data-native-mobile] .native-shell-connecting {
   min-height: var(--native-visible-height, 100dvh);
-  padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #f5f6f8);
+}
+html[data-native-mobile] .native-shell-connecting .native-connect {
+  flex: 1;
+  min-height: 0;
+  align-items: start;
+  padding: max(20px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 20px max(16px, env(safe-area-inset-left));
+}
+html[data-native-mobile] .native-shell-connecting .native-update-footer {
+  flex-shrink: 0;
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
 }
 html[data-native-mobile] .studio-shell { min-height: 100dvh; padding-top: env(safe-area-inset-top); }
 html[data-native-mobile] .main-content { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
