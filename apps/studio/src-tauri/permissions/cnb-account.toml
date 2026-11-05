@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-cnb-account-get"
+description = "Read only the fixed CNB account and repository discovery endpoints without browser Origin or cookies."
+commands.allow = ["cnb_account_get"]

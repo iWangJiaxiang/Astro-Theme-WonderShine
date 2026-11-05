@@ -1,5 +1,23 @@
 use urlpattern::{UrlPattern, UrlPatternMatchInput};
 
+// Run the native transport unit/wire tests in the existing remote-CI test target.
+#[path = "../src/cnb_account.rs"]
+mod cnb_account;
+
+#[test]
+fn cnb_command_is_local_main_only_on_desktop_and_mobile() {
+    let capability: serde_json::Value =
+        serde_json::from_str(include_str!("../capabilities/cnb-account.json")).unwrap();
+    assert_eq!(capability["local"], true);
+    assert_eq!(capability["webviews"], serde_json::json!(["main"]));
+    assert!(capability.get("windows").is_none());
+    assert!(capability.get("remote").is_none());
+    assert!(capability.get("platforms").is_none());
+    assert_eq!(capability["permissions"], serde_json::json!(["allow-cnb-account-get"]));
+    let permission = include_str!("../permissions/cnb-account.toml");
+    assert!(permission.contains("commands.allow = [\"cnb_account_get\"]"));
+}
+
 // Validate permission patterns with the same parser as tauri-plugin-http.
 // Invalid entries otherwise fail lazily at runtime and disable every HTTP request.
 #[test]

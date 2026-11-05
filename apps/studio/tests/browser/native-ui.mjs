@@ -117,11 +117,24 @@ try {
         }
       } else if (allowOAuthHttp && command === 'plugin:opener|open_url') {
         assert.ok(/^https:\/\/(github.com\/login\/device|cnb.cool\/oauth2\/device)/.test(args.url));
+      } else if (allowOAuthHttp && command === 'cnb_account_get') {
+        assert.equal(args.token, 'oauth-fixture-token');
+        assert.ok(['account', 'repos'].includes(args.resource));
+        assert.deepEqual(Object.keys(args).sort(), (args.resource === 'repos' ? ['page', 'resource', 'token'] : ['resource', 'token']));
+        const stage = args.resource;
+        if (stage === 'account') await accountGate;
+        else assert.equal(args.page, 1);
+        const failed = oauthFailureStage === stage;
+        const body = failed ? '' : JSON.stringify(stage === 'account'
+          ? {username:'fixture-writer',nickname:'Fixture Writer'}
+          : [{id:'1',path:'fixture-writer/blog',visibility_level:'Public'}]);
+        value = {status:failed?403:200,headers:[['x-trace-id','0123456789abcdef']],body};
       } else if (allowOAuthHttp && command.startsWith('plugin:http|')) {
         const operation = command.split('|')[1];
         if (operation === 'fetch') {
           const config = args.clientConfig, url = new URL(config.url);
-          assert.ok(['https://github.com', 'https://api.github.com', 'https://cnb.cool', 'https://api.cnb.cool'].includes(url.origin));
+          assert.notEqual(url.origin, 'https://api.cnb.cool', 'CNB discovery must use the narrow command, not the Origin-injecting HTTP plugin');
+          assert.ok(['https://github.com', 'https://api.github.com', 'https://cnb.cool'].includes(url.origin));
           assert.equal(config.maxRedirections, 0, 'OAuth must disable redirects in the actual native client');
           assert.equal(new Map(config.headers).get('user-agent'), 'WonderShine-Studio');
           value = nextResource++; requests.set(value, config);
@@ -422,6 +435,7 @@ try {
         const diagnostic = await page.$eval('.oauth-dialog [role=alert]', node => node.textContent);
         assert.ok(diagnostic.includes(`stage=${stage}`), provider + ' reports the actual failed stage');
         assert.ok(diagnostic.includes('HTTP=403'));
+        if (provider === 'CNB' && stage !== 'token') assert.ok(diagnostic.includes('x-trace-id=0123456789abcdef'), 'Native command metadata reaches safe stage errors');
         assert.equal(await page.$('.oauth-device'), null, 'Terminal failures remove expired code and authorization actions');
         assert.equal(await page.$('.oauth-dialog [role=status]'), null, 'Terminal failures never claim authorization or connection is pending');
         const dialogText = await page.$eval('.oauth-dialog', node => node.textContent);
