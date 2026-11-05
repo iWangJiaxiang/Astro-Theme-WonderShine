@@ -71,7 +71,10 @@ export class ContentService {
     return threadLanguages(file ? parse(file.text) : {});
   }
   async list(): Promise<ArticleSummary[]> {
-    const [files, configFile] = await Promise.all([this.repository.list(), this.repository.read('config.toml')]);
+    const [files, configFile] = await Promise.all([
+      this.repository.listForSummary ? this.repository.listForSummary() : this.repository.list(),
+      this.repository.read('config.toml'),
+    ]);
     const config = configFile ? asJson(parse(configFile.text)) as Record<string, Json> : {};
     const languages = threadLanguages(config);
     // Timer tasks (not microtasks) let the native WebView handle input and paint.
@@ -95,7 +98,8 @@ export class ContentService {
           updated: metadata.updated instanceof Date ? metadata.updated.toISOString() : typeof metadata.updated === 'string' ? metadata.updated : '', topics: stringValues(getValue(metadata, 'extra.topics')),
           draft: metadata.draft === true, kind, tags: stringValues(getValue(metadata, 'taxonomies.tags')), categories: stringValues(getValue(metadata, 'taxonomies.categories')),
           displayTags: stringValues(getValue(metadata, 'extra.tags')), layout: typeof metadata.layout === 'string' ? metadata.layout : undefined,
-          ...contentLink(file.path, asJson(metadata) as Record<string, Json>, config),
+          // Link resolution only needs these fields, not potentially large custom metadata.
+          ...contentLink(file.path, asJson({ path: metadata.path, slug: metadata.slug }) as Record<string, Json>, config),
           description: typeof metadata.description === 'string' ? metadata.description : '', render: metadata.render !== false,
           weight: typeof metadata.weight === 'number' ? metadata.weight : 0 } satisfies ArticleSummary;
       } catch {

@@ -104,6 +104,54 @@ test('native listing drains failed batches and retains size, UTF-8 and symlink c
   }
 }));
 
+test('summary listing skips hashes but preserves fallback reads, order and full document revisions', async context => fixture(async (repo, root) => {
+  await fs.mkdir(root + '/content/articles', { recursive: true });
+  await fs.writeFile(root + '/content/articles/z.md', 'last');
+  await fs.writeFile(root + '/content/articles/a.md', 'first');
+  const digest = context.mock.method(crypto.subtle, 'digest');
+  assert.deepEqual(await repo.listForSummary(), [
+    { path: 'content/articles/a.md', text: 'first' }, { path: 'content/articles/z.md', text: 'last' },
+  ]);
+  assert.equal(digest.mock.callCount(), 0, 'summary-only reads do not hash file bodies');
+  const full = await repo.list();
+  assert.equal(digest.mock.callCount(), 2);
+  assert.equal(full[0].revision, (await repo.read(full[0].path))!.revision);
+  assert.equal(digest.mock.callCount(), 3);
+}));
+
+test('summary listing drains bounded fallback reads and preserves size, UTF-8 and fresh symlink checks', async () => fixture(async (_repo, root, state) => {
+  await fs.mkdir(root + '/content/articles', { recursive: true });
+  const paths = Array.from({ length: 17 }, (_, i) => `content/articles/story-${String(i).padStart(2, '0')}.md`);
+  for (const file of paths) await fs.writeFile(root + '/' + file, 'valid');
+  let active = 0, peak = 0, started = 0;
+  const files: WorkspaceFiles = { ...nativeFiles, readFile: async (file, options) => {
+    active++; started++; peak = Math.max(peak, active);
+    try { await new Promise(resolve => setTimeout(resolve, 1)); return await nativeFiles.readFile(file, options); }
+    finally { active--; }
+  } };
+  const repository = new FileRepository(files, root, state);
+  assert.deepEqual((await repository.listForSummary()).map(file => file.path), paths);
+  assert.ok(peak > 1 && peak <= 8); assert.equal(active, 0);
+  await fs.writeFile(root + '/' + paths[0], new Uint8Array([0xff])); started = 0;
+  await assert.rejects(repository.listForSummary(), /encoded data|encoding/i);
+  assert.equal(active, 0); assert.equal(started, 8, 'later batches must not start after invalid UTF-8');
+  await fs.writeFile(root + '/' + paths[0], 'x'.repeat(1024 * 1024 + 1));
+  await assert.rejects(repository.listForSummary(), /限制/); assert.equal(active, 0);
+  await fs.unlink(root + '/' + paths[0]); await fs.writeFile(root + '/' + paths[0], 'valid');
+  // Replace a parent after discovery and before any read, without a timing-dependent race.
+  await fs.mkdir(root + '/content/topics');
+  const fresh: WorkspaceFiles = { ...files, readdir: async directory => {
+    const names = await nativeFiles.readdir(directory);
+    if (directory === root + '/content/topics') {
+      await fs.rename(root + '/content/articles', root + '/content/original');
+      await fs.symlink(root + '/content/original', root + '/content/articles');
+    }
+    return names;
+  } };
+  await assert.rejects(new FileRepository(fresh, root, state).listForSummary(), /符号链接/);
+  assert.equal(active, 0);
+}));
+
 test('all hosting providers support explicit Git remotes without pretending API discovery exists', () => {
   assert.equal(hostingProviders.length, 7);
   for (const provider of hostingProviders) { assert.equal(provider.validateRemote('https://git.example/team/site.git').host, 'git.example'); assert.equal(provider.capabilities.discovery, false); }
