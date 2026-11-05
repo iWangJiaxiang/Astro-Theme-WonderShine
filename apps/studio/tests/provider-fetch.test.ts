@@ -44,12 +44,15 @@ test('only exact CNB discovery URLs are routed; all other HTTP is unchanged', as
 test('native discovery refuses method/body/header/cookie overrides before IPC', async () => {
   let calls = 0;
   const fetcher = createProviderFetch(noFallback, async () => { calls++; throw new Error('must not invoke'); });
-  for (const options of [
+  const invalidOptions: RequestInit[] = [
     { ...init(), method: 'POST' }, { ...init(), body: 'x' }, { ...init(), credentials: 'include' as const },
     { ...init(), redirect: 'follow' as const }, { headers: { Authorization: `Bearer ${token}`, Origin: 'https://cnb.cool' } },
     { headers: { Authorization: `Bearer ${token}`, Cookie: 'x=y' } }, { headers: { Authorization: 'Bearer a b' } },
     { headers: { Authorization: `Bearer ${'x'.repeat(8193)}` } }, {},
-  ]) await assert.rejects(fetcher('https://api.cnb.cool/user', options), /Invalid CNB discovery request/);
+  ];
+  for (const options of invalidOptions) {
+    await assert.rejects(fetcher('https://api.cnb.cool/user', options), /Invalid CNB discovery request/);
+  }
   assert.equal(calls, 0);
 });
 
