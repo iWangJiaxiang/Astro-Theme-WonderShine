@@ -19,8 +19,12 @@ export class FileRepository implements Repository {
     if (!isRepositoryPath(path)) throw new StudioError(400, '不允许访问此文件路径');
     return this.root + '/' + path;
   }
-  private async safe(path: string): Promise<string> {
+  private location(path: string): string {
     if (path.split('/').some(part => !part || part === '..' || part === '.')) throw new StudioError(400, '不允许访问此文件路径');
+    return this.root + '/' + path;
+  }
+  private async safe(path: string): Promise<string> {
+    this.location(path);
     let current = this.root;
     for (const part of path.split('/')) {
       current += '/' + part;
@@ -30,8 +34,9 @@ export class FileRepository implements Repository {
     return current === this.root + '/' + path ? current : this.root + '/' + path;
   }
   private async bytes(path: string, limit: number): Promise<Uint8Array | null> {
-    const location = await this.safe(path);
     try {
+      if (this.files.readCheckedFile) return await this.files.readCheckedFile(this.location(path), limit);
+      const location = await this.safe(path);
       const stat = await this.files.stat(location);
       if (!stat.isFile()) throw new StudioError(400, '请选择文件');
       if (stat.size > limit) throw new StudioError(413, '文件超过编辑或预览限制');
@@ -51,33 +56,54 @@ export class FileRepository implements Repository {
   private async walk(directory: string, accept: (path: string) => boolean, limit = 20000): Promise<{ paths: string[]; truncated: boolean }> {
     const paths: string[] = []; let visited = 0, truncated = false;
     const visit = async (relative: string): Promise<void> => {
-      let names: string[];
-      try { names = await this.files.readdir(await this.safe(relative)); } catch (error) { if (missingFile(error)) return; throw error; }
-      for (const name of names.sort()) {
+      let entries: { name: string; isFile?: boolean; isDirectory?: boolean; isSymbolicLink?: boolean }[];
+      try {
+        entries = this.files.readCheckedDirectory
+          ? await this.files.readCheckedDirectory(this.location(relative))
+          : (await this.files.readdir(await this.safe(relative))).map(name => ({ name }));
+      } catch (error) { if (missingFile(error)) return; throw error; }
+      // Match Array<string>.sort() ordering, independent of the device locale.
+      entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+      for (const entry of entries) {
+        const { name } = entry;
         if (++visited > limit) { truncated = true; return; }
         if (name.startsWith('.') || ['node_modules', 'dist', 'processed_images'].includes(name)) continue;
         const path = relative + '/' + name;
-        const info = await this.files.lstat(this.root + '/' + path);
-        if (info.isSymbolicLink()) continue;
-        if (info.isDirectory()) await visit(path);
-        else if (info.isFile() && accept(path)) paths.push(path);
+        // Directory entry types only guide discovery. Reads and recursion recheck paths.
+        if (entry.isSymbolicLink === undefined || (!entry.isFile && !entry.isDirectory && !entry.isSymbolicLink)) {
+          const info = await this.files.lstat(this.location(path));
+          entry.isSymbolicLink = info.isSymbolicLink(); entry.isDirectory = info.isDirectory(); entry.isFile = info.isFile();
+        }
+        if (entry.isSymbolicLink) continue;
+        if (entry.isDirectory) await visit(path);
+        else if (entry.isFile && accept(path)) paths.push(path);
         if (truncated) return;
       }
     };
     await visit(directory); return { paths, truncated };
   }
   async list(): Promise<FileSnapshot[]> {
+    return this.listFiles(path => this.read(path));
+  }
+  async listForSummary(): Promise<Pick<FileSnapshot, 'path' | 'text'>[]> {
+    return this.listFiles(async path => {
+      this.check(path);
+      const bytes = await this.bytes(path, 1024 * 1024);
+      return bytes ? { path, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) } : null;
+    });
+  }
+  private async listFiles<T>(read: (path: string) => Promise<T | null>): Promise<T[]> {
     const paths: string[] = [];
     for (const kind of ['articles', 'pages', 'collections', 'threads', 'topics']) {
       const result = await this.walk('content/' + kind, isRepositoryPath);
       if (result.truncated) throw new StudioError(413, '仓库文件过多，请缩小工作区');
       paths.push(...result.paths);
     }
-    const snapshots: FileSnapshot[] = [];
-    // Bound native filesystem/crypto work without bypassing read() safety checks.
+    const snapshots: T[] = [];
+    // Bound native filesystem work while retaining each reader's safety checks.
     // Drain each batch before rejecting so no reads outlive a failed listing.
     for (let offset = 0; offset < paths.length; offset += 8) {
-      const batch = await Promise.allSettled(paths.slice(offset, offset + 8).map(path => this.read(path)));
+      const batch = await Promise.allSettled(paths.slice(offset, offset + 8).map(read));
       for (const result of batch) {
         if (result.status === 'rejected') throw result.reason;
         if (result.value) snapshots.push(result.value);

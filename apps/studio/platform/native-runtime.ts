@@ -14,6 +14,7 @@ import { NativeGitEngine } from './git-engine';
 import { createGitHttp } from './git-http';
 import { validateProfile, validateRemote, type WorkspaceProfile } from './hosting';
 import { inspectLocalRepository } from './local-workspace';
+import { createLoadDiagnostics } from './load-diagnostics';
 
 export async function connectNativeWorkspace(profile: WorkspaceProfile, token: string, onDisconnect: () => void, onProgress?: ProgressCallback): Promise<() => void> {
   validateProfile(profile, { allowAutomaticBranch: true });
@@ -32,20 +33,26 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
   const http = httpsRemote ? createGitHttp(profile.url, (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }))
     : { request: async (): Promise<never> => { throw new Error('App 同步需要 HTTPS 远端；本地保存和提交仍可使用'); } };
   const git = new NativeGitEngine(files, root, state, profile, http, () => ({ username: profile.username || 'oauth2', password: token }));
-  await git.open(onProgress);
+  const diagnostics = createLoadDiagnostics(localStorage);
+  const progress = diagnostics.progress(onProgress);
+  try { await diagnostics.measure('git-open', () => git.open(progress.onProgress)); }
+  finally { progress.finish(); }
   const local = new FileRepository(files, root, state, () => git.assertWritable());
-  await local.recover();
+  await diagnostics.measure('recovery', () => local.recover());
   const repository = Object.assign(local, { mode: 'git' as const, workspace: git });
   const ai = new NativeAiController(repository, (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }), localStorage, profile.id);
   let disposed = false;
-  const dispose = () => { if (disposed) return; disposed = true; ai.dispose(); token = ''; setMediaResolver(); setApiTransport(); };
+  const dispose = () => { if (disposed) return; disposed = true; diagnostics.dispose(); ai.dispose(); token = ''; setMediaResolver(); setApiTransport(); };
   const transport = createContentTransport(repository, { ai, identity: { id: profile.id, name: profile.authorName || profile.label }, onLogout: () => {
     dispose(); onDisconnect();
   } });
   setMediaResolver((path, version) => { validateMediaPath(path); return convertFileSrc(root + '/' + path) + `?v=${version}`; });
   setApiTransport((path, init) => {
     if (disposed) return Promise.reject(new Error('连接已更换，请重试'));
-    return transport(new Request(new URL('/api' + path, 'https://studio.local'), init));
+    const request = new Request(new URL('/api' + path, 'https://studio.local'), init);
+    return request.method === 'GET' && new URL(request.url).pathname === '/api/content'
+      ? diagnostics.measure('content-request', () => transport(request))
+      : transport(request);
   });
   return dispose;
 }

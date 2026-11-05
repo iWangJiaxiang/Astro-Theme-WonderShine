@@ -35,6 +35,18 @@ Local transaction journals and history backups live outside the native Git check
 
 Downloaded repositories use the private App data directory; selected desktop repositories stay in their original location. The App does not yet provide a visual merge resolver, Git LFS, submodule management, background mobile synchronization or secure persistent token storage. Do not uninstall the App before syncing/backing up offline work. Native direct mode supports manual and AI translations, AI summaries and cover generation through client-configured OpenAI-compatible endpoints. Server mode continues to use the server operator’s AI configuration.
 
+## Native loading performance
+
+Native content reads combine fresh path/symlink checks with file metadata and bounded reads instead of repeating the same checks at both repository and filesystem layers. Directory enumeration reuses native entry types for discovery, but every subsequent read or recursive traversal rechecks its path. Checks are never cached across operations. Generic filesystem adapters retain the previous fallback checks. Checkout also reuses metadata already obtained during each `stat` operation, but still performs fresh per-component checks when writing.
+
+Content summaries read complete text without computing unused document revision hashes. Opening documents, saving and conflict detection continue to compute authoritative revisions from actual files. This is not a persistent content index or a shallow clone: initial listing still scans all content, and Git still downloads the selected branch's full history without recursively downloading submodules. Regression tests compare native call counts; device timing improvements must be measured separately.
+
+## Native loading diagnostics
+
+Native connections keep one bounded, local-only timing report at localStorage key `wondershine.native.load-diagnostics.v1`. It contains fixed stage names, counts and elapsed milliseconds only: Git open, recovery, content-list requests and recognized Git progress phases. It contains no repository URL, file paths, account identity, credentials, content or raw errors, and is never uploaded automatically. Starting another native connection replaces the report; disposed connections stop updating it. There is not yet an in-app report export UI.
+
+Git phase timings are wall-clock intervals between progress transitions, not exclusive CPU measurements. Content-request timing includes the transport response construction, not React rendering; repeated requests may hit the existing in-memory cache. These measurements can locate a bottleneck but do not themselves demonstrate a device speedup. Progress callbacks to the UI are limited to roughly ten updates per second, except phase changes and completion events.
+
 ## Client API configuration (direct Git mode)
 
 Open **Client API settings** after connecting a local Git workspace. Enter the provider base URL (usually ending in `/v1`), text model, optional image model, image size, and API key. The text model serves summaries, cover prompts and translations. An empty image model disables image generation. This version uses one endpoint/key for both text and images.

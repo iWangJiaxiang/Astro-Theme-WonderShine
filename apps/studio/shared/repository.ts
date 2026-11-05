@@ -20,6 +20,9 @@ export interface Repository {
   clearReadCache?(): void;
   read(path: string): Promise<FileSnapshot | null>;
   list(): Promise<FileSnapshot[]>;
+  // Same files, order and complete text as list(), without requiring revision hashes.
+  // Summary-only reads must not populate revision caches used by read() or writes.
+  listForSummary?(): Promise<Pick<FileSnapshot, 'path' | 'text'>[]>;
   listMedia(refresh?: boolean): Promise<MediaListing>;
   readMedia(path: string): Promise<MediaFile | null>;
   uploadMedia(directory: string, name: string, data: Uint8Array): Promise<MediaUploadResult>;

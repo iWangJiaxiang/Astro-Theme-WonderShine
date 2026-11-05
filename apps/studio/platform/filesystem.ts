@@ -1,7 +1,13 @@
 export interface FileInfo { size: number; mtimeMs: number; ctimeMs: number; mode: number; dev: number; ino: number; uid: number; gid: number; isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean }
+export interface DirectoryEntry { name: string; isFile: boolean; isDirectory: boolean; isSymbolicLink: boolean }
 /** Minimal Node-compatible promises surface consumed by isomorphic-git. */
 export interface WorkspaceFiles {
   readFile(path: string, options?: unknown): Promise<Uint8Array | string>;
+  /** Optional capabilities must freshly reject symlinks in the root and all path components.
+   * Reads check file type before I/O and byte limits before and after I/O. Entries are discovery hints,
+   * never authorization for a later read. Adapters without these retain repository checks. */
+  readCheckedFile?(path: string, limit: number): Promise<Uint8Array>;
+  readCheckedDirectory?(path: string): Promise<DirectoryEntry[]>;
   writeFile(path: string, data: Uint8Array | string, options?: unknown): Promise<void>;
   readdir(path: string): Promise<string[]>;
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
