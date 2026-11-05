@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { fetch as nativeFetch } from '@tauri-apps/plugin-http';
+import { providerFetch } from './provider-fetch';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { beginDeviceLogin, completeDeviceLogin, loadAccount, listRepositories, ProviderAuthError, type AccountProvider, type ProviderAccount, type AccountRepository, type DeviceGrant, type ProviderFetch } from './provider-auth';
+import { beginDeviceLogin, completeDeviceLogin, loadAccount, listRepositories, ProviderAuthError, type AccountProvider, type ProviderAccount, type AccountRepository, type DeviceGrant } from './provider-auth';
 import { t, type Message } from '../src/i18n';
 import { useSignals } from '../src/reactivity';
-const providerFetch: ProviderFetch = (url, init) => nativeFetch(url, { ...init, maxRedirections: 0 });
 const clientIds = { github: import.meta.env.VITE_STUDIO_GITHUB_CLIENT_ID || '', cnb: import.meta.env.VITE_STUDIO_CNB_CLIENT_ID || '' };
 function loginError(reason: unknown, fallback: string): Message {
   if (reason instanceof ProviderAuthError) return { key: `${reason.message}（{diagnostics}）`, params: { diagnostics: reason.diagnostics } };
