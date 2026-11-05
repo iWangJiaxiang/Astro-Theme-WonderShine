@@ -20,7 +20,8 @@ const root = join(appData, 'workspaces', profile.id, 'repo');
 const localRoot = join(base, 'selected local blog');
 let selectedFolder = null, folderGranted = false;
 let browser, server;
-let allowOAuthHttp = false, oauthApproved = false;
+let allowOAuthHttp = false, oauthApproved = false, oauthFailureStage = null;
+let accountGate = Promise.resolve(), releaseAccount = () => {};
 let allowCloneHttp = false, failNextHttp = false, failNextBranchWrite = false;
 let releaseDownload = () => {}, releaseCheckout = () => {};
 let downloadGate = Promise.resolve(), checkoutGate = Promise.resolve();
@@ -126,19 +127,28 @@ try {
           value = nextResource++; requests.set(value, config);
         } else if (operation === 'fetch_send') {
           const config = requests.get(args.rid), url = new URL(config.url), github = url.hostname.includes('github');
-          let body;
+          let body, stage;
           if (url.pathname === '/login/device/code' || url.pathname === '/oauth2/device/auth') {
+            stage = 'device';
             body = {device_code:'device-fixture',user_code:'TEST-CODE',expires_in:600,interval:1,verification_uri:github?'https://github.com/login/device':'https://cnb.cool/oauth2/device/verify'};
           } else if (url.pathname === '/login/oauth/access_token' || url.pathname === '/oauth2/token') {
+            stage = 'token';
             body = oauthApproved ? {access_token:'oauth-fixture-token',token_type:'bearer'} : {error:'authorization_pending'};
           } else {
             assert.equal(new Map(config.headers).get('authorization'), 'Bearer oauth-fixture-token');
-            if (url.pathname === '/user') body = github ? {login:'fixture-writer',name:'Fixture Writer'} : {username:'fixture-writer',nickname:'Fixture Writer'};
-            else if (url.pathname === '/user/repos') body = github ? [{id:1,full_name:'fixture-writer/blog',default_branch:'main',permissions:{push:true},private:false}] : [{id:'1',path:'fixture-writer/blog',visibility_level:'Public'}];
-            else throw new Error('Unexpected OAuth fixture endpoint');
+            if (url.pathname === '/user') {
+              stage = 'account';
+              await accountGate;
+              body = github ? {login:'fixture-writer',name:'Fixture Writer'} : {username:'fixture-writer',nickname:'Fixture Writer'};
+            } else if (url.pathname === '/user/repos') {
+              stage = 'repos';
+              body = github ? [{id:1,full_name:'fixture-writer/blog',default_branch:'main',permissions:{push:true},private:false}] : [{id:'1',path:'fixture-writer/blog',visibility_level:'Public'}];
+            } else throw new Error('Unexpected OAuth fixture endpoint');
           }
+          const failed = oauthApproved && oauthFailureStage === stage;
+          if (failed) body = {error:'fixture_failure',error_description:'private-response-body oauth-fixture-token device-fixture TEST-CODE'};
           const rid = nextResource++; responses.set(rid, Buffer.from(JSON.stringify(body))); requests.delete(args.rid);
-          value = {rid,status:200,statusText:'OK',url:config.url,headers:[['content-type','application/json']]};
+          value = {rid,status:failed?403:200,statusText:failed?'Forbidden':'OK',url:config.url,headers:[['content-type','application/json']]};
         } else if (operation === 'fetch_read_body') {
           const body = responses.get(args.rid); value = body?.length ? [...body,0] : [1]; responses.delete(args.rid);
         } else if (operation === 'fetch_cancel' || operation === 'fetch_cancel_body') {
@@ -394,11 +404,42 @@ try {
 
     allowOAuthHttp = true;
     for (const provider of ['GitHub', 'CNB']) {
+      for (const stage of ['token', 'account', 'repos']) {
+        oauthApproved = false; oauthFailureStage = stage;
+        if (stage === 'account') accountGate = new Promise(resolve => { releaseAccount = resolve; });
+        await click(`使用 ${provider} 登录`); await page.waitForSelector('.oauth-code');
+        assert.equal(await page.$eval('.oauth-device [role=status]', node => node.textContent), '等待授权…');
+        oauthApproved = true;
+        if (stage === 'account') {
+          await page.waitForSelector('.oauth-status');
+          assert.equal(await page.$('.oauth-device'), null, 'Token receipt removes device actions before the account request completes');
+          assert.equal(await page.$eval('.oauth-status', node => node.textContent), '正在连接…');
+          assert.equal(await page.$('.oauth-dialog [role=alert]'), null);
+          releaseAccount();
+        }
+        await page.waitForSelector('.oauth-dialog [role=alert]');
+        await page.waitForFunction(() => [...document.querySelectorAll('.oauth-dialog button')].some(button => button.textContent === '重新登录' && !button.disabled));
+        const diagnostic = await page.$eval('.oauth-dialog [role=alert]', node => node.textContent);
+        assert.ok(diagnostic.includes(`stage=${stage}`), provider + ' reports the actual failed stage');
+        assert.ok(diagnostic.includes('HTTP=403'));
+        assert.equal(await page.$('.oauth-device'), null, 'Terminal failures remove expired code and authorization actions');
+        assert.equal(await page.$('.oauth-dialog [role=status]'), null, 'Terminal failures never claim authorization or connection is pending');
+        const dialogText = await page.$eval('.oauth-dialog', node => node.textContent);
+        assert.doesNotMatch(dialogText, /等待授权|在浏览器中输入此代码|打开授权页面|没有可写入的仓库/);
+        assert.doesNotMatch(dialogText, /private-response-body|oauth-fixture-token|device-fixture|TEST-CODE/, 'Errors do not expose response bodies or credentials');
+        assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('oauth-fixture-token')), false);
+        if (stage === 'repos') assert.ok(await page.$('.oauth-repositories'), 'Repository failure retains the picker without claiming an empty result');
+        await screenshot(`oauth-error-${provider.toLowerCase()}-${stage}`); await noOverflow('OAuth ' + stage + ' error');
+        await click('取消'); await page.waitForFunction(() => !document.querySelector('.oauth-dialog'));
+      }
+      oauthFailureStage = null;
       oauthApproved = false;
       await click(`使用 ${provider} 登录`); await page.waitForSelector('.oauth-code');
       assert.equal(await page.$eval('.oauth-code', node => node.textContent), 'TEST-CODE');
       await screenshot('oauth-device-' + provider.toLowerCase());
       oauthApproved = true; await page.waitForSelector('.oauth-repository');
+      assert.equal(await page.$('.oauth-device'), null, 'Successful sign-in leaves the device authorization stage');
+      assert.equal(await page.$('.oauth-dialog [role=alert]'), null, 'A fresh sign-in clears previous diagnostics');
       await page.type('.oauth-dialog input', 'blog');
       await screenshot('oauth-repositories-' + provider.toLowerCase());
       await page.setViewport({width:390,height:430,isMobile:true,hasTouch:true});
@@ -477,7 +518,7 @@ try {
   if (browser) { const pages = await browser.pages(); await pages.at(-1)?.screenshot({ path: join(screenshots, 'failure.png'), fullPage: true }); }
   throw error;
 } finally {
-  releaseDownload(); releaseCheckout(); releaseWrite();
+  releaseDownload(); releaseCheckout(); releaseWrite(); releaseAccount();
   await browser?.close();
   if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   await fs.rm(base, { recursive: true, force: true });
