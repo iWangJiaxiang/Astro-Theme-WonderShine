@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { parse } from 'smol-toml';
 import { splitDocument } from '../../server/content.ts';
+import { revealField } from './controls.mjs';
+import { openImagePicker } from './image-picker.mjs';
 
 export async function checkUploads({ page, base, theme, screenshots, click, heading, fill }) {
   const source = base + '/upload-fixtures'; await mkdir(source);
@@ -9,7 +11,20 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await writeFile(source + '/invalid.webp', 'not an image');
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNwinr/HwAE+AKLJh4rzQAAAABJRU5ErkJggg==', 'base64');
   await writeFile(source + '/cover-upload.png', png);
-  const upload = async files => { const input = await page.$('.upload-file-input'); await input.uploadFile(...files.map(file => source + '/' + file)); };
+  const revealUpload = async () => {
+    await revealField(page, '.upload-file-input');
+    await page.waitForSelector('.media-upload-disclosure[open] .upload-actions', { visible: true });
+  };
+  const upload = async files => {
+    await revealUpload();
+    // Exercise the visible upload action rather than injecting files into a
+    // closed disclosure's native input, which is intentionally display:none.
+    const [chooser] = await Promise.all([
+      page.waitForFileChooser(),
+      page.locator('.media-upload-disclosure[open] .upload-actions button').click(),
+    ]);
+    await chooser.accept(files.map(file => source + '/' + file));
+  };
   const finished = () => page.waitForFunction(() => !document.querySelector('.upload-progress') && document.querySelector('.upload-results li'));
   const selected = () => page.$eval('.media-card.selected', el => el.dataset.mediaPath);
   await click('媒体库'); await heading('媒体库');
@@ -39,8 +54,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await heading('Site information');
   await page.setViewport({ width: 390, height: 844 });
   await page.waitForFunction(() => document.querySelector('.sidebar').getBoundingClientRect().right <= 0);
-  await page.click('[data-image-field="extra.site.logo"] .secondary');
-  await page.waitForSelector('dialog.media-dialog[open]');
+  await openImagePicker(page, 'extra.site.logo');
   await upload(['cover-upload.png']); await finished();
   assert.equal(await selected(), 'public/uploads/cover-upload.png');
   assert.equal(await page.$eval('[name="extra.site.logo"]', el => el.value), original, 'upload does not change a form before confirmation');
@@ -52,8 +66,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   assert.deepEqual(await readFile(base + '/site/public/uploads/cover-upload.png'), png, 'cancel retains the uploaded image');
   await page.setViewport({ width: 1440, height: 1000 });
   await page.select('.language-switcher select', 'zh-CN');
-  await page.click('[data-image-field="extra.site.logo"] .secondary');
-  await page.waitForSelector('dialog.media-dialog[open]');
+  await openImagePicker(page, 'extra.site.logo');
   await fill('dialog.media-dialog[open] [aria-label="搜索仓库图片"]', 'cover-upload.png');
   await page.waitForSelector('[data-media-path="public/uploads/cover-upload.png"]');
   await page.click('[data-media-path="public/uploads/cover-upload.png"]'); await click('使用这张图片');
@@ -64,8 +77,9 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await page.waitForSelector('[data-path="content/articles/studio-browser-test/index.md"]');
   await page.click('[data-path="content/articles/studio-browser-test/index.md"]');
   await page.waitForSelector('.markdown-source');
-  await page.locator('[data-image-field="extra.cover"] .secondary').click();
-  await page.waitForSelector('dialog.media-dialog[open]');
+  await openImagePicker(page, 'extra.cover');
+  await revealUpload();
+  await page.waitForSelector('.upload-destination', { visible: true });
   assert.equal(await page.$eval('.upload-destination', el => el.textContent), '文件位置：content/articles/studio-browser-test');
   await upload(['cover-upload.png']); await finished();
   assert.equal(await selected(), 'content/articles/studio-browser-test/cover-upload.png');
@@ -94,6 +108,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
     };
   });
   await click('刷新仓库');
+  await revealUpload();
   await page.waitForFunction(() => document.querySelector('.upload-actions')?.textContent.includes('4 MB'));
   await writeFile(source + '/cloud-too-large.png', Buffer.alloc(4 * 1024 * 1024 + 1));
   const uploadRequests = [];

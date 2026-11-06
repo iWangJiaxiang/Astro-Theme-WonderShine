@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, cp, readFile, writeFile } from 'node:fs/promises';
 import { parse } from 'smol-toml';
 import { splitDocument } from '../../server/content.ts';
-import { revealField } from './controls.mjs';
+import { openImagePicker } from './image-picker.mjs';
 
 export async function checkMedia({ page, base, theme, screenshots, click, heading, fill }) {
   const shared = 'public/img/媒体 配图.webp', local = 'content/articles/studio-browser-test/封面 配图.webp';
@@ -11,29 +11,7 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   await cp(theme + '/public/img/logo.webp', base + '/site/' + local);
   await writeFile(base + '/site/public/img/preview.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><script>parent.mediaScriptExecuted=true</script><rect width="32" height="32" fill="#425aef"/></svg>');
   const chooseImage = async (name, path, confirm = true) => {
-    await revealField(page, `[data-image-field="${name}"]`);
-    const selector = `[data-image-field="${name}"] .secondary`;
-    // Unlike page.click, locators wait for an enabled, visible target with a
-    // stable bounding box after scrolling the long metadata form into view.
-    await page.locator(selector).click();
-    try {
-      await page.waitForSelector('dialog.media-dialog[open]');
-    } catch (error) {
-      const state = await page.$eval(selector, button => {
-        const rect = button.getBoundingClientRect();
-        const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-        return {
-          rect: rect.toJSON(), disabled: button.disabled,
-          inert: !!button.closest('[inert]'),
-          focused: document.activeElement?.outerHTML.slice(0, 500),
-          hit: hit?.outerHTML.slice(0, 500),
-          viewport: { width: innerWidth, height: innerHeight },
-          scroll: { x: scrollX, y: scrollY },
-        };
-      });
-      console.error(`Media picker did not open for ${name}: ${JSON.stringify(state)}`);
-      throw error;
-    }
+    await openImagePicker(page, name);
     await fill('dialog.media-dialog[open] [aria-label="搜索仓库图片"]', path.split('/').at(-1));
     await page.waitForSelector(`dialog.media-dialog[open] [data-media-path="${path}"]`);
     await page.click(`dialog.media-dialog[open] [data-media-path="${path}"]`);
