@@ -378,7 +378,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                   },
                   element(
                     "div",
-                    { className: classes("selection-panel") },
+                    { className: classes("selection-panel selection-field-panel") },
                     element(
                       "div",
                       { className: classes("card-heading") },

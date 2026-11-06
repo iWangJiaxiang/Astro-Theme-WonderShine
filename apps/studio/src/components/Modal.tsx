@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { createBusinessModal } from "../modal-layer";
+import { containModalFocus, createBusinessModal } from "../modal-layer";
 import {
   classes,
   component,
@@ -35,6 +35,7 @@ const Modal: StudioComponent<Props, Events> = component<Props, Events>(
       ? document.activeElement
       : null);
     let mountedDialog: HTMLDialogElement | undefined;
+    let releaseFocus: (() => void) | undefined;
     let disposed = false;
     let wantsOpen = true;
     function focusInitial(node: HTMLDialogElement) {
@@ -56,11 +57,13 @@ const Modal: StudioComponent<Props, Events> = component<Props, Events>(
       if (businessModal) businessModal.open();
       else {
         if (!node.open) node.showModal();
+        releaseFocus = containModalFocus(node);
         focusInitial(node);
       }
     });
     onBeforeUnmount(() => {
       disposed = true;
+      releaseFocus?.();
       businessModal?.dispose();
       // React may already have cleared the ref. Retain the actual opened node.
       if (mountedDialog?.open) mountedDialog.close();

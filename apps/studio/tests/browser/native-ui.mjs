@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
-import { exerciseScroll, exercisePinch } from './ui-audit-gestures.mjs';
+import { configureGestureEmulation, inspectGestureEnvironment, exerciseScroll, exercisePinch } from './ui-audit-gestures.mjs';
 
 // Real production React/native adapter code; only the Tauri IPC host is mocked.
 const studio = fileURLToPath(new URL('../../', import.meta.url));
@@ -22,6 +22,8 @@ const localRoot = join(base, 'selected local blog');
 let selectedFolder = null, folderGranted = false;
 let browser, server, page;
 const errors = [], cspErrors = [], failedResources = [], ipcFailures = [];
+const nativeGestureRecords = [];
+const gestureFindings = () => nativeGestureRecords.flatMap(record => (record.findings || []).map(finding => ({ name:record.name, ...finding })));
 const commands = new Set();
 const reviewClaims = new Set();
 let reviewEpoch;
@@ -260,7 +262,6 @@ try {
     await page.goto(origin, { waitUntil: 'networkidle0' });
   };
   const noOverflow = async label => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, label + ' must fit viewport');
-  const nativeGestureRecords = [];
   const gestureClient = await page.createCDPSession();
   const screenshot = async name => {
     await page.evaluate(async () => { window.scrollTo(0, 0); await document.fonts.ready; for (const animation of document.getAnimations()) { if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) { try { animation.finish(); } catch {} } } await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
@@ -269,19 +270,43 @@ try {
     // Keep these actual synthetic inputs distinct from viewport-only screenshots.
     const viewport = page.viewport();
     if (process.env.STUDIO_TEST_GESTURES === 'true' && viewport && viewport.width <= 844) {
-      await gestureClient.send('Emulation.setDeviceMetricsOverride', { width: viewport.width, height: viewport.height, deviceScaleFactor: 1, mobile: true });
-      await gestureClient.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+      const record = { name, viewport, findings:[], evidence:'Chromium synthetic touch + mocked Tauri IPC; not OS WebView or hardware' };
+      nativeGestureRecords.push(record);
       try {
-        const scroll = await exerciseScroll(page, gestureClient, { touch: true });
-        const pinch = await exercisePinch(page, gestureClient);
-        const record = { name, viewport, scroll, pinch, evidence: 'Chromium synthetic touch + mocked Tauri IPC; not OS WebView or hardware' };
-        nativeGestureRecords.push(record);
-        await fs.writeFile(join(screenshots, 'gesture-report.json'), JSON.stringify(nativeGestureRecords, null, 2));
-        assert.deepEqual([...scroll.failures, ...pinch.failures], [], name + ': mobile synthetic gestures');
+        record.afterScreenshot = await inspectGestureEnvironment(page);
+        await configureGestureEmulation(page, gestureClient, { ...viewport, mobile:true, hasTouch:true });
+        record.beforeGestures = await inspectGestureEnvironment(page);
+        const actual = record.beforeGestures;
+        if (Math.abs(actual.layout.width-viewport.width)>1 || Math.abs(actual.layout.height-viewport.height)>1 || Math.abs((actual.visual?.scale ?? 0)-1)>.06) {
+          record.findings.push({type:'unexpected-gesture-viewport',expected:{width:viewport.width,height:viewport.height,scale:1},actual:{layout:actual.layout,visual:actual.visual}});
+        }
+        if (actual.maxTouchPoints < 1) record.findings.push({type:'touch-emulation-unavailable',maxTouchPoints:actual.maxTouchPoints});
+        // Independent exercises preserve pinch coverage even if scroll setup/input fails.
+        for (const [phase, exercise] of [
+          ['scroll', () => exerciseScroll(page, gestureClient, { touch:true })],
+          ['pinch', () => exercisePinch(page, gestureClient)],
+        ]) {
+          try {
+            record[phase] = await exercise();
+            record.findings.push(...record[phase].failures.map(finding => ({phase,...finding})));
+          } catch (error) {
+            record.findings.push({type:'gesture-exercise-error',phase,message:error.message});
+          }
+        }
+      } catch (error) {
+        record.findings.push({type:'gesture-setup-error',message:error.message});
       } finally {
-        await gestureClient.send('Emulation.setDeviceMetricsOverride', { width: viewport.width, height: viewport.height, deviceScaleFactor: viewport.deviceScaleFactor || 1, mobile: !!viewport.isMobile });
-        await gestureClient.send('Emulation.setTouchEmulationEnabled', { enabled: !!viewport.hasTouch, maxTouchPoints: 5 });
+        try {
+          await configureGestureEmulation(page, gestureClient, { ...viewport, mobile:!!viewport.isMobile, hasTouch:!!viewport.hasTouch });
+          record.afterCleanup = await inspectGestureEnvironment(page);
+        } catch (error) {
+          record.findings.push({type:'gesture-cleanup-error',message:error.message});
+        }
+        record.status = record.findings.length ? 'failed' : 'passed';
+        await fs.writeFile(join(screenshots, 'gesture-report.json'), JSON.stringify(nativeGestureRecords, null, 2));
       }
+      // Findings remain failures, but must not hide later native business/gesture coverage.
+      if (record.findings.length) console.error(`Native synthetic gesture findings: ${name} (${record.findings.length}); continuing fixture.`);
     }
   };
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
@@ -590,10 +615,13 @@ try {
   assert.deepEqual(await page.$$eval('.settings-card input:not([type=checkbox]):not([type=radio]):not([type=color]), .settings-card select, .settings-card textarea', fields => fields.filter(node => node.getClientRects().length && (parseFloat(getComputedStyle(node).fontSize) < 16 || node.getBoundingClientRect().height < 44)).map(node => node.outerHTML.slice(0,80))), [], 'Native iOS settings retain readable editing size and touch targets');
   await screenshot('settings-iphone'); await noOverflow('iPhone settings');
   assert.deepEqual(errors, []); assert.deepEqual(cspErrors, []); assert.deepEqual(failedResources, []);
+  assert.deepEqual(gestureFindings(), [], 'Native synthetic gesture findings (all reached mobile screenshot surfaces; see gesture-report.json)');
   console.log('Native UI passed: desktop/mobile connection modes, offline dashboard, source save, bundled Vditor, native asset preview, client API settings, secret redaction, configuration reopen, logout.');
   console.log('Screenshots: ' + screenshots);
 } catch (error) {
-  const diagnostics = { failure: String(error), commands: [...commands], ipcFailures, errors, cspErrors, failedResources };
+  const diagnostics = { failure:String(error), commands:[...commands], ipcFailures, errors, cspErrors, failedResources,
+    gestureCoverage:{ reachedSurfaces:nativeGestureRecords.length, findings:gestureFindings(),
+      scope:'Only reached mobile screenshot surfaces; a business-flow failure can still block later surfaces.' } };
   if (page && !page.isClosed()) {
     try {
       diagnostics.ui = await page.evaluate(() => ({

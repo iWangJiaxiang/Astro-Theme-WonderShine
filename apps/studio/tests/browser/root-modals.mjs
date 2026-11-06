@@ -27,11 +27,77 @@ async function fill(page, selector, value) {
 async function containsFocus(page, selector) {
   await page.waitForFunction(selector => document.querySelector(selector)?.contains(document.activeElement), {}, selector);
 }
+async function pressTab(page, backwards = false) {
+  if (backwards) await page.keyboard.down('Shift');
+  try { await page.keyboard.press('Tab'); }
+  finally { if (backwards) await page.keyboard.up('Shift'); }
+}
+async function assertKeyboardFocus(page, selector) {
+  const state = await page.$eval(selector, dialog => {
+    const active = document.activeElement;
+    const rect = active?.getBoundingClientRect();
+    let painted = false;
+    for (let node = active; node && node !== dialog; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if ((node === active || node.matches('label')) &&
+          ((style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0 && style.outlineColor !== 'rgba(0, 0, 0, 0)') || style.boxShadow !== 'none')) painted = true;
+    }
+    return {
+      contained: active !== dialog && dialog.contains(active),
+      documentFocused: document.hasFocus(),
+      keyboardVisible: !!active?.matches(':focus-visible'),
+      inViewport: !!rect && rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 && rect.top < innerHeight && rect.left < innerWidth,
+      painted,
+      // Never include values/outerHTML: this helper also inspects login fields.
+      active: active ? `${active.tagName}.${active.className}[name="${active.getAttribute('name') || ''}"]` : null,
+    };
+  });
+  assert.ok(state.contained && state.documentFocused && state.keyboardVisible && state.inViewport && state.painted,
+    `Expected a visible keyboard focus target in ${selector}: ${JSON.stringify(state)}`);
+}
+async function tabBoundary(page, selector, first, last) {
+  // Force both actual App boundaries; a fixed number of random Tab presses can
+  // miss the boundary and cannot prove that focus progresses rather than sticks.
+  for (const backwards of [false, true]) {
+    await page.$eval(`${selector} ${backwards ? first : last}`, node => node.focus());
+    await pressTab(page, backwards);
+    assert.equal(await page.$eval(`${selector} ${backwards ? last : first}`, node => node === document.activeElement), true,
+      `${backwards ? 'Shift+Tab' : 'Tab'} must wrap to the opposite App control in ${selector}`);
+    await assertKeyboardFocus(page, selector);
+  }
+}
+async function disclosureTabStops(page, selector) {
+  // A small DOM fixture exercises the shared production trap with controls that
+  // native closed-details rendering may still give layout rectangles.
+  await page.$eval(selector, dialog => {
+    const outer = document.createElement('details');
+    outer.dataset.focusFixture = '';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Disclosure focus fixture';
+    const inner = document.createElement('details');
+    inner.open = true;
+    const innerSummary = document.createElement('summary');
+    innerSummary.textContent = 'Nested disclosure';
+    const button = document.createElement('button');
+    button.type = 'button'; button.textContent = 'Nested focus fixture';
+    inner.append(innerSummary, button); outer.append(summary, inner); dialog.append(outer);
+  });
+  const fixture = '[data-focus-fixture]';
+  try {
+    await tabBoundary(page, selector, '.card-heading button', `${fixture} > summary`);
+    await page.$eval(`${selector} ${fixture}`, node => { node.open = true; });
+    await tabBoundary(page, selector, '.card-heading button', `${fixture} button`);
+    await page.$eval(`${selector} ${fixture}`, node => { node.open = false; });
+    await tabBoundary(page, selector, '.card-heading button', `${fixture} > summary`);
+  } finally {
+    await page.$eval(`${selector} ${fixture}`, node => node.remove());
+  }
+}
 async function tabContained(page, selector) {
-  for (const key of ['Tab', 'Shift+Tab']) {
+  for (const backwards of [false, true]) {
     for (let i = 0; i < 18; i++) {
-      await page.keyboard.press(key);
-      assert.equal(await page.$eval(selector, node => node.contains(document.activeElement)), true, `${key} escaped ${selector}`);
+      await pressTab(page, backwards);
+      await assertKeyboardFocus(page, selector);
     }
   }
 }
@@ -57,6 +123,7 @@ async function assertBlockingReauth(page, underlying, screenshots, name) {
   // though it was portalled outside the explicit inert studio shell.
   await page.$eval(underlying, node => node.querySelector('button')?.focus());
   await containsFocus(page, reauth);
+  await tabBoundary(page, reauth, '.login-language select', '.login-help summary');
   await tabContained(page, reauth);
   await page.keyboard.press('Escape');
   assert.ok(await page.$(reauth), 'Escape cannot dismiss expired-session login');
@@ -127,7 +194,12 @@ export async function checkRootModals({ page, origin, password, screenshots }) {
     await page.waitForFunction(selector => document.activeElement?.matches(selector), {}, title);
     await fill(page, title, 'Unfinished modal title');
     await fill(page, slug, 'unfinished-modal-slug');
+    await tabBoundary(page, creation, '.card-heading button', 'button.primary.wide');
+    await disclosureTabStops(page, creation);
     await tabContained(page, creation);
+    await page.focus(title);
+    await pressTab(page);
+    assert.equal(await page.$eval(slug, node => node === document.activeElement), true, 'Ordinary Tab still advances from title to slug');
     // Attempt background focus and an actual backdrop hit, not a synthetic click.
     await page.$eval('.content-library .search-box input', node => node.focus());
     await containsFocus(page, creation);
@@ -137,6 +209,10 @@ export async function checkRootModals({ page, origin, password, screenshots }) {
     const chooser = `${creation} [data-field="article-collection"] .choice-trigger`;
     await page.click(chooser);
     await page.waitForSelector('.selection-dialog[open]');
+    await containsFocus(page, '.selection-dialog[open]');
+    await tabBoundary(page, '.selection-dialog[open]', '.card-heading button', '.selection-footer button.primary');
+    // Parent native modality must not make its own key handler steal nested focus.
+    await page.$eval(creation, node => node.querySelector('input')?.focus());
     await containsFocus(page, '.selection-dialog[open]');
     await tabContained(page, '.selection-dialog[open]');
     await page.keyboard.press('Escape');
@@ -148,9 +224,13 @@ export async function checkRootModals({ page, origin, password, screenshots }) {
     await page.click('.selection-dialog input[value="modal-collection-0"]');
     await clickText(page, '.selection-dialog button', '确认选择');
     await page.waitForSelector('.selection-dialog', { hidden: true });
+    await page.$eval(creation, node => { window.closedCreationNode = node; });
     await page.keyboard.press('Escape');
     await page.waitForSelector(creation, { hidden: true });
+    assert.equal(await page.evaluate(() => window.closedCreationNode.isConnected || window.closedCreationNode.open), false, 'Unmount must close the retained node even after its ref clears');
     await page.waitForFunction(() => document.activeElement?.matches('.page-heading .primary'));
+    await pressTab(page);
+    assert.equal(await page.evaluate(() => document.hasFocus() && document.activeElement !== document.body && !window.closedCreationNode.contains(document.activeElement)), true, 'Disposed owner cannot trap background keyboard focus');
     await clickText(page, '.page-heading button', '新建文章');
     await page.waitForSelector(creation);
     assert.equal(await page.$eval(title, node => node.value), 'Unfinished modal title');
@@ -162,9 +242,26 @@ export async function checkRootModals({ page, origin, password, screenshots }) {
     await clickText(page, '.page-heading button', '新建文章');
     await page.waitForSelector(creation);
     assert.equal(await page.$eval(title, node => node.value), 'Unfinished modal title');
+    // Owner state can disappear while a portalled child is in the top layer.
+    // Invoke the real owner's cancellation handler, not dialog.close/remove().
+    await page.click(chooser);
+    await page.waitForSelector('.selection-dialog[open]');
+    await page.$eval('.selection-dialog[open]', node => { window.orphanedChoiceNode = node; });
+    await page.$eval(creation, node => {
+      window.closedCreationNode = node;
+      node.querySelector('.card-heading button').click();
+    });
+    await page.waitForFunction(() => !window.closedCreationNode.isConnected && !window.orphanedChoiceNode.isConnected);
+    assert.equal(await page.evaluate(() => window.closedCreationNode.open || window.orphanedChoiceNode.open), false, 'Parent unmount must close both retained native nodes');
+    await page.waitForFunction(() => document.activeElement?.matches('.page-heading .primary'));
+    await clickText(page, '.page-heading button', '新建文章');
+    await page.waitForSelector(creation);
+    assert.equal(await page.$eval(title, node => node.value), 'Unfinished modal title');
+    await tabBoundary(page, creation, '.card-heading button', 'button.primary.wide');
     if (screenshots) await page.screenshot({ path: `${screenshots}/root-modal-creation.png` });
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
     await containsFocus(page, creation);
+    await tabBoundary(page, creation, '.card-heading button', 'button.primary.wide');
     await tabContained(page, creation);
     assert.equal(await page.$eval(creation, node => {
       const rect = node.getBoundingClientRect();
@@ -188,6 +285,7 @@ export async function checkRootModals({ page, origin, password, screenshots }) {
     assert.equal(await page.$eval('.editor-page .markdown-source', node => node === window.modalEditorNode && node.value === draft), true);
     await loginAgain(page, password);
     await containsFocus(page, '.ai-assistant-dialog[open]');
+    await tabContained(page, '.ai-assistant-dialog[open]');
     assert.equal(aiWrites, 1, 'Login must not replay the failed AI mutation');
     assert.equal(await page.$eval('.editor-page .markdown-source', node => node === window.modalEditorNode && node.value === draft), true);
     await page.keyboard.press('Escape');
@@ -200,6 +298,7 @@ export async function checkRootModals({ page, origin, password, screenshots }) {
     await assertBlockingReauth(page, '.delete-content-dialog[open]', screenshots, 'root-modal-reauth-delete');
     await loginAgain(page, password);
     await containsFocus(page, '.delete-content-dialog[open]');
+    await tabContained(page, '.delete-content-dialog[open]');
     assert.equal(deleteWrites, 1, 'Login must not replay deletion');
     assert.equal(await page.$eval('.editor-page .markdown-source', node => node === window.modalEditorNode && node.value === draft), true);
     assert.equal(await page.evaluate(async () => (await fetch('/api/document?path=content%2Farticles%2Fexample%2Findex.md')).status), 200, '401 deletion must retain the stored article');
@@ -248,7 +347,7 @@ export async function checkRootModals({ page, origin, password, screenshots }) {
       assert.equal(aiWrites, 1, 'Deferred activation must not replay AI generation');
       assert.equal(deleteWrites, 1, 'Deferred activation must not replay deletion');
     }
-    console.log('PASS: native creation focus/Tab/nesting/Escape/backdrop/resume; blocking AI/delete 401 and delayed business-open races preserve mounted state, cancel stale opens and never replay mutations.');
+    console.log('PASS: visible keyboard focus and bidirectional boundary wrapping in native creation/reauth/nested dialogs; Escape/backdrop/resume and owner cleanup; blocking AI/delete 401 and delayed business-open races preserve mounted state and never replay mutations.');
   } finally {
     await releaseOpenTimers(page);
     page.off('request', intercept);

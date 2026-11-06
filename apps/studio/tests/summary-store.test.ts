@@ -24,6 +24,11 @@ async function fixture(run: (base: string, repository: string) => Promise<void>)
   try { await run(base, repository); }
   finally { await fs.rm(base, { recursive: true, force: true }); }
 }
+/** Preserve the first failure, but never let fixture cleanup race sibling I/O. */
+async function drainConcurrent(work: readonly Promise<void>[]): Promise<void> {
+  try { await Promise.all(work); }
+  finally { await Promise.allSettled(work); }
+}
 /** Read-only index checks must finish background saves before fixture removal. */
 async function withSummaryIndex(options: SummaryIndexOptions & { store: SummaryIndexStore }, run: (index: SummaryIndex) => Promise<void>) {
   const saves: Promise<void>[] = [];
@@ -133,7 +138,7 @@ for (const adapter of adapters) {
     const first = adapter.create(state, repository), second = adapter.create(state, repository);
     const a = record('workspace:one', 'a'.repeat(4096)), b = record('workspace:one', 'b'.repeat(4096));
     await first.save(a);
-    await Promise.all([
+    await drainConcurrent([
       (async () => { for (let i = 0; i < 12; i++) await first.save(a); })(),
       (async () => { for (let i = 0; i < 12; i++) await second.save(b); })(),
       (async () => {
@@ -169,6 +174,47 @@ for (const adapter of adapters) {
     await a.clear(); assert.deepEqual(await b.load(), record('two'));
   }));
 }
+
+test('concurrent fixture drains every worker and preserves the first writer or reader failure', async () => {
+  for (const failedWorker of [0, 2]) { // Two writers and one reader, as above.
+    let release!: () => void, started!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const ready = new Promise<void>(resolve => { started = resolve; });
+    const failure = new Error(failedWorker === 0 ? 'writer failed' : 'reader assertion failed');
+    const settled: number[] = [];
+    let directory = '', cleaned = false;
+    const running = fixture(async base => {
+      directory = base;
+      const work = [0, 1, 2].map(async worker => {
+        try {
+          if (worker === failedWorker) throw failure;
+          await gate;
+          // A sibling is still using the fixture after the first rejection.
+          await fs.writeFile(join(base, `worker-${worker}`), 'finished');
+          if (worker === 1) throw new Error('later worker failure');
+        } finally { settled.push(worker); }
+      });
+      const draining = drainConcurrent(work);
+      started();
+      await draining;
+    }).finally(() => { cleaned = true; });
+    // Observe rejection immediately, including a later sibling rejection.
+    const finished = assert.rejects(running, error => error === failure);
+    try {
+      await ready;
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert.deepEqual(settled, [failedWorker]);
+      assert.equal(cleaned, false, 'teardown must wait for all pending workers');
+      assert.equal((await fs.stat(directory)).isDirectory(), true);
+    } finally {
+      release();
+      await finished;
+    }
+    assert.deepEqual(settled.sort(), [0, 1, 2]);
+    assert.equal(cleaned, true);
+    await assert.rejects(fs.stat(directory), { code: 'ENOENT' });
+  }
+});
 
 test('index fixture waits for an in-flight save even when assertions or persistence fail', async () => {
   for (const fail of [false, true]) {

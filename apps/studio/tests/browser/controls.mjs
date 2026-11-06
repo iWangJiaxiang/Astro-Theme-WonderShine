@@ -32,10 +32,10 @@ export function chooser(page) {
     const trigger = await page.$(`${root} > .choice-trigger`);
     if (trigger) {
       await trigger.click();
-      await page.waitForSelector('dialog[open]');
-      await page.waitForSelector(`dialog[open] input[value="${value}"]`);
-      await page.click(`dialog[open] input[value="${value}"]`);
-      await page.click('dialog[open] .selection-footer button');
+      await page.waitForSelector('.selection-dialog[open]');
+      await page.waitForSelector(`.selection-dialog[open] input[value="${value}"]`);
+      await page.click(`.selection-dialog[open] input[value="${value}"]`);
+      await page.click('.selection-dialog[open] .selection-footer button');
       await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
     } else {
       await page.waitForSelector(`${root} input[value="${value}"]`);
@@ -82,10 +82,17 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await heading('外观样式');
   await page.waitForSelector('button[name="extra.style.font_family"]');
   assert.equal(await page.$('[data-field="extra.style.font_family"] fieldset'), null, 'six values use a modal, including existing custom value');
-  await page.click('button[name="extra.style.font_family"]'); await page.waitForSelector('dialog[open]');
-  assert.equal(await page.$eval('dialog[open] .selection-results', el => el.querySelectorAll('input').length), 6);
-  assert.equal(await page.$eval('dialog[open] input[value="Custom Font"]', el => el.checked), true, 'legacy values are retained');
-  await page.click('dialog[open] input[value="system-ui"]');
+  await page.click('button[name="extra.style.font_family"]'); await page.waitForSelector('.selection-dialog[open]');
+  assert.equal(await page.$eval('.selection-dialog[open] .selection-results', el => el.querySelectorAll('input').length), 6);
+  assert.equal(await page.$eval('.selection-dialog[open] input[value="Custom Font"]', el => el.checked), true, 'legacy values are retained');
+  assert.ok(await page.$eval('.selection-field-panel > .selection-results', node => {
+    const last = [...node.querySelectorAll('.choice-tile')].at(-1);
+    const style = getComputedStyle(node);
+    if (!last) return false;
+    const gap = node.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom;
+    return gap >= -1 && gap <= parseFloat(style.paddingBottom) + 2 && node.scrollHeight <= node.clientHeight + 1;
+  }), 'short option lists fit their content without a fixed-height blank results area');
+  await page.click('.selection-dialog[open] input[value="system-ui"]');
   await click('取消');
   assert.ok(await page.$eval('button[name="extra.style.font_family"]', el => el.textContent.includes('Custom Font')));
   await choose('extra.style.font_family', 'PingFang SC');
@@ -96,10 +103,16 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   const name = 'menu.nav_menu.0.menus.0.icon';
   await page.waitForSelector(`button[name="${name}"]`);
   await revealField(page, `button[name="${name}"]`);
-  await page.click(`button[name="${name}"]`); await page.waitForSelector('dialog[open]');
-  await fill('dialog[open] input[type=search]', 'github');
-  await page.click('dialog[open] input[value="icon-github"]');
-  await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('dialog[open]'));
+  await page.click(`button[name="${name}"]`); await page.waitForSelector('.selection-dialog[open]');
+  assert.ok(await page.$eval('.selection-field-panel', panel => {
+    const results = panel.querySelector('.selection-results'), footer = panel.querySelector('.selection-footer');
+    const view = window.visualViewport;
+    const bottom = (view?.offsetTop ?? 0) + (view?.height ?? innerHeight);
+    return results.clientHeight > 0 && results.scrollHeight > results.clientHeight && footer.getBoundingClientRect().bottom <= bottom;
+  }), 'long option lists scroll within the visible viewport and keep confirmation reachable');
+  await fill('.selection-dialog[open] input[type=search]', 'github');
+  await page.click('.selection-dialog[open] input[value="icon-github"]');
+  await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
   assert.equal(await page.evaluate(name => document.activeElement?.getAttribute('name') === name, name), true, 'Escape restores focus');
   assert.equal(await page.$eval('.settings-page .page-heading .primary', e => e.disabled), true, 'cancel must not change form');
   await choose(name, 'icon-github');
@@ -127,14 +140,14 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await click('页面'); await heading('页面'); await click('新建页面');
   await fill('.modal input[placeholder="给它取个名字"]', 'Enter should not create');
   await fill('.modal input[placeholder="my-first-story"]', 'do-not-create');
-  await page.click('button[name="page-template"]'); await page.waitForSelector('dialog[open]');
-  await page.type('dialog[open] input[type=search]', '装备'); await page.keyboard.press('Enter');
+  await page.click('button[name="page-template"]'); await page.waitForSelector('.selection-dialog[open]');
+  await page.type('.selection-dialog[open] input[type=search]', '装备'); await page.keyboard.press('Enter');
   assert.ok(await page.$('.modal'), 'Enter inside dialog must not submit parent creation form');
-  assert.ok(await page.$('dialog[open]'));
-  await page.focus('dialog[open] input[value="equipment"]'); await page.keyboard.press('Enter');
+  assert.ok(await page.$('.selection-dialog[open]'));
+  await page.focus('.selection-dialog[open] input[value="equipment"]'); await page.keyboard.press('Enter');
   assert.ok(await page.$('.modal'), 'Enter on a radio must not submit the creation form');
   await page.setViewport({ width: 390, height: 844 });
-  assert.ok(await page.$eval('dialog[open]', el => el.getBoundingClientRect().width <= innerWidth));
+  assert.ok(await page.$eval('.selection-dialog[open]', el => el.getBoundingClientRect().width <= innerWidth));
   await page.screenshot({ path: screenshots + '/form-picker-mobile.png', fullPage: true });
   await page.keyboard.press('Escape'); await click('取消');
   await page.setViewport({ width: 1440, height: 1000 });

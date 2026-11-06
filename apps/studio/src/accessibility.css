@@ -1,6 +1,9 @@
 /* Shared interaction contracts include body portals and first-run/login screens. */
 .sidebar .navigation-close { display: inline-flex; align-self: flex-end; min-width: 44px; min-height: 44px; }
 .mobile-menu { display: inline-flex; }
+/* Navigation targets are programmatically focusable, not form controls. Keep a
+   visible focus cue without inheriting the browser's black input-like border. */
+.main-content h1[tabindex="-1"]:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: 4px; border-radius: 3px; }
 .sidebar .navigation-close[hidden], .mobile-menu[hidden] { display: none; }
 :root {
   --studio-overlay-gap: 12px;
@@ -22,6 +25,10 @@ dialog[open] {
 }
 .selection-panel, .media-dialog-panel { min-height: 0; max-height: calc(var(--studio-overlay-height) - 2px); }
 .selection-panel { height: min(680px, calc(var(--studio-overlay-height) - 2px)); }
+/* Option pickers fit short lists; only their results shrink when the cap is hit.
+   Reference and OAuth panels keep their separate layout contracts. */
+.selection-panel.selection-field-panel { height: auto; max-height: min(680px, calc(var(--studio-overlay-height) - 2px)); }
+.selection-field-panel > .selection-results { flex: 0 1 auto; }
 :is(.selection-results, .media-dialog-body, .oauth-repositories, .ai-assistant-body) { overscroll-behavior: contain; }
 .save-mode-menu { max-width: calc(var(--studio-visible-width, 100vw) - 16px); max-height: calc(var(--native-visible-height, 100dvh) - 16px); overflow-y: auto; overscroll-behavior: contain; }
 
@@ -44,6 +51,9 @@ html[data-native-mobile] :is(input:not([type=checkbox]):not([type=radio]):not([t
   .color-inputs input[type=color] { width: var(--studio-touch-target); height: var(--studio-touch-target); }
   .topbar-actions .visit-site { display: inline-flex; align-items: center; min-height: var(--studio-touch-target); }
   .choice-tile { align-items: center; }
+  /* Center disclosure text within its touch target instead of leaving the extra
+     hit area entirely below the label, which reads as an empty form row. */
+  .advanced-field > summary { padding-block: 12px; }
 }
 @media (max-width: 760px) {
   body:has(.sidebar.open) { overflow: hidden; }

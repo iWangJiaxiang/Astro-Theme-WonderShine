@@ -20,6 +20,10 @@ concurrency:
 jobs:
   ui-audit:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     timeout-minutes: 80
     steps:
       - uses: actions/checkout@v7.0.1
@@ -51,16 +55,18 @@ jobs:
         timeout-minutes: 43
         run: npx --no-install tsx apps/studio/tests/browser/form-audit.mjs
         env:
+          STUDIO_AUDIT_SHARD_INDEX: ${{ matrix.shard }}
+          STUDIO_AUDIT_SHARD_COUNT: '2'
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - name: Root modal stacking and focus regression (synthetic browser)
-        if: ${{ !cancelled() && steps.service-build.outcome == 'success' && steps.chrome.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.shard == 1 && steps.service-build.outcome == 'success' && steps.chrome.outcome == 'success' }}
         timeout-minutes: 5
         run: npx --no-install tsx apps/studio/tests/browser/root-modals-runner.mjs
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - name: Build native-adapter browser fixture even if layout findings failed
         id: native-build
-        if: ${{ !cancelled() && steps.service-build.outcome == 'success' && steps.chrome.outcome == 'success' }}
+        if: ${{ !cancelled() && matrix.shard == 1 && steps.service-build.outcome == 'success' && steps.chrome.outcome == 'success' }}
         run: npm run build:app -w @wondershine/studio
         env:
           VITE_STUDIO_GITHUB_CLIENT_ID: studio-ci-github
@@ -88,7 +94,7 @@ jobs:
         uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
-          name: studio-expanded-ui-audit-${{ github.run_attempt }}
+          name: studio-expanded-ui-audit-${{ github.run_attempt }}-shard-${{ matrix.shard }}
           path: apps/studio/test-results/
           if-no-files-found: warn
           retention-days: 7

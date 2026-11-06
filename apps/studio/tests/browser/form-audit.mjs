@@ -22,10 +22,13 @@ const site = join(base, 'site');
 const password = 'studio-form-test-2026';
 const started = Date.now();
 const maxRuntime = 40 * 60_000;
+const shardIndex = Number(process.env.STUDIO_AUDIT_SHARD_INDEX || 1);
+const shardCount = Number(process.env.STUDIO_AUDIT_SHARD_COUNT || 1);
+if (!Number.isInteger(shardIndex) || !Number.isInteger(shardCount) || shardCount < 1 || shardIndex < 1 || shardIndex > shardCount) throw new Error('Invalid audit shard index/count');
 let browser, page, client, server, logs = '', current = 'setup';
 const report = {
   schemaVersion: 2, startedAt: new Date().toISOString(), engine: 'Chromium (Puppeteer/CDP, headless)',
-  sizes: AUDIT_SIZES, limitations: SYNTHETIC_LIMITATIONS, inventory: {}, surfaces: [], records: [], errors: [],
+  sizes: AUDIT_SIZES, shard: {index:shardIndex,count:shardCount}, limitations: SYNTHETIC_LIMITATIONS, inventory: {}, surfaces: [], records: [], errors: [],
   delegated: [
     { surface:'native connection chooser / folder / repository / service / clone progress / OAuth / client API / workspace / recovery', runner:'native-ui.mjs', status:'separate-workflow-step', reason:'Requires mocked Tauri host; not available in the file-backed service bootstrap. See native-ui artifacts and step outcome; not counted as expanded six-size coverage.' },
     { surface:'AI generation success / billing services / OS file chooser / browser color picker / expired authentication / conflict recovery', status:'not-exercised', reason:'No paid or external services; deterministic audit inspects reachable forms/dialogs without submitting destructive actions. Browser/OS-owned widgets are outside DOM inspection.' },
@@ -34,7 +37,14 @@ const report = {
 const surfaces = [];
 const add = (id, category, open, options = {}) => surfaces.push({id, category, open, ...options});
 const slug = value => value.replace(/[^a-zA-Z0-9_-]/g, '-');
-const ready = async selector => { await page.waitForSelector(selector); await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]')); await settleLayout(page); };
+const expectedSizesFor = surface => surface.onlyMobile ? AUDIT_SIZES.filter(([width]) => width <= 390) : AUDIT_SIZES;
+const reflowEvidence = {sourceViewport:[1440,1000],percent:200,method:'half CSS viewport; visualViewport.scale=1; not browser UI zoom'};
+const markdownCell = value => String(value ?? '').replaceAll('|','&#124;').replace(/[\r\n]+/g,' ');
+const shellSettled = async () => {
+  await page.waitForFunction(() => ![...document.querySelectorAll('.sidebar')].some(node => node.getAnimations().some(animation => animation.playState === 'running' && Number.isFinite(animation.effect?.getComputedTiming().endTime))));
+  await settleLayout(page);
+};
+const ready = async selector => { await page.waitForSelector(selector, {visible:true}); await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]')); await shellSettled(); };
 const click = async (text, scope = 'body') => {
   await page.waitForFunction(({text,scope}) => [...document.querySelectorAll(`${scope} button`)].some(node => node.textContent.trim().replace(/^✦\s*/, '') === text && !node.disabled), {}, {text,scope});
   // Navigation/setup is programmatic; the recorded gesture and hit tests are real input/CDP.
@@ -42,6 +52,9 @@ const click = async (text, scope = 'body') => {
 };
 const navigate = async label => { await click(label, '.sidebar'); await settleLayout(page); };
 const selectChoice = async (name, value) => {
+  // Library choices arrive asynchronously after the toolbar itself. Wait for
+  // the actual field, not merely its surrounding library shell.
+  await ready(`[data-field="${name}"]`);
   const inline = await page.$(`input[name="${name}"][value="${value}"]`);
   if (inline) { await inline.evaluate(node => node.click()); await inline.dispose(); }
   else {
@@ -76,20 +89,30 @@ async function saveReport() {
   report.updatedAt = new Date().toISOString();
   report.elapsedSeconds = Math.round((Date.now()-started)/1000);
   report.summary = {
-    plannedSurfaces:surfaces.length, completedSurfaces:report.surfaces.filter(s => s.status === 'completed').length,
-    blockedSurfaces:report.surfaces.filter(s => s.status !== 'completed').length,
-    records:report.records.length, findings:report.records.reduce((n,r) => n+(r.findings?.length || 0),0), errors:report.errors.length,
+    inventorySurfaces:surfaces.length, plannedSurfaces:report.assignedSurfaceIds?.length ?? 0,
+    completedSurfaces:report.surfaces.filter(s => s.status === 'completed').length,
+    blockedSurfaces:report.surfaces.filter(s => ['blocked','error'].includes(s.status)).length,
+    unfinishedSurfaces:report.surfaces.filter(s => ['pending','running'].includes(s.status)).length,
+    records:report.records.length, passedRecords:report.records.filter(r => r.status === 'passed').length,
+    unfinishedRecords:report.records.filter(r => ['not-run','running'].includes(r.status)).length,
+    blockedRecords:report.records.filter(r => r.status === 'blocked').length,
+    findings:report.records.reduce((n,r) => n+(r.findings?.length || 0),0), errors:report.errors.length,
   };
   await writeFile(join(output,'report.json'), JSON.stringify(report,null,2)+'\n');
-  const rows = report.records.map(record => `| ${record.surface} | ${record.size} | ${record.mode} | ${record.scroll?.results.map(r => `${r.method}:${r.status}`).join(', ') || 'not-run'} | ${record.pinch?.status || 'not-applicable'} | ${record.findings?.length || 0} | ${Object.values(record.screenshots || {}).map(file => `[image](${file})`).join(' ')} |`);
-  await writeFile(join(output,'report.md'), `# Studio remote UI audit\n\n${JSON.stringify(report.summary)}\n\n## Evidence limits\n${report.limitations.map(s => `- ${s}`).join('\n')}\n\n## Per-surface/size evidence\n| Surface | Size | Mode | Scroll | Pinch | Findings | Screenshots |\n|---|---|---|---|---|---|---|\n${rows.join('\n')}\n\n## Blocked surfaces\n${report.surfaces.filter(s => s.status !== 'completed').map(s => `- ${s.id}: ${s.error || s.status}`).join('\n')}\n\n## Delegated / not exercised\n${report.delegated.map(s => `- ${s.surface}: ${s.reason}`).join('\n')}\n`);
+  const rows = report.records.map(record => {
+    const pinchExpected = record.mode === 'responsive' && Number(record.size.split('x')[0]) <= 1024;
+    return `| ${record.surface} | ${record.size} | ${record.mode} | ${record.status} | ${markdownCell(record.error)} | ${record.scroll?.results.map(r => `${r.method}:${r.status}`).join(', ') || 'not-run'} | ${record.pinch?.status || (pinchExpected ? 'not-run' : 'not-applicable')} | ${record.findings?.length || 0} | ${Object.values(record.screenshots || {}).map(file => `[image](${file})`).join(' ')} |`;
+  });
+  await writeFile(join(output,'report.md'), `# Studio remote UI audit\n\n${JSON.stringify(report.summary)}\n\n## Evidence limits\n${report.limitations.map(s => `- ${s}`).join('\n')}\n\n## Per-surface/size evidence\nCollection completion is not a pass: findings, errors and not-run records remain failures.\n\n| Surface | Size | Mode | Status | Error | Scroll | Pinch | Findings | Screenshots |\n|---|---|---|---|---|---|---|---|---|\n${rows.join('\n')}\n\n## Blocked surfaces\n${report.surfaces.filter(s => s.status !== 'completed').map(s => `- ${s.id}: ${markdownCell(s.error || s.status)}${s.setupScreenshot ? ` [setup only; not size evidence](${s.setupScreenshot})` : ''}`).join('\n')}\n\n## Delegated / not exercised\n${report.delegated.map(s => `- ${s.surface}: ${s.reason}`).join('\n')}\n`);
 }
 async function capture(surface, width, height, mode = 'responsive') {
   const mobile = width <= 1024;
-  const record = { surface:surface.id, category:surface.category, size:`${width}x${height}`, mode, findings:[], screenshots:{} };
-  report.records.push(record);
+  const record = report.records.find(record => record.surface === surface.id && record.size === `${width}x${height}` && record.mode === mode);
+  if (!record || record.status !== 'not-run') throw new Error('Capture missing from planned matrix or already attempted');
+  record.status = 'running';
   try {
     await configureViewport(page,client,width,height,mobile && mode === 'responsive');
+    await shellSettled();
     if (surface.ensure) await surface.ensure();
     record.initialViewport = await page.evaluate(() => ({width:innerWidth,height:innerHeight,scale:visualViewport?.scale ?? 1}));
     if (Math.abs(record.initialViewport.width-width)>1 || Math.abs(record.initialViewport.height-height)>1 || Math.abs(record.initialViewport.scale-1)>.06) record.findings.push({type:'unexpected-layout-viewport',expected:{width,height,scale:1},actual:record.initialViewport});
@@ -109,9 +132,9 @@ async function capture(surface, width, height, mode = 'responsive') {
     record.findings.push(...record.scroll.failures);
     // Reflow is explicitly isolated from visual pinch zoom.
     if (mobile && mode === 'responsive') {
-      record.pinch = await exercisePinch(page,client,() => image('pinch-in'));
+      record.pinch = await exercisePinch(page,client,() => image('pinch-in'),() => image('pinch-restored'));
       record.findings.push(...record.pinch.failures);
-      await image('pinch-restored');
+      await image('pinch-cleanup');
     }
     record.status = record.findings.length ? 'findings' : 'passed';
   } catch (error) {
@@ -194,7 +217,11 @@ try {
   add('select-topics','dialog',async () => { await threads(); await page.click('.thread-composer button[name="extra.topics"]'); await ready('dialog[open]'); });
   add('create-topic-inline','dialog',async () => { await threads(); await page.click('.thread-composer button[name="extra.topics"]'); await ready('dialog[open]'); await page.type('dialog[open] input[type=search]','审计新话题'); });
   for (const external of [false,true]) add('reference-'+(external?'external':'internal'),'dialog',async () => { await threads(); await click('引用文章'); await ready('dialog[open]'); if (external) await click('外部文章'); });
-  add('publication-date','dialog',async () => { await threads(); await page.click('.thread-composer .thread-date-trigger'); await ready('.publication-date-dialog[open]'); });
+  add('publication-date','dialog',async () => {
+    await threads(); await click('发布设置'); await ready('.thread-properties-heading');
+    await page.waitForSelector('.thread-composer .thread-date-trigger', {visible:true});
+    await page.click('.thread-composer .thread-date-trigger'); await ready('.publication-date-dialog[open]');
+  });
   add('thread-detail','page',async () => { await threads(); await click('详情'); await ready('.thread-detail-page'); });
   add('thread-editor','editor',async () => { await threads(); await click('详情'); await ready('.thread-detail-page'); await click('编辑动态'); await ready('.thread-editor'); await expand(); });
   add('library-topics','library',async () => { await navigate('话题管理'); await ready('.localized-library'); });
@@ -263,11 +290,24 @@ try {
     dialogComponents:['Modal (creation/reauthentication)','SelectionField (template/language/taxonomy/icon/collection/topic choices)','PublicationDateField','ArticleReferences','AiAssistant','MediaPicker','DeleteContentDialog','SaveButton body portal'],
   };
   await saveReport();
+  // Disjoint stable inventory partitions retain every surface/size while keeping
+  // each remote runner below the watchdog instead of dropping tail coverage.
+  const assigned = surfaces.filter((_, index) => index % shardCount === shardIndex - 1);
+  report.assignedSurfaceIds = assigned.map(surface => surface.id);
+  for (const surface of assigned) {
+    const expectedSizes = expectedSizesFor(surface);
+    report.surfaces.push({id:surface.id,category:surface.category,status:'pending',expectedSizes:expectedSizes.map(size => size.join('x')),reflow200:!surface.onlyMobile});
+    const matrix = expectedSizes.map(([width,height]) => ({size:`${width}x${height}`,mode:'responsive'}));
+    if (!surface.onlyMobile) matrix.push({size:'720x500',mode:'reflow-200',reflow:reflowEvidence});
+    for (const entry of matrix) report.records.push({surface:surface.id,category:surface.category,...entry,status:'not-run',findings:[],screenshots:{}});
+  }
+  await saveReport();
   let authenticated = false;
-  for (const surface of surfaces) {
+  for (const surface of assigned) {
     current = surface.id;
-    const expectedSizes = surface.onlyMobile ? AUDIT_SIZES.filter(([width]) => width <= 390) : AUDIT_SIZES;
-    const coverage = {id:surface.id,category:surface.category,status:'running',expectedSizes:expectedSizes.map(size => size.join('x')),reflow200:!surface.onlyMobile}; report.surfaces.push(coverage);
+    const expectedSizes = expectedSizesFor(surface);
+    const coverage = report.surfaces.find(entry => entry.id === surface.id);
+    coverage.status = 'running';
     try {
       if (!surface.unauthenticated) {
         if (!authenticated) {
@@ -278,20 +318,24 @@ try {
         } else await reset();
       }
       await surface.open();
-      const sizes = surface.onlyMobile ? AUDIT_SIZES.filter(([width]) => width <= 390) : AUDIT_SIZES;
-      for (const [width,height] of sizes) await capture(surface,width,height);
+      for (const [width,height] of expectedSizes) await capture(surface,width,height);
       if (!surface.onlyMobile) {
         // 1440x1000 at 200% desktop zoom has a 720x500 CSS layout viewport.
         await capture(surface,720,500,'reflow-200');
-        report.records.at(-1).reflow = {sourceViewport:[1440,1000],percent:200,method:'half CSS viewport; visualViewport.scale=1; not browser UI zoom'};
       }
-      coverage.status = report.records.some(record => record.surface === surface.id && record.status === 'error') ? 'error' : 'completed';
+      const records = report.records.filter(record => record.surface === surface.id);
+      const missingSizes = expectedSizes.filter(([width,height]) => !records.some(record => record.size === `${width}x${height}` && record.mode === 'responsive'));
+      if (missingSizes.length || (!surface.onlyMobile && !records.some(record => record.mode === 'reflow-200')) || records.some(record => !['passed','findings','error'].includes(record.status))) throw new Error('Surface did not collect its complete size/reflow matrix');
+      coverage.status = records.some(record => record.status === 'error') ? 'error' : 'completed';
     } catch (error) {
       coverage.status = 'blocked'; coverage.error = error.message;
       report.errors.push({surface:surface.id,error:error.message});
       const blockedFile = `${slug(surface.id)}-blocked.png`;
-      await page?.screenshot({path:join(output,blockedFile),fullPage:false}).catch(() => {});
-      for (const [width,height] of expectedSizes) if (!report.records.some(record => record.surface === surface.id && record.size === `${width}x${height}`)) report.records.push({surface:surface.id,category:surface.category,size:`${width}x${height}`,mode:'responsive',status:'blocked',error:error.message,findings:[],screenshots:{blocked:blockedFile}});
+      const blockedImage = await page?.screenshot({path:join(output,blockedFile),fullPage:false}).then(() => blockedFile).catch(() => undefined);
+      coverage.setupScreenshot = blockedImage;
+      // A setup screenshot is not per-size evidence: retain it on the surface,
+      // and mark every unattempted responsive/reflow combination explicitly.
+      for (const record of report.records.filter(record => record.surface === surface.id && record.status === 'not-run')) Object.assign(record,{status:'blocked',error:error.message});
     }
     await saveReport();
     console.log(`Audited ${surface.id}: ${coverage.status}`);
@@ -312,7 +356,7 @@ try {
   clearTimeout(watchdog);
 }
 console.log(JSON.stringify(report.summary,null,2));
-if (report.errors.length || report.records.some(record => record.status === 'error' || record.findings.length)) {
+if (report.errors.length || report.surfaces.length !== report.assignedSurfaceIds?.length || report.surfaces.some(surface => surface.status !== 'completed') || report.records.some(record => record.status !== 'passed' || record.findings.length)) {
   process.exitCode = 1;
   console.error('UI audit collected findings or blocked coverage; see test-results/form-audit/report.json and report.md');
 }

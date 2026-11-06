@@ -11,6 +11,15 @@ export async function inspectLayout(page, { mobile = false, reflow = false } = {
     const findings = [], warnings = [];
     const modal = [...document.querySelectorAll('dialog[open]')].filter(node => node.matches(':modal')).at(-1) || document.querySelector('.save-mode-menu[role=dialog]');
     const visible = node => {
+      // Chromium can retain layout boxes inside a closed details element even
+      // though its contents are not painted or hit-testable. Only the first
+      // direct summary (and its descendants) remains visible when collapsed.
+      for (let p = node.parentElement; p; p = p.parentElement) {
+        if (p.matches('details:not([open])')) {
+          const summary = [...p.children].find(child => child.tagName === 'SUMMARY');
+          if (!summary?.contains(node)) return false;
+        }
+      }
       const style = getComputedStyle(node), rect = node.getBoundingClientRect();
       return node.getClientRects().length && style.visibility !== 'hidden' && style.display !== 'none' &&
         Number(style.opacity) !== 0 && rect.width > 0 && rect.height > 0 && !node.closest('[inert]') && (!modal || modal.contains(node));
@@ -22,6 +31,15 @@ export async function inspectLayout(page, { mobile = false, reflow = false } = {
     };
     const add = (type, node, extra = {}) => findings.push({ type, name: label(node), box: box(node), ...extra });
     if (document.documentElement.scrollWidth > innerWidth + 1) findings.push({ type: 'page-overflow', width: document.documentElement.scrollWidth, viewport: innerWidth });
+    for (const header of document.querySelectorAll('.topbar')) {
+      if (!visible(header)) continue;
+      const bounds = header.getBoundingClientRect();
+      for (const row of header.children) {
+        if (!visible(row)) continue;
+        const rect = row.getBoundingClientRect();
+        if (rect.top < bounds.top - 1 || rect.bottom > bounds.bottom + 1) add('topbar-row-outside-header', row, {header:box(header)});
+      }
+    }
     const controls = [...document.querySelectorAll('button,a[href],input:not([type=hidden]),select,textarea,summary,[role=button],[role=radio],[contenteditable=true]')].filter(visible);
     let hitTested = 0;
     const candidates = controls.map(node => ({ node, r: node.getBoundingClientRect() }));
@@ -65,12 +83,65 @@ export async function inspectLayout(page, { mobile = false, reflow = false } = {
         if (/(auto|scroll|hidden|clip)/.test(s.overflowX)) { left = Math.max(left, b.left); right = Math.min(right, b.right); }
       }
       if (right - left < 3 || bottom - top < 3 || node.disabled) continue;
-      // A strip hidden under a sticky header is not a usable sampled target;
-      // require a substantial portion of its box before declaring occlusion.
-      if (bottom-top < Math.min(hitRect.height*.6,20) || right-left < Math.min(hitRect.width*.6,20)) continue;
-      const points = [[.5,.5],[.25,.5],[.75,.5]].map(([x,y]) => [left + (right-left)*x, top+(bottom-top)*y]);
+      const substantial = () => bottom-top >= Math.min(hitRect.height*.6,20) && right-left >= Math.min(hitRect.width*.6,20);
+      if (!substantial()) continue;
+      // Edge samples also exercise exposed overlay strips, such as the backdrop
+      // beside a navigation drawer. They do not exempt overlays from hit tests.
+      const sample = () => [.5,.25,.75,.05,.95].map(x => document.elementFromPoint(left + (right-left)*x, top+(bottom-top)/2));
+      let hits = sample();
+      const scrollport = target => {
+        for (let p = target.parentElement; p && p !== document.body; p = p.parentElement) {
+          if (/^(auto|scroll|hidden|overlay)$/.test(getComputedStyle(p).overflowY)) return p;
+        }
+        return document.scrollingElement;
+      };
+      // A clipping card need not be the ancestor that actually moved a target.
+      // Keep sticky containment separate: even an unscrolled overflow:hidden
+      // ancestor remains a sticky containing scrollport under CSS rules.
+      const scrolledAncestor = target => {
+        for (let p = target.parentElement; p && p !== document.body; p = p.parentElement) {
+          if (/^(auto|scroll|hidden|overlay)$/.test(getComputedStyle(p).overflowY) && p.scrollTop > 1) return p;
+        }
+        return document.scrollingElement?.scrollTop > 1 ? document.scrollingElement : null;
+      };
+      // Scroll-under is not evidence of an unreachable control. Only clip a
+      // preceding, pinned sticky sibling region in the same scrolled container.
+      // Fixed/positioned controls and topbar collisions must still be reported.
+      let normalFlow = !hitTarget.closest('.topbar');
+      for (let p = hitTarget; p && p !== document.body; p = p.parentElement) {
+        if (/^(absolute|fixed|sticky)$/.test(getComputedStyle(p).position)) { normalFlow = false; break; }
+      }
+      const port = scrolledAncestor(hitTarget), stickyClips = [];
+      if (normalFlow && port?.scrollTop > 1) {
+        const documentPort = port === document.scrollingElement;
+        const portTop = documentPort ? 0 : port.getBoundingClientRect().top + port.clientTop;
+        const blockers = new Set();
+        for (const hit of hits) {
+          for (let p = hit; p && p !== document.body; p = p.parentElement) {
+            if (getComputedStyle(p).position === 'sticky') blockers.add(p);
+          }
+        }
+        for (const sticky of blockers) {
+          const s = getComputedStyle(sticky), b = sticky.getBoundingClientRect();
+          const inset = parseFloat(s.top);
+          if (sticky.closest('.topbar') || sticky.contains(hitTarget) || !sticky.parentElement?.contains(hitTarget) ||
+              !(sticky.compareDocumentPosition(hitTarget) & Node.DOCUMENT_POSITION_FOLLOWING) ||
+              scrollport(sticky) !== port || !Number.isFinite(inset) || Math.abs(b.top - (portTop + inset)) > 1 ||
+              b.left > left + 1 || b.right < right - 1 || b.top > top + 1 || b.bottom <= top ||
+              port.scrollTop < b.bottom - top - 1) continue;
+          top = Math.min(bottom, b.bottom);
+          stickyClips.push({ name: label(sticky), box: box(sticky) });
+        }
+      }
+      if (stickyClips.length) {
+        warnings.push({ type: 'scroll-under-sticky-clipped', name: label(node), box: box(node),
+          blockers: stickyClips, scrollTop: Math.round(port.scrollTop),
+          sampledBox: { left: Math.round(left), top: Math.round(top), width: Math.round(right-left), height: Math.round(bottom-top) },
+          hitTestSkipped: !substantial() });
+        if (!substantial()) continue;
+        hits = sample();
+      }
       hitTested++;
-      const hits = points.map(([x,y]) => document.elementFromPoint(x,y));
       if (!hits.some(hit => hit && (hitTarget === hit || hitTarget.contains(hit)))) add('control-occluded', node, { blockers: hits.map(hit => hit ? label(hit) : null), hitTarget:label(hitTarget) });
     }
     for (const node of document.querySelectorAll('dialog[open],[role=dialog]')) {
