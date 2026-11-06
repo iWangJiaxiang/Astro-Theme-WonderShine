@@ -926,6 +926,8 @@ export const english: Record<string, string> = {
   "已复制的图片路径": "Copied image path",
   "选择一张图片，查看大图与路径。": "Select an image to see its preview and paths.",
   "从仓库选择图片": "Choose an image",
+  "当前图片": "Current image",
+  "尚未更改；选择图片后确认": "Unchanged. Choose an image to confirm.",
   "将填写：{p0}": "Selected path: {p0}",
   "选中图片后确认，取消不会修改表单": "Choose an image to confirm. Cancel keeps the current value.",
   "使用这张图片": "Use this image",

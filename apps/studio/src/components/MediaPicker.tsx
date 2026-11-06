@@ -121,7 +121,8 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
                 element(MediaBrowser, {
                   mode: props.mode,
                   documentPath: props.documentPath,
-                  selected: pending.value?.item.path || props.selected,
+                  selected: pending.value?.item.path || "",
+                  current: props.selected,
                   svgOnly: props.svgOnly,
                   onSelect: ((item, value) =>
                     (pending.value = { item, value })) satisfies EventHandler<
@@ -138,7 +139,9 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
                   { className: classes("muted media-pending") },
                   pending.value
                     ? t("将填写：{p0}", { p0: pending.value.value })
-                    : t("选中图片后确认，取消不会修改表单"),
+                    : props.selected
+                      ? t("尚未更改；选择图片后确认")
+                      : t("选中图片后确认，取消不会修改表单"),
                 ),
                 element(
                   "button",

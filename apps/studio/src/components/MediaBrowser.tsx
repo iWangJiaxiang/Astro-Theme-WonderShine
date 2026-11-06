@@ -37,6 +37,7 @@ type Props = {
   mode: MediaMode;
   documentPath: string;
   selected: string;
+  current?: string;
   svgOnly: boolean;
 };
 type Events = { select: [item: MediaItem, value: string] };
@@ -363,7 +364,10 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                         key: item.path,
                         type: "button",
                         "data-media-path": item.path,
-                        "aria-label": t("选择图片：{p0}", { p0: item.path }),
+                        "aria-label":
+                          (props.current === item.path && props.selected !== item.path
+                            ? `${t("当前图片")} · `
+                            : "") + t("选择图片：{p0}", { p0: item.path }),
                         "aria-pressed": props.selected === item.path,
                         disabled:
                           !!item.unavailable ||
@@ -408,6 +412,13 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                         { className: classes("media-name") },
                         item.name,
                       ),
+                      props.current === item.path && props.selected !== item.path
+                        ? element(
+                            "span",
+                            { className: classes("media-path") },
+                            t("当前图片"),
+                          )
+                        : null,
                       element(
                         "span",
                         { className: classes("media-path") },
