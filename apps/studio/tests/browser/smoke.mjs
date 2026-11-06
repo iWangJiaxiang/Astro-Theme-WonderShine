@@ -7,6 +7,7 @@ import { checkLanguages } from './languages.mjs';
 import { checkOnboarding } from './onboarding.mjs';
 import { checkMedia } from './media.mjs';
 import { checkUploads } from './uploads.mjs';
+import { createMediaDisclosureDiagnostics } from './media-disclosure-diagnostics.mjs';
 import { chooser, checkControls } from './controls.mjs';
 import { checkPageManagement } from './pages.mjs';
 import assert from 'node:assert/strict';
@@ -37,7 +38,7 @@ const server = spawn(process.execPath, process.env.STUDIO_TEST_DEV ? ['--import'
   STUDIO_ADMIN_USER: 'owner', STUDIO_ADMIN_PASSWORD_HASH: await hashPassword('studio-browser-test-2026'), STUDIO_SESSION_SECRET: randomBytes(32).toString('hex') }, stdio: ['ignore', 'pipe', 'pipe'] });
 let logs = ''; server.stderr.on('data', data => { logs += data; });
 const executablePath = process.env.STUDIO_TEST_BROWSER || ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
-let browser, emulationOwner, smokeFailure;
+let browser, emulationOwner, smokeFailure, mediaDiagnostics;
 const emulationOwnerReport = { schemaVersion:1, created:false, scope:'smoke-page',
   disposalMode:'browser-close', result:'not-created', serverCleanupGuaranteed:false };
 const recordFailure = error => {
@@ -209,7 +210,12 @@ try {
   await checkPageManagement({ page, base, screenshots, click, heading, fill, delayNextDocumentSave });
   await checkControls({ page, click, heading, fill, base, screenshots, choose });
   await checkMedia({ page, base, theme, screenshots, click, heading, fill });
-  await checkUploads({ page, base, theme, screenshots, click, heading, fill });
+  mediaDiagnostics = createMediaDisclosureDiagnostics({ page, reportPath: `${screenshots}/media-disclosure-diagnostics.json`, withTimeout });
+  await mediaDiagnostics.install();
+  await checkUploads({ page, base, theme, screenshots, click, heading, fill, mediaDiagnostics });
+  await mediaDiagnostics.stop('passed');
+  const mediaDiagnosticErrors = mediaDiagnostics.takeErrors();
+  if (mediaDiagnosticErrors.length) throw new AggregateError(mediaDiagnosticErrors, 'Media disclosure diagnostics failed');
   await page.click('[aria-label="退出登录"]');await page.waitForSelector('[name=username]');
  assert.equal(await page.evaluate(async()=> (await fetch('/api/content')).status),401);
  assert.deepEqual(errors,[]);
@@ -275,14 +281,36 @@ try {
   console.log('PASS: configuration recovery after full reload; screenshots in studio/test-results.');
 } catch (error) {
   recordFailure(error);
+  // The active uploads collector brackets the existing screenshot, not a retry.
+  await mediaDiagnostics?.snapshot('failure-before-screenshot');
+  let failurePage;
   try {
     await withTimeout(async () => {
-      if (browser) { const pages = await browser.pages(); const last = pages.at(-1); if (last) { await last.screenshot({ path: screenshots + '/failure.png', fullPage: true }); console.error((await last.evaluate(() => document.body.innerText)).slice(-2500)); } }
+      if (browser) {
+        const pages = await browser.pages(); failurePage = pages.at(-1);
+        if (failurePage) await failurePage.screenshot({ path: screenshots + '/failure.png', fullPage: true });
+      }
+    }, 'Failure screenshot');
+  } catch (diagnosticError) {
+    recordFailure(diagnosticError);
+  } finally {
+    // Also attempted if screenshot/page lookup fails or its timeout expires.
+    await mediaDiagnostics?.snapshot('failure-after-screenshot');
+  }
+  try {
+    await withTimeout(async () => {
+      if (failurePage) console.error((await failurePage.evaluate(() => document.body.innerText)).slice(-2500));
     }, 'Failure diagnostics');
   } catch (diagnosticError) {
     recordFailure(diagnosticError);
+  } finally {
+    await mediaDiagnostics?.stop('failed');
+    for (const diagnosticError of mediaDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
   }
 } finally {
+  // Also covers partial installation; report serialization needs no live page.
+  await mediaDiagnostics?.stop('interrupted');
+  for (const diagnosticError of mediaDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
   let browserProcess;
   try {
     if (browser) {
@@ -364,6 +392,11 @@ try {
       try { await withTimeout(() => rm(base, { recursive: true, force: true }), 'Fixture removal'); }
       catch (error) { recordFailure(error); }
     }
+  }
+  try {
+    if (mediaDiagnostics) await withTimeout(() => mediaDiagnostics.writeReport(), 'Media disclosure report write');
+  } catch (error) {
+    recordFailure(error);
   }
   try {
     await withTimeout(() => writeFile(`${screenshots}/navigation-emulation-owner.json`,JSON.stringify(emulationOwnerReport,null,2)+'\n'), 'Lifecycle report write');

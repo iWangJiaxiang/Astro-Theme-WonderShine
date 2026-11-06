@@ -5,7 +5,7 @@ import { splitDocument } from '../../server/content.ts';
 import { revealField } from './controls.mjs';
 import { openImagePicker } from './image-picker.mjs';
 
-export async function checkUploads({ page, base, theme, screenshots, click, heading, fill }) {
+export async function checkUploads({ page, base, theme, screenshots, click, heading, fill, mediaDiagnostics }) {
   const source = base + '/upload-fixtures'; await mkdir(source);
   await cp(theme + '/public/img/logo.webp', source + '/上传 配图.webp');
   await writeFile(source + '/invalid.webp', 'not an image');
@@ -28,7 +28,21 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   const finished = () => page.waitForFunction(() => !document.querySelector('.upload-progress') && document.querySelector('.upload-results li'));
   const selected = () => page.$eval('.media-card.selected', el => el.dataset.mediaPath);
   const disclosureState = async (selector, open) => {
-    await page.waitForFunction(({ selector, open }) => document.querySelector(selector)?.open === open, {}, { selector, open });
+    const waitId = mediaDiagnostics?.nextWait();
+    let outcome = 'failed';
+    try {
+      await page.waitForFunction(({ selector, open, waitId }) => {
+        const node = document.querySelector(selector);
+        const matched = node?.open === open;
+        // Sample this exact predicate invocation; do not introduce a second poll.
+        try { window.__mediaDisclosureDiagnostics?.sampleWait(waitId, node, matched, open, selector.includes('media-library') ? 'library' : 'picker'); } catch {}
+        return matched;
+      }, {}, { selector, open, waitId });
+      outcome = 'passed';
+    } finally {
+      // The collector retains diagnostic errors, never replaces this wait's error.
+      await mediaDiagnostics?.endWait(waitId, outcome);
+    }
     assert.equal(await page.$eval(`${selector} > summary`, node => {
       const minimum = document.documentElement.dataset.nativePlatform === 'android' ? 48 : 44;
       const box = node.getBoundingClientRect();
@@ -36,9 +50,15 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
     }), true, 'disclosure has a meaningful name and the platform touch target');
   };
   const initialPreview = async root => {
+    // Capture pre-readiness geometry, including any partially translated sidebar.
+    await mediaDiagnostics?.snapshot(root.startsWith('.media-library') ? 'library-preview-pre-ready' : 'picker-preview-pre-ready');
     await page.waitForFunction(root => {
       const browser = document.querySelector(root);
-      return browser?.getAttribute('aria-busy') === 'false' && [...browser.querySelectorAll('.media-thumbnail img')].some(image => image.complete && image.naturalWidth > 0);
+      const loaded = browser?.getAttribute('aria-busy') === 'false' && [...browser.querySelectorAll('.media-thumbnail img')].some(image => image.complete && image.naturalWidth > 0);
+      const sidebar = document.querySelector('.sidebar');
+      const sidebarReady = !!sidebar && sidebar.getBoundingClientRect().right <= 0 && sidebar.inert && !sidebar.classList.contains('open') && !document.querySelector('.sidebar-backdrop');
+      try { window.__mediaDisclosureDiagnostics?.previewSample(root.startsWith('.media-library') ? 'library' : 'picker', !!loaded, sidebarReady); } catch {}
+      return loaded && sidebarReady;
     }, {}, root);
     if (root.startsWith('.media-library')) {
       const context = await page.evaluate(() => ({
