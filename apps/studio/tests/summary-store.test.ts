@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { SummaryIndex, SUMMARY_INDEX_CACHE_RECIPE, type SummaryIndexCacheRecord, type SummaryIndexStore } from '../core/summary-index.js';
+import { SummaryIndex, SUMMARY_INDEX_CACHE_RECIPE, type SummaryIndexCacheRecord, type SummaryIndexOptions, type SummaryIndexStore } from '../core/summary-index.js';
 import { createContentSummaryContext } from '../core/content-summary.js';
 import { createNativeSummaryStore } from '../platform/summary-store.js';
 import type { WorkspaceFiles } from '../platform/filesystem.js';
@@ -23,6 +23,26 @@ async function fixture(run: (base: string, repository: string) => Promise<void>)
   await fs.mkdir(repository);
   try { await run(base, repository); }
   finally { await fs.rm(base, { recursive: true, force: true }); }
+}
+/** Read-only index checks must finish background saves before fixture removal. */
+async function withSummaryIndex(options: SummaryIndexOptions & { store: SummaryIndexStore }, run: (index: SummaryIndex) => Promise<void>) {
+  const saves: Promise<void>[] = [];
+  const index = new SummaryIndex({ ...options, store: {
+    load: () => options.store.load(),
+    clear: () => options.store.clear(),
+    save: value => {
+      const pending = options.store.save(value);
+      saves.push(pending);
+      return pending;
+    },
+  } });
+  try { await run(index); }
+  finally {
+    // list() publishes rows without awaiting disk I/O. Disposal fences queued
+    // saves, but a save already inside an adapter is intentionally uncancellable.
+    index.dispose();
+    await Promise.allSettled(saves);
+  }
 }
 const adapters = [
   {
@@ -97,13 +117,15 @@ for (const adapter of adapters) {
     await fs.writeFile(target, '{"version":999,"rows":null}');
     assert.deepEqual(await store.load(), { version: 999, rows: null });
     let builds = 0;
-    const index = new SummaryIndex({ scope: 'workspace:one', store, builder: {
+    await withSummaryIndex({ scope: 'workspace:one', store, builder: {
       fresh: async () => { builds++; return { facts: [], context: createContentSummaryContext({}) }; },
       apply: async snapshot => snapshot,
-    } });
-    assert.equal(await index.preview(), null);
-    assert.deepEqual(await index.list(), []);
-    assert.equal(builds, 1);
+    } }, async index => {
+      assert.equal(await index.preview(), null);
+      assert.deepEqual(await index.list(), []);
+      assert.equal(builds, 1);
+    });
+    assert.deepEqual(await store.load(), { ...record(), rows: [] }, 'fresh preview is fully saved before fixture cleanup');
   }));
 
   test(`${adapter.name} concurrent writers and readers see whole snapshots, never freshness authority`, posix, async () => fixture(async (base, repository) => {
@@ -124,13 +146,15 @@ for (const adapter of adapters) {
     ]);
     await first.clear(); await second.save(b); // A clear cannot fence another worker.
     let builds = 0;
-    const index = new SummaryIndex({ scope: b.scope, store: first, builder: {
+    await withSummaryIndex({ scope: b.scope, store: first, builder: {
       fresh: async () => { builds++; return { facts: [], context: createContentSummaryContext({}) }; },
       apply: async snapshot => snapshot,
-    } });
-    assert.deepEqual(await index.preview(), { source: 'cache', authoritative: false, rows: b.rows });
-    assert.deepEqual(await index.list(), [], 'authoritative listing must rebuild, never hydrate preview');
-    assert.equal(builds, 1);
+    } }, async index => {
+      assert.deepEqual(await index.preview(), { source: 'cache', authoritative: false, rows: b.rows });
+      assert.deepEqual(await index.list(), [], 'authoritative listing must rebuild, never hydrate preview');
+      assert.equal(builds, 1);
+    });
+    assert.deepEqual(await first.load(), { ...record(), rows: [] }, 'fresh preview is fully saved before fixture cleanup');
   }));
 
   test(`${adapter.name} separate directories isolate snapshots and exact scopes are checked by the index`, posix, async () => fixture(async (base, repository) => {
@@ -145,6 +169,49 @@ for (const adapter of adapters) {
     await a.clear(); assert.deepEqual(await b.load(), record('two'));
   }));
 }
+
+test('index fixture waits for an in-flight save even when assertions or persistence fail', async () => {
+  for (const fail of [false, true]) {
+    let release!: () => void, started!: () => void, checked!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const saving = new Promise<void>(resolve => { started = resolve; });
+    const assertionsDone = new Promise<void>(resolve => { checked = resolve; });
+    let saved = false, cleaned = false;
+    const failure = new Error('assertion failed');
+    const running = withSummaryIndex({ scope: 'fixture', store: {
+      load: async () => null,
+      clear: async () => {},
+      save: async () => {
+        started(); await gate;
+        saved = true;
+        if (fail) throw new Error('disk full');
+      },
+    }, builder: {
+      fresh: async () => ({ facts: [], context: createContentSummaryContext({}) }),
+      apply: async snapshot => snapshot,
+    } }, async index => {
+      assert.deepEqual(await index.list(), []);
+      await saving;
+      checked();
+      if (fail) throw failure;
+    }).finally(() => { cleaned = true; });
+    // Attach the rejection assertion before releasing the deliberately failed save.
+    const finished = fail ? assert.rejects(running, error => error === failure) : running;
+    try {
+      await assertionsDone;
+      // Let promise continuations reach teardown; the save stays blocked by the
+      // explicit gate, not by a filesystem delay or a wall-clock timeout.
+      await new Promise<void>(resolve => setImmediate(resolve));
+      assert.equal(saved, false, 'listing does not wait for preview persistence');
+      assert.equal(cleaned, false, 'fixture cannot be removed while the adapter is writing');
+    } finally {
+      release();
+      await finished;
+    }
+    assert.equal(saved, true);
+    assert.equal(cleaned, true);
+  }
+});
 
 test('file summary storage refuses repository/public boundaries, permissive modes and hardlinks', posix, async () => fixture(async (base, repository) => {
   for (const path of [repository, join(repository, 'cache'), base, join(base, 'public/cache')]) {

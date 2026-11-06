@@ -161,7 +161,8 @@ test('text helper never caches either capability and propagates fallback failure
 test('real writes scan fresh relationship text inside the lock without creating revisions for the library', async t => {
   const root = await mkdtemp(join(tmpdir(), 'studio-relationship-text-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  await writeFile(join(root, 'config.toml'), 'default_language="zh"\n[languages.en]\n');
+  const configText = 'default_language="zh"\n[languages.en]\n';
+  await writeFile(join(root, 'config.toml'), configText);
   for (const file of [
     { path: topicPath, text: topic() },
     ...Array.from({ length: 20 }, (_, index) => ({ path: `content/articles/unrelated-${index}.md`, text: document('title="Unrelated"') })),
@@ -169,9 +170,12 @@ test('real writes scan fresh relationship text inside the lock without creating 
     await mkdir(dirname(join(root, file.path)), { recursive: true });
     await writeFile(join(root, file.path), file.text);
   }
-  const revisionPaths: string[] = [];
+  const revisionCalls: TextFile[] = [];
+  const configRevision = { path: 'config.toml', text: configText };
   const repository = new LocalRepository(root, { revision: async (path, text) => {
-    revisionPaths.push(path);
+    await access(join(root, '.studio-write-lock'));
+    assert.equal(await readFile(join(root, path), 'utf8'), text, 'revision publication describes the current file inside the write lock');
+    revisionCalls.push({ path, text });
     return `fixture:${text}`;
   } });
   const listText = repository.listForSummary.bind(repository);
@@ -179,17 +183,26 @@ test('real writes scan fresh relationship text inside the lock without creating 
   repository.listForSummary = async () => {
     await access(join(root, '.studio-write-lock'));
     scansInLock++;
-    return listText();
+    const before = [...revisionCalls];
+    const files = await listText();
+    assert.deepEqual(revisionCalls, before, 'text-only library scans must not publish revisions');
+    return files;
   };
   repository.list = async () => { throw new Error('Guard requested revision-bearing library'); };
-  await repository.write(articlePath, linked, null, repo => validateContentRelations(repo, articlePath, linked));
+  const saved = await repository.write(articlePath, linked, null, async repo => {
+    await validateContentRelations(repo, articlePath, linked);
+    assert.deepEqual(revisionCalls, [configRevision], 'the guard reads config but creates no library or target revisions');
+    assert.equal(await repository.read(articlePath), null, 'the target is not written before the guard completes');
+  });
   assert.equal(await readFile(join(root, articlePath), 'utf8'), linked);
-  assert.deepEqual(revisionPaths, ['config.toml']);
+  assert.equal(saved.revision, `fixture:${linked}`);
+  assert.deepEqual(revisionCalls, [configRevision, { path: articlePath, text: linked }], 'a successful save publishes exactly the target revision after its guard');
   assert.equal(scansInLock, 1);
+  revisionCalls.length = 0;
   await rm(join(root, topicPath));
   await assert.rejects(repository.write(threadPath, linked, null, repo => validateContentRelations(repo, threadPath, linked)), /关联话题.*不存在/);
   assert.equal(await repository.read(threadPath), null);
-  assert.deepEqual(revisionPaths, ['config.toml', 'config.toml']);
+  assert.deepEqual(revisionCalls, [configRevision], 'a rejected guard must not publish a target or library revision');
   assert.equal(scansInLock, 2);
 });
 

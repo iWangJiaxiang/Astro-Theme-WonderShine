@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createApp } from '../server/app.js';
@@ -15,6 +15,7 @@ import { hashPassword } from '../server/password.js';
 test('forced bootstrap refresh reads new config from a warm online checkout before content refresh', async t => {
   const root = await mkdtemp(join(tmpdir(), 'studio-bootstrap-refresh-'));
   t.after(() => rm(root, { recursive: true, force: true }));
+  await Promise.all(['old', 'next'].map(name => mkdir(join(root, name))));
   const old = new LocalRepository(join(root, 'old'));
   const next = new LocalRepository(join(root, 'next'));
   const path = 'content/articles/example/index.md';

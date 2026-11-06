@@ -141,9 +141,17 @@ for (const backend of ['native', 'server'] as const) {
     const bytes = await originalReadFile(packPath);
     const damaged = Buffer.from(bytes);
     damaged[damaged.length - 1] ^= 1;
-    await fs.promises.writeFile(packPath, damaged);
-    await assert.rejects(workspace.status(), /[Pp]ackfile/);
-    await fs.promises.writeFile(packPath, bytes);
+    // Git creates read-only packs. Only make this disposable fixture writable,
+    // and restore both its bytes and permissions even if the assertion fails.
+    const packMode = (await fs.promises.stat(packPath)).mode & 0o777;
+    await fs.promises.chmod(packPath, packMode | 0o200);
+    try {
+      await fs.promises.writeFile(packPath, damaged);
+      await assert.rejects(workspace.status(), /[Pp]ackfile/);
+    } finally {
+      try { await fs.promises.writeFile(packPath, bytes); }
+      finally { await fs.promises.chmod(packPath, packMode); }
+    }
     assert.deepEqual(await workspace.status(), removed);
 
     // Exercise the actual engine review -> commit path, not just the store, at the

@@ -74,7 +74,12 @@ test('facts projection preserves legacy content, links, errors and locales when 
   const facts = fixtures.map(readContentSummaryFacts);
   const configurations: Record<string, Json>[] = [config, {}, { ...config, slugify: { paths: 'off', paths_keep_dates: true } }, { ...config, slugify: { paths: 'safe' } }, { default_language: 'en', languages: { fr: {}, 'zh-CN': {} } }];
   for (const configuration of configurations) {
-    assert.deepEqual(projectContentSummaries(facts, createContentSummaryContext(configuration)), legacy(fixtures, configuration));
+    // TOML tables have null prototypes; compare reference field values as exposed
+    // by the JSON API while keeping strict checks (including undefined) elsewhere.
+    const expected = legacy(fixtures, configuration).map(row => row.references
+      ? { ...row, references: row.references.map(reference => ({ ...reference })) }
+      : row);
+    assert.deepEqual(projectContentSummaries(facts, createContentSummaryContext(configuration)), expected);
   }
 });
 
