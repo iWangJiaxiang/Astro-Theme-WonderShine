@@ -292,14 +292,30 @@ export async function checkRootModals({ page, origin, password, screenshots, out
     await page.click('.content-row[data-path="content/articles/example/index.md"]');
     await page.waitForSelector('.editor-page .markdown-source');
     const draft = 'Unsaved editor body survives top-layer reauthentication.';
-    await fill(page, '.editor-page .markdown-source', draft);
     await page.$eval('.editor-page .markdown-source', node => { window.modalEditorNode = node; });
+    await fill(page, '.editor-page .markdown-source', draft);
+    const assertRetainedDraft = async () => {
+      assert.equal(await page.$eval('.editor-page .markdown-source', (node, draft) =>
+        node === window.modalEditorNode && node.isConnected && node.value === draft, draft), true,
+      'Initial AI setup retains the original editor and unsaved draft');
+    };
+    await assertRetainedDraft();
+    // Wait only for the real control's activation precondition, not language UI
+    // completion or a failed click. There is still exactly one physical click.
+    await page.waitForSelector('.editor-page .summary-heading button.ai-action:not(:disabled)', { visible: true });
+    await assertRetainedDraft();
+    assert.equal(await page.$eval('.editor-page .summary-heading button.ai-action', node =>
+      node.isConnected && !node.disabled && !node.closest('[inert]')), true,
+    'Initial AI click requires an enabled, non-inert control');
     const initialAiDiagnostics = await initialAiClickDiagnostics({ page, screenshots, outcome });
     let initialAiFailed = true;
     try {
       await page.click('.ai-action');
       await initialAiDiagnostics.afterClick();
       await page.waitForSelector('.ai-assistant-dialog[open]');
+      assert.equal(await page.$eval('.ai-assistant-dialog .ai-source p', node => node.textContent), draft,
+        'Initial AI dialog uses the retained unsaved draft');
+      await assertRetainedDraft();
       initialAiFailed = false;
     } finally {
       try { await initialAiDiagnostics.finish(initialAiFailed); }
