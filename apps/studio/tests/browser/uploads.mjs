@@ -5,7 +5,7 @@ import { splitDocument } from '../../server/content.ts';
 import { revealField } from './controls.mjs';
 import { openImagePicker } from './image-picker.mjs';
 
-export async function checkUploads({ page, base, theme, screenshots, click, heading, fill, mediaDiagnostics }) {
+export async function checkUploads({ page, base, theme, screenshots, click, heading, fill, mediaDiagnostics, folderClearDiagnostics }) {
   const source = base + '/upload-fixtures'; await mkdir(source);
   await cp(theme + '/public/img/logo.webp', source + '/上传 配图.webp');
   await writeFile(source + '/invalid.webp', 'not an image');
@@ -391,13 +391,26 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
     assert.ok(await page.$$eval(`${picker} .media-card`, nodes => nodes.length > 0 && nodes.every(node => node.dataset.mediaPath.slice(0, node.dataset.mediaPath.lastIndexOf('/')) === 'public/uploads')), 'picker folder filter still matches the exact directory, not its subtree');
     assert.match(await page.$eval(`${filterDisclosure} > summary`, node => node.textContent), /Folder.*public\/uploads/, 'filter summary shows the active full directory path');
     await assertParentSelection();
+    // One diagnostic install RPC before the original folder-clear input sequence.
+    await folderClearDiagnostics?.install();
     await page.locator(folderTrigger).click();
     await page.waitForSelector(chooser, { visible: true });
     await page.locator(`${chooser} input[value=""]`).click();
     await page.locator(`${chooser} .selection-footer button.primary`).click();
-    await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
-    assert.ok(await page.$$eval(`${picker} .media-card`, nodes => nodes.some(node => !node.dataset.mediaPath.startsWith('public/uploads/'))), 'clearing the folder restores other fixture images');
+    await page.waitForFunction(() => {
+      const matched = !document.querySelector('.selection-dialog[open]');
+      try { window.__folderClearDiagnostics?.sampleWait(matched); } catch {}
+      return matched;
+    }, {});
+    assert.ok(await page.$$eval(`${picker} .media-card`, nodes => {
+      const matched = nodes.some(node => !node.dataset.mediaPath.startsWith('public/uploads/'));
+      try { window.__folderClearDiagnostics?.sampleAssertion(nodes, matched); } catch {}
+      return matched;
+    }), 'clearing the folder restores other fixture images');
     await assertParentSelection();
+    await folderClearDiagnostics?.stop('passed');
+    const folderClearErrors = folderClearDiagnostics?.takeErrors() ?? [];
+    if (folderClearErrors.length) throw new AggregateError(folderClearErrors, 'Folder clear diagnostics failed');
 
     const fileInput = await page.$(`${picker} .upload-file-input`);
     const results = await page.$(`${picker} .upload-results`);

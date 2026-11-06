@@ -9,6 +9,7 @@ import { checkMedia } from './media.mjs';
 import { checkUploads } from './uploads.mjs';
 import { createMediaDisclosureDiagnostics } from './media-disclosure-diagnostics.mjs';
 import { createChooserScrollDiagnostics } from './chooser-scroll-diagnostics.mjs';
+import { createFolderClearDiagnostics } from './folder-clear-diagnostics.mjs';
 import { chooser, checkControls } from './controls.mjs';
 import { checkPageManagement } from './pages.mjs';
 import assert from 'node:assert/strict';
@@ -39,7 +40,7 @@ const server = spawn(process.execPath, process.env.STUDIO_TEST_DEV ? ['--import'
   STUDIO_ADMIN_USER: 'owner', STUDIO_ADMIN_PASSWORD_HASH: await hashPassword('studio-browser-test-2026'), STUDIO_SESSION_SECRET: randomBytes(32).toString('hex') }, stdio: ['ignore', 'pipe', 'pipe'] });
 let logs = ''; server.stderr.on('data', data => { logs += data; });
 const executablePath = process.env.STUDIO_TEST_BROWSER || ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
-let browser, emulationOwner, smokeFailure, mediaDiagnostics, chooserDiagnostics;
+let browser, emulationOwner, smokeFailure, mediaDiagnostics, chooserDiagnostics, folderClearDiagnostics;
 const emulationOwnerReport = { schemaVersion:1, created:false, scope:'smoke-page',
   disposalMode:'browser-close', result:'not-created', serverCleanupGuaranteed:false };
 const recordFailure = error => {
@@ -216,7 +217,8 @@ try {
   await checkMedia({ page, base, theme, screenshots, click, heading, fill });
   mediaDiagnostics = createMediaDisclosureDiagnostics({ page, reportPath: `${screenshots}/media-disclosure-diagnostics.json`, withTimeout });
   await mediaDiagnostics.install();
-  await checkUploads({ page, base, theme, screenshots, click, heading, fill, mediaDiagnostics });
+  folderClearDiagnostics = createFolderClearDiagnostics({ page, reportPath: `${screenshots}/folder-clear-diagnostics.json`, withTimeout });
+  await checkUploads({ page, base, theme, screenshots, click, heading, fill, mediaDiagnostics, folderClearDiagnostics });
   await mediaDiagnostics.stop('passed');
   const mediaDiagnosticErrors = mediaDiagnostics.takeErrors();
   if (mediaDiagnosticErrors.length) throw new AggregateError(mediaDiagnosticErrors, 'Media disclosure diagnostics failed');
@@ -288,6 +290,7 @@ try {
   // Active collectors bracket the existing screenshot, not a retry.
   await chooserDiagnostics?.snapshot('failure-before-screenshot');
   await mediaDiagnostics?.snapshot('failure-before-screenshot');
+  await folderClearDiagnostics?.snapshot('failure-before-screenshot');
   let failurePage;
   try {
     await withTimeout(async () => {
@@ -302,6 +305,7 @@ try {
     // Also attempted if screenshot/page lookup fails or its timeout expires.
     await chooserDiagnostics?.snapshot('failure-after-screenshot');
     await mediaDiagnostics?.snapshot('failure-after-screenshot');
+    await folderClearDiagnostics?.snapshot('failure-after-screenshot');
   }
   try {
     await withTimeout(async () => {
@@ -314,6 +318,8 @@ try {
     for (const diagnosticError of chooserDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
     await mediaDiagnostics?.stop('failed');
     for (const diagnosticError of mediaDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
+    await folderClearDiagnostics?.stop('failed');
+    for (const diagnosticError of folderClearDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
   }
 } finally {
   // Also covers partial installation; report serialization needs no live page.
@@ -321,6 +327,8 @@ try {
   for (const diagnosticError of chooserDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
   await mediaDiagnostics?.stop('interrupted');
   for (const diagnosticError of mediaDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
+  await folderClearDiagnostics?.stop('interrupted');
+  for (const diagnosticError of folderClearDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
   let browserProcess;
   try {
     if (browser) {
@@ -413,6 +421,8 @@ try {
   } catch (error) {
     recordFailure(error);
   }
+  await folderClearDiagnostics?.writeReport();
+  for (const diagnosticError of folderClearDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
   try {
     await withTimeout(() => writeFile(`${screenshots}/navigation-emulation-owner.json`,JSON.stringify(emulationOwnerReport,null,2)+'\n'), 'Lifecycle report write');
   } catch (error) {
