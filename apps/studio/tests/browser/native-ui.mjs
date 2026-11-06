@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import { exerciseScroll, exercisePinch } from './ui-audit-gestures.mjs';
 
 // Real production React/native adapter code; only the Tauri IPC host is mocked.
 const studio = fileURLToPath(new URL('../../', import.meta.url));
@@ -259,9 +260,29 @@ try {
     await page.goto(origin, { waitUntil: 'networkidle0' });
   };
   const noOverflow = async label => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, label + ' must fit viewport');
+  const nativeGestureRecords = [];
+  const gestureClient = await page.createCDPSession();
   const screenshot = async name => {
     await page.evaluate(async () => { window.scrollTo(0, 0); await document.fonts.ready; for (const animation of document.getAnimations()) { if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) { try { animation.finish(); } catch {} } } await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
-    return page.screenshot({ path: join(screenshots, name + '.png'), fullPage: true });
+    await page.screenshot({ path: join(screenshots, name + '.png'), fullPage: true });
+    // CDP activates mobile touch without reloading the fixture or losing dialogs.
+    // Keep these actual synthetic inputs distinct from viewport-only screenshots.
+    const viewport = page.viewport();
+    if (process.env.STUDIO_TEST_GESTURES === 'true' && viewport && viewport.width <= 844) {
+      await gestureClient.send('Emulation.setDeviceMetricsOverride', { width: viewport.width, height: viewport.height, deviceScaleFactor: 1, mobile: true });
+      await gestureClient.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+      try {
+        const scroll = await exerciseScroll(page, gestureClient, { touch: true });
+        const pinch = await exercisePinch(page, gestureClient);
+        const record = { name, viewport, scroll, pinch, evidence: 'Chromium synthetic touch + mocked Tauri IPC; not OS WebView or hardware' };
+        nativeGestureRecords.push(record);
+        await fs.writeFile(join(screenshots, 'gesture-report.json'), JSON.stringify(nativeGestureRecords, null, 2));
+        assert.deepEqual([...scroll.failures, ...pinch.failures], [], name + ': mobile synthetic gestures');
+      } finally {
+        await gestureClient.send('Emulation.setDeviceMetricsOverride', { width: viewport.width, height: viewport.height, deviceScaleFactor: viewport.deviceScaleFactor || 1, mobile: !!viewport.isMobile });
+        await gestureClient.send('Emulation.setTouchEmulationEnabled', { enabled: !!viewport.hasTouch, maxTouchPoints: 5 });
+      }
+    }
   };
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.goto(origin, { waitUntil: 'networkidle0' }); await heading('连接创作工作区');
@@ -452,8 +473,8 @@ try {
   await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1');
   await restartNativeFixture(); await heading('连接创作工作区');
   assert.equal(await page.$eval('html', node => node.dataset.nativeMobile), 'true');
-  assert.match(await page.$eval('meta[name=viewport]', node => node.content), /maximum-scale=1/);
-  assert.equal(await page.evaluate(() => {const event = new Event('gesturestart', {cancelable:true}); document.dispatchEvent(event); return event.defaultPrevented;}), true);
+  assert.doesNotMatch(await page.$eval('meta[name=viewport]', node => node.content), /maximum-scale=1|user-scalable=no/);
+  assert.equal(await page.evaluate(() => {const event = new Event('gesturestart', {cancelable:true}); document.dispatchEvent(event); return event.defaultPrevented;}), false, 'Intentional magnification is not cancelled');
   assert.ok(await page.$eval('.connection-url input', node => parseFloat(getComputedStyle(node).fontSize) >= 16), 'iOS inputs avoid focus zoom');
   if (process.env.STUDIO_TEST_OAUTH === 'fixture') {
     assert.ok(await page.$eval('.account-login button', node => node.getBoundingClientRect().height >= 44));

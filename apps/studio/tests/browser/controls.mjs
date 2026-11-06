@@ -36,7 +36,7 @@ export function chooser(page) {
       await page.waitForSelector(`dialog[open] input[value="${value}"]`);
       await page.click(`dialog[open] input[value="${value}"]`);
       await page.click('dialog[open] .selection-footer button');
-      await page.waitForFunction(() => !document.querySelector('dialog[open]'));
+      await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
     } else {
       await page.waitForSelector(`${root} input[value="${value}"]`);
       await page.click(`${root} input[value="${value}"]`);

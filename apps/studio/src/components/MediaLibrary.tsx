@@ -10,7 +10,7 @@ import {
   type EventHandler,
   type StudioComponent,
 } from "../react-component";
-import { computed, ref, watch } from "../reactivity";
+import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from "../reactivity";
 import MediaBrowser from "./MediaBrowser";
 
 type Props = {};
@@ -36,11 +36,27 @@ const MediaLibrary: StudioComponent<Props, Events> = component<Props, Events>(
       message.value = "";
       copied.value = "";
     });
+    const detailsId = useId();
+    function selectedTile() {
+      return [...document.querySelectorAll<HTMLElement>('.media-library .media-card')]
+        .find(tile => tile.dataset.mediaPath === selected.value?.path);
+    }
+    let selectionGeneration = 0;
+    onBeforeUnmount(() => { selectionGeneration++; });
     function choose(item: MediaItem) {
+      const generation = ++selectionGeneration;
       selected.value = item;
       message.value = "";
       copied.value = "";
       failed.value = false;
+      if (window.matchMedia('(max-width: 1180px)').matches) {
+        void nextTick().then(() => {
+          if (generation !== selectionGeneration) return;
+          const details = document.getElementById(detailsId);
+          details?.focus({ preventScroll: true });
+          details?.scrollIntoView({ block: 'start', behavior: 'instant' });
+        });
+      }
     }
     async function copy(value: string) {
       try {
@@ -82,11 +98,25 @@ const MediaLibrary: StudioComponent<Props, Events> = component<Props, Events>(
           ),
           element(
             "aside",
-            { className: classes("card media-details") },
+            { id: detailsId, tabIndex: -1, 'aria-label': t('图片详情'), className: classes("card media-details") },
             selected.value
               ? element(
                   Fragment,
                   null,
+                  element("button", {
+                    type: 'button',
+                    className: classes('text-button media-details-back'),
+                    onClick: () => {
+                      // Re-query by path: touch activation need not focus a tile,
+                      // and upload/list refresh may have replaced its DOM node.
+                      const target = selectedTile() ?? document.querySelector<HTMLElement>('.media-library-browser');
+                      if (target) {
+                        if (!target.matches('button,[tabindex]')) target.tabIndex = -1;
+                        target.focus({ preventScroll: true });
+                        target.scrollIntoView({ block: 'center', behavior: 'instant' });
+                      }
+                    },
+                  }, t('返回图片列表')),
                   element("h2", null, selected.value.name),
                   !failed.value
                     ? element("img", {

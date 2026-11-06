@@ -4,6 +4,7 @@ import type { SaveMode } from '../../shared/save';
 import { rememberSaveMode, saveContext, saveModeLabel } from '../save-preferences';
 import { t } from '../i18n';
 import { useSignals } from '../reactivity';
+import { overlayPosition } from '../overlay-position';
 
 type Props = { mode: SaveMode; onModeChange(mode: SaveMode): void; onSave(): void; disabled?: boolean; busy?: boolean; label?: string };
 export default function SaveButton({ mode, onModeChange, onSave, disabled, busy, label }: Props) {
@@ -17,9 +18,11 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
     if (!open) return;
     const place = () => {
       const rect = trigger.current!.getBoundingClientRect();
-      const height = panel.current?.offsetHeight || 200;
-      const top = rect.bottom + 8 + height < innerHeight ? rect.bottom + 8 : Math.max(8, rect.top - height - 8);
-      setPosition({ top, left: Math.max(8, Math.min(rect.right - 240, innerWidth - 248)) });
+      const view = window.visualViewport;
+      setPosition(overlayPosition(rect,
+        { height: panel.current?.offsetHeight || 200, width: panel.current?.offsetWidth || 240 },
+        { left: view?.offsetLeft ?? 0, top: view?.offsetTop ?? 0, width: view?.width ?? innerWidth, height: view?.height ?? innerHeight },
+      ));
     };
     const outside = (event: PointerEvent) => {
       if (!panel.current?.contains(event.target as Node) && !trigger.current?.contains(event.target as Node)) setOpen(false);
@@ -32,7 +35,15 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
     document.addEventListener('focusin', focusOutside);
     document.addEventListener('pointerdown', outside); document.addEventListener('keydown', escape);
     window.addEventListener('resize', place); window.addEventListener('scroll', place, true);
-    return () => { document.removeEventListener('focusin', focusOutside); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+    window.visualViewport?.addEventListener('resize', place); window.visualViewport?.addEventListener('scroll', place);
+    const observer = new ResizeObserver(place);
+    if (panel.current) observer.observe(panel.current);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('focusin', focusOutside); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape);
+      window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true);
+      window.visualViewport?.removeEventListener('resize', place); window.visualViewport?.removeEventListener('scroll', place);
+    };
   }, [open]);
   useEffect(() => { if (busy) setOpen(false); }, [busy]);
   return <div className="save-button">

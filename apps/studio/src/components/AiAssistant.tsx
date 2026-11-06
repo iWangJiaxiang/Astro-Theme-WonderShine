@@ -7,6 +7,7 @@ import {
 import { api, errorMessage } from "../api";
 import { t, type Message } from "../i18n";
 import { addUploadedMedia } from "../media-store";
+import { createBusinessModal } from "../modal-layer";
 import {
   classes,
   component,
@@ -17,7 +18,7 @@ import {
   portal,
   type StudioComponent,
 } from "../react-component";
-import { nextTick, onBeforeUnmount, onMounted, ref } from "../reactivity";
+import { onBeforeUnmount, onMounted, ref } from "../reactivity";
 
 type Props = {
   kind: "summary" | "cover";
@@ -44,10 +45,10 @@ const AiAssistant: StudioComponent<Props, Events> = component<Props, Events>(
       image = ref<AiImageResult>(),
       imagePrompt = ref("");
     const previousFocus = document.activeElement as HTMLElement | null;
-    let alive = true;
+    let alive = true, wantsOpen = true;
+    const modal = createBusinessModal(() => dialog.value, () => alive && wantsOpen);
     onMounted(async () => {
-      await nextTick();
-      dialog.value?.showModal();
+      modal.open();
       try {
         capabilities.value = await api<AiCapabilities>("/ai/config");
       } catch (e) {
@@ -58,11 +59,14 @@ const AiAssistant: StudioComponent<Props, Events> = component<Props, Events>(
     });
     onBeforeUnmount(() => {
       alive = false;
-      dialog.value?.close();
-      previousFocus?.focus();
+      modal.dispose();
+      if (previousFocus?.isConnected) previousFocus.focus();
     });
     function close() {
-      if (!busy.value) emit("close");
+      if (busy.value) return;
+      wantsOpen = false;
+      modal.close();
+      emit("close");
     }
     async function work(fn: () => Promise<void>) {
       if (busy.value) return false;

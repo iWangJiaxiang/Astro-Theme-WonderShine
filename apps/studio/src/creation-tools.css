@@ -96,3 +96,9 @@
 .save-mode-menu .save-mode-default { margin-top: 5px; border-top: 1px solid var(--studio-line); border-radius: 0 0 7px 7px; font-size: 12px; justify-content: center; }
 .save-mode-menu p { margin: 6px; font-size: 12px; }
 .saved-branch { display: block; font-family: ui-monospace, monospace; overflow-wrap: anywhere; font-size: 11px; margin: 6px 0; color: var(--studio-muted); }
+.media-details { scroll-margin-block: 20px; }
+.media-details h2 { overflow-wrap: anywhere; }
+.media-details-back { display: none; }
+@media (max-width: 1180px) {
+  .media-details-back { display: inline-flex; align-items: center; margin-bottom: 12px; }
+}

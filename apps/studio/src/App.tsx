@@ -20,6 +20,7 @@ import {
   type StudioComponent,
 } from "./react-component";
 import LoadingState from "./components/LoadingState";
+import { navigationPosition } from "./navigation-position";
 import { mediaUploading } from "./media-store";
 import { subscribeWorkspaceChanged } from "./workspace-events";
 import { t, type Message } from "./i18n";
@@ -27,6 +28,7 @@ import { ref, watch, onMounted, onBeforeUnmount, computed } from "./reactivity";
 import type { Json, ArticleSummary } from "../shared/types";
 import { api, session, reauthentication, errorMessage, pendingMutations } from "./api";
 import LoginView from "./components/LoginView";
+import Modal from "./components/Modal";
 import SettingsView from "./components/SettingsView";
 import ContentLibrary from "./components/ContentLibrary";
 import ThreadComposer from "./components/ThreadComposer";
@@ -70,6 +72,17 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       dirty = ref(false),
       menuOpen = ref(false),
       dark = ref(false);
+    // Capture before the shell becomes inert, including focus inside portalled dialogs.
+    const reauthenticationFocus = ref<HTMLElement | null>(null);
+    watch(reauthentication, (required) => {
+      if (!required) return;
+      const focused = window.document.activeElement;
+      // An in-flight mutation may disable its trigger and move focus to body.
+      const underlying = [...window.document.querySelectorAll<HTMLDialogElement>("dialog:modal")].at(-1);
+      reauthenticationFocus.value = focused instanceof HTMLElement && focused !== window.document.body
+        ? focused
+        : underlying || null;
+    });
     const mobileNavigation = ref(window.matchMedia("(max-width: 760px)").matches);
     let navigationFrame = 0;
     watch(menuOpen, (open) => {
@@ -105,7 +118,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         });
       };
       const keydown = (event: KeyboardEvent) => {
-        if (!mobileNavigation.value || !menuOpen.value) return;
+        if (reauthentication.value || !mobileNavigation.value || !menuOpen.value) return;
         if (event.key === 'Escape') { event.preventDefault(); menuOpen.value = false; }
         if (event.key !== 'Tab') return;
         const items = [...window.document.querySelectorAll<HTMLElement>('.sidebar button:not(:disabled), .sidebar a[href], .sidebar summary')].filter(node => node.getClientRects().length);
@@ -337,12 +350,19 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         )
       );
     }
+    const viewportPosition = navigationPosition();
+    watch(session, () => viewportPosition.clear());
+    onBeforeUnmount(() => viewportPosition.dispose());
+    function positionKey() { return document.value ? `document:${document.value.path}:${document.value.mode}` : `view:${view.value}`; }
     function navigate(next: string) {
       if (!leave()) return;
+      const returning = !!document.value && next === view.value;
+      viewportPosition.remember(positionKey());
       document.value = null;
       dirty.value = false;
       view.value = next;
       menuOpen.value = false;
+      viewportPosition.enter(positionKey(), returning);
       if (next === "home") void loadArticles();
     }
     function open(
@@ -351,6 +371,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       initialBody?: string,
     ) {
       if (!leave()) return false;
+      viewportPosition.remember(positionKey());
       document.value = {
         path,
         initial,
@@ -358,6 +379,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         mode: !initial && path.startsWith("content/threads/") ? "detail" : "edit",
       };
       dirty.value = false;
+      viewportPosition.enter(positionKey());
       return true;
     }
     function edit(
@@ -366,8 +388,10 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       initialBody?: string,
     ) {
       if (!leave()) return;
+      viewportPosition.remember(positionKey());
       document.value = { path, initial, initialBody, mode: "edit" };
       dirty.value = false;
+      viewportPosition.enter(positionKey());
     }
     function saved(path: string) {
       if (document.value?.path === path) {
@@ -1118,12 +1142,13 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
               ),
         reauthentication.value && session.value
           ? element(
-              "div",
+              Modal,
               {
-                role: "dialog",
-                "aria-modal": "true",
-                "aria-label": t("重新登录"),
-                className: classes("reauth-backdrop"),
+                label: t("重新登录"),
+                className: "reauth-backdrop",
+                blocking: true,
+                initialFocus: '[name="username"]',
+                returnFocus: reauthenticationFocus.value,
               },
               element(
                 "p",

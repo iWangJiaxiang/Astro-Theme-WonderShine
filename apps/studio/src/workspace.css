@@ -143,3 +143,21 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 }
 
 .writing-card > .title-field { grid-template-columns: auto minmax(0, 1fr); }
+
+/* Keep the primary row readable before giving repeated-item actions their own
+   gutter. This covers every structured list, including nested page settings. */
+@media (max-width: 480px) {
+  .structured .collapsible-item { grid-template-columns: minmax(0, 1fr); }
+  .collapsible-item > .item-actions { justify-content: flex-end; flex-wrap: wrap; }
+  .collapsible-item > .structured-body { margin-left: 0; padding-inline: 0; border-left: 0; }
+  .structured .compact-object > .field-inline { grid-template-columns: minmax(0, 1fr); }
+  .structured-toggle { width: 100%; }
+  .editor-page > .page-heading > .row { justify-content: flex-start; }
+}
+
+/* A short screen should not inherit a desktop-sized empty writing canvas.
+   Use viewport units rather than the zoomed visual viewport's height. */
+@media (max-width: 760px), (max-height: 500px) {
+  .editor-page:not(.embedded-editor) .markdown-source { min-height: clamp(240px, 52dvh, 430px); }
+  .editor-page:not(.embedded-editor) .vditor { max-height: max(280px, 65dvh); }
+}

@@ -4,6 +4,7 @@ import { api, ApiError, errorMessage, session } from "../api";
 import { contentLabel } from "../content-model";
 import { forgetDeletedContent } from "../deleted-content";
 import { t, type Message } from "../i18n";
+import { createBusinessModal } from "../modal-layer";
 import {
   classes,
   component,
@@ -16,7 +17,6 @@ import {
 } from "../react-component";
 import {
   computed,
-  nextTick,
   onBeforeUnmount,
   onMounted,
   ref,
@@ -54,8 +54,11 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
       () => props.title?.trim() || loadedTitle.value || t("未命名内容"),
     );
     const busy = computed(() => loading.value || deleting.value);
-    let alive = true,
+    let alive = true, wantsOpen = true,
       previousFocus: HTMLElement | null = null;
+    const modal = createBusinessModal(() => dialog.value, () => alive && wantsOpen, () => {
+      cancelButton.value?.focus();
+    });
     async function load() {
       loading.value = true;
       error.value = "";
@@ -97,7 +100,10 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
       }
     }
     function close() {
-      if (!deleting.value) emit("close");
+      if (deleting.value) return;
+      wantsOpen = false;
+      modal.close();
+      emit("close");
     }
     async function remove() {
       if (busy.value || blocked.value || !revision.value) return;
@@ -134,15 +140,13 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
         document.activeElement instanceof HTMLElement
           ? document.activeElement
           : null;
-      await nextTick();
       if (!alive) return;
-      dialog.value?.showModal();
-      cancelButton.value?.focus();
+      modal.open();
       void load();
     });
     onBeforeUnmount(() => {
       alive = false;
-      dialog.value?.close();
+      modal.dispose();
       emit("working", false);
       if (previousFocus?.isConnected) previousFocus.focus();
     });

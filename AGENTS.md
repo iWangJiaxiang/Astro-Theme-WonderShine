@@ -87,6 +87,7 @@
 
 - `.github/workflows/ci.yml` 支持手动运行，可只重测主题/Web 而不重复触发整套原生打包。执行 GitHub 操作沿用当前任务的授权范围。
 - App 构建和原生验收由 `studio.yml` 负责；Lighthouse 由 `lighthouse.yml` 负责。已有报告可通过 `report_run_id` 提取，不必重复测量。
+- Studio 多尺寸、滚动／缩放与共享弹层审计由 `studio-ui-audit.yml` 负责，覆盖与证据边界见 `docs/studio-ui-validation.md`。Chromium 合成触控和 mocked Tauri IPC 不等于原生 WebView 或真机验收。
 - 根据改动选择必要测试；通过后不无故重复。修复失败后复测受影响部分，代码变更完成后进行代码审查。
 - UI 修改应读取远程截图并检查布局、遮挡和交互。不要把 CI 构建成功称为真机或应用商店验收成功。
 - 完成报告说明改动、实际验证、未验证项与限制，并关联 run ID 或提交。不得仅因 CI 已启动就宣称验证完成。

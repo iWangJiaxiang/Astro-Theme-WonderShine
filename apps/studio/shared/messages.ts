@@ -133,6 +133,8 @@ export const english: Record<string, string> = {
   "暂无动态": "No threads yet",
   "暂无话题": "No topics yet",
   "选择图片预览": "Select an image to preview",
+  "图片详情": "Image details",
+  "返回图片列表": "Back to images",
   "同时用于站点个人信息组件。": "Also used by the site profile widget.",
   "本组设置与导航播放器共用。": "These settings also apply to the navigation player.",
   "本组设置与首页侧栏共用。": "These settings also apply to the home sidebar.",

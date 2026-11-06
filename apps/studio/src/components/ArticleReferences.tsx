@@ -1,5 +1,6 @@
 import type { ArticleSummary, Json } from "../../shared/types";
 import { t } from "../i18n";
+import { createBusinessModal } from "../modal-layer";
 import {
   classes,
   component,
@@ -11,7 +12,7 @@ import {
   renderList,
   type StudioComponent,
 } from "../react-component";
-import { computed, nextTick, onBeforeUnmount, ref, useId } from "../reactivity";
+import { computed, onBeforeUnmount, ref, useId } from "../reactivity";
 import Icon from "./Icon";
 
 type Props = {
@@ -78,7 +79,8 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
         : articles.value.find((item) => key(item) === reference.path)?.title ||
             reference.path;
     }
-    async function open() {
+    const modal = createBusinessModal(() => dialog.value, () => opened.value && !props.disabled);
+    function open() {
       if (props.disabled || references.value.length >= 12) return;
       search.value = "";
       selected.value = "";
@@ -86,11 +88,10 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
       title.value = "";
       error.value = "";
       opened.value = true;
-      await nextTick();
-      dialog.value?.showModal();
+      modal.open();
     }
     function close() {
-      dialog.value?.close();
+      modal.close();
       opened.value = false;
       trigger.value?.focus();
     }
@@ -133,7 +134,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
         emit("update:modelValue", [...references.value, reference]);
       close();
     }
-    onBeforeUnmount(() => dialog.value?.close());
+    onBeforeUnmount(() => modal.dispose());
     return () =>
       element(
         "div",

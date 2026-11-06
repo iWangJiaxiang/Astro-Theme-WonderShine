@@ -17,7 +17,9 @@ import type {
   Json,
   Settings,
 } from "../../shared/types";
-import { api, errorMessage } from "../api";
+import { api, errorMessage, session } from "../api";
+import { initialLibraryState, libraryStateMemory, type LibraryListState } from "../library-state";
+import { saveContext } from "../save-preferences";
 import { t, translateOptions, type Message } from "../i18n";
 import {
   classes,
@@ -29,11 +31,22 @@ import {
   type EventHandler,
   type StudioComponent,
 } from "../react-component";
-import { computed, onMounted, ref, watch } from "../reactivity";
+import { batch, computed, onBeforeUnmount, onMounted, ref, useId, watch } from "../reactivity";
 import DeleteContentDialog from "./DeleteContentDialog";
 import Icon from "./Icon";
 import LoadingState from "./LoadingState";
+import Modal from "./Modal";
 import SelectionField from "./SelectionField";
+
+// Module-lifetime memory only. Logout/account/workspace transitions erase all lists,
+// including while no ContentLibrary is mounted. Token renewal for one identity does not.
+const listMemory = libraryStateMemory();
+const listContext = computed(() => {
+  const identity = session.value?.identity;
+  const scope = saveContext.value.scope;
+  return identity && scope ? JSON.stringify([identity.method, identity.id, scope]) : null;
+});
+watch(listContext, (context) => { listMemory.activate(context); }, { immediate: true });
 
 type Props = { kind: "article" | "page" | "collection"; folder?: string };
 type Events = {
@@ -46,6 +59,15 @@ type Events = {
 const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
   "ContentLibrary",
   (props, emit, expose) => {
+    let stateLease = listMemory.capture(props.kind);
+    let alive = true, request = 0, restoringList = false;
+    let restoredFilters: string | undefined, restoredLanguage = "";
+    let initialEdits: Partial<LibraryListState> = {};
+    let initialLanguage: string | undefined;
+    const listReady = ref(false);
+    function editInitialList(edits: Partial<LibraryListState>) {
+      if (!listReady.value) initialEdits = { ...initialEdits, ...edits };
+    }
     const deleteTarget = ref<ArticleSummary>();
     function deleted(path: string) {
       items.value = items.value.filter((item) => item.path !== path);
@@ -59,11 +81,16 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
       status = ref("all"),
       error = ref<Message>(""),
       loading = ref(true);
-    const folder = ref(props.folder || collectionRoot),
+    // App's legacy folder prop is not account/workspace stamped. An absent
+    // scoped snapshot must start at root, not revive that potentially stale prop.
+    const folder = ref(collectionRoot),
       pageNumber = ref(1),
       pageSize = 20;
     const tagLabels = ref(new Map<string, string>()),
       categoryLabels = ref(new Map<string, string>());
+    const creationTitleId = useId();
+    let creationStarted = false;
+    const createError = ref<Message>("");
     const creating = ref(false),
       title = ref(""),
       slug = ref(""),
@@ -109,8 +136,13 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
       },
       { flush: "sync" },
     );
-    watch([search, status, folder, language], () => {
-      pageNumber.value = 1;
+    const filterKey = () => JSON.stringify([search.value, status.value, folder.value]);
+    watch([search, status, folder], () => {
+      // Effects invoked from another signals effect may flush after the restore
+      // batch returns. Match the restored values rather than relying on a flag.
+      if (filterKey() === restoredFilters) return;
+      restoredFilters = undefined;
+      if (!restoringList) pageNumber.value = 1;
     });
     const creatingAlbum = computed(
       () => parent.value === "album" || parent.value.startsWith("album/"),
@@ -181,10 +213,55 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
         pageNumber.value * pageSize,
       ),
     );
+    function rememberList(value = language.value) {
+      if (!listReady.value || !stateLease.current()) return;
+      stateLease.write(value, {
+        search: search.value, status: status.value,
+        folder: folder.value, page: pageNumber.value,
+      });
+    }
+    function restoreList(value: string, fallbackFolder: string, edits: Partial<LibraryListState> = {}) {
+      const config = languages.value;
+      if (!config) return;
+      const saved = initialLibraryState(stateLease.read(value), {
+        search: "", status: "all", folder: fallbackFolder, page: 1,
+      }, edits);
+      const candidate = saved?.folder || fallbackFolder;
+      const rootPath = translationLocation(collectionRoot, value, config).path;
+      const translated = /^content\/collections\/.+\.md$/.test(candidate)
+        ? translationLocation(candidate, value, config).path
+        : rootPath;
+      // A removed section falls back to root without erasing the saved filters.
+      const validFolder = items.value.some((item) => item.path === translated && isSection(item))
+        ? translated : rootPath;
+      const savedSearch = saved?.search || "";
+      const savedStatus = saved && ["all", "draft", "published"].includes(saved.status) ? saved.status : "all";
+      restoredFilters = JSON.stringify([savedSearch, savedStatus, validFolder]);
+      restoredLanguage = value;
+      restoringList = true;
+      try {
+        batch(() => {
+          language.value = value;
+          folder.value = validFolder;
+          search.value = savedSearch;
+          status.value = savedStatus;
+          pageNumber.value = Math.max(1, Math.min(saved?.page || 1, pages.value));
+        });
+      } finally { restoringList = false; }
+      emit("browse", folder.value);
+      rememberList();
+    }
+    watch([search, status, folder, pageNumber], () => {
+      if (!restoringList) rememberList();
+    });
     function browse(path: string) {
-      folder.value = path;
-      search.value = "";
-      status.value = "all";
+      editInitialList({ folder: path, search: "", status: "all", page: 1 });
+      batch(() => {
+        folder.value = path;
+        search.value = "";
+        status.value = "all";
+        pageNumber.value = 1;
+      });
       emit("browse", path);
     }
     function openItem(item: ArticleSummary) {
@@ -229,6 +306,12 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
       );
     }
     function startCreate() {
+      // Escape/Cancel pauses this form; reopening resumes all unfinished values.
+      if (creationStarted) {
+        creating.value = true;
+        return;
+      }
+      creationStarted = true;
       createLanguage.value = language.value;
       title.value = "";
       slug.value = "";
@@ -248,10 +331,13 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
       creating.value = true;
     }
     async function load(refresh = false) {
+      const currentRequest = ++request, context = listContext.value;
+      const isCurrent = () => alive && currentRequest === request && context === listContext.value;
       loading.value = true;
       error.value = "";
       const labels = api<Settings>("/settings/taxonomies")
         .then((settings) => {
+          if (!isCurrent()) return;
           tagLabels.value = new Map(
             taxonomyChoices(settings.values["post.tags"], []).map((option) => [
               option.value,
@@ -272,33 +358,68 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
           api<ArticleSummary[]>("/content" + (refresh ? "?refresh=1" : "")),
           api<ContentLanguages>("/content-languages"),
         ]);
+        if (!isCurrent()) return;
+        // Taxonomy labels participate in search; clamp the page only after both
+        // fresh content and those labels have settled.
+        await labels;
+        if (!isCurrent()) return;
+        rememberList();
+        if (!stateLease.current()) stateLease = listMemory.capture(props.kind);
         items.value = content;
         languages.value = config;
-        if (!config.languages.includes(language.value))
-          language.value = config.defaultLanguage;
-        if (!items.value.some((item) => item.path === folder.value))
-          browse(root.value);
+        const preferred = listReady.value ? language.value : initialLanguage ?? stateLease.language();
+        const value = preferred && config.languages.includes(preferred) ? preferred : config.defaultLanguage;
+        restoreList(value, folder.value, listReady.value ? {} : initialEdits);
+        listReady.value = true;
+        initialEdits = {};
+        initialLanguage = undefined;
+        rememberList();
       } catch (e) {
-        error.value = errorMessage(e);
+        if (isCurrent()) error.value = errorMessage(e);
       } finally {
-        loading.value = false;
+        if (isCurrent()) loading.value = false;
       }
       await labels;
     }
-    watch(language, (value) => {
-      if (languages.value) {
-        folder.value = translationLocation(
-          folder.value,
-          value,
-          languages.value,
-        ).path;
-        emit("browse", folder.value);
-      }
+    watch(language, (value, previous) => {
+      if (restoringList || value === restoredLanguage || !listReady.value || !languages.value?.languages.includes(value)) return;
+      rememberList(previous);
+      restoreList(value, folder.value);
+    });
+    watch(listContext, (context) => {
+      listMemory.activate(context);
+      // Never write the outgoing component's state into a new workspace. Keep
+      // creation/editor/mutation ownership untouched; only reset list context.
+      request++;
+      stateLease = listMemory.capture(props.kind);
+      listReady.value = false;
+      initialEdits = {};
+      initialLanguage = undefined;
+      restoringList = true;
+      try {
+        batch(() => {
+          search.value = "";
+          status.value = "all";
+          folder.value = collectionRoot;
+          pageNumber.value = 1;
+          language.value = "";
+          items.value = [];
+          languages.value = undefined;
+          tagLabels.value = new Map();
+          categoryLabels.value = new Map();
+        });
+      } finally { restoringList = false; }
+      if (session.value) void load();
+    });
+    onBeforeUnmount(() => {
+      rememberList();
+      alive = false;
+      request++;
     });
     onMounted(() => load());
     function create() {
       if (!title.value.trim() || !/^[a-z0-9][a-z0-9-]*$/.test(slug.value)) {
-        error.value = "请填写标题，网址标识使用小写字母、数字和连字符。";
+        createError.value = "请填写标题，网址标识使用小写字母、数字和连字符。";
         return;
       }
       const metadata: Record<string, Json> = {
@@ -313,7 +434,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
             (option) => option.value === articleCollection.value,
           )
         ) {
-          error.value = "请选择已有系列。";
+          createError.value = "请选择已有系列。";
           return;
         }
         path = articleCollection.value
@@ -335,7 +456,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
           subtype.value !== "column" &&
           !parents.value.some((option) => option.value === parent.value)
         ) {
-          error.value = "请选择已有分组、系列或专辑。";
+          createError.value = "请选择已有分组、系列或专辑。";
           return;
         }
         const directory =
@@ -358,10 +479,10 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
           languages.value,
         ).path;
       if (items.value.some((item) => item.path === path)) {
-        error.value = "此语言版本已存在，请从内容库打开";
+        createError.value = "此语言版本已存在，请从内容库打开";
         return;
       }
-      error.value = "";
+      createError.value = "";
       emit("create", path, metadata);
     }
     return () =>
@@ -497,7 +618,9 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                     ? t("搜索系列、专辑和章节…")
                     : t("搜索标题、标签或分类…"),
                 onInput: domEvent(($event: Event) => {
-                  search.value = ($event.target as HTMLInputElement).value;
+                  const value = ($event.target as HTMLInputElement).value;
+                  editInitialList({ search: value });
+                  search.value = value;
                 }),
               }),
             ),
@@ -511,6 +634,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                     label: value,
                   })),
                   onUpdateModelValue: (($event) => {
+                    if (!listReady.value) initialLanguage = String($event);
                     language.value = String($event);
                   }) satisfies EventHandler<
                     typeof SelectionField,
@@ -528,6 +652,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 { value: "published", label: t("已发布") },
               ],
               onUpdateModelValue: (($event) => {
+                editInitialList({ status: String($event) });
                 status.value = String($event);
               }) satisfies EventHandler<
                 typeof SelectionField,
@@ -735,13 +860,12 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
         ),
         creating.value
           ? element(
-              "div",
+              Modal,
               {
-                className: classes("modal-backdrop"),
-                onClick: domEvent(($event: Event) => {
-                  if ($event.target !== $event.currentTarget) return;
-                  creating.value = false;
-                }),
+                className: "creation-modal",
+                labelledBy: creationTitleId,
+                initialFocus: 'input[name="creation-title"]',
+                onCancel: () => { creating.value = false; },
               },
               element(
                 "form",
@@ -755,7 +879,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 element(
                   "div",
                   { className: classes("card-heading") },
-                  element("h2", null, t("新建内容")),
+                  element("h2", { id: creationTitleId }, t("新建内容")),
                   element(
                     "button",
                     {
@@ -768,11 +892,11 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                     t("取消"),
                   ),
                 ),
-                error.value
+                createError.value
                   ? element(
                       "p",
                       { role: "alert", className: classes("notice error") },
-                      t(error.value),
+                      t(createError.value),
                     )
                   : null,
                 props.kind === "collection"
@@ -830,8 +954,8 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                   element("span", null, t("标题")),
                   element("input", {
                     value: title.value ?? "",
+                    name: "creation-title",
                     required: true,
-                    autoFocus: true,
                     placeholder: t("给它取个名字"),
                     onInput: domEvent(($event: Event) => {
                       title.value = ($event.target as HTMLInputElement).value;

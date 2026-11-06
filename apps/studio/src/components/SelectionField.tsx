@@ -2,6 +2,7 @@ import type { Choice } from "../../shared/choices";
 import type { Json } from "../../shared/types";
 import { errorMessage } from "../api";
 import { t, type Message } from "../i18n";
+import { createBusinessModal } from "../modal-layer";
 import {
   classes,
   component,
@@ -15,7 +16,6 @@ import {
 } from "../react-component";
 import {
   computed,
-  nextTick,
   onBeforeUnmount,
   ref,
   useId,
@@ -126,19 +126,19 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       if (!props.disabled)
         emit("update:modelValue", props.multiple ? values : (values[0] ?? ""));
     }
-    async function open() {
+    const modal = createBusinessModal(() => dialog.value, () => opened.value && !props.disabled);
+    function open() {
       if (props.disabled) return;
       pending.value = [...selected.value];
       search.value = "";
       createError.value = "";
       created.value = false;
       opened.value = true;
-      await nextTick();
-      dialog.value?.showModal();
+      modal.open();
     }
     function close() {
       if (creating.value) return;
-      dialog.value?.close();
+      modal.close();
       opened.value = false;
       trigger.value?.focus();
     }
@@ -183,7 +183,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
     );
     onBeforeUnmount(() => {
       alive = false;
-      dialog.value?.close();
+      modal.dispose();
     });
     return () =>
       element(

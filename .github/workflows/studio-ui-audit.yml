@@ -1,0 +1,94 @@
+name: Studio expanded UI audit
+run-name: Studio synthetic UI audit · ${{ github.ref_name }}
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: &audit_paths
+      - 'apps/studio/**'
+      - 'examples/demo/**'
+      - 'packages/theme/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/studio-ui-audit.yml'
+  push:
+    paths: *audit_paths
+permissions:
+  contents: read
+concurrency:
+  group: studio-ui-audit-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ui-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked workspace dependencies (remote only)
+        run: npm ci
+      - name: Studio type and unit prerequisites
+        run: |
+          npm run typecheck -w @wondershine/studio
+          npm test -w @wondershine/studio
+      - name: Build Studio service and browser assets
+        id: service-build
+        run: npm run studio:build
+      - uses: browser-actions/setup-chrome@v2.2.0
+        id: chrome
+      - name: Enable Chromium sandbox namespaces on the ephemeral runner
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Install multilingual screenshot fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk fonts-noto-color-emoji
+      - name: Six-size UI, synthetic scroll/pinch and separate 200% reflow audit
+        id: audit
+        timeout-minutes: 43
+        run: npx --no-install tsx apps/studio/tests/browser/form-audit.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Root modal stacking and focus regression (synthetic browser)
+        if: ${{ !cancelled() && steps.service-build.outcome == 'success' && steps.chrome.outcome == 'success' }}
+        timeout-minutes: 5
+        run: npx --no-install tsx apps/studio/tests/browser/root-modals-runner.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Build native-adapter browser fixture even if layout findings failed
+        id: native-build
+        if: ${{ !cancelled() && steps.service-build.outcome == 'success' && steps.chrome.outcome == 'success' }}
+        run: npm run build:app -w @wondershine/studio
+        env:
+          VITE_STUDIO_GITHUB_CLIENT_ID: studio-ci-github
+          VITE_STUDIO_CNB_CLIENT_ID: studio-ci-cnb
+      - name: Existing mocked-Tauri native UI complement (not physical devices)
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        timeout-minutes: 15
+        run: node apps/studio/tests/browser/native-ui.mjs
+        env:
+          STUDIO_TEST_GESTURES: 'true'
+          STUDIO_TEST_OAUTH: fixture
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Publish coverage summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f apps/studio/test-results/form-audit/report.md ]; then
+            # Full per-size report is in the artifact; keep job summary bounded.
+            head -n 18 apps/studio/test-results/form-audit/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Expanded audit did not reach report creation; inspect prerequisite logs.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo 'Chromium CDP gestures and mocked Tauri IPC are synthetic evidence, not native WebView or physical-device validation.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Always retain UI audit evidence
+        uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: studio-expanded-ui-audit-${{ github.run_attempt }}
+          path: apps/studio/test-results/
+          if-no-files-found: warn
+          retention-days: 7

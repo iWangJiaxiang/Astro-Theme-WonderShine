@@ -1,24 +1,86 @@
-/* Shared browser and app interaction floor; desktop keeps its compact rhythm. */
-/* Hide breakpoint-only controls after the media change handler captures focus,
-   not during the browser's earlier media-query style recalculation. */
+/* Shared interaction contracts include body portals and first-run/login screens. */
 .sidebar .navigation-close { display: inline-flex; align-self: flex-end; min-width: 44px; min-height: 44px; }
 .mobile-menu { display: inline-flex; }
 .sidebar .navigation-close[hidden], .mobile-menu[hidden] { display: none; }
-.save-mode-menu { max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
-@media (max-width: 760px) {
-  body:has(.sidebar.open) { overflow: hidden; }
-  .studio-shell :is(button, select, summary),
-  .native-connect :is(button, select, summary) { min-height: 44px; }
-  .studio-shell :is(.icon-button, .save-button-toggle) { min-width: 44px; }
-  .studio-shell :is(input:not([type=checkbox]):not([type=radio]):not([type=color]), textarea, select),
-  .native-connect :is(input:not([type=checkbox]):not([type=radio]), textarea, select) { font-size: 16px; }
-  .studio-shell .field input:not([type=checkbox]):not([type=radio]):not([type=color]) { min-height: 44px; }
-  .thread-composer :is(.composer-mode-tabs button, .composer-tool, .choice-compact .choice-trigger, .reference-heading > button, .composer-recovery .text-button, .composer-publish .primary, .composer-initial-language select) { min-height: 44px; }
+:root {
+  --studio-overlay-gap: 12px;
+  --studio-overlay-height: calc(var(--native-visible-height, 100dvh) - max(var(--studio-overlay-gap), env(safe-area-inset-top)) - max(var(--studio-overlay-gap), env(safe-area-inset-bottom)));
+}
+body:has(dialog[open]) { overflow: hidden; }
+dialog[open] {
+  position: fixed;
+  top: calc(var(--native-visible-top, 0px) + max(var(--studio-overlay-gap), env(safe-area-inset-top)));
+  bottom: auto;
+  left: var(--studio-visible-left, 0px);
+  right: calc(100% - var(--studio-visible-left, 0px) - var(--studio-visible-width, 100vw));
+  margin-block: 0;
+  margin-inline: auto;
+  max-width: calc(var(--studio-visible-width, 100vw) - 2 * max(var(--studio-overlay-gap), env(safe-area-inset-left), env(safe-area-inset-right)));
+  max-height: var(--studio-overlay-height);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.selection-panel, .media-dialog-panel { min-height: 0; max-height: calc(var(--studio-overlay-height) - 2px); }
+.selection-panel { height: min(680px, calc(var(--studio-overlay-height) - 2px)); }
+:is(.selection-results, .media-dialog-body, .oauth-repositories, .ai-assistant-body) { overscroll-behavior: contain; }
+.save-mode-menu { max-width: calc(var(--studio-visible-width, 100vw) - 16px); max-height: calc(var(--native-visible-height, 100dvh) - 16px); overflow-y: auto; overscroll-behavior: contain; }
+
+html[data-native-mobile] { --studio-touch-target: 44px; }
+html[data-native-platform=android] { --studio-touch-target: 48px; }
+html[data-native-mobile] :is(button, select, summary, .choice-tile, .form-switch, input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=hidden]):not([type=file])) { min-height: var(--studio-touch-target) !important; }
+html[data-native-mobile] :is(.icon-button, .text-button, .save-button-toggle, .directory-disclosure) { min-width: var(--studio-touch-target) !important; }
+html[data-native-mobile] :is(input:not([type=checkbox]):not([type=radio]):not([type=color]), textarea, select, [contenteditable=true]) { font-size: 16px !important; }
+/* These minimums deliberately override compact component styles, not desktop density.
+   Apply to the document: dialogs/menus are portaled outside .studio-shell. */
+@media (max-width: 760px), (any-pointer: coarse) {
+  :root:not([data-native-mobile]) { --studio-touch-target: 44px; }
+  :is(button, select, summary, .choice-tile, .form-switch, input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=hidden]):not([type=file])) { min-height: var(--studio-touch-target) !important; }
+  :is(.icon-button, .text-button, .save-button-toggle, .directory-disclosure) { min-width: var(--studio-touch-target) !important; }
+  :is(input:not([type=checkbox]):not([type=radio]):not([type=color]), textarea, select, [contenteditable=true]) { font-size: 16px !important; }
+  .thread-composer :is(.composer-mode-tabs button, .composer-tool, .reference-heading > button, .composer-recovery .text-button, .composer-publish .primary) { min-height: var(--studio-touch-target); }
   .composer-publish { flex-wrap: wrap; }
-  .topbar-actions { flex-wrap: wrap !important; }
   .selection-footer { flex-wrap: wrap; }
   .selection-footer > small { min-width: 0; overflow-wrap: anywhere; }
+  .color-inputs input[type=color] { width: var(--studio-touch-target); height: var(--studio-touch-target); }
+  .topbar-actions .visit-site { display: inline-flex; align-items: center; min-height: var(--studio-touch-target); }
+  .choice-tile { align-items: center; }
 }
+@media (max-width: 760px) {
+  body:has(.sidebar.open) { overflow: hidden; }
+  .topbar-actions { flex-wrap: wrap !important; }
+}
+/* At phone widths, let fields use the available measure instead of compressing
+   inputs beside a desktop label column. Keep short composer controls inline. */
+@media (max-width: 480px) {
+  .field-inline:not(.composer-initial-language):not(.autosave-control),
+  .settings-card .field-inline,
+  .metadata-card .field-inline,
+  .field-inline > .field-inline { grid-template-columns: minmax(0, 1fr); }
+  .field-inline:not(.composer-initial-language):not(.autosave-control) > :nth-child(n) { grid-column: 1; grid-row: auto; }
+  .field.form-switch { grid-template-columns: minmax(0, 1fr) auto; }
+  .field.form-switch > span { grid-column: 1; grid-row: 1; }
+  .field.form-switch > input[type=checkbox] { grid-column: 2; grid-row: 1; }
+  .image-field, .image-field.has-preview,
+  .settings-card .image-field, .settings-card .image-field.has-preview,
+  .metadata-card .image-field, .metadata-card .image-field.has-preview { grid-template-columns: minmax(0, 1fr); }
+  .image-field > :nth-child(n), .settings-card .image-field > :nth-child(n), .metadata-card .image-field > :nth-child(n),
+  .image-field.has-preview > .image-field-preview,
+  .settings-card .image-field.has-preview > .image-field-preview,
+  .metadata-card .image-field.has-preview > .image-field-preview,
+  .image-field.has-preview > small, .settings-card .image-field.has-preview > small { grid-column: 1; grid-row: auto; }
+  .image-field .row { flex-wrap: wrap; }
+  .editor-save-actions { justify-content: flex-start; }
+}
+/* If fixed dialog chrome cannot fit, use one scrolling surface. A zero-height
+   results pane behind overflow:hidden would make confirmation unreachable. */
+html[data-compact-viewport] :is(.selection-panel, .media-dialog-panel) {
+  display: block; height: auto; max-height: none; overflow: visible;
+}
+html[data-compact-viewport] :is(.selection-results, .media-dialog-body, .oauth-repositories, .external-reference-fields) {
+  overflow: visible; max-height: none; min-height: 0;
+}
+html[data-compact-viewport] .ai-assistant-dialog[open] { display: block; }
+html[data-compact-viewport] .ai-assistant-body { overflow: visible; }
 @media (prefers-reduced-motion: reduce) {
   .sidebar { transition: none; }
 }

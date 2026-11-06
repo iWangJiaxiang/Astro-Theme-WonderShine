@@ -1,5 +1,5 @@
 import type { MediaItem, MediaMode } from "../../shared/media";
-import { reauthentication } from "../api";
+import { createBusinessModal } from "../modal-layer";
 import { t } from "../i18n";
 import {
   mediaError,
@@ -39,13 +39,16 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
       }>();
     const id = useId();
     let previousFocus: HTMLElement | null = null;
+    let wantsOpen = true;
+    const modal = createBusinessModal(() => dialog.value, () => wantsOpen);
     onMounted(() => {
       previousFocus = document.activeElement as HTMLElement;
-      dialog.value?.showModal();
+      modal.open();
     });
-    function close(force = false) {
-      if (mediaUploading.value && !force) return;
-      dialog.value?.close();
+    function close() {
+      if (mediaUploading.value) return;
+      wantsOpen = false;
+      modal.close();
       emit("close");
     }
     function confirm() {
@@ -68,11 +71,9 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
       )
         pending.value = undefined;
     });
-    watch(reauthentication, (value) => {
-      if (value) close(true);
-    });
     onBeforeUnmount(() => {
-      dialog.value?.close();
+      wantsOpen = false;
+      modal.dispose();
       if (previousFocus?.isConnected) previousFocus.focus();
     });
     return () =>
