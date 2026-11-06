@@ -149,7 +149,7 @@ test('a refresh waiting behind mutations retains refresh=1 when an ordinary retr
     await tick();
     const second = api(refreshFirst ? '/content' : '/content?refresh=1');
     await tick();
-    assert.deepEqual(paths, []);
+    assert.equal(paths.length, 0);
     write.resolve(Response.json({})); await save;
     assert.deepEqual(await Promise.all([first, second]), [['forced'], ['forced']]);
     assert.ok(paths.includes('/content?refresh=1'));

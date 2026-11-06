@@ -42,7 +42,7 @@ function parsedDocument(source: string) {
   delimiters.lastIndex = opening[0].length;
   for (let match = delimiters.exec(source); match; match = delimiters.exec(source)) {
     const header = source.slice(opening[0].length, match.index);
-    let metadata: ReturnType<typeof parse>;
+    let metadata: Record<string, unknown>;
     try { metadata = parse(header); } catch { continue; }
     return { metadata, body: source.slice(delimiters.lastIndex) };
   }

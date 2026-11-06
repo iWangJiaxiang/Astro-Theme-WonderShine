@@ -38,7 +38,7 @@ test('server preview store is lazy, usable after authentication creates state, a
   assert.equal(await configured.summaryStore.load(), null, 'missing state is a cache miss, not a startup error');
   await configured.state.set('fixture-session', { authenticated: true });
   if (process.platform === 'win32') return; // Adapter intentionally refuses unproved Windows ACLs.
-  const record = { version: 1 as const, recipe: SUMMARY_INDEX_CACHE_RECIPE, scope: configured.summaryScope!, state: 'clean' as const, rows: [] };
+  const record = { version: 1 as const, recipe: SUMMARY_INDEX_CACHE_RECIPE, scope: configured.summaryScope!, state: 'clean' as const, rows: [] } satisfies import('../core/summary-index.js').SummaryIndexCacheRecord;
   await configured.summaryStore.save(record);
   assert.deepEqual(await configured.summaryStore.load(), record);
   const otherSite = join(root, 'other-site');

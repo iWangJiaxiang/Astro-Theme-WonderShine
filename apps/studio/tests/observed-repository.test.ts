@@ -207,7 +207,7 @@ test('sync always invalidates at both boundaries, preserving workspace receivers
   assert.equal((await repository.workspace!.status()).confirmation, undefined, 'review must not mutate the ordinary status');
   assert.equal(await repository.workspace!.commit('message', 'commit-token'), await control.status());
   await repository.workspace!.saveBranch!('key', []);
-  assert.deepEqual(events, []);
+  assert.equal(events.length, 0);
   assert.equal(await repository.workspace!.sync('sync-token'), await control.status());
   assert.equal(control.confirmation, 'sync-token');
   assert.deepEqual(events.map(event => [event.operation, event.type]), [['sync', 'begin'], ['sync', 'uncertain']]);
