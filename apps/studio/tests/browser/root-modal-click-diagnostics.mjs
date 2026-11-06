@@ -157,7 +157,8 @@ export async function initialAiClickDiagnostics({ page, screenshots, outcome }) 
       let capture = null;
       try {
         if (handle) {
-          try { capture = await handle.evaluate(capture => capture.finish(!operationFailed)); }
+          // Browser callbacks cannot close over this module's operation state.
+          try { capture = await handle.evaluate((capture, success) => capture.finish(success), !operationFailed); }
           catch (error) { failed('final-capture-cleanup-unavailable', error); }
         }
       } finally {
