@@ -472,7 +472,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
     await folderClearDiagnostics?.install();
     await page.locator(folderTrigger).click();
     await page.waitForSelector(chooser, { visible: true });
-    await page.locator(`${chooser} input[value=""]`).click();
+    await page.locator(`${chooser} input[type="radio"][value=""]`).click();
     await page.locator(`${chooser} .selection-footer button.primary`).click();
     await page.waitForFunction(() => {
       const matched = !document.querySelector('.selection-dialog[open]');
