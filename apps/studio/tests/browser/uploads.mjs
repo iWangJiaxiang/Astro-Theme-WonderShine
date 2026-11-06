@@ -67,25 +67,102 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
       }));
       assert.deepEqual(context, { windowX: 0, windowY: 0, rootX: 0, rootY: 0 }, 'initial library preview is measured at the actual unscrolled window/root context, without a test scroll reset');
     }
-    const preview = await page.$eval(root, browser => {
-      const body = browser.closest('.media-dialog-body');
-      const footer = browser.closest('dialog')?.querySelector('.selection-footer');
-      const clip = body?.getBoundingClientRect();
-      const top = Math.max(0, clip?.top ?? 0);
-      const bottom = Math.min(innerHeight, clip?.bottom ?? innerHeight, footer?.getBoundingClientRect().top ?? innerHeight);
-      const candidates = [...browser.querySelectorAll('.media-thumbnail img')].filter(image => image.complete && image.naturalWidth > 0);
-      return candidates.some(image => {
-        const box = image.getBoundingClientRect();
-        const left = Math.max(0, box.left), right = Math.min(innerWidth, box.right);
-        const visibleTop = Math.max(top, box.top), visibleBottom = Math.min(bottom, box.bottom);
-        // Show at least a square half-thumbnail region, not a one-pixel sliver.
-        const meaningful = Math.min(box.width, box.height) / 2;
-        if (meaningful <= 0 || right - left < meaningful || visibleBottom - visibleTop < meaningful) return false;
-        const hit = document.elementFromPoint((left + right) / 2, (visibleTop + visibleBottom) / 2);
-        return image.closest('.media-card').contains(hit);
-      }) && (!body || body.scrollTop === 0);
-    });
-    assert.ok(preview, 'initial 320x568 view shows a meaningful loaded image preview, unobscured by the footer, without scrolling');
+    const target = root.startsWith('.media-library') ? 'library' : 'picker';
+    let preview;
+    try {
+      preview = await page.$eval(root, browser => {
+        const body = browser.closest('.media-dialog-body');
+        const footer = browser.closest('dialog')?.querySelector('.selection-footer');
+        const clip = body?.getBoundingClientRect();
+        const top = Math.max(0, clip?.top ?? 0);
+        let footerBox;
+        const bottom = Math.min(innerHeight, clip?.bottom ?? innerHeight, (footerBox = footer?.getBoundingClientRect())?.top ?? innerHeight);
+        const images = [...browser.querySelectorAll('.media-thumbnail img')];
+        const candidates = images.filter(image => image.complete && image.naturalWidth > 0);
+        const visited = [];
+        let visitedTotal = 0, captureFailed = false, bodyScrollReadForPredicate = false, bodyScrollTopForPredicate = null;
+        const remember = entry => {
+          try { if (visited.length < 24) visited.push(entry); } catch { captureFailed = true; }
+        };
+        const imageMatched = candidates.some(image => {
+          visitedTotal++;
+          const box = image.getBoundingClientRect();
+          const left = Math.max(0, box.left), right = Math.min(innerWidth, box.right);
+          const visibleTop = Math.max(top, box.top), visibleBottom = Math.min(bottom, box.bottom);
+          // Show at least a square half-thumbnail region, not a one-pixel sliver.
+          const meaningful = Math.min(box.width, box.height) / 2;
+          if (meaningful <= 0 || right - left < meaningful || visibleBottom - visibleTop < meaningful) {
+            remember({ box, left, right, visibleTop, visibleBottom, meaningful, geometryPassed: false, hitTestCalled: false, hit: null, cardContainsHit: null });
+            return false;
+          }
+          const hit = document.elementFromPoint((left + right) / 2, (visibleTop + visibleBottom) / 2);
+          const cardContainsHit = image.closest('.media-card').contains(hit);
+          remember({ box, left, right, visibleTop, visibleBottom, meaningful, geometryPassed: true, hitTestCalled: true, hit, cardContainsHit });
+          return cardContainsHit;
+        });
+        const matched = imageMatched && (!body || (bodyScrollReadForPredicate = true, (bodyScrollTopForPredicate = body.scrollTop) === 0));
+        // No extra DOM reads precede matched; retained rectangles/hits are from the predicate.
+        let sample;
+        try {
+          const faults = [];
+          let droppedFaults = 0;
+          const read = (stage, action) => {
+            try { return action(); } catch { if (faults.length < 8) faults.push(stage); else droppedFaults++; return null; }
+          };
+          const numeric = n => typeof n === 'number' && Number.isFinite(n) ? n : null;
+          const rect = box => box ? Object.fromEntries(['left', 'top', 'right', 'bottom', 'width', 'height'].map(key => [key, numeric(box[key])])) : null;
+          const role = node => !node ? null : node.matches('img') ? 'img' : node.closest('.media-card') ? 'media-card' : node.closest('.selection-footer') ? 'footer' : node.closest('.media-dialog-body') ? 'body' : node.closest('dialog') ? 'dialog' : 'other';
+          const scroll = node => node ? { scrollTop: numeric(node.scrollTop), clientHeight: numeric(node.clientHeight), scrollHeight: numeric(node.scrollHeight) } : null;
+          sample = {
+            status: 'available', imageMatched, bodyPresent: !!body, bodyScrollReadForPredicate,
+            bodyScrollTopForPredicate: numeric(bodyScrollTopForPredicate), bodyAtZero: imageMatched ? (!body || bodyScrollTopForPredicate === 0) : null,
+            totalImageCount: images.length, loadedCount: candidates.length, visitedTotal,
+            unvisitedCount: candidates.length - visitedTotal, droppedCandidates: visitedTotal - visited.length,
+            clipTop: numeric(top), clipBottom: numeric(bottom), bodyRect: rect(clip), footerRect: rect(footerBox),
+            candidates: visited.map((entry, index) => ({
+              index, rect: rect(entry.box), meaningful: numeric(entry.meaningful),
+              intersection: { left: numeric(entry.left), right: numeric(entry.right), top: numeric(entry.visibleTop), bottom: numeric(entry.visibleBottom), width: numeric(entry.right - entry.left), height: numeric(entry.visibleBottom - entry.visibleTop) },
+              geometryPassed: entry.geometryPassed, hitTestCalled: entry.hitTestCalled,
+              intersectionCenter: entry.hitTestCalled ? { x: numeric((entry.left + entry.right) / 2), y: numeric((entry.visibleTop + entry.visibleBottom) / 2) } : null,
+              cardContainsHit: entry.cardContainsHit, matched: entry.cardContainsHit === true,
+              hitRoleAtSampling: entry.hitTestCalled ? read('hit-role', () => role(entry.hit)) : null,
+            })),
+            atSampling: read('context', () => {
+              const dialog = browser.closest('dialog');
+              return {
+                dialogRect: read('dialog-rect', () => rect(dialog?.getBoundingClientRect())),
+                bodyScroll: read('body-scroll', () => scroll(body)), dialogScroll: read('dialog-scroll', () => scroll(dialog)),
+                active: read('active', () => ({ role: role(document.activeElement), inBody: body ? body.contains(document.activeElement) : null })),
+                innerWidth: numeric(innerWidth), innerHeight: numeric(innerHeight),
+                compact: document.documentElement.hasAttribute('data-compact-viewport'),
+                visualViewport: read('visual-viewport', () => {
+                  const vv = window.visualViewport;
+                  return vv ? { width: numeric(vv.width), height: numeric(vv.height), offsetLeft: numeric(vv.offsetLeft), offsetTop: numeric(vv.offsetTop), pageLeft: numeric(vv.pageLeft), pageTop: numeric(vv.pageTop), scale: numeric(vv.scale) } : null;
+                }),
+                css: read('css', () => {
+                  const style = getComputedStyle(document.documentElement);
+                  return Object.fromEntries(['--native-visible-height', '--native-visible-top', '--studio-visible-left', '--studio-visible-width'].map(name => {
+                    const match = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+))(px)?$/.exec(style.getPropertyValue(name).trim());
+                    return [name, match ? { number: numeric(Number(match[1])), unit: match[2] ?? 'number' } : null];
+                  }));
+                }),
+              };
+            }),
+            faults, droppedFaults,
+          };
+          if (captureFailed) { if (faults.length < 8) faults.push('candidate-capture'); else sample.droppedFaults++; }
+          if (faults.length || sample.droppedFaults) sample.status = 'partial';
+        } catch { sample = { status: 'unavailable', faults: ['post-predicate'], droppedFaults: 0 }; }
+        return { matched, sample };
+      });
+    } catch (error) {
+      try { mediaDiagnostics?.recordPreview(target, null, 'rpc-failed'); } catch {}
+      throw error;
+    }
+    let recordFailed = false;
+    try { mediaDiagnostics.recordPreview(target, preview); } catch { recordFailed = true; }
+    assert.ok(preview.matched, 'initial 320x568 view shows a meaningful loaded image preview, unobscured by the footer, without scrolling');
+    if (recordFailed) throw new Error('Media disclosure diagnostic: preview-record unavailable');
   };
   const retainUploadAcrossBrowseToggle = async disclosure => {
     const handles = await Promise.all(['.media-upload', '.upload-file-input', '.upload-results'].map(selector => page.$(selector)));

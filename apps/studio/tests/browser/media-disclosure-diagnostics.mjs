@@ -2,13 +2,22 @@ import { writeFile } from 'node:fs/promises';
 
 // Test-only DOM evidence. Node IDs are not React refs; no component state is read.
 const hook = '__mediaDisclosureDiagnostics';
-const caps = { events: 120, waits: 96, checkpoints: 16, failures: 24, animations: 4, mutationNodes: 8 };
+const caps = { events: 120, waits: 96, checkpoints: 16, failures: 24, animations: 4, mutationNodes: 8, previewSamples: 2, previewCandidates: 24, previewFaults: 8 };
 let nextOwner = 0;
 
 export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout }) {
   const owner = ++nextOwner;
   const report = {
-    schemaVersion: 1, scope: 'checkUploads', limitation: 'DOM identity only; not React refs or proof of a shared root cause; instrumentation may affect timing',
+    schemaVersion: 2, scope: 'checkUploads', limitation: 'DOM identity only; not React refs or proof of a shared root cause; instrumentation may affect timing',
+    previewSemantics: {
+      predicate: 'Original some order, geometry, hit tests and body-scroll short circuit; matched computed before additional DOM reads',
+      measurements: 'Candidate/body/footer rectangles and hits reused from predicate; atSampling context and hit roles read afterward, not an atomic snapshot or causal evidence',
+      missing: 'Missing, partial or unavailable evidence is not success; skipped predicate body scroll is null, not zero; body absence preserves original true branch',
+      limits: 'First 24 visited candidates per sample, at most 2 samples; counts distinguish dropped visited candidates from short-circuited unvisited candidates; DOM only, not component state',
+      roles: ['img', 'media-card', 'footer', 'body', 'dialog', 'other', null],
+      css: 'Only finite numeric px or unitless custom properties on documentElement; null means absent or unparseable, never an inferred zero',
+    },
+    previewSamples: [], previewAttempts: 0, droppedPreviewSamples: 0,
     codes: { roles: ['library-directory', 'picker-filter', 'sidebar', 'sidebar-backdrop'], playStates: ['idle', 'running', 'paused', 'finished'], mutationChange: { removed: -1, attribute: 0, added: 1 } },
     caps, installation: 'not-started', outcome: 'not-run', active: false,
     browser: null, waits: [], droppedWaits: 0, cleanup: {}, diagnosticFailures: [], droppedFailures: 0,
@@ -185,6 +194,24 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
       retain(data);
       report.installation = data?.installed ? 'installed' : 'failed-or-partial';
       if (!data?.installed && !report.diagnosticFailures.length) failure('install-unavailable', new Error('Media diagnostic installation returned no state'));
+    },
+    recordPreview(target, result, unavailableStage = 'sample-unavailable') {
+      // Synchronous Node cache only: no export RPC, disk write or active-hook dependency.
+      report.previewAttempts++;
+      try {
+        const sample = result?.sample;
+        const available = sample?.status === 'available';
+        if (report.previewSamples.length < caps.previewSamples) {
+          report.previewSamples.push({
+            attempt: report.previewAttempts, target: target === 'library' ? 'library' : 'picker',
+            matched: typeof result?.matched === 'boolean' ? result.matched : null,
+            sample: sample ?? { status: 'unavailable', faults: [unavailableStage === 'rpc-failed' ? 'rpc-failed' : 'sample-unavailable'], droppedFaults: 0 },
+          });
+        } else report.droppedPreviewSamples++;
+        if (!available) failure(sample?.status === 'partial' ? 'preview-sample-partial' : unavailableStage === 'rpc-failed' ? 'preview-rpc-failed' : 'preview-sample-unavailable', new Error('Media diagnostic preview evidence unavailable or partial'));
+      } catch {
+        failure('preview-record', new Error('Media diagnostic preview cache failed'));
+      }
     },
     nextWait() {
       if (!active) return undefined;
