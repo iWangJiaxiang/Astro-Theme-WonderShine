@@ -115,6 +115,11 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       () =>
         new Map(options.value.map((option) => [option.value, option.label])),
     );
+    const compactValues = computed(() =>
+      selected.value.filter(
+        (value) => !!value || (!props.multiple && labels.value.has(value)),
+      ),
+    );
     function toggle(values: string[], value: string): string[] {
       return props.multiple
         ? values.includes(value)
@@ -255,13 +260,12 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                 "aria-haspopup": "dialog",
                 "aria-expanded": opened.value,
                 "aria-labelledby":
-                  props.compact && !selected.value.filter(Boolean).length
+                  props.compact && !compactValues.value.length
                     ? `${id}-label`
                     : `${id}-label ${id}-value`,
                 title:
-                  props.compact && selected.value.filter(Boolean).length
-                    ? selected.value
-                        .filter(Boolean)
+                  props.compact && compactValues.value.length
+                    ? compactValues.value
                         .map((value) => labels.value.get(value) || value)
                         .join(" · ")
                     : undefined,
@@ -286,9 +290,8 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                     element(
                       "span",
                       { id: `${id}-value` },
-                      selected.value.filter(Boolean).length
-                        ? selected.value
-                            .filter(Boolean)
+                      compactValues.value.length
+                        ? compactValues.value
                             .map((value) => labels.value.get(value) || value)
                             .join(" · ")
                         : props.label,

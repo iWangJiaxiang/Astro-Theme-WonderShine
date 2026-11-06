@@ -60,7 +60,157 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   assert.equal(await page.$eval('[name="extra.site.logo"]', el => el.value), original, 'upload does not change a form before confirmation');
   assert.match(await page.$eval('.upload-results', el => el.textContent), /Uploaded:/);
   assert.ok(await page.$eval('.media-dialog-body', el => el.scrollWidth <= el.clientWidth), 'upload controls fit a mobile dialog');
-  await page.screenshot({ path: screenshots + '/upload-picker-mobile-en.png' });
+  const picker = 'dialog.media-dialog[open]', body = `${picker} .media-dialog-body`;
+  const layoutUploadRequests = [];
+  const trackLayoutUpload = request => { if (new URL(request.url()).pathname === '/api/media/upload') layoutUploadRequests.push(request.url()); };
+  page.on('request', trackLayoutUpload);
+  try {
+    for (const width of [320, 390]) {
+      await page.setViewport({ width, height: 844 });
+      const layout = await page.$eval(picker, dialog => {
+        const rect = selector => dialog.querySelector(selector).getBoundingClientRect().toJSON();
+        const rendered = node => {
+          if (!node) return false;
+          const box = node.getBoundingClientRect();
+          if (box.width <= 0 || box.height <= 0) return false;
+          for (let ancestor = node; ancestor; ancestor = ancestor.parentElement) {
+            const style = getComputedStyle(ancestor);
+            if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0 || ancestor.hidden) return false;
+          }
+          return true;
+        };
+        const compact = selector => {
+          const control = dialog.querySelector(selector), label = control.querySelector(':scope > span');
+          const field = control.querySelector(':scope > .choice-compact'), trigger = field?.querySelector(':scope > button.choice-trigger');
+          const innerLabel = field?.querySelector(':scope > .sr-only');
+          return {
+            label: label?.textContent, visibleLabel: rendered(label), trigger: rendered(trigger),
+            accessibleLabel: !!innerLabel && trigger?.getAttribute('aria-labelledby')?.split(' ').includes(innerLabel.id),
+            fullWidth: !!trigger && Math.abs(trigger.getBoundingClientRect().width - control.getBoundingClientRect().width) <= 2,
+            wraps: !!trigger && getComputedStyle(trigger.querySelector('span')).whiteSpace !== 'nowrap',
+            flatOptions: control.querySelectorAll('.choice-options').length,
+          };
+        };
+        return {
+          toolbar: rect('.media-toolbar'), search: rect('.media-search input'), refresh: rect('.media-toolbar > button'),
+          touchControls: [...dialog.querySelectorAll('.media-search input, .media-toolbar > button, .upload-actions > button, .upload-directory-control .choice-trigger, .media-filter-control .choice-trigger')]
+            .map(node => ({ name: node.getAttribute('name') || node.type, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })),
+          directory: compact('.upload-directory-control'), folder: compact('.media-filter-control'),
+          folderValue: (() => {
+            const trigger = dialog.querySelector('button[name="media-folder"]');
+            return { text: trigger.textContent, name: trigger.getAttribute('aria-labelledby').split(/\s+/).map(id => document.getElementById(id)?.textContent.trim()).join(' ') };
+          })(),
+          filters: dialog.querySelectorAll('.media-filter-control').length,
+          duplicateHeadings: dialog.querySelectorAll('.upload-actions strong').length,
+          results: rendered(dialog.querySelector('.upload-results li button')), note: rendered(dialog.querySelector('.upload-note')),
+          fitsViewport: dialog.getBoundingClientRect().left >= 0 && dialog.getBoundingClientRect().right <= innerWidth && document.documentElement.scrollWidth <= innerWidth,
+        };
+      });
+      assert.ok(layout.search.width >= layout.toolbar.width - 2, `${width}px search uses the full toolbar row`);
+      assert.ok(Math.abs(layout.search.left - layout.toolbar.left) <= 2 && Math.abs(layout.search.right - layout.toolbar.right) <= 2, `${width}px search aligns with toolbar edges`);
+      assert.ok(layout.refresh.top >= layout.search.bottom, `${width}px refresh moves below search`);
+      assert.ok(Math.abs(layout.refresh.right - layout.toolbar.right) <= 2, `${width}px refresh aligns right on its own row`);
+      for (const control of layout.touchControls) assert.ok(control.width >= 44 && control.height >= 44, `${width}px ${control.name} has a nonzero 44px touch target`);
+      assert.equal(layout.touchControls.length, 5, 'search, refresh, upload, directory and folder controls are measured');
+      for (const [control, label] of [[layout.directory, 'Save to'], [layout.folder, 'Folder']]) {
+        assert.equal(control.label, label);
+        assert.ok(control.visibleLabel && control.trigger && control.accessibleLabel && control.fullWidth && control.wraps, `${width}px ${label} stays a labelled full-width compact trigger with wrapping text`);
+        assert.equal(control.flatOptions, 0, `${label} does not render an inline option grid`);
+      }
+      assert.match(layout.folderValue.text, /All folders/, `${width}px empty folder selection displays its matched option label`);
+      assert.equal(layout.folderValue.name, 'Folder All folders', `${width}px folder accessible name resolves both label and selected value IDs`);
+      assert.equal(layout.filters, 1, 'public-image picker has the folder filter');
+      assert.equal(layout.duplicateHeadings, 0, 'upload disclosure does not repeat its heading inside the actions');
+      assert.ok(layout.results && layout.note, `${width}px uploaded result and save reminder remain rendered, not CSS-hidden`);
+      assert.ok(layout.fitsViewport, `${width}px dialog and page fit the viewport`);
+      assert.ok(await page.$eval(body, el => el.scrollWidth <= el.clientWidth), `${width}px upload controls fit without horizontal overflow`);
+      await page.screenshot({ path: screenshots + (width === 390 ? '/upload-picker-mobile-en.png' : '/upload-picker-mobile-en-320.png') });
+
+      // Existing fixture images plus the expanded upload panel must overflow.
+      // Wheel in the body's padding, not over nested upload-results scrolling.
+      const target = await page.$eval(body, node => {
+        const box = node.getBoundingClientRect(), style = getComputedStyle(node);
+        const x = box.left + node.clientLeft + parseFloat(style.paddingLeft) / 2;
+        const y = (Math.max(0, box.top) + Math.min(innerHeight, box.bottom)) / 2;
+        return { x, y, top: node.scrollTop, max: node.scrollHeight - node.clientHeight,
+          height: node.clientHeight, overflow: node.scrollHeight > node.clientHeight,
+          scrollable: /^(auto|scroll)$/.test(style.overflowY), safePoint: document.elementFromPoint(x, y) === node };
+      });
+      assert.ok(target.height > 0 && target.overflow && target.scrollable, `${width}px fixture guarantees an overflowing media dialog body`);
+      assert.ok(target.max > target.top + 1 && target.safePoint, `${width}px wheel starts in body padding with room to scroll down`);
+      await page.mouse.move(target.x, target.y);
+      await page.mouse.wheel({ deltaY: 160 });
+      await page.waitForFunction(({ body, top }) => document.querySelector(body).scrollTop > top + 1, {}, { body, top: target.top });
+      const down = await page.$eval(body, node => node.scrollTop);
+      assert.ok(down > target.top + 1, `${width}px browser wheel actually scrolls the media body down`);
+      await page.mouse.wheel({ deltaY: -160 });
+      await page.waitForFunction(({ body, top }) => document.querySelector(body).scrollTop < top - 1, {}, { body, top: down });
+      assert.ok(await page.$eval(body, node => node.scrollTop) < down - 1, `${width}px browser wheel actually scrolls the media body up`);
+    }
+
+    const directoryTrigger = `${picker} button[name="upload-directory"]`;
+    const folderTrigger = `${picker} button[name="media-folder"]`;
+    const chooser = '.selection-dialog[open]';
+    const defaultDestination = await page.$eval(`${picker} .upload-destination`, el => el.textContent);
+    assert.match(defaultDestination, /public\/uploads$/, 'public picker keeps the default upload destination');
+    const pending = await page.$eval(`${picker} .media-pending`, el => el.textContent);
+    const assertParentSelection = async () => {
+      assert.equal(await page.$eval(picker, dialog => dialog.open && dialog.matches(':modal')), true, 'nested chooser leaves the parent media dialog open and modal');
+      assert.equal(await selected(), 'public/uploads/cover-upload.png');
+      assert.equal(await page.$eval(`${picker} .media-pending`, el => el.textContent), pending);
+      assert.equal(await page.$eval(`${picker} .upload-destination`, el => el.textContent), defaultDestination);
+    };
+    await page.locator(directoryTrigger).click();
+    await page.waitForSelector(chooser, { visible: true });
+    await page.locator(`${chooser} input[value="public/img"]`).click();
+    assert.equal(await page.$eval(`${chooser} input[value="public/img"]`, el => el.checked), true);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
+    assert.equal(await page.$eval(directoryTrigger, el => document.activeElement === el), true, 'directory cancel restores trigger focus');
+    await assertParentSelection();
+    await page.locator(directoryTrigger).click();
+    await page.waitForSelector(chooser, { visible: true });
+    assert.equal(await page.$eval(`${chooser} input[value="public/uploads"]`, el => el.checked), true, 'cancelled directory candidate was not retained');
+    await page.locator(`${chooser} .selection-footer button.primary`).click();
+    await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
+    assert.equal(await page.$eval(directoryTrigger, el => document.activeElement === el), true, 'directory confirm restores trigger focus');
+    await assertParentSelection();
+
+    await page.locator(folderTrigger).click();
+    await page.waitForSelector(chooser, { visible: true });
+    await page.locator(`${chooser} input[value="public/uploads"]`).click();
+    await page.locator(`${chooser} .selection-footer button.primary`).click();
+    await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
+    assert.equal(await page.$eval(folderTrigger, el => document.activeElement === el), true, 'folder confirm restores trigger focus');
+    assert.ok(await page.$$eval(`${picker} .media-card`, nodes => nodes.length > 0 && nodes.every(node => node.dataset.mediaPath.startsWith('public/uploads/'))), 'confirmed folder filters the image list');
+    await assertParentSelection();
+    await page.locator(folderTrigger).click();
+    await page.waitForSelector(chooser, { visible: true });
+    await page.locator(`${chooser} input[value=""]`).click();
+    await page.locator(`${chooser} .selection-footer button.primary`).click();
+    await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
+    assert.ok(await page.$$eval(`${picker} .media-card`, nodes => nodes.some(node => !node.dataset.mediaPath.startsWith('public/uploads/'))), 'clearing the folder restores other fixture images');
+    await assertParentSelection();
+
+    const fileInput = await page.$(`${picker} .upload-file-input`);
+    const results = await page.$(`${picker} .upload-results`);
+    try {
+      await page.locator(`${picker} .media-upload-disclosure > summary`).click();
+      await page.waitForFunction(selector => !document.querySelector(selector).open, {}, `${picker} .media-upload-disclosure`);
+      assert.equal(await fileInput.evaluate(node => node.isConnected && node.ownerDocument.defaultView === window && node === document.querySelector('dialog.media-dialog[open] .upload-file-input')), true, 'collapse retains the same file input in the same window');
+      await page.locator(`${picker} .media-upload-disclosure > summary`).click();
+      await page.waitForSelector(`${picker} .media-upload-disclosure[open] .upload-actions`, { visible: true });
+      assert.equal(await fileInput.evaluate(node => node.isConnected && node.ownerDocument.defaultView === window && node === document.querySelector('dialog.media-dialog[open] .upload-file-input')), true, 'reopen retains the original file input node without reading its value');
+      assert.equal(await results.evaluate(node => node.isConnected && node === document.querySelector('dialog.media-dialog[open] .upload-results') && node.getBoundingClientRect().height > 0), true, 'reopen retains and renders the original upload results');
+      await assertParentSelection();
+    } finally {
+      await fileInput.dispose();
+      await results.dispose();
+    }
+    assert.deepEqual(layoutUploadRequests, [], 'layout, nested choosers and disclosure toggles do not upload again');
+  } finally {
+    page.off('request', trackLayoutUpload);
+  }
   await page.keyboard.press('Escape');
   assert.equal(await page.$eval('[name="extra.site.logo"]', el => el.value), original, 'cancel leaves the form unchanged');
   assert.deepEqual(await readFile(base + '/site/public/uploads/cover-upload.png'), png, 'cancel retains the uploaded image');
@@ -87,6 +237,16 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   assert.equal(await page.$eval('[name="extra.cover"]', el => el.value), 'cover-upload.png');
   await page.$eval('.markdown-source', el => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); });
   await click('插入图片'); await page.waitForSelector('dialog.media-dialog[open]');
+  assert.deepEqual(await page.$$eval('dialog.media-dialog[open] .media-filter-control', controls => controls.map(control => {
+    const label = control.querySelector(':scope > span'), field = control.querySelector(':scope > .choice-compact');
+    const trigger = field?.querySelector(':scope > button.choice-trigger'), innerLabel = field?.querySelector(':scope > .sr-only');
+    return { label: label?.textContent, visible: !!label && label.getBoundingClientRect().width > 0 && label.getBoundingClientRect().height > 0 && getComputedStyle(label).visibility === 'visible',
+      compact: !!trigger && !!innerLabel && trigger.getAttribute('aria-labelledby')?.split(' ').includes(innerLabel.id),
+      flatOptions: control.querySelectorAll('.choice-options').length };
+  })), [
+    { label: '图片来源', visible: true, compact: true, flatOptions: 0 },
+    { label: '文件夹', visible: true, compact: true, flatOptions: 0 },
+  ], 'document picker source and folder filters both use labelled compact triggers');
   await upload(['上传 配图.webp']); await finished();
   assert.equal(await selected(), 'content/articles/studio-browser-test/上传 配图.webp');
   await click('使用这张图片'); await click('本地保存'); await page.waitForSelector('.editor-page > .notice.success');
@@ -121,5 +281,5 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await page.evaluate(() => { window.fetch = window.originalUploadTestFetch; delete window.originalUploadTestFetch; });
   await click('刷新仓库');
   await page.waitForFunction(() => document.querySelector('.upload-actions')?.textContent.includes('20 MB'));
-  console.log('PASS: batch and drag uploads, mixed failures, duplicate renaming, public and bundle paths, picker cancel/confirm, English mobile controls and saved cover/Markdown.');
+  console.log('PASS: batch and drag uploads, mixed failures, duplicate renaming, public and bundle paths, picker cancel/confirm, 320/390px English layout, bidirectional browser wheel scrolling, nested compact chooser cancel/confirm and focus, disclosure node retention and saved cover/Markdown.');
 }

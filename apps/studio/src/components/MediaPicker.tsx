@@ -88,6 +88,7 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
               "aria-labelledby": id,
               className: classes("media-dialog"),
               onCancel: domEvent(($event: Event) => {
+                if ($event.target !== dialog.value) return;
                 $event.preventDefault();
                 close();
               }),

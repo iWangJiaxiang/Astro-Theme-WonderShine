@@ -247,35 +247,47 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                   "div",
                   { className: classes("media-filters") },
                   props.mode === "document"
-                    ? element(SelectionField, {
-                        modelValue: source.value,
-                        name: "media-source",
-                        label: t("图片来源"),
-                        options: [
-                          { value: "all", label: t("全部") },
-                          { value: "public", label: t("公共图片") },
-                          { value: "content", label: t("内容配图") },
-                        ],
-                        onUpdateModelValue: (($event) => {
-                          source.value = String($event);
-                        }) satisfies EventHandler<
-                          typeof SelectionField,
-                          "onUpdateModelValue"
-                        >,
-                      })
+                    ? element(
+                        "div",
+                        { className: classes("media-filter-control") },
+                        element("span", { "aria-hidden": "true" }, t("图片来源")),
+                        element(SelectionField, {
+                          modelValue: source.value,
+                          name: "media-source",
+                          label: t("图片来源"),
+                          compact: true,
+                          options: [
+                            { value: "all", label: t("全部") },
+                            { value: "public", label: t("公共图片") },
+                            { value: "content", label: t("内容配图") },
+                          ],
+                          onUpdateModelValue: (($event) => {
+                            source.value = String($event);
+                          }) satisfies EventHandler<
+                            typeof SelectionField,
+                            "onUpdateModelValue"
+                          >,
+                        }),
+                      )
                     : null,
-                  element(SelectionField, {
-                    modelValue: folder.value,
-                    name: "media-folder",
-                    label: t("文件夹"),
-                    options: folders.value,
-                    onUpdateModelValue: (($event) => {
-                      folder.value = String($event);
-                    }) satisfies EventHandler<
-                      typeof SelectionField,
-                      "onUpdateModelValue"
-                    >,
-                  }),
+                  element(
+                    "div",
+                    { className: classes("media-filter-control") },
+                    element("span", { "aria-hidden": "true" }, t("文件夹")),
+                    element(SelectionField, {
+                      modelValue: folder.value,
+                      name: "media-folder",
+                      label: t("文件夹"),
+                      compact: true,
+                      options: folders.value,
+                      onUpdateModelValue: (($event) => {
+                        folder.value = String($event);
+                      }) satisfies EventHandler<
+                        typeof SelectionField,
+                        "onUpdateModelValue"
+                      >,
+                    }),
+                  ),
                 )
               : null,
             props.mode === "library"

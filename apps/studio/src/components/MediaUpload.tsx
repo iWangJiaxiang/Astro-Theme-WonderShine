@@ -239,7 +239,6 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
                 element(
                   "div",
                   null,
-                  element("strong", null, t("上传图片")),
                   element(
                     "p",
                     { className: classes("muted small") },
@@ -273,19 +272,25 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
                   }),
                 }),
               ),
-              element(SelectionField, {
-                modelValue: directory.value,
-                name: "upload-directory",
-                label: t("保存位置"),
-                options: destinations.value,
-                disabled: mediaUploading.value || mediaLoading.value,
-                onUpdateModelValue: (($event) => {
-                  directory.value = String($event);
-                }) satisfies EventHandler<
-                  typeof SelectionField,
-                  "onUpdateModelValue"
-                >,
-              }),
+              element(
+                "div",
+                { className: classes("upload-directory-control") },
+                element("span", { "aria-hidden": "true" }, t("保存位置")),
+                element(SelectionField, {
+                  modelValue: directory.value,
+                  name: "upload-directory",
+                  label: t("保存位置"),
+                  compact: true,
+                  options: destinations.value,
+                  disabled: mediaUploading.value || mediaLoading.value,
+                  onUpdateModelValue: (($event) => {
+                    directory.value = String($event);
+                  }) satisfies EventHandler<
+                    typeof SelectionField,
+                    "onUpdateModelValue"
+                  >,
+                }),
+              ),
               element(
                 "small",
                 { className: classes("muted upload-destination") },
