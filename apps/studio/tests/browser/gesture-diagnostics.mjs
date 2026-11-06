@@ -25,7 +25,7 @@ const report = { viewport:[390,844], startedAt:new Date().toISOString(), surface
   'Browser command-line values and positional arguments are redacted except selected diagnostic flags. No CDP Tracing is collected.',
   'Chooser setup authenticates the fixture via HTTP and programmatically opens navigation/disclosures; it is not pointer-navigation, disclosure or login UX acceptance. Only the chooser trigger uses a pointer click.',
 ] };
-let browser, page, raw, client, server, phase = 'setup', active;
+let browser, page, raw, client, server, phase = 'setup', active, touchState = 'idle';
 const errorKind = error => error?.name || 'Error'; // Do not persist exception messages that could contain URLs or credentials.
 function safeBaseline(value) {
   // Shared helpers also catch page/evaluation errors outside our CDP wrapper.
@@ -72,12 +72,27 @@ function installObserver() {
 const read = selector => page.evaluate(selector => window.__gestureDiagnostics.read(selector),selector);
 const drain = () => page.evaluate(() => window.__gestureDiagnostics.drain());
 const settle = () => delay(250); // Finite post-input inertia/visual-viewport observation window.
+async function safeDrain(step) {
+  try { return await drain(); }
+  catch (error) {
+    report.errors.push({surface:active?.id ?? null,phase,step,error:errorKind(error)});
+    return {unavailable:true,error:errorKind(error)};
+  }
+}
+function requireIdleTouch() {
+  if (touchState === 'idle') return;
+  report.gestureRunAborted ??= {surface:active?.id ?? null,phase,reason:'touch-state-not-idle',touchState};
+  throw new Error('Touch cleanup did not establish idle state');
+}
 async function measured(name, run) {
-  phase = name; await drain();
-  try { return await run(); } finally { active.events[phase] = await drain(); }
+  phase = name; await safeDrain('measurement-before');
+  try { return await run(); }
+  finally { active.events[phase] = await safeDrain('measurement-after'); }
 }
 async function touch(points, type) {
+  touchState = 'unknown';
   await client.send('Input.dispatchTouchEvent',{type,touchPoints:points.map(([id,x,y]) => ({id,x,y,radiusX:1,radiusY:1,force:1}))});
+  touchState = type === 'touchEnd' || type === 'touchCancel' ? 'idle' : 'active';
 }
 async function stroke(from, to) {
   await touch(from,'touchStart');
@@ -87,24 +102,37 @@ async function stroke(from, to) {
   }
   await touch([],'touchEnd'); await settle();
 }
-async function cleanup(record, selector) {
-  record.cleanup = {before:await read(selector)};
-  try {
-    await touch([],'touchCancel');
-    await client.send('Emulation.setPageScaleFactor',{pageScaleFactor:1});
-    if (selector) await page.$eval(selector,node => { node.scrollTop = 0; });
-    await settle(); record.cleanup.after = await read(selector);
-  } catch (error) { record.cleanup.error = errorKind(error); report.errors.push({phase,error:errorKind(error)}); }
+async function cleanup(record, selector, { settleAfter = true } = {}) {
+  const out = record.cleanup = {touchStateBefore:touchState,before:null,after:null,steps:{}};
+  async function attempt(step, run) {
+    try {
+      const value = await run(); out.steps[step] = {status:'returned'}; return value;
+    } catch (error) {
+      out.steps[step] = {status:'failed',error:errorKind(error)};
+      report.errors.push({surface:active?.id ?? null,phase,step,error:errorKind(error)});
+      return null;
+    }
+  }
+  out.before = await attempt('read-before',() => read(selector));
+  if (touchState === 'idle') out.steps.cancel = {status:'skipped-no-active-touch'};
+  else await attempt('cancel',() => touch([],'touchCancel'));
+  await attempt('reset-scale',() => client.send('Emulation.setPageScaleFactor',{pageScaleFactor:1}));
+  if (selector) await attempt('reset-scroll',() => page.$eval(selector,node => { node.scrollTop = 0; }));
+  else out.steps['reset-scroll'] = {status:'not-applicable'};
+  if (settleAfter) await attempt('settle',settle);
+  else out.steps.settle = {status:'skipped-final-close'};
+  out.after = await attempt('read-after',() => read(selector));
+  out.touchStateAfter = touchState;
 }
 async function dispatchDrag(target) {
   const result = {id:target.id,applicable:target.applicable,status:'running'}; active.drags.push(result);
-  await measured(`prepare-drag-${target.id}`,async () => {
-    result.preparation = {before:await read(target.selector)};
-    if (target.selector) await page.$eval(target.selector,node => { node.scrollTop = 0; });
-    await settle(); result.preparation.after = await read(target.selector);
-  });
-  await measured(`dispatch-drag-${target.id}`,async () => {
-    try {
+  try {
+    await measured(`prepare-drag-${target.id}`,async () => {
+      result.preparation = {before:await read(target.selector)};
+      if (target.selector) await page.$eval(target.selector,node => { node.scrollTop = 0; });
+      await settle(); result.preparation.after = await read(target.selector);
+    });
+    await measured(`dispatch-drag-${target.id}`,async () => {
       result.before = await read(target.selector);
       result.environment = await inspectGestureEnvironment(page,target.point);
       const {x,y} = target.point, distance = Math.min(160,Math.max(20,y-16));
@@ -113,33 +141,75 @@ async function dispatchDrag(target) {
       result.downChanged = (result.down.target?.top ?? 0) > (result.before.target?.top ?? 0)+1;
       result.upChanged = (result.up.target?.top ?? 0) < (result.down.target?.top ?? 0)-1;
       result.status = target.applicable ? result.downChanged && result.upChanged ? 'passed' : 'failed' : 'not-applicable';
-    } catch (error) { result.status = 'failed'; result.error = errorKind(error); }
-  });
-  await measured(`cleanup-drag-${target.id}`,() => cleanup(result,target.selector));
+    });
+  } catch (error) { result.status = 'failed'; result.error = errorKind(error); }
+  finally { await measured(`cleanup-drag-${target.id}`,() => cleanup(result,target.selector)); }
+  requireIdleTouch();
 }
 async function dispatchPinch(center) {
-  const result = active.dispatchPinch = {status:'running',center};
-  await measured('dispatch-pinch',async () => {
-    try {
+  const startRadius = 80, endRadius = 150, spanSlop = 30, minScalingSpan = 125;
+  const result = active.dispatchPinch = {status:'running',center,reverse:{status:'not-run'},geometryModel:{
+    sourceRevision:'a733b5afbb3ba618844ff8876b89ad1a774b2f18',
+    sources:['content/common/input/synthetic_touchscreen_pinch_gesture.cc: SetupCoordinatesAndStopTime','ui/events/gesture_detection/gesture_configuration.h','ui/events/gesture_detection/gesture_configuration_aura.cc'],
+    browserRevision:report['Browser.getVersion']?.value?.revision ?? null,
+    startRadius,endRadius,spanSlop,minScalingSpan,reverseEndRadius:startRadius,
+    formula:'q = before.scale / beforeRestore.scale; reverseStartRadius = reverseEndRadius / q + spanSlop / 2',
+    limitation:'One analytic reverse using the reviewed Linux/Aura defaults, not runtime-measured recognizer settings or a guarantee of restoration on this or other browsers. No retries or endpoint clamps.',
+  }};
+  try {
+    await measured('dispatch-pinch',async () => {
       result.before = await read(); result.environment = await inspectGestureEnvironment(page,center);
       const points = radius => [[0,center.x-radius,center.y],[1,center.x+radius,center.y]];
-      await stroke(points(40),points(68));
+      function geometry(fromRadius, toRadius) {
+        const [width,height] = report.viewport, from = points(fromRadius), to = points(toRadius);
+        // Every interpolated point lies in this convex viewport if both endpoints do.
+        const inBounds = [fromRadius,toRadius].every(radius => Number.isFinite(radius) && radius > 0)
+          && [...from,...to].every(([,x,y]) => Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x < width && y >= 0 && y < height);
+        return {status:inBounds ? 'passed' : 'failed',fromRadius,toRadius,from,to,bounds:{width,height},
+          coordinates:'CDP viewport-relative visual input CSS pixels in the configured 390x844 viewport; not zoomed document coordinates. No visualViewport offset or scale transform.',
+          entirePath:'Straight-line interpolation; endpoint containment proves containment of the entire path.'};
+      }
+      result.outward = {status:'not-run',geometry:geometry(startRadius,endRadius)};
+      if (result.outward.geometry.status !== 'passed') {
+        result.outward.status = 'failed'; result.outward.reason = 'geometry-out-of-bounds';
+        result.reverse.reason = 'outward-geometry-failed'; result.status = 'failed'; return;
+      }
+      result.outward.status = 'running';
+      await stroke(points(startRadius),points(endRadius)); result.outward.status = 'returned';
       await page.waitForFunction(scale => visualViewport.scale > scale+.05,{timeout:2500},result.before.visual.scale).catch(() => {});
       result.zoomed = await read(); result.beforeRestore = await read();
-      await stroke(points(68),points(40));
+      result.zoomChanged = result.zoomed.visual.scale > result.before.visual.scale+.05 && result.zoomed.visual.width < result.before.visual.width-1;
+      if (!result.zoomChanged) {
+        result.reverse.reason = 'no-zoom'; result.status = 'failed'; return;
+      }
+      const beforeScale = result.before.visual.scale, restoreScale = result.beforeRestore.visual.scale;
+      if (!Number.isFinite(beforeScale) || !Number.isFinite(restoreScale) || beforeScale <= 0 || restoreScale <= beforeScale) {
+        result.reverse.reason = 'invalid-scale-ratio'; result.status = 'failed'; return;
+      }
+      const q = beforeScale/restoreScale, reverseStartRadius = startRadius/q+spanSlop/2;
+      result.reverse = {status:'not-run',q,startRadius:reverseStartRadius,endRadius:startRadius,geometry:geometry(reverseStartRadius,startRadius)};
+      if (result.reverse.geometry.status !== 'passed') {
+        result.reverse.status = 'failed'; result.reverse.reason = 'geometry-out-of-bounds'; result.status = 'failed'; return;
+      }
+      result.reverse.status = 'running';
+      await stroke(points(reverseStartRadius),points(startRadius)); result.reverse.status = 'returned';
       await page.waitForFunction(scale => Math.abs(visualViewport.scale-scale)<.06,{timeout:2500},result.before.visual.scale).catch(() => {});
       result.restored = await read();
-      result.zoomChanged = result.zoomed.visual.scale > result.before.visual.scale+.05 && result.zoomed.visual.width < result.before.visual.width-1;
       result.reverseRestored = Math.abs(result.restored.visual.scale-result.before.visual.scale)<.06;
       result.status = result.zoomChanged && result.reverseRestored ? 'passed' : 'failed';
-    } catch (error) { result.status = 'failed'; result.error = errorKind(error); }
-  });
-  await measured('cleanup-pinch',() => cleanup(result));
+    });
+  } catch (error) {
+    result.status = 'failed'; result.error = errorKind(error);
+    if (result.outward?.status === 'running') result.outward.status = 'failed';
+    if (result.reverse.status === 'running') result.reverse.status = 'failed';
+    else if (result.reverse.status === 'not-run') result.reverse.reason ??= 'pinch-error';
+  } finally { await measured('cleanup-pinch',() => cleanup(result)); }
+  requireIdleTouch();
 }
 await mkdir(output,{recursive:true});
 const watchdog = setTimeout(() => {
   report.errors.push({phase,error:'180-second wall-clock budget exceeded'});
-  void (async () => { report.watchdogDrain = await Promise.race([drain().catch(() => ({unavailable:true})),delay(500).then(() => ({timedOut:true}))]); browser?.process()?.kill('SIGKILL'); server?.kill('SIGKILL'); await save(); await rm(base,{recursive:true,force:true}); })().finally(() => process.exit(1));
+  void (async () => { report.watchdogDrain = await Promise.race([safeDrain('watchdog-drain'),delay(500).then(() => ({timedOut:true}))]); browser?.process()?.kill('SIGKILL'); server?.kill('SIGKILL'); await save(); await rm(base,{recursive:true,force:true}); })().finally(() => process.exit(1));
 },180_000);
 try {
   await prepareBrowserFixture(site);
@@ -162,13 +232,13 @@ try {
   page = await browser.newPage(); raw = await page.createCDPSession();
   client = {async send(method,params) {
     if (method === 'Input.synthesizeScrollGesture' && phase === 'synthetic-scroll') {
-      active.events['synthetic-wheel-scroll'] = await drain(); phase = 'synthetic-touch-scroll';
+      active.events['synthetic-wheel-scroll'] = await safeDrain('synthetic-wheel-scroll'); phase = 'synthetic-touch-scroll';
     }
     if (method === 'Input.synthesizePinchGesture' && phase === 'synthetic-pinch') {
-      active.events['synthetic-pinch-setup'] = await drain(); phase = 'synthetic-pinch-input';
+      active.events['synthetic-pinch-setup'] = await safeDrain('synthetic-pinch-setup'); phase = 'synthetic-pinch-input';
     }
     if (method === 'Emulation.setPageScaleFactor' && phase === 'synthetic-pinch-input') {
-      active.events[phase] = await drain(); phase = 'synthetic-pinch-cleanup';
+      active.events[phase] = await safeDrain('synthetic-pinch-input'); phase = 'synthetic-pinch-cleanup';
     }
     const entry = {phase,method,params,status:'pending'}, tracked = /^(Input\.|Emulation.setPageScaleFactor$)/.test(method);
     if (tracked && active) active.protocol.push(entry);
@@ -232,18 +302,28 @@ try {
       surface.status = surface.baselineScroll.failures.length || surface.baselinePinch.status !== 'passed' || surface.drags.some(r => r.status === 'failed') || surface.dispatchPinch.status !== 'passed' ? 'failed' : 'passed';
     } catch (error) { surface.status = 'error'; surface.error = errorKind(error); }
     finally {
-      surface.events.finalDrain = await drain().catch(() => ({unavailable:true}));
+      if (touchState !== 'idle') {
+        surface.finalCleanup = {};
+        await measured(`${surface.id}-cleanup`,() => cleanup(surface.finalCleanup));
+      }
+      surface.events.finalDrain = await safeDrain('surface-final-drain');
       if (!surface.snapshot) await page.screenshot({path:join(output,`${surface.id}-setup-failure.png`),fullPage:false}).then(() => { surface.setupSnapshot = `${surface.id}-setup-failure.png`; }).catch(() => {});
       await save();
+    }
+    // A failed cancellation permanently stops this run, even if surface teardown later recovers.
+    if (report.gestureRunAborted || touchState !== 'idle') {
+      report.gestureRunAborted ??= {surface:surface.id,phase,reason:'touch-state-not-idle',touchState};
+      break;
     }
   }
 } catch (error) { report.errors.push({phase,error:errorKind(error)}); }
 finally {
   phase = 'final-cleanup';
-  if (raw) {
-    report.finalDrain = await drain().catch(() => ({unavailable:true}));
-    await raw.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]}).catch(() => {});
-    await raw.send('Emulation.setPageScaleFactor',{pageScaleFactor:1}).catch(() => {});
+  if (client) {
+    report.finalDrain = await safeDrain('global-final-drain');
+    report.finalCleanup = {};
+    // Use the reporting wrapper even when no surface reached setup; never silently discard reset failures.
+    await cleanup(report.finalCleanup,null,{settleAfter:false});
   }
   await browser?.close().catch(() => { browser?.process()?.kill('SIGKILL'); });
   if (server?.pid && server.exitCode === null && server.signalCode === null) {

@@ -110,6 +110,22 @@ export async function checkControls({ page, click, heading, fill, base, screensh
     const bottom = (view?.offsetTop ?? 0) + (view?.height ?? innerHeight);
     return results.clientHeight > 0 && results.scrollHeight > results.clientHeight && footer.getBoundingClientRect().bottom <= bottom;
   }), 'long option lists scroll within the visible viewport and keep confirmation reachable');
+  for (const width of [1440, 390]) {
+    await page.setViewport({ width, height: width === 390 ? 844 : 1000 });
+    const selector = '.selection-dialog[open] .selection-results';
+    const target = await page.$eval(selector, node => {
+      const rect = node.getBoundingClientRect();
+      return { x:rect.left + rect.width / 2, y:rect.top + rect.height / 2, top:node.scrollTop };
+    });
+    await page.mouse.move(target.x, target.y);
+    await page.mouse.wheel({ deltaY:160 });
+    await page.waitForFunction(({selector,top}) => document.querySelector(selector).scrollTop > top + 1, {}, {selector,top:target.top});
+    const down = await page.$eval(selector, node => node.scrollTop);
+    await page.mouse.wheel({ deltaY:-160 });
+    await page.waitForFunction(({selector,top}) => document.querySelector(selector).scrollTop < top - 1, {}, {selector,top:down});
+    await page.screenshot({ path: screenshots + `/form-icon-scroll-${width}.png` });
+  }
+  await page.setViewport({ width:1440, height:1000 });
   await fill('.selection-dialog[open] input[type=search]', 'github');
   await page.click('.selection-dialog[open] input[value="icon-github"]');
   await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));

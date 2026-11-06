@@ -474,55 +474,59 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                         )
                       : null,
                     element(
-                      "fieldset",
-                      {
-                        disabled: creating.value,
-                        "aria-label": props.label,
-                        className: classes("selection-results"),
-                      },
-                      renderList(filtered.value).map((option) =>
-                        element(
-                          "label",
-                          {
-                            key: option.value,
-                            className: classes("choice-tile", {
-                              selected: pending.value.includes(option.value),
+                      "div",
+                      { className: classes("selection-results") },
+                      element(
+                        "fieldset",
+                        {
+                          disabled: creating.value,
+                          "aria-label": props.label,
+                          className: classes("selection-result-options"),
+                        },
+                        renderList(filtered.value).map((option) =>
+                          element(
+                            "label",
+                            {
+                              key: option.value,
+                              className: classes("choice-tile", {
+                                selected: pending.value.includes(option.value),
+                              }),
+                            },
+                            element("input", {
+                              type: props.multiple ? "checkbox" : "radio",
+                              name: `${props.name}-dialog`,
+                              value: option.value,
+                              checked: pending.value.includes(option.value),
+                              onChange: domEvent(($event: Event) => {
+                                pending.value = toggle(
+                                  pending.value,
+                                  option.value,
+                                );
+                              }),
                             }),
-                          },
-                          element("input", {
-                            type: props.multiple ? "checkbox" : "radio",
-                            name: `${props.name}-dialog`,
-                            value: option.value,
-                            checked: pending.value.includes(option.value),
-                            onChange: domEvent(($event: Event) => {
-                              pending.value = toggle(
-                                pending.value,
-                                option.value,
-                              );
+                            element(ChoicePreview, {
+                              value: option.value,
+                              kind: props.preview,
                             }),
-                          }),
-                          element(ChoicePreview, {
-                            value: option.value,
-                            kind: props.preview,
-                          }),
-                          element("span", null, option.label),
+                            element("span", null, option.label),
+                          ),
                         ),
+                        !filtered.value.length
+                          ? element(
+                              "p",
+                              { className: classes("muted") },
+                              t(
+                                props.createOption
+                                  ? query.value
+                                    ? "没有匹配的话题，可以直接创建。"
+                                    : "暂无话题，输入名称即可创建。"
+                                  : options.value.length
+                                    ? "没有匹配的选项"
+                                    : "暂无可选项，请先添加关联内容。",
+                              ),
+                            )
+                          : null,
                       ),
-                      !filtered.value.length
-                        ? element(
-                            "p",
-                            { className: classes("muted") },
-                            t(
-                              props.createOption
-                                ? query.value
-                                  ? "没有匹配的话题，可以直接创建。"
-                                  : "暂无话题，输入名称即可创建。"
-                                : options.value.length
-                                  ? "没有匹配的选项"
-                                  : "暂无可选项，请先添加关联内容。",
-                            ),
-                          )
-                        : null,
                     ),
                     element(
                       "div",

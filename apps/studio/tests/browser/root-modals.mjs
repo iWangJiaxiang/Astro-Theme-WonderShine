@@ -5,6 +5,8 @@ const reauth = 'dialog.reauth-backdrop[open]';
 const title = '.modal input[name="creation-title"]';
 const slug = '.modal input[placeholder="my-first-story"]';
 
+export const ROOT_MODAL_OUTCOMES = Object.freeze(['resume', 'cancel-before-release', 'unmount-after-defer']);
+
 async function clickText(page, selector, text) {
   await page.waitForFunction((selector, text) => [...document.querySelectorAll(selector)].some(node => node.textContent.trim() === text && !node.disabled), {}, selector, text);
   const handles = await page.$$(selector);
@@ -107,12 +109,23 @@ async function expireSession(page) {
     return (await fetch('/api/auth/logout', { method: 'POST', headers: { 'X-CSRF-Token': session.csrf } })).status;
   }), 200);
 }
-async function loginAgain(page, password) {
+async function loginAgain(page, password, stage) {
   await page.waitForSelector(`${reauth} [name="username"]`);
   await fill(page, `${reauth} [name="username"]`, 'owner');
   await fill(page, `${reauth} [name="password"]`, password);
-  await clickText(page, `${reauth} button`, '进入创作中心');
+  const loginUrl = new URL('/api/auth/login', page.url()).href;
+  const controller = new AbortController();
+  try {
+    // Register before the physical click; report a rejected login, not a later
+    // modal timeout. Never inspect credentials, cookies or response bodies.
+    await Promise.all([
+      page.waitForResponse(response => response.url() === loginUrl && response.request().method() === 'POST', { signal: controller.signal })
+        .then(response => assert.equal(response.status(), 200, `${stage}: login status ${response.status()}`)),
+      clickText(page, `${reauth} button`, '进入创作中心'),
+    ]);
+  } finally { controller.abort(); }
   await page.waitForSelector(reauth, { hidden: true });
+  await page.waitForFunction(() => document.querySelector('.studio-shell')?.inert === false);
 }
 async function assertBlockingReauth(page, underlying, screenshots, name) {
   await page.waitForSelector(reauth);
@@ -163,10 +176,13 @@ async function releaseOpenTimers(page) {
   });
 }
 
-/** Dedicated fresh authenticated fixture: example article + six collection-detail sections.
+/** Dedicated fresh authenticated server/site/state/browser per required outcome.
+ * Initial login + AI/delete/delayed reauthentication = four logins per server.
  * Owns request interception on this page; do not attach it to smoke.mjs's shared page.
+ * The runner must enumerate ROOT_MODAL_OUTCOMES; missing outcomes are not a pass.
  */
-export async function checkRootModals({ page, origin, password, screenshots }) {
+export async function checkRootModals({ page, origin, password, screenshots, outcome }) {
+  assert.ok(ROOT_MODAL_OUTCOMES.includes(outcome), 'A supported root-modal outcome is required');
   let aiWrites = 0, deleteWrites = 0;
   let expireAiConfig = false;
   await page.setRequestInterception(true);
@@ -283,7 +299,7 @@ export async function checkRootModals({ page, origin, password, screenshots }) {
     await clickText(page, '.ai-assistant-dialog button', '生成摘要');
     await assertBlockingReauth(page, '.ai-assistant-dialog[open]', screenshots, 'root-modal-reauth-ai');
     assert.equal(await page.$eval('.editor-page .markdown-source', (node, draft) => node === window.modalEditorNode && node.value === draft, draft), true);
-    await loginAgain(page, password);
+    await loginAgain(page, password, `${outcome}/ai`);
     await containsFocus(page, '.ai-assistant-dialog[open]');
     await tabContained(page, '.ai-assistant-dialog[open]');
     assert.equal(aiWrites, 1, 'Login must not replay the failed AI mutation');
@@ -296,7 +312,7 @@ export async function checkRootModals({ page, origin, password, screenshots }) {
     await expireSession(page);
     await page.click('.delete-content-confirm');
     await assertBlockingReauth(page, '.delete-content-dialog[open]', screenshots, 'root-modal-reauth-delete');
-    await loginAgain(page, password);
+    await loginAgain(page, password, `${outcome}/delete`);
     await containsFocus(page, '.delete-content-dialog[open]');
     await tabContained(page, '.delete-content-dialog[open]');
     assert.equal(deleteWrites, 1, 'Login must not replay deletion');
@@ -307,47 +323,45 @@ export async function checkRootModals({ page, origin, password, screenshots }) {
     // A real GET 401 overtakes an owner's already-scheduled native activation.
     // Release that exact callback only once the blocking login is in the top layer.
     expireAiConfig = true;
-    for (const outcome of ['resume', 'cancel-before-release', 'unmount-after-defer']) {
-      await expireSession(page);
-      await holdOpenTimers(page);
-      await page.click('.ai-action');
-      await page.waitForSelector('.ai-assistant-dialog', { visible: false });
-      await page.waitForFunction(() => window.heldModalOpenTimers() > 0);
-      await page.waitForSelector(reauth);
-      await page.$eval('.ai-assistant-dialog', node => { window.delayedBusinessNode = node; });
-      assert.equal(await page.$eval('.ai-assistant-dialog', node => node.open), false);
-      if (outcome === 'cancel-before-release') {
-        await page.$eval('.ai-assistant-dialog .card-heading button', node => node.click());
-        await page.waitForSelector('.ai-assistant-dialog', { hidden: true });
-      }
-      await releaseOpenTimers(page);
-      await containsFocus(page, reauth);
-      assert.equal(await page.evaluate(() => window.delayedBusinessNode.open), false, 'Late callback must not activate above login');
-      if (outcome === 'unmount-after-defer') {
-        await page.$eval('.ai-assistant-dialog .card-heading button', node => node.click());
-        await page.waitForFunction(() => !window.delayedBusinessNode.isConnected);
-      }
-      await tabContained(page, reauth);
-      if (screenshots && outcome === 'resume') await page.screenshot({ path: `${screenshots}/root-modal-reauth-delayed-open.png`, fullPage: true });
-      // Physical login button click proves that the late business open did not
-      // make reauthentication inert. Filling alone would not establish this.
-      await loginAgain(page, password);
-      if (outcome === 'resume') {
-        await page.waitForSelector('.ai-assistant-dialog[open]');
-        await containsFocus(page, '.ai-assistant-dialog[open]');
-        assert.equal(await page.$eval('.ai-assistant-dialog', node => node === window.delayedBusinessNode), true, 'Resume must retain the mounted dialog');
-        await page.keyboard.press('Escape');
-        await page.waitForSelector('.ai-assistant-dialog', { hidden: true });
-      } else {
-        await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 30)));
-        assert.equal(await page.$('.ai-assistant-dialog[open]'), null, 'Cancelled/unmounted open cannot resume');
-        assert.equal(await page.evaluate(() => window.delayedBusinessNode.isConnected || window.delayedBusinessNode.open), false);
-      }
-      assert.equal(await page.$eval('.editor-page .markdown-source', (node, draft) => node === window.modalEditorNode && node.value === draft, draft), true);
-      assert.equal(aiWrites, 1, 'Deferred activation must not replay AI generation');
-      assert.equal(deleteWrites, 1, 'Deferred activation must not replay deletion');
+    await expireSession(page);
+    await holdOpenTimers(page);
+    await page.click('.ai-action');
+    await page.waitForSelector('.ai-assistant-dialog', { visible: false });
+    await page.waitForFunction(() => window.heldModalOpenTimers() > 0);
+    await page.waitForSelector(reauth);
+    await page.$eval('.ai-assistant-dialog', node => { window.delayedBusinessNode = node; });
+    assert.equal(await page.$eval('.ai-assistant-dialog', node => node.open), false);
+    if (outcome === 'cancel-before-release') {
+      await page.$eval('.ai-assistant-dialog .card-heading button', node => node.click());
+      await page.waitForSelector('.ai-assistant-dialog', { hidden: true });
     }
-    console.log('PASS: visible keyboard focus and bidirectional boundary wrapping in native creation/reauth/nested dialogs; Escape/backdrop/resume and owner cleanup; blocking AI/delete 401 and delayed business-open races preserve mounted state and never replay mutations.');
+    await releaseOpenTimers(page);
+    await containsFocus(page, reauth);
+    assert.equal(await page.evaluate(() => window.delayedBusinessNode.open), false, 'Late callback must not activate above login');
+    if (outcome === 'unmount-after-defer') {
+      await page.$eval('.ai-assistant-dialog .card-heading button', node => node.click());
+      await page.waitForFunction(() => !window.delayedBusinessNode.isConnected);
+    }
+    await tabContained(page, reauth);
+    if (screenshots) await page.screenshot({ path: `${screenshots}/root-modal-reauth-delayed-open.png`, fullPage: true });
+    // Physical login button click proves that the late business open did not
+    // make reauthentication inert. Filling alone would not establish this.
+    await loginAgain(page, password, `${outcome}/delayed`);
+    if (outcome === 'resume') {
+      await page.waitForSelector('.ai-assistant-dialog[open]');
+      await containsFocus(page, '.ai-assistant-dialog[open]');
+      assert.equal(await page.$eval('.ai-assistant-dialog', node => node === window.delayedBusinessNode), true, 'Resume must retain the mounted dialog');
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('.ai-assistant-dialog', { hidden: true });
+    } else {
+      await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 30)));
+      assert.equal(await page.$('.ai-assistant-dialog[open]'), null, 'Cancelled/unmounted open cannot resume');
+      assert.equal(await page.evaluate(() => window.delayedBusinessNode.isConnected || window.delayedBusinessNode.open), false);
+    }
+    assert.equal(await page.$eval('.editor-page .markdown-source', (node, draft) => node === window.modalEditorNode && node.value === draft, draft), true);
+    assert.equal(aiWrites, 1, 'Deferred activation must not replay AI generation');
+    assert.equal(deleteWrites, 1, 'Deferred activation must not replay deletion');
+    console.log(`PASS [${outcome}]: visible keyboard focus and bidirectional boundary wrapping in native creation/reauth/nested dialogs; Escape/backdrop/resume and owner cleanup; blocking AI/delete 401 and delayed business-open race preserve mounted state and never replay mutations.`);
   } finally {
     await releaseOpenTimers(page);
     page.off('request', intercept);
