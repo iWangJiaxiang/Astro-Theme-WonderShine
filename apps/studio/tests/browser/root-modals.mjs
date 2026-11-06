@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { initialAiClickDiagnostics } from './root-modal-click-diagnostics.mjs';
 
 const creation = 'dialog.creation-modal[open]';
 const reauth = 'dialog.reauth-backdrop[open]';
@@ -293,8 +294,21 @@ export async function checkRootModals({ page, origin, password, screenshots, out
     const draft = 'Unsaved editor body survives top-layer reauthentication.';
     await fill(page, '.editor-page .markdown-source', draft);
     await page.$eval('.editor-page .markdown-source', node => { window.modalEditorNode = node; });
-    await page.click('.ai-action');
-    await page.waitForSelector('.ai-assistant-dialog[open]');
+    const initialAiDiagnostics = await initialAiClickDiagnostics({ page, screenshots, outcome });
+    let initialAiFailed = true;
+    try {
+      await page.click('.ai-action');
+      await initialAiDiagnostics.afterClick();
+      await page.waitForSelector('.ai-assistant-dialog[open]');
+      initialAiFailed = false;
+    } finally {
+      try { await initialAiDiagnostics.finish(initialAiFailed); }
+      catch {
+        // Diagnostics must never replace the original click/wait exception.
+        console.error('Initial AI click diagnostics unavailable: finalization failed');
+        if (!initialAiFailed) throw new Error('Initial AI click diagnostics unavailable');
+      }
+    }
     await expireSession(page);
     await clickText(page, '.ai-assistant-dialog button', '生成摘要');
     await assertBlockingReauth(page, '.ai-assistant-dialog[open]', screenshots, 'root-modal-reauth-ai');
