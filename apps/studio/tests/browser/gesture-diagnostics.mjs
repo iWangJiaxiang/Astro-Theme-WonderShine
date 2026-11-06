@@ -150,11 +150,22 @@ async function dispatchPinch(center) {
   const startRadius = 80, endRadius = 150, spanSlop = 30, minScalingSpan = 125;
   const result = active.dispatchPinch = {status:'running',center,reverse:{status:'not-run'},geometryModel:{
     sourceRevision:'a733b5afbb3ba618844ff8876b89ad1a774b2f18',
-    sources:['content/common/input/synthetic_touchscreen_pinch_gesture.cc: SetupCoordinatesAndStopTime','ui/events/gesture_detection/gesture_configuration.h','ui/events/gesture_detection/gesture_configuration_aura.cc'],
+    sources:['third_party/blink/public/devtools_protocol/domains/Input.pdl:9-15 (TouchPoint viewport CSS pixels)',
+      'content/browser/devtools/protocol/input_handler.cc:1551-1573 (ScaleFactor includes pinch page scale), 567-568 and 1688-1691 (WebTouch coordinate conversion), 1653-1668 (feature-selected dispatch path)',
+      'content/public/common/content_features.cc:1248-1251 (SyntheticPointerActions disabled by default)',
+      'ui/events/gesture_detection/scale_gesture_detector.cc:217-253,289-311 (slop-compensated incremental span ratio)',
+      'content/common/input/synthetic_touchscreen_pinch_gesture.cc:145-162 (SetupCoordinatesAndStopTime)',
+      'ui/events/gesture_detection/gesture_configuration.h','ui/events/gesture_detection/gesture_configuration_aura.cc'],
     browserRevision:report['Browser.getVersion']?.value?.revision ?? null,
     startRadius,endRadius,spanSlop,minScalingSpan,reverseEndRadius:startRadius,
     formula:'q = before.scale / beforeRestore.scale; reverseStartRadius = reverseEndRadius / q + spanSlop / 2',
-    limitation:'One analytic reverse using the reviewed Linux/Aura defaults, not runtime-measured recognizer settings or a guarantee of restoration on this or other browsers. No retries or endpoint clamps.',
+    coordinateFormula:'cdpPoint = widgetPoint / strokeStart.visualScale, including both center coordinates; no visualViewport offsets',
+    stroke:'touchStart / ONE touchMove / touchEnd; endpoint-only diagnostic, not smooth or physical touch',
+    factorProvenance:{browserZoomFactor:{value:1,status:'assumed-not-runtime-measured'},
+      embeddingCSSZoomFactor:{value:1,status:'ordinary-top-frame-model-not-runtime-measured'},
+      browserSideScaleFactor:'Not directly measured; visualViewport.scale is the observed page-scale proxy.'},
+    featureCaveat:'The reviewed revision defaults SyntheticPointerActions off. Command-line flags do not prove the runtime feature state; the alternative synthetic-pointer path is not this WebTouch conversion model.',
+    limitation:'Source-supported, runtime-unverified hypothesis: one endpoint move uses the stroke-start inverse scale under the ordinary top-frame/browser-zoom-1 model. Protocol returned and matching page observations do not prove browser-side ScaleFactor synchronization. Linux/Aura recognizer defaults are not runtime-measured. Observed final geometry governs pass, not predicted geometry or cleanup. No retries or endpoint clamps.',
   }};
   try {
     await measured('dispatch-pinch',async () => {
@@ -162,20 +173,52 @@ async function dispatchPinch(center) {
       const points = radius => [[0,center.x-radius,center.y],[1,center.x+radius,center.y]];
       function geometry(fromRadius, toRadius) {
         const [width,height] = report.viewport, from = points(fromRadius), to = points(toRadius);
-        // Every interpolated point lies in this convex viewport if both endpoints do.
         const inBounds = [fromRadius,toRadius].every(radius => Number.isFinite(radius) && radius > 0)
           && [...from,...to].every(([,x,y]) => Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x < width && y >= 0 && y < height);
         return {status:inBounds ? 'passed' : 'failed',fromRadius,toRadius,from,to,bounds:{width,height},
-          coordinates:'CDP viewport-relative visual input CSS pixels in the configured 390x844 viewport; not zoomed document coordinates. No visualViewport offset or scale transform.',
-          entirePath:'Straight-line interpolation; endpoint containment proves containment of the entire path.'};
+          coordinates:'Planned root-widget/DIP endpoints in the configured 390x844 viewport, not raw CDP parameters. CDP parameters inverse-transform all coordinates by the observed stroke-start scale; no visualViewport offsets.',
+          entirePath:'Endpoint-only stroke, no interpolated moves. Boundary check covers planned endpoints and their convex sequential-pointer intermediate positions only; runtime conversion/synchronization remains unverified.'};
+      }
+      async function endpointStroke(record, expectedScale) {
+        const observe = () => page.evaluate(() => ({visualScale:window.visualViewport?.scale ?? null,
+          isTopFrame:window === window.top,frame:'page.evaluate main frame',
+          factorStatus:'Observed visual scale only; browser-side ScaleFactor and browser zoom factor not directly measured.'}));
+        record.strokeStart = await observe();
+        const scale = record.strokeStart.visualScale;
+        record.scaleCheck = {expectedScale,observedScale:scale,status:Number.isFinite(expectedScale) && expectedScale > 0
+          && Number.isFinite(scale) && scale > 0 && scale === expectedScale && record.strokeStart.isTopFrame ? 'passed' : 'failed',
+          limitation:'Exact page-observation agreement is a precondition, not proof of browser-side factor synchronization.'};
+        if (record.scaleCheck.status !== 'passed') {
+          record.status = 'failed'; record.reason = 'stroke-start-scale-or-frame-mismatch'; return false;
+        }
+        const convert = points => points.map(([id,x,y]) => [id,x/scale,y/scale]);
+        const from = convert(record.geometry.from), to = convert(record.geometry.to);
+        const params = (points, type) => ({type,touchPoints:points.map(([id,x,y]) => ({id,x,y,radiusX:1,radiusY:1,force:1}))});
+        record.cdp = {appliedPageScale:scale,inverseFactor:1/scale,center:{x:center.x/scale,y:center.y/scale},from,to,
+          params:[params(from,'touchStart'),params(to,'touchMove'),params([],'touchEnd')],
+          paramsStatus:'Planned parameters; surface.protocol records commands actually sent and their returned/rejected status.',
+          factorProvenance:result.geometryModel.factorProvenance,
+          model:'One fixed inverse factor for this endpoint-only stroke; source-supported hypothesis, runtime-unverified. No offsets.'};
+        record.status = 'running';
+        await touch(from,'touchStart');
+        record.beforeMove = await observe();
+        record.beforeMove.scaleMatchesStart = Number.isFinite(record.beforeMove.visualScale) && record.beforeMove.visualScale > 0
+          && record.beforeMove.visualScale === scale && record.beforeMove.isTopFrame;
+        if (!record.beforeMove.scaleMatchesStart) {
+          record.status = 'failed'; record.reason = 'pre-move-scale-or-frame-mismatch'; return false;
+        }
+        await touch(to,'touchMove');
+        await touch([],'touchEnd');
+        record.status = 'returned'; return true;
       }
       result.outward = {status:'not-run',geometry:geometry(startRadius,endRadius)};
       if (result.outward.geometry.status !== 'passed') {
         result.outward.status = 'failed'; result.outward.reason = 'geometry-out-of-bounds';
         result.reverse.reason = 'outward-geometry-failed'; result.status = 'failed'; return;
       }
-      result.outward.status = 'running';
-      await stroke(points(startRadius),points(endRadius)); result.outward.status = 'returned';
+      if (!await endpointStroke(result.outward,result.before.visual.scale)) {
+        result.reverse.reason = 'outward-stroke-precondition-failed'; result.status = 'failed'; return;
+      }
       await page.waitForFunction(scale => visualViewport.scale > scale+.05,{timeout:2500},result.before.visual.scale).catch(() => {});
       result.zoomed = await read(); result.beforeRestore = await read();
       result.zoomChanged = result.zoomed.visual.scale > result.before.visual.scale+.05 && result.zoomed.visual.width < result.before.visual.width-1;
@@ -191,8 +234,7 @@ async function dispatchPinch(center) {
       if (result.reverse.geometry.status !== 'passed') {
         result.reverse.status = 'failed'; result.reverse.reason = 'geometry-out-of-bounds'; result.status = 'failed'; return;
       }
-      result.reverse.status = 'running';
-      await stroke(points(reverseStartRadius),points(startRadius)); result.reverse.status = 'returned';
+      if (!await endpointStroke(result.reverse,restoreScale)) { result.status = 'failed'; return; }
       await page.waitForFunction(scale => Math.abs(visualViewport.scale-scale)<.06,{timeout:2500},result.before.visual.scale).catch(() => {});
       result.restored = await read();
       result.reverseRestored = Math.abs(result.restored.visual.scale-result.before.visual.scale)<.06;
