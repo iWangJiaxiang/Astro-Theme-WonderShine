@@ -91,6 +91,25 @@ test('fresh locked reads detect same-size, same-mtime external edits', async t =
   assert.equal(await readFile(file, 'utf8'), 'bbbb');
 });
 
+test('revision-only strategies retain null fallback and write publication compatibility', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'studio-revision-strategy-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(join(root, 'config.toml'), 'original');
+  const calls: string[] = [];
+  const repo = new LocalRepository(root, { revision: async (path, text) => {
+    assert.equal(path, 'config.toml');
+    calls.push(text);
+    return null;
+  } }, new RevisionRegistry());
+  const first = (await repo.read('config.toml'))!;
+  assert.match(first.revision, /^baseline:/);
+  const saved = await repo.write('config.toml', 'saved', first.revision);
+  assert.deepEqual(calls, ['original', 'original', 'saved'], 'writes still publish through the original strategy');
+  assert.equal((await repo.read('config.toml'))!.revision, saved.revision);
+  await assert.rejects(repo.write('config.toml', 'stale', first.revision), { status: 409 });
+  assert.equal(await readFile(join(root, 'config.toml'), 'utf8'), 'saved');
+});
+
 test('restart and eviction fail closed, and summary reads do not evict editor baselines', async t => {
   const root = await mkdtemp(join(tmpdir(), 'studio-revision-eviction-'));
   t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });

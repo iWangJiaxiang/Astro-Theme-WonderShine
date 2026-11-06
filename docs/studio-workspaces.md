@@ -54,6 +54,8 @@ Content revisions are opaque identities backed by private exact-text baselines, 
 
 Unknown, expired, evicted or pre-upgrade SHA-based revisions produce a conflict instead of silently adopting current content. Keep recovery drafts and merge against a freshly loaded document. Stable workspace IDs, save-scope hashes and authentication-state key names are unchanged.
 
+Node acquires the shared baseline lock before reading authoritative file text and holds it through revision registration. This prevents an old read waiting for the lock from later replacing a newer editing baseline. Native repositories likewise serialize snapshot reads by filesystem authority, root and path across repository instances. Batch mutations and recovery reserve all affected paths together; guards run before those reservations so they may read the repository without lock reentry. Saves recheck their revisions after waiting for those reservations, and recovery checks every affected file before restoring any file. Unrelated paths remain independently readable. These locks coordinate Studio operations only: external editors do not participate, and validation followed by a file write is not an atomic compare-and-write against external processes.
+
 ## Save, commit and synchronize
 
 Authenticated HTTP endpoints:

@@ -131,7 +131,22 @@ export class DiskRevisionStore implements SnapshotRevisionStrategy {
   }
   async revision(path: string, text: string): Promise<string> {
     validatePath(path);
+    this.validateText(text);
+    return this.withLock((scope, directory) => this.publish(scope, directory, path, text));
+  }
+  async snapshot(path: string, read: Parameters<NonNullable<SnapshotRevisionStrategy['snapshot']>>[1]) {
+    validatePath(path);
+    return this.withLock(async (scope, directory) => {
+      const file = await read();
+      if (!file) return null;
+      this.validateText(file.text);
+      return { ...file, revision: await this.publish(scope, directory, path, file.text) };
+    });
+  }
+  private validateText(text: string): void {
     if (Buffer.byteLength(text) > 1024 * 1024) throw new StudioError(413, '文件超过 1 MB 编辑限制');
+  }
+  private async withLock<T>(operation: (scope: string, directory: string) => Promise<T>): Promise<T> {
     const scope = await realpath(resolve(this.checkout));
     if (scope === dirname(scope)) throw unavailable();
     const directory = resolve(this.options.directory ?? scope + '.studio-revisions-v1');
@@ -153,42 +168,46 @@ export class DiskRevisionStore implements SnapshotRevisionStrategy {
     try {
       await directoryPath(directory);
       if (await ordinaryFile(join(directory, 'pending')) || await ordinaryFile(join(directory, 'baselines.json'))) throw unavailable();
-      const slot = createHash('sha256').update(JSON.stringify([scope, path])).digest('hex') + '.json';
-      const now = this.now();
-      let slotBytes = 0;
-      const raw = await this.read(directory, slot, Math.min(maxSlotBytes, this.maxBytes), bytes => { slotBytes = bytes; });
-      // Validate the small quota manifest even on reuse: an orphan or retired
-      // body must never authorize a save merely because its bytes survived.
-      const index = this.index(await this.read(directory, 'index.json', this.maxEntries * 256 + 128));
-      if (raw !== null) {
-        if (!raw || typeof raw !== 'object' || !('scope' in raw) || raw.scope !== scope || !('path' in raw) || raw.path !== path
-          || !('text' in raw) || typeof raw.text !== 'string' || Buffer.byteLength(raw.text) > 1024 * 1024
-          || !('token' in raw) || typeof raw.token !== 'string' || !/^disk-baseline:[0-9a-f-]{36}$/.test(raw.token)
-          || !('expires' in raw) || typeof raw.expires !== 'number' || !Number.isSafeInteger(raw.expires) || raw.expires < 0) throw unavailable();
-        const indexed = index.find(entry => entry.slot === slot);
-        if (!indexed || indexed.expires !== raw.expires || indexed.bytes !== slotBytes) throw unavailable();
-        if (raw.text === text && raw.expires > now) return raw.token;
-      }
-      const entry: Slot = { scope, path, text, token: `disk-baseline:${randomUUID()}`, expires: now + this.ttlMs };
-      const body = JSON.stringify(entry), bytes = Buffer.byteLength(body);
-      if (bytes > Math.min(this.maxBytes, maxSlotBytes)) throw new StudioError(503, '私有版本状态配额不足，无法保留此文件的编辑基线');
-      const retained = index.filter(entry => entry.slot !== slot && entry.expires > now);
-      let used = retained.reduce((sum, entry) => sum + entry.bytes, 0);
-      while (retained.length >= this.maxEntries || used + bytes > this.maxBytes) used -= retained.shift()!.bytes;
-      const keep = new Set(retained.map(entry => entry.slot));
-      // Publish intent before touching any slot. Crash recovery never guesses which
-      // old token remains valid from a partially committed metadata/body pair.
-      await this.write(directory, 'pending', '{"version":2}'); await this.sync(directory);
-      for (const old of index) if (!keep.has(old.slot)) await this.remove(directory, old.slot);
-      await this.remove(directory, 'slot.tmp'); await this.remove(directory, 'index.tmp');
-      await this.write(directory, 'slot.tmp', body);
-      await ordinaryFile(join(directory, slot)); await rename(join(directory, 'slot.tmp'), join(directory, slot));
-      retained.push({ slot, bytes, expires: entry.expires });
-      await this.write(directory, 'index.tmp', JSON.stringify({ version: 2, entries: retained }));
-      await ordinaryFile(join(directory, 'index.json')); await rename(join(directory, 'index.tmp'), join(directory, 'index.json'));
-      await this.sync(directory);
-      await this.remove(directory, 'pending'); await this.sync(directory);
-      return entry.token;
+      return await operation(scope, directory);
     } finally { await directoryPath(lock); await rmdir(lock); }
+  }
+  // The caller already owns the disk lock; never reenter revision() here.
+  private async publish(scope: string, directory: string, path: string, text: string): Promise<string> {
+    const slot = createHash('sha256').update(JSON.stringify([scope, path])).digest('hex') + '.json';
+    const now = this.now();
+    let slotBytes = 0;
+    const raw = await this.read(directory, slot, Math.min(maxSlotBytes, this.maxBytes), bytes => { slotBytes = bytes; });
+    // Validate the small quota manifest even on reuse: an orphan or retired
+    // body must never authorize a save merely because its bytes survived.
+    const index = this.index(await this.read(directory, 'index.json', this.maxEntries * 256 + 128));
+    if (raw !== null) {
+      if (!raw || typeof raw !== 'object' || !('scope' in raw) || raw.scope !== scope || !('path' in raw) || raw.path !== path
+        || !('text' in raw) || typeof raw.text !== 'string' || Buffer.byteLength(raw.text) > 1024 * 1024
+        || !('token' in raw) || typeof raw.token !== 'string' || !/^disk-baseline:[0-9a-f-]{36}$/.test(raw.token)
+        || !('expires' in raw) || typeof raw.expires !== 'number' || !Number.isSafeInteger(raw.expires) || raw.expires < 0) throw unavailable();
+      const indexed = index.find(entry => entry.slot === slot);
+      if (!indexed || indexed.expires !== raw.expires || indexed.bytes !== slotBytes) throw unavailable();
+      if (raw.text === text && raw.expires > now) return raw.token;
+    }
+    const entry: Slot = { scope, path, text, token: `disk-baseline:${randomUUID()}`, expires: now + this.ttlMs };
+    const body = JSON.stringify(entry), bytes = Buffer.byteLength(body);
+    if (bytes > Math.min(this.maxBytes, maxSlotBytes)) throw new StudioError(503, '私有版本状态配额不足，无法保留此文件的编辑基线');
+    const retained = index.filter(entry => entry.slot !== slot && entry.expires > now);
+    let used = retained.reduce((sum, entry) => sum + entry.bytes, 0);
+    while (retained.length >= this.maxEntries || used + bytes > this.maxBytes) used -= retained.shift()!.bytes;
+    const keep = new Set(retained.map(entry => entry.slot));
+    // Publish intent before touching any slot. Crash recovery never guesses which
+    // old token remains valid from a partially committed metadata/body pair.
+    await this.write(directory, 'pending', '{"version":2}'); await this.sync(directory);
+    for (const old of index) if (!keep.has(old.slot)) await this.remove(directory, old.slot);
+    await this.remove(directory, 'slot.tmp'); await this.remove(directory, 'index.tmp');
+    await this.write(directory, 'slot.tmp', body);
+    await ordinaryFile(join(directory, slot)); await rename(join(directory, 'slot.tmp'), join(directory, slot));
+    retained.push({ slot, bytes, expires: entry.expires });
+    await this.write(directory, 'index.tmp', JSON.stringify({ version: 2, entries: retained }));
+    await ordinaryFile(join(directory, 'index.json')); await rename(join(directory, 'index.tmp'), join(directory, 'index.json'));
+    await this.sync(directory);
+    await this.remove(directory, 'pending'); await this.sync(directory);
+    return entry.token;
   }
 }

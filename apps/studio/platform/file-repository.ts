@@ -6,6 +6,7 @@ import { StudioError } from '../core/errors';
 import { validateUpload, validateMediaPath } from '../core/media-validation';
 import { ensureDirectory, missingFile, parentPath, type WorkspaceFiles } from './filesystem';
 import { withWorkspaceLock } from './queue';
+import { withSnapshotLocks } from './snapshot-queue';
 import { contentRevisions, type RevisionRegistry } from '../core/revision';
 
 const filesystemScopes = new WeakMap<WorkspaceFiles, string>();
@@ -57,6 +58,9 @@ export class FileRepository implements Repository {
     return bytes ? { path, text: new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes) } : null;
   }
   async read(path: string): Promise<FileSnapshot | null> {
+    return withSnapshotLocks(this.revisionScope, [path], () => this.readSnapshotUnlocked(path));
+  }
+  private async readSnapshotUnlocked(path: string): Promise<FileSnapshot | null> {
     const file = await this.readText(path);
     return file ? { ...file, revision: this.revisions.revision(this.revisionScope, path, file.text) } : null;
   }
@@ -156,6 +160,10 @@ export class FileRepository implements Repository {
       entries = JSON.parse(String(text)) as JournalEntry[];
       if (!Array.isArray(entries) || entries.some(entry => !isRepositoryPath(entry.path) || entry.previous !== null && typeof entry.previous !== 'string' || entry.next !== null && typeof entry.next !== 'string')) throw new Error('工作区恢复记录无效');
     } catch (error) { if (missingFile(error)) return; throw error; }
+    await withSnapshotLocks(this.revisionScope, entries.map(entry => entry.path), () => this.rollbackUnlocked(entries, journal));
+  }
+  // Caller holds every affected snapshot path, as well as the workspace lock.
+  private async rollbackUnlocked(entries: JournalEntry[], journal: string): Promise<void> {
     // Preflight every file before rollback: external edits after a crash must survive.
     for (const entry of entries) {
       const current = (await this.readText(entry.path))?.text ?? null;
@@ -182,27 +190,35 @@ export class FileRepository implements Repository {
         if (entry.text !== null && new TextEncoder().encode(entry.text).byteLength > 1024 * 1024) throw new StudioError(413, '文件超过 1 MB 编辑限制');
         const previous = await this.read(entry.path);
         if ((previous?.revision ?? null) !== entry.expectedRevision) throw new StudioError(409, '文件已更新，请重新加载并合并修改');
-        if (entry.text === null && /\/_index(?:\.[A-Za-z0-9-]+)?\.md$/.test(entry.path)) {
-          const children = await this.files.readdir(await this.safe(parentPath(entry.path)));
-          if (children.some(name => !/^_index(?:\.[A-Za-z0-9-]+)?\.md$/.test(name))) throw new StudioError(409, '专栏或合集仍有子内容，不能删除');
-        }
         backup.push({ path: entry.path, previous: previous?.text ?? null, next: entry.text });
       }
       if (guard) await guard(this);
-      await ensureDirectory(this.files, this.stateRoot);
-      const journal = this.stateRoot + '/transaction.json';
-      await this.files.writeFile(journal + '.tmp', JSON.stringify(backup));
-      await this.files.rename(journal + '.tmp', journal);
-      try {
+      // Guards may read/list the repository. Acquire snapshot locks only afterwards.
+      return withSnapshotLocks(this.revisionScope, entries.map(entry => entry.path), async () => {
+        // Preflight may have gone stale while the guard or earlier snapshots ran.
         for (const entry of entries) {
-          const file = await this.safe(entry.path);
-          if (entry.text === null) { try { await this.files.unlink(file); } catch (error) { if (!missingFile(error)) throw error; } }
-          else { await ensureDirectory(this.files, parentPath(file)); await this.files.writeFile(file, entry.text); }
+          const current = await this.readSnapshotUnlocked(entry.path);
+          if ((current?.revision ?? null) !== entry.expectedRevision) throw new StudioError(409, '文件已更新，请重新加载并合并修改');
+          if (entry.text === null && /\/_index(?:\.[A-Za-z0-9-]+)?\.md$/.test(entry.path)) {
+            const children = await this.files.readdir(await this.safe(parentPath(entry.path)));
+            if (children.some(name => !/^_index(?:\.[A-Za-z0-9-]+)?\.md$/.test(name))) throw new StudioError(409, '专栏或合集仍有子内容，不能删除');
+          }
         }
-        // Keep immutable history outside the Git worktree; it is never published.
-        await this.files.rename(journal, this.stateRoot + `/history-${crypto.randomUUID()}.json`);
-      } catch (error) { await this.recoverUnlocked(); throw error; }
-      return { revision: entries[0].text === null ? '' : this.revisions.revision(this.revisionScope, entries[0].path, entries[0].text), message: '已保存到设备；提交并同步后更新 Git 仓库' };
+        await ensureDirectory(this.files, this.stateRoot);
+        const journal = this.stateRoot + '/transaction.json';
+        await this.files.writeFile(journal + '.tmp', JSON.stringify(backup));
+        await this.files.rename(journal + '.tmp', journal);
+        try {
+          for (const entry of entries) {
+            const file = await this.safe(entry.path);
+            if (entry.text === null) { try { await this.files.unlink(file); } catch (error) { if (!missingFile(error)) throw error; } }
+            else { await ensureDirectory(this.files, parentPath(file)); await this.files.writeFile(file, entry.text); }
+          }
+          // Keep immutable history outside the Git worktree; it is never published.
+          await this.files.rename(journal, this.stateRoot + `/history-${crypto.randomUUID()}.json`);
+        } catch (error) { await this.rollbackUnlocked(backup, journal); throw error; }
+        return { revision: entries[0].text === null ? '' : this.revisions.revision(this.revisionScope, entries[0].path, entries[0].text), message: '已保存到设备；提交并同步后更新 Git 仓库' };
+      });
     });
   }
 }

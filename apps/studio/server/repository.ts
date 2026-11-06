@@ -49,6 +49,9 @@ export class LocalRepository implements Repository {
     } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
   }
   async read(path: string): Promise<FileSnapshot | null> {
+    // Disk baselines must not publish text acquired before waiting for their lock.
+    // Keep safePath, file limits and decoding inside the serialized callback.
+    if (this.snapshotRevisions?.snapshot) return this.snapshotRevisions.snapshot(path, () => this.readText(path));
     const file = await this.readText(path);
     return file ? { ...file, revision: await this.revision(path, file.text) } : null;
   }

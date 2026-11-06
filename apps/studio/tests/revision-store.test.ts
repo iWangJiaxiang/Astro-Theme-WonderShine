@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { DiskRevisionStore } from '../server/revision-store.js';
 import { LocalRepository } from '../server/repository.js';
 import { inspectConfig } from '../server/config.js';
+import type { SnapshotRevisionStrategy } from '../core/revision.js';
+import { ContentService } from '../server/content-service.js';
 
 async function fixture(t: test.TestContext) {
   const base = await mkdtemp(join(tmpdir(), 'studio-disk-revisions-'));
@@ -150,6 +152,108 @@ test('retired tokens are not resurrected by delayed reads with older text', asyn
   const repo = new LocalRepository(root, b);
   await assert.rejects(repo.write('config.toml', 'stale', old), { status: 409 });
   assert.equal(await readFile(join(root, 'config.toml'), 'utf8'), 'aaaa');
+});
+
+function gate() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+for (const delay of ['before lock', 'inside read'] as const) {
+  test(`settings reads delayed ${delay} cannot retire a newer baseline`, { timeout: 10_000 }, async t => {
+    const { root, directory } = await fixture(t);
+    const original = '[extra.style]\nfont_family="system-ui"\n';
+    const external = '[extra.style]\nfont_family="Custom Font"\n';
+    await writeFile(join(root, 'config.toml'), original);
+    const started = gate(), release = gate(), newerStarted = gate();
+    t.after(() => release.resolve());
+    let armed = false, released = false, newerRead = false;
+    type Read = Parameters<NonNullable<SnapshotRevisionStrategy['snapshot']>>[1];
+    class DelayedStore extends DiskRevisionStore {
+      override async snapshot(path: string, read: Read) {
+        if (!armed) return super.snapshot(path, read);
+        armed = false;
+        if (delay === 'before lock') {
+          started.resolve(); await release.promise;
+          return super.snapshot(path, read);
+        }
+        return super.snapshot(path, async () => {
+          // Hold the actual safe-read result under the real cross-process lock.
+          const file = await read();
+          assert.equal(file?.text, original);
+          assert.ok((await stat(join(directory, 'lock'))).isDirectory());
+          started.resolve(); await release.promise;
+          return file;
+        });
+      }
+    }
+    class NewerStore extends DiskRevisionStore {
+      override async snapshot(path: string, read: Read) {
+        newerStarted.resolve();
+        return super.snapshot(path, async () => {
+          if (delay === 'inside read') assert.ok(released, 'new safe read waits for the old lock owner');
+          newerRead = true;
+          return read();
+        });
+      }
+    }
+    const a = new LocalRepository(root, new DelayedStore(root, { directory }));
+    const b = new LocalRepository(root, new NewerStore(root, { directory }));
+    const contentA = new ContentService(a), contentB = new ContentService(b);
+    const stale = await contentA.settings('appearance');
+    armed = true;
+    const delayed = contentA.settings('appearance');
+    await started.promise;
+    await writeFile(join(root, 'config.toml'), external);
+    const newer = contentB.settings('appearance');
+    await newerStarted.promise;
+    let current: Awaited<ReturnType<ContentService['settings']>>;
+    if (delay === 'before lock') {
+      current = await newer;
+      released = true; release.resolve();
+      const late = await delayed;
+      assert.equal(late.values['extra.style.font_family'], 'Custom Font', 'queued requests acquire text only after obtaining the lock');
+      assert.equal(late.revision, current.revision);
+    } else {
+      assert.equal(newerRead, false, 'a second store cannot read while the first holds the disk lock');
+      released = true; release.resolve();
+      assert.equal((await delayed).revision, stale.revision);
+      current = await newer;
+    }
+    assert.equal(current.values['extra.style.font_family'], 'Custom Font');
+    assert.equal((await contentA.settings('appearance')).revision, current.revision, 'late completion does not churn the current token');
+    await assert.rejects(contentA.saveSettings('appearance', { 'extra.style.font_family': 'stale' }, stale.revision), { status: 409 });
+    assert.equal(await readFile(join(root, 'config.toml'), 'utf8'), external);
+    const saved = await contentB.saveSettings('appearance', { 'extra.style.font_family': 'PingFang SC' }, current.revision);
+    assert.equal((await contentA.settings('appearance')).revision, saved.revision);
+    assert.equal((await contentA.settings('appearance')).values['extra.style.font_family'], 'PingFang SC');
+    await writeFile(join(root, 'config.toml'), external);
+    await assert.rejects(contentB.saveSettings('appearance', { 'extra.style.font_family': 'overwrite' }, saved.revision), { status: 409 });
+    assert.equal(await readFile(join(root, 'config.toml'), 'utf8'), external, 'real external edits after loading remain protected');
+  });
+}
+
+test('snapshot callbacks preserve absence and errors and always release the disk lock', async t => {
+  const { root, directory } = await fixture(t);
+  const store = new DiskRevisionStore(root, { directory });
+  const repo = new LocalRepository(root, store);
+  const before = (await repo.read('config.toml'))!;
+  assert.equal(await repo.read('data.toml'), null);
+  const failure = new Error('safe read failed');
+  await assert.rejects(store.snapshot('config.toml', async () => { throw failure; }), error => error === failure);
+  await assert.rejects(stat(join(directory, 'lock')), { code: 'ENOENT' });
+  assert.equal((await new LocalRepository(root, new DiskRevisionStore(root, { directory })).read('config.toml'))!.revision, before.revision);
+  await writeFile(join(root, 'data.toml'), 'x'.repeat(1024 * 1024 + 1));
+  await assert.rejects(repo.read('data.toml'), { status: 413 });
+  await rm(join(root, 'data.toml')); await mkdir(join(root, 'data.toml'));
+  await assert.rejects(repo.read('data.toml'), { status: 400 });
+  await rm(join(root, 'data.toml'), { recursive: true });
+  await writeFile(join(root, 'data.toml'), Buffer.from([0xff]));
+  await assert.rejects(repo.read('data.toml'), TypeError);
+  await rm(join(root, 'data.toml')); await symlink(join(root, 'config.toml'), join(root, 'data.toml'));
+  await assert.rejects(repo.read('data.toml'), { status: 400 });
+  assert.equal((await repo.read('config.toml'))!.revision, before.revision);
 });
 
 test('corrupt or missing manifest membership blocks saves before any content mutation', async t => {

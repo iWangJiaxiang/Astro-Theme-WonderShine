@@ -1,3 +1,5 @@
+import type { FileSnapshot } from '../shared/types.js';
+
 /** Process-local exact-text baselines. Tokens are identities, never content digests.
  * Eviction/restart deliberately invalidates old drafts; callers must not rebind them. */
 export interface RevisionRegistryOptions {
@@ -64,6 +66,9 @@ export const contentRevisions = new RevisionRegistry();
  * null falls back to an exact-text baseline (e.g. an uncommitted working file). */
 export interface SnapshotRevisionStrategy {
   revision(path: string, text: string): Promise<string | null>;
+  /** Acquire authoritative text and publish its baseline in one serialized operation.
+   * The callback reads text only; it must not reenter the strategy or repository writes. */
+  snapshot?(path: string, read: () => Promise<Pick<FileSnapshot, 'path' | 'text'> | null>): Promise<FileSnapshot | null>;
 }
 
 /** Preserve URL/branch/path identity across cold online Git instances without
