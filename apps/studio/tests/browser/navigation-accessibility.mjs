@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { checkDrawerScroll } from './drawer-scroll.mjs';
 
 // Focus and inert update before the 200ms transform transition finishes. Wait for
 // both the final geometry and animation completion, including reduced-motion mode.
@@ -26,8 +27,8 @@ async function assertFocusedControl(page, selector) {
       visible: rect.width > 0 && rect.height > 0 && rect.left >= 0 && rect.top >= 0 &&
         rect.right <= innerWidth && rect.bottom <= innerHeight,
       unobscured: node.contains(hit),
-      activeElement: document.activeElement?.outerHTML.slice(0, 500),
-      hitElement: hit?.outerHTML.slice(0, 500),
+      activeElement: { tag:document.activeElement?.tagName, target:document.activeElement === node },
+      hitElement: hit ? { tag:hit.tagName, target:node.contains(hit) } : null,
       rect: rect.toJSON(),
       viewport: { width: innerWidth, height: innerHeight },
     };
@@ -103,8 +104,9 @@ async function checkBreakpointFocus(page) {
 }
 
 export async function checkNavigationAccessibility({ page, screenshots }) {
-  for (const width of [320, 390, 760]) {
-    await page.setViewport({ width, height: 844, deviceScaleFactor: 1 });
+  for (const [width, height] of [[320, 568], [320, 844], [390, 844], [760, 844]]) {
+    const imageSize = height === 844 ? String(width) : `${width}x${height}`;
+    await page.setViewport({ width, height, deviceScaleFactor: 1 });
     await waitForDrawer(page, false);
     await page.focus('.mobile-menu');
     await page.keyboard.press('Enter');
@@ -120,7 +122,10 @@ export async function checkNavigationAccessibility({ page, screenshots }) {
     // Inert must prevent actual focus, not merely appear as an attribute.
     await page.$eval('.mobile-menu', node => node.focus());
     await assertFocusedControl(page, '.navigation-close');
-    await page.screenshot({ path: `${screenshots}/navigation-open-${width}.png` });
+    await page.screenshot({ path: `${screenshots}/navigation-open-${imageSize}.png` });
+    if ((width === 320 && height === 568) || (width === 390 && height === 844)) {
+      await checkDrawerScroll({ page, screenshots, waitForDrawer });
+    }
     await page.keyboard.down('Shift');
     try { await page.keyboard.press('Tab'); }
     finally { await page.keyboard.up('Shift'); }
@@ -141,7 +146,7 @@ export async function checkNavigationAccessibility({ page, screenshots }) {
     assert.equal(await page.evaluate(() => !!document.activeElement?.closest('.main-shell') && !document.activeElement.closest('[inert]')), true, 'Closed drawer must not receive Tab focus');
     await page.focus('.mobile-menu');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `No horizontal overflow at ${width}`);
-    await page.screenshot({ path: `${screenshots}/navigation-${width}.png`, fullPage: true });
+    await page.screenshot({ path: `${screenshots}/navigation-${imageSize}.png`, fullPage: true });
   }
   await checkBreakpointFocus(page);
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
