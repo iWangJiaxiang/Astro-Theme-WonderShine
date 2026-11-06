@@ -92,12 +92,12 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
           // Show at least a square half-thumbnail region, not a one-pixel sliver.
           const meaningful = Math.min(box.width, box.height) / 2;
           if (meaningful <= 0 || right - left < meaningful || visibleBottom - visibleTop < meaningful) {
-            remember({ box, left, right, visibleTop, visibleBottom, meaningful, geometryPassed: false, hitTestCalled: false, hit: null, cardContainsHit: null });
+            remember({ image, box, left, right, visibleTop, visibleBottom, meaningful, geometryPassed: false, hitTestCalled: false, hit: null, cardContainsHit: null });
             return false;
           }
           const hit = document.elementFromPoint((left + right) / 2, (visibleTop + visibleBottom) / 2);
           const cardContainsHit = image.closest('.media-card').contains(hit);
-          remember({ box, left, right, visibleTop, visibleBottom, meaningful, geometryPassed: true, hitTestCalled: true, hit, cardContainsHit });
+          remember({ image, box, left, right, visibleTop, visibleBottom, meaningful, geometryPassed: true, hitTestCalled: true, hit, cardContainsHit });
           return cardContainsHit;
         });
         const matched = imageMatched && (!body || (bodyScrollReadForPredicate = true, (bodyScrollTopForPredicate = body.scrollTop) === 0));
@@ -118,9 +118,10 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
             bodyScrollTopForPredicate: numeric(bodyScrollTopForPredicate), bodyAtZero: imageMatched ? (!body || bodyScrollTopForPredicate === 0) : null,
             totalImageCount: images.length, loadedCount: candidates.length, visitedTotal,
             unvisitedCount: candidates.length - visitedTotal, droppedCandidates: visitedTotal - visited.length,
+            droppedImageLayouts: Math.max(0, images.length - 24),
             clipTop: numeric(top), clipBottom: numeric(bottom), bodyRect: rect(clip), footerRect: rect(footerBox),
             candidates: visited.map((entry, index) => ({
-              index, rect: rect(entry.box), meaningful: numeric(entry.meaningful),
+              index, imageOrdinal: images.indexOf(entry.image), rect: rect(entry.box), meaningful: numeric(entry.meaningful),
               intersection: { left: numeric(entry.left), right: numeric(entry.right), top: numeric(entry.visibleTop), bottom: numeric(entry.visibleBottom), width: numeric(entry.right - entry.left), height: numeric(entry.visibleBottom - entry.visibleTop) },
               geometryPassed: entry.geometryPassed, hitTestCalled: entry.hitTestCalled,
               intersectionCenter: entry.hitTestCalled ? { x: numeric((entry.left + entry.right) / 2), y: numeric((entry.visibleTop + entry.visibleBottom) / 2) } : null,
@@ -130,6 +131,22 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
             atSampling: read('context', () => {
               const dialog = browser.closest('dialog');
               return {
+                mediaLayout: read('media-layout', () => {
+                  const startedAt = numeric(performance.now());
+                  const imageLayouts = images.slice(0, 24).map((image, ordinal) => ({
+                    ordinal,
+                    loaded: read('image-loaded', () => image.complete && image.naturalWidth > 0),
+                    rect: read('image-rect', () => rect(image.getBoundingClientRect())),
+                  }));
+                  const upload = read('upload-layout', () => {
+                    const disclosure = browser.querySelector('.media-upload-disclosure');
+                    return disclosure ? { open: disclosure.open, rect: rect(disclosure.getBoundingClientRect()) } : null;
+                  });
+                  const boxes = Object.fromEntries([
+                    ['toolbar', '.media-toolbar'], ['filter', '.media-filter-disclosure'], ['grid', '.media-grid'],
+                  ].map(([name, selector]) => [name, read(`${name}-rect`, () => rect(browser.querySelector(selector)?.getBoundingClientRect()))]));
+                  return { startedAt, finishedAt: numeric(performance.now()), images: imageLayouts, upload, ...boxes };
+                }),
                 dialogRect: read('dialog-rect', () => rect(dialog?.getBoundingClientRect())),
                 bodyScroll: read('body-scroll', () => scroll(body)), dialogScroll: read('dialog-scroll', () => scroll(dialog)),
                 active: read('active', () => ({ role: role(document.activeElement), inBody: body ? body.contains(document.activeElement) : null })),
@@ -151,7 +168,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
             faults, droppedFaults,
           };
           if (captureFailed) { if (faults.length < 8) faults.push('candidate-capture'); else sample.droppedFaults++; }
-          if (faults.length || sample.droppedFaults) sample.status = 'partial';
+          if (faults.length || sample.droppedFaults || sample.droppedCandidates || sample.droppedImageLayouts) sample.status = 'partial';
         } catch { sample = { status: 'unavailable', faults: ['post-predicate'], droppedFaults: 0 }; }
         return { matched, sample };
       });

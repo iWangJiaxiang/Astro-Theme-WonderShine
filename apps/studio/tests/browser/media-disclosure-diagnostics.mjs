@@ -3,7 +3,7 @@ import { writeFile } from 'node:fs/promises';
 // DOM IDs and controller-trace IDs are independent namespaces, not interchangeable refs.
 const hook = '__mediaDisclosureDiagnostics';
 const controllerTraceExpected = process.env.STUDIO_TEST_MEDIA_TRACE_EXPECTED === '1';
-const caps = { events: 120, waits: 96, checkpoints: 16, failures: 24, animations: 4, mutationNodes: 8, previewSamples: 2, previewCandidates: 24, previewFaults: 8 };
+const caps = { events: 120, waits: 96, checkpoints: 16, failures: 24, animations: 4, mutationNodes: 8, previewSamples: 2, previewCandidates: 24, previewImageLayouts: 24, previewFaults: 8 };
 let nextOwner = 0;
 
 export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout }) {
@@ -13,9 +13,10 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
     controllerTraceExpectation: controllerTraceExpected ? 'expected' : 'not-enabled',
     previewSemantics: {
       predicate: 'Original some order, geometry, hit tests and body-scroll short circuit; matched computed before additional DOM reads',
-      measurements: 'Candidate/body/footer rectangles and hits reused from predicate; atSampling context and hit roles read afterward, not an atomic snapshot or causal evidence',
+      measurements: 'Candidate/body/footer rectangles and hits reused from predicate; candidate imageOrdinal is the zero-based original image-array position. atSampling context, hit roles and mediaLayout loaded flags/rectangles are read afterward, not an atomic snapshot or causal evidence',
       missing: 'Missing, partial or unavailable evidence is not success; skipped predicate body scroll is null, not zero; body absence preserves original true branch',
-      limits: 'First 24 visited candidates per sample, at most 2 samples; counts distinguish dropped visited candidates from short-circuited unvisited candidates; DOM only, not component state',
+      limits: 'First 24 visited candidates and first 24 original image layouts per sample, at most 2 samples; counts distinguish dropped visited candidates, short-circuited unvisited candidates and droppedImageLayouts. Any truncation or sampling fault is partial and fails diagnostics; DOM only, not component state',
+      layout: 'mediaLayout includes post-predicate start/end performance times, original image ordinals with newly read loaded flags/rectangles, upload disclosure open/rectangle and toolbar/filter/grid rectangles; missing elements are null, not inferred closed or zero',
       roles: ['img', 'media-card', 'footer', 'body', 'dialog', 'other', null],
       css: 'Only finite numeric px or unitless custom properties on documentElement; null means absent or unparseable, never an inferred zero',
     },
@@ -260,7 +261,8 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
       report.previewAttempts++;
       try {
         const sample = result?.sample;
-        const available = sample?.status === 'available';
+        const partial = sample?.status === 'partial' || (sample?.faults?.length ?? 0) > 0 || (sample?.droppedFaults ?? 0) > 0 || (sample?.droppedCandidates ?? 0) > 0 || (sample?.droppedImageLayouts ?? 0) > 0;
+        const available = sample?.status === 'available' && !partial;
         if (report.previewSamples.length < caps.previewSamples) {
           report.previewSamples.push({
             attempt: report.previewAttempts, target: target === 'library' ? 'library' : 'picker',
@@ -268,7 +270,7 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
             sample: sample ?? { status: 'unavailable', faults: [unavailableStage === 'rpc-failed' ? 'rpc-failed' : 'sample-unavailable'], droppedFaults: 0 },
           });
         } else report.droppedPreviewSamples++;
-        if (!available) failure(sample?.status === 'partial' ? 'preview-sample-partial' : unavailableStage === 'rpc-failed' ? 'preview-rpc-failed' : 'preview-sample-unavailable', new Error('Media diagnostic preview evidence unavailable or partial'));
+        if (!available) failure(partial ? 'preview-sample-partial' : unavailableStage === 'rpc-failed' ? 'preview-rpc-failed' : 'preview-sample-unavailable', new Error('Media diagnostic preview evidence unavailable or partial'));
       } catch {
         failure('preview-record', new Error('Media diagnostic preview cache failed'));
       }
