@@ -8,7 +8,7 @@ export async function checkLoading({ browser, origin, screenshots }) {
   const workspaceRetry = '.main-content > .notice.error button';
   page.on('response', response => {
     const url = new URL(response.url());
-    if (url.origin === origin && ['/api/bootstrap', '/api/content'].includes(url.pathname)) {
+    if (url.origin === origin && ['/api/bootstrap', '/api/content', '/api/content-languages', '/api/settings/taxonomies', '/api/document'].includes(url.pathname)) {
       responses.push({ path: url.pathname + url.search, status: response.status() });
     }
   });
@@ -81,21 +81,63 @@ export async function checkLoading({ browser, origin, screenshots }) {
     assert.equal(recoveredRetry.status(), 200, 'workspace retry receives fresh content');
     await page.waitForFunction(() => Number(document.querySelector('.stat-card strong')?.textContent) > 0);
     assert.ok(requests.includes('/api/content?refresh=1'), 'workspace retry reloads the failed content request');
-    assert.equal(await page.$('.notice.error'), null);
+    assert.equal(await page.$('.main-content > .notice.error'), null, 'workspace recovery clears its own error');
+    // Editor options own their failed read; refreshing dashboard counts does not
+    // reload them. The notice remains in the collapsed publishing-settings DOM.
+    const optionsError = '.thread-composer .metadata-card > .notice.error';
+    await page.waitForFunction(selector => document.querySelector(selector)?.textContent.includes('选项载入失败：连接已更换，请重试'), {}, optionsError);
+    await page.click('.thread-composer .composer-tools > button[aria-expanded="false"]');
+    await page.waitForSelector(optionsError + ' button', { visible: true });
+    const [optionsContent, optionsTaxonomies] = await Promise.all([
+      page.waitForResponse(response => response.url() === origin + '/api/content?refresh=1'),
+      page.waitForResponse(response => new URL(response.url()).pathname === '/api/settings/taxonomies'),
+      page.click(optionsError + ' button'),
+    ]);
+    assert.equal(optionsContent.status(), 200, 'composer option retry reloads content');
+    assert.equal(optionsTaxonomies.status(), 200, 'composer option retry completes taxonomy loading');
+    // Error text clears at retry start; enabled controls prove loadChoices ended.
+    await page.waitForSelector('.thread-composer [data-field="extra.topics"] .choice-trigger:not(:disabled)');
+    await page.waitForSelector('.thread-composer .article-references .reference-heading button:not(:disabled)');
+    assert.equal(await page.$('.notice.error'), null, 'workspace and child option errors both recover');
+    await page.click('.thread-composer .article-references .reference-heading button');
+    await page.waitForSelector('.reference-dialog[open] input[type="radio"]', { visible: true });
+    assert.ok(await page.$$eval('.reference-dialog[open] input[type="radio"]', nodes => nodes.length > 0), 'recovered composer options contain article references');
+    await page.click('.reference-dialog[open] .card-heading button');
+    await page.waitForSelector('.reference-dialog[open]', { hidden: true });
+    await page.click('.thread-composer .composer-tools > button[aria-expanded="true"]');
     failContent = true;
-    await page.click('aside nav button:nth-child(2)');
-    await page.waitForSelector('.content-library .notice.error');
+    const [failedLibrary] = await Promise.all([
+      page.waitForResponse(response => response.url() === origin + '/api/content'),
+      page.click('aside nav button:nth-child(2)'),
+    ]);
+    assert.equal(failedLibrary.status(), 502, 'library navigation reaches the injected content failure');
+    await page.waitForSelector('.content-library .notice.error button:not(:disabled)');
     assert.equal(await page.$('.content-library .empty-state'), null, 'failed library request is not an empty state');
     failContent = false;
-    await page.click('.content-library .notice.error button');
+    const [recoveredLibrary] = await Promise.all([
+      page.waitForResponse(response => response.url() === origin + '/api/content?refresh=1'),
+      page.click('.content-library .notice.error button'),
+    ]);
+    assert.equal(recoveredLibrary.status(), 200, 'library retry receives fresh content');
     await page.waitForSelector('.library-row .content-row');
+    assert.equal(await page.$('.notice.error'), null, 'library recovery leaves no hidden errors');
     failDocument = true;
-    await page.click('.library-row .content-row');
-    await page.waitForSelector('main .notice.error');
+    const [failedDocument] = await Promise.all([
+      page.waitForResponse(response => new URL(response.url()).pathname === '/api/document'),
+      page.click('.library-row .content-row'),
+    ]);
+    assert.equal(failedDocument.status(), 502, 'opening a document reaches the injected document failure');
+    await page.waitForSelector('.main-content > .notice.error button', { visible: true });
     assert.equal(await page.$('.markdown-source'), null, 'failed document request must not expose an empty editable document');
     failDocument = false;
-    await page.click('main .notice.error button');
+    const [recoveredDocument] = await Promise.all([
+      page.waitForResponse(response => new URL(response.url()).pathname === '/api/document'),
+      page.click('.main-content > .notice.error button'),
+    ]);
+    assert.equal(recoveredDocument.status(), 200, 'document retry receives the saved document');
     await page.waitForSelector('.markdown-source');
+    await page.waitForSelector('.editor-page [data-field="taxonomies.tags"] :is(fieldset, button):not(:disabled)');
+    assert.equal(await page.$('.notice.error'), null, 'document and its independently loaded options both recover');
     console.log('PASS: parallel workspace reads, slow feedback, retry, document failure safety, reduced motion and mobile loading.');
   } catch (error) {
     // smoke.mjs owns a different page; capture this page before finally closes it.
@@ -103,6 +145,7 @@ export async function checkLoading({ browser, origin, screenshots }) {
       counts: [...document.querySelectorAll('.stat-card strong')].map(node => node.textContent),
       notices: [...document.querySelectorAll('.notice.error')].map(node => ({
         text: node.textContent,
+        visible: node.getClientRects().length > 0,
         retryDisabled: node.querySelector('button')?.disabled,
       })),
       loading: [...document.querySelectorAll('.loading-panel')].map(node => node.textContent),
