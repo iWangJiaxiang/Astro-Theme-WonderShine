@@ -308,9 +308,23 @@ export async function checkRootModals({ page, origin, password, screenshots, out
       node.isConnected && !node.disabled && !node.closest('[inert]')), true,
     'Initial AI click requires an enabled, non-inert control');
     const initialAiDiagnostics = await initialAiClickDiagnostics({ page, screenshots, outcome });
+    const initialAiLocator = page.locator('.editor-page .summary-heading button.ai-action').setVisibility('visible');
+    const initialAiAbort = new AbortController();
+    let initialAiActions = 0;
+    const beforeInitialAiAction = () => {
+      // Locator readiness may poll, but a failed input action must not be replayed.
+      if (++initialAiActions > 1) {
+        const error = new Error('Initial AI input must not be retried');
+        initialAiAbort.abort(error);
+        throw error;
+      }
+    };
+    initialAiLocator.on('action', beforeInitialAiAction);
     let initialAiFailed = true;
     try {
-      await page.click('.ai-action');
+      // Retain default enabled and two-frame bounding-box checks, not a language-UI wait.
+      await initialAiLocator.click({ signal: initialAiAbort.signal });
+      assert.equal(initialAiActions, 1, 'Initial AI input has one action attempt');
       await initialAiDiagnostics.afterClick();
       await page.waitForSelector('.ai-assistant-dialog[open]');
       assert.equal(await page.$eval('.ai-assistant-dialog .ai-source p', node => node.textContent), draft,
@@ -318,6 +332,7 @@ export async function checkRootModals({ page, origin, password, screenshots, out
       await assertRetainedDraft();
       initialAiFailed = false;
     } finally {
+      initialAiLocator.off('action', beforeInitialAiAction);
       try { await initialAiDiagnostics.finish(initialAiFailed); }
       catch {
         // Diagnostics must never replace the original click/wait exception.
