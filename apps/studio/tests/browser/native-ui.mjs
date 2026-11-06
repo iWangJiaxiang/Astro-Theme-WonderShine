@@ -260,9 +260,26 @@ try {
     await page.goto('about:blank');
     reviewEpoch = undefined; reviewClaims.clear();
     await page.goto(origin, { waitUntil: 'networkidle0' });
+    // Navigation can reapply session-local emulation; check the reopened WebView too.
+    await setViewport(page.viewport());
   };
   const noOverflow = async label => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, label + ' must fit viewport');
   const gestureClient = await page.createCDPSession();
+  const setViewport = async viewport => {
+    await page.setViewport(viewport);
+    // The gesture session also owns a metrics override. Update both owners before
+    // business input, not just before/after screenshots, without reloading the app.
+    await configureGestureEmulation(page, gestureClient, {
+      ...viewport, mobile:!!viewport.isMobile, hasTouch:!!viewport.hasTouch,
+    });
+    await page.waitForFunction(({ width, height }) =>
+      Math.abs(innerWidth - width) <= 1 && Math.abs(innerHeight - height) <= 1
+      && (document.compatMode !== 'CSS1Compat' || (
+        Math.abs(document.documentElement.clientWidth - width) <= 1
+        && Math.abs(document.documentElement.clientHeight - height) <= 1))
+      && Math.abs((visualViewport?.scale ?? 0) - 1) <= .06,
+    {}, viewport);
+  };
   const screenshot = async name => {
     await page.evaluate(async () => { window.scrollTo(0, 0); await document.fonts.ready; for (const animation of document.getAnimations()) { if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) { try { animation.finish(); } catch {} } } await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
     await page.screenshot({ path: join(screenshots, name + '.png'), fullPage: true });
@@ -309,7 +326,7 @@ try {
       if (record.findings.length) console.error(`Native synthetic gesture findings: ${name} (${record.findings.length}); continuing fixture.`);
     }
   };
-  await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+  await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.goto(origin, { waitUntil: 'networkidle0' }); await heading('连接创作工作区');
   assert.equal(runtimeChunks.some(name => loadedScripts.has(name)), false, 'Connection screen must not load the Git/content runtime before opening a workspace');
   assert.equal(await page.$$('.workspace-record').then(records => records.length), 2, 'Git and service records share the initial chooser');
@@ -346,8 +363,8 @@ try {
   selectedFolder = localRoot; await page.click('.folder-picker'); await page.waitForSelector('.selected-repository');
   await screenshot('connection-folder-selected-desktop');
   await page.click('.connection-options summary'); await screenshot('connection-folder-options-desktop');
-  await page.setViewport({width:390,height:844}); await screenshot('connection-folder-options-mobile'); await noOverflow('local folder options');
-  await page.setViewport({width:1440,height:1000});
+  await setViewport({width:390,height:844}); await screenshot('connection-folder-options-mobile'); await noOverflow('local folder options');
+  await setViewport({width:1440,height:1000});
   await click('打开工作区'); await heading('今天，写点什么？');
   assert.ok(runtimeChunks.some(name => loadedScripts.has(name)), 'Opening a workspace loads the deferred native runtime');
   await click('工作区同步'); await page.waitForSelector('.workspace-status-grid');
@@ -358,19 +375,19 @@ try {
   await click('远程仓库');
 
   await click('连接自建创作中心'); await page.waitForSelector('input[placeholder="https://studio.example.com"]'); await screenshot('connection-remote-desktop');
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('connection-remote-mobile'); await noOverflow('mobile remote connection');
+  await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('connection-remote-mobile'); await noOverflow('mobile remote connection');
   await click('远程仓库'); await screenshot('connection-git-mobile'); await noOverflow('mobile Git connection');
-  await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+  await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await click('打开工作区'); await heading('今天，写点什么？'); await page.waitForFunction(() => Number(document.querySelector('.stat-card strong')?.textContent) > 0);
   await screenshot('dashboard-desktop'); await noOverflow('desktop dashboard');
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('dashboard-mobile'); await noOverflow('mobile dashboard');
-  await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+  await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('dashboard-mobile'); await noOverflow('mobile dashboard');
+  await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   for (const [label, name, ready] of [['动态', 'threads', '.thread-composer textarea'], ['话题管理', 'topics', '.localized-library'], ['站点信息', 'site-settings', '.settings-grid']]) {
     await click(label); await heading(label);
     if (name !== 'topics') await page.waitForSelector(ready);
     await screenshot(name + '-desktop'); await noOverflow(name + ' desktop');
-    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot(name + '-mobile'); await noOverflow(name + ' mobile');
-    await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+    await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot(name + '-mobile'); await noOverflow(name + ' mobile');
+    await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   }
   await click('工作台'); await heading('今天，写点什么？');
   await page.evaluate(() => [...document.querySelectorAll('.content-row')].find(node => node.textContent.includes('离线文章示例')).click());
@@ -402,13 +419,13 @@ try {
   await click('Git 分支保存'); await page.waitForFunction(() => !document.querySelector('.save-button-main').disabled);
   assert.equal(git(['rev-parse', branch]), commit, 'unchanged saves reuse the commit');
   for (const [width, height] of [[1440,1000],[1024,768],[390,844]]) {
-    await page.setViewport({width,height});
+    await setViewport({width,height});
     await page.click('.save-button-toggle'); await page.waitForSelector('.save-mode-menu');
     await screenshot(`save-menu-${width}`); await noOverflow('save menu');
     assert.equal(await page.$eval('.save-mode-menu', e => { const r=e.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight; }), true);
     await page.keyboard.press('Escape');
   }
-  await page.setViewport({width:1440,height:1000});
+  await setViewport({width:1440,height:1000});
   await page.type('.markdown-source', '\nBranch retry retains this local edit.');
   failNextBranchWrite = true;
   await click('Git 分支保存'); await page.waitForSelector('.notice.error');
@@ -452,8 +469,8 @@ try {
   await screenshot('media-desktop');
   await click('工作区同步'); await page.waitForSelector('.workspace-status-grid');
   await screenshot('workspace-desktop'); await noOverflow('desktop workspace');
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('workspace-mobile'); await noOverflow('mobile workspace');
-  await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+  await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('workspace-mobile'); await noOverflow('mobile workspace');
+  await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await click('客户端 API 设置'); await heading('客户端 API 设置');
   await page.waitForSelector('.native-ai-settings form');
   const fillSetting = async (label, value) => {
@@ -468,13 +485,13 @@ try {
   assert.equal(await page.$eval('.native-ai-settings input[type="password"]', input => input.value), '');
   assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('browser-fixture-secret')), false);
   await screenshot('api-settings-desktop');
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('api-settings-mobile'); await noOverflow('mobile API settings');
-  await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+  await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('api-settings-mobile'); await noOverflow('mobile API settings');
+  await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.select('.language-switcher select', 'en'); await heading('Client API settings');
   assert.match(await page.$eval('.native-ai-settings .notice.success', node => node.textContent), /Local configuration saved/, 'existing feedback follows the selected language');
   await screenshot('api-settings-en-desktop'); await noOverflow('English API settings');
-  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('api-settings-en-mobile'); await noOverflow('English mobile API settings');
-  await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+  await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('api-settings-en-mobile'); await noOverflow('English mobile API settings');
+  await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.select('.language-switcher select', 'zh-CN'); await heading('客户端 API 设置');
   await click('清除密钥'); await page.waitForFunction(() => document.querySelector('.native-ai-settings')?.textContent.includes('尚未配置密钥'));
   await restartNativeFixture(); await heading('连接创作工作区');
@@ -482,12 +499,22 @@ try {
   await click('客户端 API 设置'); await page.waitForSelector('.native-ai-settings form');
   assert.equal(await page.$eval('.native-ai-settings input[type="url"]', input => input.value), 'http://127.0.0.1:18361/v1');
   assert.ok(await page.$eval('.native-ai-settings', node => node.textContent.includes('尚未配置密钥')));
-  await page.click('[aria-label="退出登录"]'); await heading('连接创作工作区');
+  const logout = '#studio-navigation .sidebar-bottom button[aria-label="退出登录"]';
+  await page.waitForFunction(selector => {
+    const button = document.querySelector(selector);
+    if (!button || button.disabled || button.closest('[inert], [hidden], details:not([open])')) return false;
+    const rect = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return rect.width > 0 && rect.height > 0 && rect.left >= 0 && rect.top >= 0
+      && rect.right <= document.documentElement.clientWidth && rect.bottom <= document.documentElement.clientHeight
+      && button.contains(hit);
+  }, { polling:'raf' }, logout);
+  await page.locator(logout).click(); await heading('连接创作工作区');
   assert.equal(await page.$('.studio-shell'), null);
   assert.equal([...commands].some(command => command.startsWith('plugin:http|')), false, 'offline workflow must not contact Git or other services');
   await page.evaluate(()=>localStorage.setItem('wondershine.native.workspaces.v1','[]'));
   await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36');
-  await page.setViewport({width:390,height:844,isMobile:true,hasTouch:true});
+  await setViewport({width:390,height:844,isMobile:true,hasTouch:true});
   await page.reload({waitUntil:'networkidle0'});await heading('连接创作工作区');
   assert.equal(await page.$eval('.connection-modes button[aria-pressed=true]',node=>node.textContent.trim()),'远程仓库','mobile first launch starts with usable repository URL entry');
   assert.equal(await page.$$eval('.connection-modes button', buttons => buttons.some(button => button.textContent.includes('本地文件夹'))), false, 'Mobile does not offer an unsupported folder picker');
@@ -545,11 +572,11 @@ try {
       assert.equal(await page.$('.oauth-dialog [role=alert]'), null, 'A fresh sign-in clears previous diagnostics');
       await page.type('.oauth-dialog input', 'blog');
       await screenshot('oauth-repositories-' + provider.toLowerCase());
-      await page.setViewport({width:390,height:430,isMobile:true,hasTouch:true});
+      await setViewport({width:390,height:430,isMobile:true,hasTouch:true});
       await page.waitForFunction(() => parseFloat(document.documentElement.style.getPropertyValue('--native-visible-height')) < 500);
       assert.ok(await page.$eval('.oauth-dialog', node => node.getBoundingClientRect().bottom <= visualViewport.height + visualViewport.offsetTop + 1), 'Repository picker fits visible keyboard viewport');
       await screenshot('oauth-keyboard-' + provider.toLowerCase());
-      await page.setViewport({width:390,height:844,isMobile:true,hasTouch:true});
+      await setViewport({width:390,height:844,isMobile:true,hasTouch:true});
       await page.click('.oauth-repository'); await page.waitForFunction(() => !document.querySelector('.oauth-dialog'));
       assert.equal(await page.$eval('.connection-url input', node => node.value), `https://${provider === 'GitHub' ? 'github.com' : 'cnb.cool'}/fixture-writer/blog.git`);
       assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('oauth-fixture-token')), false);
@@ -559,7 +586,7 @@ try {
   }
   await page.waitForSelector('.connection-url input');
   for (const [width, height, name] of [[390, 844, 'iphone'], [430, 932, 'iphone-large'], [768, 1024, 'ipad'], [844, 390, 'landscape'], [375, 667, 'compact']]) {
-    await page.setViewport({ width, height, isMobile: true, hasTouch: true });
+    await setViewport({ width, height, isMobile: true, hasTouch: true });
     await page.waitForFunction(height => Math.abs(parseFloat(document.documentElement.style.getPropertyValue('--native-visible-height')) - height) < 1, {}, height);
     await page.evaluate(() => scrollTo(0, 0));
     const layout = await page.evaluate(() => {
@@ -580,7 +607,7 @@ try {
     }
     await screenshot('connection-first-launch-' + name); await noOverflow(name + ' first launch');
   }
-  await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+  await setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await screenshot('connection-first-launch-mobile');
   await page.click('.connection-options summary');await screenshot('connection-options-mobile');await noOverflow('mobile connection options');
   await page.select('.language-switcher select','en');await screenshot('connection-options-en-mobile');await noOverflow('English connection options');
@@ -603,7 +630,7 @@ try {
   console.log('PASS: indeterminate connection progress.'); releaseDownload();
   await page.waitForSelector('.connection-progress progress[value]',{timeout:20000});
   for(const [width,height,name] of [[1440,1000,'desktop'],[1024,768,'medium'],[390,844,'mobile']]){
-    await page.setViewport({width,height,isMobile:true,hasTouch:true});await screenshot('clone-progress-'+name);await noOverflow('clone progress '+name);
+    await setViewport({width,height,isMobile:true,hasTouch:true});await screenshot('clone-progress-'+name);await noOverflow('clone progress '+name);
   }
   await page.select('.language-switcher select','en');await screenshot('clone-progress-en-mobile');
   console.log('PASS: real clone progress at three widths.'); releaseCheckout();await heading('What will you write today?');
@@ -619,15 +646,35 @@ try {
   console.log('Native UI passed: desktop/mobile connection modes, offline dashboard, source save, bundled Vditor, native asset preview, client API settings, secret redaction, configuration reopen, logout.');
   console.log('Screenshots: ' + screenshots);
 } catch (error) {
-  const diagnostics = { failure:String(error), commands:[...commands], ipcFailures, errors, cspErrors, failedResources,
+  const diagnostics = { failure:String(error), stack:error.stack, viewport:page?.viewport(), commands:[...commands], ipcFailures, errors, cspErrors, failedResources,
     gestureCoverage:{ reachedSurfaces:nativeGestureRecords.length, findings:gestureFindings(),
       scope:'Only reached mobile screenshot surfaces; a business-flow failure can still block later surfaces.' } };
   if (page && !page.isClosed()) {
     try {
-      diagnostics.ui = await page.evaluate(() => ({
-        headings: [...document.querySelectorAll('h1')].map(node => node.textContent),
-        alerts: [...document.querySelectorAll('[role="alert"]')].map(node => node.textContent),
-      }));
+      // Capture geometry before failure.png: screenshots can alter emulated metrics.
+      diagnostics.ui = await page.evaluate(() => {
+        const describe = node => {
+          if (!node) return null;
+          const rect = node.getBoundingClientRect(), style = getComputedStyle(node);
+          const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          return { tag:node.tagName, rect:rect.toJSON(), display:style.display, visibility:style.visibility,
+            pointerEvents:style.pointerEvents, disabled:node.matches(':disabled'), inert:!!node.closest('[inert]'),
+            hidden:!!node.closest('[hidden]'), folded:!!node.closest('details:not([open])'),
+            expanded:node.getAttribute('aria-expanded'), hit:hit ? {tag:hit.tagName,id:hit.id} : null,
+            unobscured:node.contains(hit) };
+        };
+        return {
+          headings: [...document.querySelectorAll('h1')].map(node => node.textContent),
+          alerts: [...document.querySelectorAll('[role="alert"]')].map(node => node.textContent),
+          viewport:{ layout:{width:innerWidth,height:innerHeight},
+            client:{width:document.documentElement.clientWidth,height:document.documentElement.clientHeight},
+            visual:visualViewport ? {width:visualViewport.width,height:visualViewport.height,scale:visualViewport.scale,
+              offsetLeft:visualViewport.offsetLeft,offsetTop:visualViewport.offsetTop} : null },
+          navigation:{ sidebar:describe(document.querySelector('#studio-navigation')),
+            trigger:describe(document.querySelector('.mobile-menu')),
+            logout:describe(document.querySelector('.sidebar-bottom button')) },
+        };
+      });
     } catch (diagnosticError) { diagnostics.uiError = diagnosticError.message; }
     try { await page.screenshot({ path: join(screenshots, 'failure.png'), fullPage: true }); }
     catch (diagnosticError) { diagnostics.screenshotError = diagnosticError.message; }

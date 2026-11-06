@@ -282,12 +282,12 @@ export async function checkRootModals({ page, origin, password, screenshots }) {
     await expireSession(page);
     await clickText(page, '.ai-assistant-dialog button', '生成摘要');
     await assertBlockingReauth(page, '.ai-assistant-dialog[open]', screenshots, 'root-modal-reauth-ai');
-    assert.equal(await page.$eval('.editor-page .markdown-source', node => node === window.modalEditorNode && node.value === draft), true);
+    assert.equal(await page.$eval('.editor-page .markdown-source', (node, draft) => node === window.modalEditorNode && node.value === draft, draft), true);
     await loginAgain(page, password);
     await containsFocus(page, '.ai-assistant-dialog[open]');
     await tabContained(page, '.ai-assistant-dialog[open]');
     assert.equal(aiWrites, 1, 'Login must not replay the failed AI mutation');
-    assert.equal(await page.$eval('.editor-page .markdown-source', node => node === window.modalEditorNode && node.value === draft), true);
+    assert.equal(await page.$eval('.editor-page .markdown-source', (node, draft) => node === window.modalEditorNode && node.value === draft, draft), true);
     await page.keyboard.press('Escape');
     await page.waitForSelector('.ai-assistant-dialog', { hidden: true });
 
@@ -300,7 +300,7 @@ export async function checkRootModals({ page, origin, password, screenshots }) {
     await containsFocus(page, '.delete-content-dialog[open]');
     await tabContained(page, '.delete-content-dialog[open]');
     assert.equal(deleteWrites, 1, 'Login must not replay deletion');
-    assert.equal(await page.$eval('.editor-page .markdown-source', node => node === window.modalEditorNode && node.value === draft), true);
+    assert.equal(await page.$eval('.editor-page .markdown-source', (node, draft) => node === window.modalEditorNode && node.value === draft, draft), true);
     assert.equal(await page.evaluate(async () => (await fetch('/api/document?path=content%2Farticles%2Fexample%2Findex.md')).status), 200, '401 deletion must retain the stored article');
     await page.keyboard.press('Escape');
     await page.waitForSelector('.delete-content-dialog', { hidden: true });
@@ -343,7 +343,7 @@ export async function checkRootModals({ page, origin, password, screenshots }) {
         assert.equal(await page.$('.ai-assistant-dialog[open]'), null, 'Cancelled/unmounted open cannot resume');
         assert.equal(await page.evaluate(() => window.delayedBusinessNode.isConnected || window.delayedBusinessNode.open), false);
       }
-      assert.equal(await page.$eval('.editor-page .markdown-source', node => node === window.modalEditorNode && node.value === draft), true);
+      assert.equal(await page.$eval('.editor-page .markdown-source', (node, draft) => node === window.modalEditorNode && node.value === draft, draft), true);
       assert.equal(aiWrites, 1, 'Deferred activation must not replay AI generation');
       assert.equal(deleteWrites, 1, 'Deferred activation must not replay deletion');
     }
