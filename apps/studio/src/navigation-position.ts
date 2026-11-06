@@ -25,6 +25,12 @@ export function navigationPosition() {
         window.removeEventListener('touchstart', stop);
         window.removeEventListener('pointerdown', stop);
         window.removeEventListener('keydown', stop);
+        window.removeEventListener('focusin', focusIntent, true);
+      };
+      const focusIntent = (event: FocusEvent) => {
+        const target = event.target;
+        if (target instanceof HTMLElement && target.closest('.main-content') && !target.closest('[inert]') &&
+          (target.isContentEditable || target.matches('input, button, select, textarea, a[href], summary, [tabindex]'))) stop();
       };
       const place = () => {
         if (cancelled) return;
@@ -35,10 +41,11 @@ export function navigationPosition() {
         if (!heading || main?.querySelector('.loading-panel') || document.querySelector('dialog[open]')) return;
         if (saved && document.documentElement.scrollHeight - innerHeight + 1 < saved.y) return;
         const target = saved?.focus?.isConnected && !saved.focus.closest('[inert]') ? saved.focus : heading;
+        // Our own heading/saved-control focus must not count as new input intent.
+        stop();
         if (!target.matches('button, a[href], input, select, textarea, [tabindex]')) target.tabIndex = -1;
         target.focus({ preventScroll: true });
         window.scrollTo(saved?.x ?? 0, saved?.y ?? 0);
-        stop();
       };
       const schedule = () => {
         if (cancelled) return;
@@ -52,6 +59,7 @@ export function navigationPosition() {
       window.addEventListener('touchstart', stop, { passive: true });
       window.addEventListener('pointerdown', stop, { passive: true });
       window.addEventListener('keydown', stop);
+      window.addEventListener('focusin', focusIntent, true);
       cancelPending = stop;
       schedule();
     },

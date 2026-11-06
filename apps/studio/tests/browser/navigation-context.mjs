@@ -122,8 +122,8 @@ async function holdContent(page, origin) {
     },
     async dispose() {
       page.off('request', intercept);
-      if (held && !held.isInterceptResolutionHandled()) await held.continue();
-      await page.setRequestInterception(false);
+      try { if (held && !held.isInterceptResolutionHandled()) await held.continue(); }
+      finally { await page.setRequestInterception(false); }
     },
   };
 }
@@ -166,6 +166,100 @@ async function returnContext(page, origin, context, userInput = false) {
       await readyLibrary(page);
     }
   } finally { await gate.dispose(); }
+}
+
+async function focusOnlyReturnContext(page, origin, context) {
+  const gate = await holdContent(page, origin);
+  let probe, failed = false;
+  try {
+    await clickText(page, '.editor-page .page-heading button', '← 返回内容库');
+    await gate.loading();
+    await frames(page);
+    assert.ok(await page.$(`${library} .loading-panel`), 'Focus-only intent occurs during a genuinely delayed return');
+    probe = await page.evaluateHandle(selector => {
+      const input = document.querySelector(selector);
+      if (!(input instanceof HTMLInputElement)) throw new Error('Missing loading library search input');
+      const focusDocument = document;
+      const events = [];
+      let dropped = 0;
+      const observe = event => {
+        // Bounded structural observations only; do not record form contents.
+        const kind = event.target === input ? 'search' : event.target instanceof Element && event.target.matches('.main-content h1') ? 'heading' : 'other';
+        if (events.length < 32) events.push(kind); else dropped++;
+      };
+      window.addEventListener('focusin', observe, true);
+      return {
+        focus() { input.focus({ preventScroll: true }); },
+        snapshot() {
+          return {
+            connected: input.isConnected,
+            sameInput: input === document.querySelector(selector),
+            sameDocument: document === focusDocument && input.ownerDocument === focusDocument,
+            documentFocused: focusDocument.hasFocus(),
+            active: document.activeElement === input,
+            y: scrollY,
+            value: input.value,
+            events: [...events], dropped,
+          };
+        },
+        stop() { window.removeEventListener('focusin', observe, true); },
+      };
+    }, search);
+    // This single native focus call is the intent under test, not a DOM click or
+    // selector-driven typing shortcut. No pointer or keyboard event cancels first.
+    await probe.evaluate(probe => probe.focus());
+    const focused = await probe.evaluate(probe => probe.snapshot());
+    assert.equal(focused.connected && focused.sameInput && focused.sameDocument && focused.documentFocused && focused.active, true, 'Loading input owns focus in the current document');
+    assert.equal(focused.value, '');
+    assert.deepEqual(focused.events, ['search']);
+    assert.ok(Math.abs(focused.y - context.y) > 200, 'Focus-only intent is away from the saved viewport');
+
+    await gate.release();
+    await readyLibrary(page);
+    await frames(page);
+    // Assert before any keydown: otherwise the existing keyboard cancellation
+    // could mask the focus-to-placement race and selector typing could refocus.
+    const ready = await probe.evaluate(probe => probe.snapshot());
+    assert.equal(ready.connected && ready.sameInput && ready.sameDocument && ready.documentFocused && ready.active, true, 'The exact connected loading input retains focus after readiness');
+    assert.equal(ready.value, '', 'No keyboard input has occurred yet');
+    assert.ok(Math.abs(ready.y - focused.y) <= 2, 'Focus-only intent cancels saved scroll restoration');
+    assert.deepEqual(ready.events, ['search'], 'No transient heading focus occurs after search focus');
+    assert.equal(ready.dropped, 0, 'The bounded focus observation did not truncate');
+
+    await page.keyboard.type('Navigation context');
+    const typed = await probe.evaluate(probe => probe.snapshot());
+    assert.equal(typed.connected && typed.sameInput && typed.active, true);
+    assert.equal(typed.value, 'Navigation context', 'Keyboard text enters the original input without refocusing');
+    await page.keyboard.type(' 0');
+    await page.waitForFunction(selector => document.querySelectorAll(selector).length === 10, {}, rows);
+    await frames(page);
+    const mutated = await probe.evaluate(probe => probe.snapshot());
+    assert.equal(mutated.connected && mutated.sameInput && mutated.sameDocument && mutated.documentFocused && mutated.active, true);
+    assert.equal(mutated.value, 'Navigation context 0');
+    assert.ok(Math.abs(mutated.y - focused.y) <= 2, 'Real filter mutations cannot revive the cancelled restoration');
+    assert.deepEqual(mutated.events, ['search'], 'Filtering never transfers focus to the heading');
+    assert.equal(mutated.dropped, 0);
+    await page.keyboard.down('Control');
+    try { await page.keyboard.press('a'); }
+    finally { await page.keyboard.up('Control'); }
+    await page.keyboard.press('Backspace');
+    await readyLibrary(page);
+  } catch (error) {
+    failed = true;
+    throw error;
+  } finally {
+    // Release the network gate and remove the probe independently. Cleanup
+    // errors must not hide the assertion/navigation error that caused the exit.
+    const cleanup = await Promise.allSettled([
+      gate.dispose(),
+      (async () => {
+        try { if (probe) await probe.evaluate(probe => probe.stop()); }
+        finally { if (probe) await probe.dispose(); }
+      })(),
+    ]);
+    const errors = cleanup.filter(result => result.status === 'rejected').map(result => result.reason);
+    if (!failed && errors.length) throw new AggregateError(errors, 'Focus-only return cleanup failed');
+  }
 }
 
 async function cancelledDraftNavigation(page, acceptDialog) {
@@ -288,6 +382,9 @@ export async function checkNavigationContext({ page, origin, screenshots, accept
   await frames(page);
   assert.ok(Math.abs(await page.evaluate(() => scrollY) - movedY) <= 2, 'Completed restore never reasserts a saved viewport');
 
+  const focusOnly = await openVisibleArticle(page);
+  await focusOnlyReturnContext(page, origin, focusOnly);
+  await scrollLibrary(page);
   const interrupted = await openVisibleArticle(page);
   await returnContext(page, origin, interrupted, true);
   if (screenshots) await page.screenshot({ path: `${screenshots}/navigation-context-interrupted-restore.png` });
@@ -304,5 +401,5 @@ export async function checkNavigationContext({ page, origin, screenshots, accept
   await headingAtTop(page, '.media-library h1', '媒体库');
   await mediaContext(page, 1180, screenshots);
   await mediaContext(page, 390, screenshots);
-  console.log('PASS: 390px bidirectional document scroll; async destination heading focus/top; ready-only one-shot library return; user input cancels late restore; cancelled dirty navigation retains textarea/selection/scroll; 1180px/390px media details and selected-tile return.');
+  console.log('PASS: 390px bidirectional document scroll; async destination heading focus/top; ready-only one-shot library return; pointer/keyboard and focus-only intent cancel late restore; cancelled dirty navigation retains textarea/selection/scroll; 1180px/390px media details and selected-tile return.');
 }
