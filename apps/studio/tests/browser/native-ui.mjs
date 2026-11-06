@@ -8,6 +8,7 @@ import { join, resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { configureGestureEmulation, inspectGestureEnvironment, exerciseScroll, exercisePinch } from './ui-audit-gestures.mjs';
+import { startNativeInputDiagnostics } from './native-input-diagnostics.mjs';
 
 // Real production React/native adapter code; only the Tauri IPC host is mocked.
 const studio = fileURLToPath(new URL('../../', import.meta.url));
@@ -21,6 +22,8 @@ const root = join(appData, 'workspaces', profile.id, 'repo');
 const localRoot = join(base, 'selected local blog');
 let selectedFolder = null, folderGranted = false;
 let browser, server, page;
+let firstApiInputDiagnostics, firstApiInputAttempted = false;
+const apiInputTracePath = join(screenshots, 'api-address-input-trace.json');
 const errors = [], cspErrors = [], failedResources = [], ipcFailures = [];
 const nativeGestureRecords = [];
 const gestureFindings = () => nativeGestureRecords.flatMap(record => (record.findings || []).map(finding => ({ name:record.name, ...finding })));
@@ -475,12 +478,33 @@ try {
   await page.waitForSelector('.native-ai-settings form');
   const fillSetting = async (label, value) => {
     const input = await page.evaluateHandle(label => [...document.querySelectorAll('.native-ai-settings label')].find(node => node.querySelector('span')?.textContent === label)?.querySelector('input'), label);
+    const traceThisFill = label === 'API 地址' && !firstApiInputAttempted;
+    let diagnostics, operationFailed = false;
     try {
-      await input.type(value);
-      assert.equal(await input.evaluate((node, expected) => node.value === expected, value), true, `After input: ${label} input retained expected value`);
+      if (traceThisFill) {
+        firstApiInputAttempted = true;
+        diagnostics = firstApiInputDiagnostics = await startNativeInputDiagnostics(page, input, label, value);
+      }
+      try {
+        await input.type(value);
+        assert.equal(await input.evaluate((node, expected) => node.value === expected, value), true, `After input: ${label} input retained expected value`);
+      } finally {
+        await diagnostics?.after();
+      }
+    } catch (error) {
+      operationFailed = true;
+      throw error;
     } finally {
-      await input.dispose();
+      // Keep the original input/assertion error even if diagnostics or disposal fail.
+      try {
+        await diagnostics?.finish(operationFailed ? 'failed' : 'passed');
+        await diagnostics?.persist(apiInputTracePath, 'in-progress');
+      } finally {
+        try { await input.dispose(); }
+        catch (error) { if (!operationFailed) throw error; }
+      }
     }
+    if (diagnostics) assert.equal(diagnostics.available, true, 'API address input diagnostics unavailable');
   };
   const apiSettings = [
     ['API 地址', 'http://127.0.0.1:18361/v1'],
@@ -657,9 +681,13 @@ try {
   await screenshot('settings-iphone'); await noOverflow('iPhone settings');
   assert.deepEqual(errors, []); assert.deepEqual(cspErrors, []); assert.deepEqual(failedResources, []);
   assert.deepEqual(gestureFindings(), [], 'Native synthetic gesture findings (all reached mobile screenshot surfaces; see gesture-report.json)');
+  await firstApiInputDiagnostics?.persist(apiInputTracePath, 'passed');
+  if (firstApiInputDiagnostics) assert.equal(firstApiInputDiagnostics.available, true, 'API address input diagnostics unavailable');
   console.log('Native UI passed: desktop/mobile connection modes, offline dashboard, source save, bundled Vditor, native asset preview, client API settings, secret redaction, configuration reopen, logout.');
   console.log('Screenshots: ' + screenshots);
 } catch (error) {
+  // Reuse the stopped first-address trace even if a later model/key guard fails.
+  await firstApiInputDiagnostics?.persist(apiInputTracePath, 'failed');
   const diagnostics = { failure:String(error), stack:error.stack, viewport:page?.viewport(), commands:[...commands], ipcFailures, errors, cspErrors, failedResources,
     gestureCoverage:{ reachedSurfaces:nativeGestureRecords.length, findings:gestureFindings(),
       scope:'Only reached mobile screenshot surfaces; a business-flow failure can still block later surfaces.' } };
