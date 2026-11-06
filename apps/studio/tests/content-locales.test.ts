@@ -12,7 +12,7 @@ import { isLibraryItem, parentSection, sectionTrail } from '../shared/library.js
 
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
   const root = await mkdtemp(join(tmpdir(), 'studio-content-locales-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   await writeFile(join(root, 'config.toml'), 'default_language="zh"\ntaxonomies=[{name="tags"},{name="categories"}]\n[slugify]\npaths="safe"\n[languages.en]\ntaxonomies=[{name="tags"}]\n');
   const repo = new LocalRepository(root);
   return { repo, content: new ContentService(repo), translations: new TranslationService(repo) };

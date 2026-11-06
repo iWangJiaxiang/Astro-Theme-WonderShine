@@ -86,6 +86,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck -w @wondershine/studio
       - run: npm test -w @wondershine/studio
+      - name: Measure content response operation budgets
+        run: npx --no-install tsx --test tests/responsiveness-budgets.test.ts
       - run: node --test apps/studio/tests/release-scripts.test.mjs
       - run: npm run build
       - run: npm run studio:build
@@ -165,6 +167,9 @@ jobs:
       - name: Native permissions regression
         if: matrix.platform == 'macos-arm64'
         run: cargo test --locked --manifest-path apps/studio/src-tauri/Cargo.toml --features custom-protocol --test http_permissions
+      - name: Native review process ownership regression
+        if: matrix.platform == 'macos-arm64' || matrix.platform == 'linux-x64' || matrix.platform == 'windows-x64'
+        run: cargo test --locked --manifest-path apps/studio/src-tauri/Cargo.toml --features custom-protocol --lib native_review::tests
       - run: node apps/studio/scripts/release/collect.mjs
         env:
           STUDIO_BUNDLE_DIR: apps/studio/src-tauri/target/${{ matrix.target }}/release/bundle

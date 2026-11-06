@@ -12,7 +12,7 @@ const password = 'test-admin-long-password';
 const hash = hashPassword(password);
 async function fixture(t: test.TestContext, mediaLimit?: number, repositoryFactory = (root: string) => new LocalRepository(root)) {
   const root = await mkdtemp(join(tmpdir(), 'studio-api-'));
-  t.after(() => rm(root, { force: true, recursive: true }));
+  t.after(async () => { await rm(root, { force: true, recursive: true }); await rm(root + '.studio-revisions-v1', { force: true, recursive: true }); });
   await writeFile(join(root, 'config.toml'), '# keep\ntitle="Original"\nsecret="not-returned"\n[extra.style]\ntheme_light_skin="#425AEF"\n');
   await writeFile(join(root, 'data.toml'), '[menu]\nnav_menu=[]\n[post]\ntags=[]\ncategories=[]\n');
   await mkdir(join(root, 'content/articles/example'), { recursive: true });

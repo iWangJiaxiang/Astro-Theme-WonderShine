@@ -21,6 +21,7 @@ import {
 } from "./react-component";
 import LoadingState from "./components/LoadingState";
 import { mediaUploading } from "./media-store";
+import { subscribeWorkspaceChanged } from "./workspace-events";
 import { t, type Message } from "./i18n";
 import { ref, watch, onMounted, onBeforeUnmount, computed } from "./reactivity";
 import type { Json, ArticleSummary } from "../shared/types";
@@ -130,17 +131,23 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
     const loadingArticles = ref(false),
       articlesReady = ref(false),
       loadingSite = ref(false);
-    let generation = 0;
-    const libraryArticles = computed(() =>
+    // Display-only projection: never assign these rows to the live content list.
+    type PreviewRow = Pick<ArticleSummary, "path" | "title" | "date" | "draft" | "kind" | "tags" | "categories">;
+    type DashboardPreview = { source: "cache"; authoritative: false; rows: PreviewRow[] };
+    const dashboardPreview = ref<DashboardPreview | null>(null);
+    const showingPreview = computed(() => !articlesReady.value && dashboardPreview.value !== null);
+    const dashboardRows = computed(() => articlesReady.value ? articles.value : dashboardPreview.value?.rows || []);
+    let generation = 0, articleRequest = 0, bootstrapRequest = 0, workspaceRequest = 0;
+    const dashboardArticles = computed(() =>
       sortLibrary(
-        articles.value.filter(
+        dashboardRows.value.filter(
           (item) => item.kind === "article" && isLibraryItem(item),
         ),
         "article",
       ),
     );
     function countContent(kind: string) {
-      return articles.value.filter(
+      return dashboardRows.value.filter(
         (item) =>
           item.kind === kind &&
           isLibraryItem(item) &&
@@ -199,12 +206,13 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         window.document.documentElement.style.fontFamily = `${font}, -apple-system, BlinkMacSystemFont, sans-serif`;
     }
     watch(dark, applyTheme);
-    async function bootstrap() {
-      const current = generation;
+    async function bootstrap(refresh = false) {
+      const current = generation, request = ++bootstrapRequest;
+      const isCurrent = () => current === generation && request === bootstrapRequest;
       loadingSite.value = true;
       try {
-        const result = await api<Bootstrap>("/bootstrap");
-        if (current !== generation) return;
+        const result = await api<Bootstrap>("/bootstrap" + (refresh ? "?refresh=1" : ""));
+        if (!isCurrent()) return;
         configureSaving(`${session.value?.identity.id}:${result.saveScope}`, result.saveCapabilities);
         data.value = result;
         const scheme = result.appearance["extra.style.color_scheme"];
@@ -214,42 +222,83 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
             matchMedia("(prefers-color-scheme: dark)").matches);
         applyTheme();
       } catch (e) {
-        if (current === generation) error.value = errorMessage(e);
+        if (isCurrent()) error.value = errorMessage(e);
       } finally {
-        if (current === generation) loadingSite.value = false;
+        if (isCurrent()) loadingSite.value = false;
+      }
+    }
+    async function loadDashboardPreview(isCurrent: () => boolean) {
+      try {
+        const result = await api<DashboardPreview | null>("/content-preview");
+        if (isCurrent() && !articlesReady.value && result?.source === "cache" && result.authoritative === false && Array.isArray(result.rows)) {
+          dashboardPreview.value = result;
+        }
+      } catch {
+        // Optional acceleration, including 404 on older services. Fresh reads own errors.
       }
     }
     async function loadArticles(refresh = false) {
-      const current = generation;
+      const current = generation, request = ++articleRequest;
+      const isCurrent = () => current === generation && request === articleRequest;
       loadingArticles.value = true;
+      // A forced post-sync read must not revive a pre-sync persisted projection.
+      if (refresh) dashboardPreview.value = null;
+      else if (!articlesReady.value && view.value === "home" && !document.value) void loadDashboardPreview(isCurrent);
       try {
         const result = await api<ArticleSummary[]>(
           "/content" + (refresh ? "?refresh=1" : ""),
         );
-        if (current === generation) {
+        if (isCurrent()) {
           articles.value = result;
           articlesReady.value = true;
+          dashboardPreview.value = null;
         }
       } catch (e) {
-        if (current === generation) error.value = errorMessage(e);
+        if (isCurrent()) error.value = errorMessage(e);
       } finally {
-        if (current === generation) loadingArticles.value = false;
+        if (isCurrent()) loadingArticles.value = false;
       }
+    }
+    async function refreshWorkspace() {
+      const current = generation, request = ++workspaceRequest;
+      error.value = "";
+      // Invalidate old content/preview callbacks before awaiting the checkout refresh.
+      articleRequest++;
+      dashboardPreview.value = null;
+      loadingArticles.value = true;
+      // Bootstrap must not race a content refresh against an already warm checkout.
+      // Continue with the authoritative content read even if bootstrap reports an error.
+      await bootstrap(true);
+      if (current !== generation || request !== workspaceRequest) return;
+      await loadArticles(true);
     }
     async function reloadWorkspace() {
       if (loadingSite.value || loadingArticles.value) return;
-      error.value = "";
-      await Promise.all([loadArticles(true), bootstrap()]);
+      await refreshWorkspace();
     }
-    watch(session, async (value) => {
+    const unsubscribeWorkspace = subscribeWorkspaceChanged(() => {
+      if (!session.value) return;
+      // Do not navigate, clear dirty state, or remount the active editor/settings.
+      // Supersede pending reads rather than dropping a sync notification as busy.
+      return refreshWorkspace();
+    });
+    onBeforeUnmount(unsubscribeWorkspace);
+    watch([
+      session,
+      () => session.value?.identity.id,
+      () => session.value?.identity.method,
+      () => session.value?.csrf,
+      () => session.value?.expires,
+    ] as const, async ([value]) => {
       generation++;
+      dashboardPreview.value = null;
+      articles.value = [];
+      articlesReady.value = false;
+      data.value = null;
       if (value) {
         error.value = "";
         await Promise.all([bootstrap(), loadArticles()]);
       } else {
-        data.value = null;
-        articles.value = [];
-        articlesReady.value = false;
         loadingArticles.value = false;
         loadingSite.value = false;
         document.value = null;
@@ -751,6 +800,15 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                   "onSaved"
                                 >,
                               }),
+                              showingPreview.value
+                                ? element(
+                                    "p",
+                                    { role: "status", className: classes("notice"), "data-dashboard-preview": true },
+                                    t(loadingArticles.value
+                                      ? "显示上次缓存的摘要，可能已过期；正在读取最新内容…"
+                                      : "显示上次缓存的摘要，可能已过期；最新内容读取失败，请重试。"),
+                                  )
+                                : null,
                               element(
                                 "div",
                                 { className: classes("stats-grid") },
@@ -801,7 +859,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                       element(
                                         "strong",
                                         null,
-                                        articlesReady.value
+                                        articlesReady.value || showingPreview.value
                                           ? countContent(item.kind)
                                           : "—",
                                       ),
@@ -841,7 +899,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                       t("全部文章 →"),
                                     ),
                                   ),
-                                  loadingArticles.value
+                                  loadingArticles.value && !showingPreview.value
                                     ? element(LoadingState, {
                                         label: "正在读取内容…",
                                       })
@@ -857,7 +915,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                         )
                                       : null,
                                   renderList(
-                                    libraryArticles.value.slice(0, 5),
+                                    dashboardArticles.value.slice(0, 5),
                                   ).map((item) =>
                                     element(
                                       "button",
@@ -894,13 +952,15 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                             invalid: item.error,
                                           }),
                                         },
-                                        item.error
-                                          ? t("需要检查")
-                                          : item.render === false
-                                            ? t("仅作分组")
-                                            : item.draft
-                                              ? t("草稿")
-                                              : t("已发布"),
+                                        showingPreview.value
+                                          ? t("缓存摘要")
+                                          : item.error
+                                            ? t("需要检查")
+                                            : item.render === false
+                                              ? t("仅作分组")
+                                              : item.draft
+                                                ? t("草稿")
+                                                : t("已发布"),
                                       ),
                                     ),
                                   ),

@@ -14,7 +14,7 @@ const theme = fileURLToPath(new URL('../../../../examples/demo/', import.meta.ur
 // Render the production Astro application against disposable Studio-created content.
 async function site(t, values = {}) {
   const root = await mkdtemp(join(tmpdir(), 'studio-templates-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   await writeFile(join(root,'config.toml'), 'base_url="https://example.com"\ndefault_language="zh-CN"\n[languages.en]\ntitle="English"\n');
   await writeFile(join(root,'data.toml'), '');
   for (const [file, layout, route, body] of [['content/_index.md','index','/',''],['content/articles/_index.md','archives','/articles/',''],['content/pages/wechat.md','wechat','/wechat/',''],['content/pages/subscribe.md','empty','/subscribe/','{{ subscribe_list() }}']]) {

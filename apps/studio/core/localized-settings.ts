@@ -3,7 +3,6 @@ import type { FileSnapshot, SettingsSchema } from '../shared/types.js';
 import { getValue } from './content.js';
 import { threadLanguages } from './threads.js';
 import type { Repository, WriteGuard } from '../shared/repository.js';
-import { revisionOf } from './portable.js';
 import { StudioError } from './errors.js';
 
 const parseFile = (file: FileSnapshot | null): Record<string, unknown> => file ? file.path.endsWith('.json') ? JSON.parse(file.text) : parse(file.text) : {};
@@ -29,7 +28,7 @@ export async function settingsSource(repository: Repository, schema: SettingsSch
     guard: undefined as WriteGuard | undefined,
   };
   if (language === languages.defaultLanguage) {
-    const identity = (revision: string | null) => revisionOf(JSON.stringify([language, schema.file, revision, schema.file === 'config.toml' ? revision : config?.revision ?? null]));
+    const identity = (revision: string | null) => JSON.stringify(['settings-v2', language, schema.file, revision, schema.file === 'config.toml' ? revision : config?.revision ?? null]);
     const revision = await identity(base?.revision ?? null);
     return {
       path: schema.file, file: base, data: baseData, revision,
@@ -44,10 +43,10 @@ export async function settingsSource(repository: Repository, schema: SettingsSch
   const file = path === schema.file ? base : await repository.read(path);
   const overlay = schema.file === 'config.toml' ? getValue(baseData, `extra.locale.${language}`) : parseFile(file);
   const data = schema.file === 'config.toml' ? { ...baseData, extra: mergeLocaleData(baseData.extra, overlay) } : mergeLocaleData(baseData, overlay) as Record<string, unknown>;
-  const identity = (targetRevision: string | null) => revisionOf(JSON.stringify([
-    language, path, targetRevision, schema.file === path ? targetRevision : base?.revision ?? null,
+  const identity = (targetRevision: string | null) => JSON.stringify([
+    'settings-v2', language, path, targetRevision, schema.file === path ? targetRevision : base?.revision ?? null,
     path === 'config.toml' ? targetRevision : config?.revision ?? null,
-  ]));
+  ]);
   const revision = await identity(file?.revision ?? null);
   return {
     path, file, data, revision,

@@ -6,7 +6,7 @@ import { StudioError } from '../core/errors.js';
 import { validateMediaPath } from '../core/media-validation.js';
 import { validatePath } from '../shared/repository.js';
 import type { WorkspaceControl, WorkspaceStatus } from '../shared/workspace.js';
-import { confirmationMatches, workspaceChanged, workspaceConfirmation } from '../shared/workspace-confirmation.js';
+import { workspaceReviewUnavailable, type ReviewState, type WorkspaceReviewAdapter } from '../shared/workspace-confirmation.js';
 import { ensureDirectory, missingFile, parentPath, type WorkspaceFiles } from './filesystem.js';
 import { validateBranch, validateProfile, validateRemote, type WorkspaceProfile } from './hosting.js';
 import { withWorkspaceLock } from './queue.js';
@@ -22,7 +22,8 @@ function managed(path: string): boolean {
 export class NativeGitEngine implements WorkspaceControl {
   constructor(private files: WorkspaceFiles, private root: string, private stateRoot: string,
     private profile: WorkspaceProfile, private http: HttpClient,
-    private credentials: () => { username: string; password: string }) {
+    private credentials: () => { username: string; password: string },
+    private reviews?: WorkspaceReviewAdapter) {
     validateProfile(profile, { allowAutomaticBranch: true });
     if (!root || root === '/' || root.endsWith('/') || root.split('/').some(part => part === '.' || part === '..')
       || stateRoot === root || stateRoot.startsWith(root + '/')) throw new Error('Git 工作区与状态目录必须分开存储');
@@ -101,14 +102,36 @@ export class NativeGitEngine implements WorkspaceControl {
       if (await this.exists(this.root + '/.git/' + marker)) throw new StudioError(409, 'Git 操作尚未完成，请先在 Git 工具中完成合并、变基或其他操作');
     }
   }
-  private async rows() {
-    return (await git.statusMatrix({ ...this.options, refresh: false, filter: path => !internal(path) }))
+  private async rows(cache = {}) {
+    return (await git.statusMatrix({ ...this.options, cache, refresh: false, filter: path => !internal(path) }))
       .filter(([, head, worktree, stage]) => head !== worktree || head !== stage);
   }
   status(): Promise<WorkspaceStatus> {
     return withWorkspaceLock(this.root, async () => { await this.openUnlocked(); return this.statusUnlocked(); });
   }
-  private async statusUnlocked(): Promise<WorkspaceStatus> {
+  createReview(): Promise<WorkspaceStatus> {
+    return withWorkspaceLock(this.root, async () => {
+      await this.openUnlocked(); await this.assertWritable();
+      const { status, review } = await this.inspectUnlocked();
+      const adapter = this.reviewAdapter();
+      const result = await adapter.store.createReview(review, adapter.source);
+      return { ...status, confirmation: result.confirmation, confirmationExpiresAt: result.expiresAt };
+    });
+  }
+  private reviewAdapter(): WorkspaceReviewAdapter {
+    if (!this.reviews) throw new StudioError(503, workspaceReviewUnavailable);
+    return this.reviews;
+  }
+  private async validateReview(confirmation: string): Promise<void> {
+    const { review } = await this.inspectUnlocked();
+    const adapter = this.reviewAdapter();
+    await adapter.store.validateReview(confirmation, review, adapter.source);
+  }
+  private async statusUnlocked(): Promise<WorkspaceStatus> { return (await this.inspectUnlocked()).status; }
+  private async inspectUnlocked(): Promise<{ status: WorkspaceStatus; review: ReviewState }> {
+    // In isomorphic-git 1.44.4, logs populate only the pack cache. Share it with
+    // one final matrix, then discard: never carry its index cache across mutations.
+    const cache = {};
     let head: string | null = null;
     try { head = await git.resolveRef({ ...this.options, ref: 'HEAD' }); } catch (error) {
       if ((error as { code?: string }).code !== 'NotFoundError') throw error;
@@ -117,24 +140,23 @@ export class NativeGitEngine implements WorkspaceControl {
     try { remoteHead = await git.resolveRef({ ...this.options, ref: this.remoteRef }); } catch { /* No remote tip yet. */ }
     let ahead = 0, behind = 0;
     if (head !== remoteHead) {
-      const local = new Set(head ? (await git.log({ ...this.options, ref: head })).map(entry => entry.oid) : []);
-      const remote = new Set(remoteHead ? (await git.log({ ...this.options, ref: remoteHead })).map(entry => entry.oid) : []);
+      const local = new Set(head ? (await git.log({ ...this.options, cache, ref: head })).map(entry => entry.oid) : []);
+      const remote = new Set(remoteHead ? (await git.log({ ...this.options, cache, ref: remoteHead })).map(entry => entry.oid) : []);
       ahead = [...local].filter(oid => !remote.has(oid)).length;
       behind = [...remote].filter(oid => !local.has(oid)).length;
     }
     let lastSync: string | null = null;
     try { lastSync = String(await this.files.readFile(this.stateRoot + '/last-sync', 'utf8')); }
     catch (error) { if (!missingFile(error)) throw error; }
-    const rows = await this.rows();
+    const rows = await this.rows(cache);
     const managedChanges = rows.filter(([path]) => managed(path)).map(([path]) => path);
-    const confirmation = await workspaceConfirmation(this.profile.branch, head, rows.filter(([path]) => managed(path)), async path => {
-      await this.safeFile(path);
-      return new Uint8Array(await this.files.readFile(this.root + '/' + path) as Uint8Array);
-    });
     const changes = rows.length;
     let canSync = true;
     try { validateRemote(this.profile.url); } catch { canSync = false; }
-    return { branch: this.profile.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, canSync, managedChanges, confirmation };
+    return {
+      status: { branch: this.profile.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, canSync, managedChanges },
+      review: { scope: 'native:' + this.root, branch: this.profile.branch, head, rows: rows.filter(([path]) => managed(path)) },
+    };
   }
 
   saveBranch(key: string, files: BranchFile[]): Promise<BranchSave> {
@@ -152,7 +174,7 @@ export class NativeGitEngine implements WorkspaceControl {
   commit(message: string, confirmation?: string): Promise<WorkspaceStatus> {
     return withWorkspaceLock(this.root, async () => {
       await this.openUnlocked(); await this.assertWritable();
-      if (confirmation !== undefined && !confirmationMatches(confirmation, await this.statusUnlocked())) throw new StudioError(409, workspaceChanged);
+      if (confirmation !== undefined) await this.validateReview(confirmation);
       if (!this.profile.authorName.trim() || !this.profile.authorEmail.trim()) throw new StudioError(400, '请在连接设置中填写提交者名称和邮箱');
       if (typeof message !== 'string' || !message.trim() || message.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)) throw new StudioError(400, '请输入不超过 500 字的提交说明');
       const rows = await this.rows();
@@ -173,7 +195,7 @@ export class NativeGitEngine implements WorkspaceControl {
   sync(confirmation?: string): Promise<WorkspaceStatus> {
     return withWorkspaceLock(this.root, async () => {
       await this.openUnlocked(); await this.assertWritable();
-      if (confirmation !== undefined && !confirmationMatches(confirmation, await this.statusUnlocked())) throw new StudioError(409, workspaceChanged);
+      if (confirmation !== undefined) await this.validateReview(confirmation);
       try { validateRemote(this.profile.url); } catch { throw new StudioError(400, 'App 同步需要 HTTPS 远端；本地保存和提交仍可使用'); }
       if ((await this.rows()).length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
       try {

@@ -2,6 +2,9 @@ export interface FileInfo { size: number; mtimeMs: number; ctimeMs: number; mode
 export interface DirectoryEntry { name: string; isFile: boolean; isDirectory: boolean; isSymbolicLink: boolean }
 /** Minimal Node-compatible promises surface consumed by isomorphic-git. */
 export interface WorkspaceFiles {
+  /** Stable storage authority, not a user-facing workspace ID. Wrappers of the
+   * same filesystem may preserve it; unrelated virtual filesystems must not. */
+  readonly revisionNamespace?: string;
   readFile(path: string, options?: unknown): Promise<Uint8Array | string>;
   /** Optional capabilities must freshly reject symlinks in the root and all path components.
    * Reads check file type before I/O and byte limits before and after I/O. Entries are discovery hints,

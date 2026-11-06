@@ -6,6 +6,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { StudioError } from './errors.js';
+import { contentRevisions, type RevisionRegistry, type SnapshotRevisionStrategy } from '../core/revision.js';
+import { DiskRevisionStore } from './revision-store.js';
 
 export const revisionOf = (text: string) => createHash('sha256').update(text).digest('hex');
 export { validatePath } from '../shared/repository.js';
@@ -13,8 +15,16 @@ export type { Repository, RepositoryWrite, WriteGuard } from '../shared/reposito
 import { validatePath, type Repository, type RepositoryWrite, type WriteGuard } from '../shared/repository.js';
 export class LocalRepository implements Repository {
   readonly mode = 'local';
-  constructor(public root: string) {}
+  constructor(public root: string, private snapshotRevisions?: SnapshotRevisionStrategy, private revisions?: RevisionRegistry) {
+    // Explicit in-memory injection is reserved for adapters/tests. Node defaults
+    // must work across workers and restarts, including direct constructor users.
+    if (!snapshotRevisions && !revisions) this.snapshotRevisions = new DiskRevisionStore(root);
+  }
   get saveScope() { return resolve(this.root); }
+  private async revision(path: string, text: string): Promise<string> {
+    return await this.snapshotRevisions?.revision(path, text)
+      ?? (this.revisions ?? contentRevisions).revision('local:' + await realpath(resolve(this.root)), path, text);
+  }
   private async safePath(path: string): Promise<string> {
     validatePath(path);
     const root = await realpath(resolve(this.root));
@@ -27,16 +37,28 @@ export class LocalRepository implements Repository {
     }
     return current;
   }
-  async read(path: string): Promise<FileSnapshot | null> {
+  private async readText(path: string): Promise<Pick<FileSnapshot, 'path' | 'text'> | null> {
     const file = await this.safePath(path);
     try {
-      if ((await lstat(file)).size > 1024 * 1024) throw new StudioError(413, '文件超过 1 MB 编辑限制');
-      const text = await readFile(file, 'utf8');
-      return { path, text, revision: revisionOf(text) };
+      const info = await lstat(file);
+      if (!info.isFile()) throw new StudioError(400, '请选择文件');
+      if (info.size > 1024 * 1024) throw new StudioError(413, '文件超过 1 MB 编辑限制');
+      const bytes = await readFile(file);
+      if (bytes.byteLength > 1024 * 1024) throw new StudioError(413, '文件超过 1 MB 编辑限制');
+      return { path, text: new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes) };
     } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }
   }
-  async list(): Promise<FileSnapshot[]> {
-    const files: FileSnapshot[] = [];
+  async read(path: string): Promise<FileSnapshot | null> {
+    // Disk baselines must not publish text acquired before waiting for their lock.
+    // Keep safePath, file limits and decoding inside the serialized callback.
+    if (this.snapshotRevisions?.snapshot) return this.snapshotRevisions.snapshot(path, () => this.readText(path));
+    const file = await this.readText(path);
+    return file ? { ...file, revision: await this.revision(path, file.text) } : null;
+  }
+  async list(): Promise<FileSnapshot[]> { return this.listFiles(path => this.read(path)); }
+  async listForSummary(): Promise<Pick<FileSnapshot, 'path' | 'text'>[]> { return this.listFiles(path => this.readText(path)); }
+  private async listFiles<T>(read: (path: string) => Promise<T | null>): Promise<T[]> {
+    const files: T[] = [];
     const walk = async (directory: string): Promise<void> => {
       let entries;
       try { entries = await readdir(join(this.root, directory), { withFileTypes: true }); }
@@ -45,7 +67,7 @@ export class LocalRepository implements Repository {
         if (entry.name.startsWith('.') || entry.isSymbolicLink()) continue;
         const path = `${directory}/${entry.name}`;
         if (entry.isDirectory()) await walk(path);
-        else if (entry.name.endsWith('.md')) { const file = await this.read(path); if (file) files.push(file); }
+        else if (entry.name.endsWith('.md')) { const file = await read(path); if (file) files.push(file); }
       }
     };
     for (const kind of ['articles', 'pages', 'collections', 'threads', 'topics']) {
@@ -102,7 +124,7 @@ export class LocalRepository implements Repository {
               await mkdir(directory, { recursive: true, mode: 0o700 });
             }
             // Immutable backups: exclusive creation must never follow an existing symlink.
-            try { await writeFile(join(backup, `${previous.revision}.txt`), previous.text, { mode: 0o600, flag: 'wx' }); }
+            try { await writeFile(join(backup, `${randomUUID()}.txt`), previous.text, { mode: 0o600, flag: 'wx' }); }
             catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
           }
           if (text !== null) {
@@ -117,18 +139,24 @@ export class LocalRepository implements Repository {
             else await rename(item.temporary, item.file);
             applied.push(item);
           }
+          // Revision publication is part of the transaction: a failed durable
+          // baseline must never masquerade as a failed save after content changed.
+          const text = entries[0].text;
+          return { revision: text === null ? '' : await this.revision(entries[0].path, text), message: '已保存到站点文件；需要构建后更新公开网站' };
         } catch (error) {
           // Recover completed mutations while still holding the repository lock.
+          let recoveryFailed = false;
           for (const item of applied.reverse()) {
-            if (item.previous) {
-              await writeFile(item.temporary, item.previous.text, { mode: 0o600 });
-              await rename(item.temporary, item.file);
-            } else await rm(item.file, { force: true });
+            try {
+              if (item.previous) {
+                await writeFile(item.temporary, item.previous.text, { mode: 0o600 });
+                await rename(item.temporary, item.file);
+              } else await rm(item.file, { force: true });
+            } catch { recoveryFailed = true; }
           }
+          if (recoveryFailed) throw new StudioError(500, '保存或版本记录失败，部分文件回滚未完成；结果不确定，请备份并重新读取文件后检查，勿重复覆盖');
           throw error;
         }
-        const text = entries[0].text;
-        return { revision: text === null ? '' : revisionOf(text), message: '已保存到站点文件；需要构建后更新公开网站' };
       } finally { for (const item of staged) await rm(item.temporary, { force: true }); }
     } finally { await rm(lock, { recursive: true, force: true }); }
   }

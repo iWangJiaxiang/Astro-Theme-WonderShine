@@ -5,6 +5,7 @@ import type { Repository } from '../shared/repository.js';
 import { getValue, patchToml, removeTomlFields, splitDocument } from './content.js';
 import { threadLanguages, threadPath, threadMetadata } from './threads.js';
 import { StudioError } from './errors.js';
+import { listRepositoryText } from './repository-text.js';
 import { translationLocation } from '../shared/translation.js';
 
 export function taxonomyNames(config: Record<string, unknown>, language: string): Set<string> {
@@ -36,7 +37,7 @@ export async function prepareThreadTaxonomies(repository: Repository, path: stri
   const candidate = parse(patchToml(current ? splitDocument(current.text).header : '', changes));
   const taxonomies = candidate.taxonomies;
   const removed: string[] = [];
-  const siblings = !current ? (await repository.list()).filter(file => file.path.startsWith(`content/threads/${location.id}/index`) && file.path !== path) : [];
+  const siblings = !current ? (await listRepositoryText(repository)).filter(file => file.path.startsWith(`content/threads/${location.id}/index`) && file.path !== path) : [];
   if (taxonomies && typeof taxonomies === 'object') for (const [name, value] of Object.entries(taxonomies)) {
     if (names.has(name)) continue;
     const inherited = siblings.some(file => isDeepStrictEqual(getValue(threadMetadata(file), `taxonomies.${name}`), value));

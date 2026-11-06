@@ -11,7 +11,7 @@ import { getValue } from '../server/content.js';
 
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
   const root = await mkdtemp(join(tmpdir(), 'studio-locale-settings-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   const repo = new LocalRepository(root), content = new ContentService(repo);
   await repo.write('config.toml', 'default_language="zh"\n[languages.en]\n[extra.equipment]\nbig_title="装备"\nsmall_title="基础副标题"\n[extra.about.careers]\ntitle="职业"\ncolor="blue"\n[extra.about_reward]\nenable=true\n[extra.locale.en.about.careers]\ntitle="Career"\n', null);
   await repo.write('data.toml', '[post]\ntags=[{id="r",name="研究"}]\ncategories=[{id="c",name="生活"}]\n[skill]\nsvg_sprite="/icons.svg"\nitems=[{name="共同技能"}]\n', null);
@@ -25,6 +25,11 @@ test('config locale overrides deeply inherit fields and never overwrite default-
   assert.equal(getValue(about.values['extra.about.careers'], 'title'), 'Career');
   assert.equal(getValue(about.values['extra.about.careers'], 'color'), 'blue');
   const settings = await content.settings('page-equipment-header', 'en');
+  const identity = JSON.parse(settings.revision) as unknown[];
+  assert.equal(identity[0], 'settings-v2');
+  assert.equal(identity[1], 'en');
+  assert.equal(identity[2], 'config.toml');
+  assert.equal(identity[3], (await repo.read('config.toml'))!.revision);
   const result = await content.saveSettings(settings.id, { 'extra.equipment.big_title': 'Equipment' }, settings.revision, 'en');
   const saved = await content.settings(settings.id, 'en');
   assert.equal(result.revision, saved.revision);

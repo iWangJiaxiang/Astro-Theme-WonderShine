@@ -6,11 +6,13 @@ import git from 'isomorphic-git';
 import type { Repository, RepositoryWrite, WriteGuard } from '../shared/repository.js';
 import type { WorkspaceControl, WorkspaceStatus } from '../shared/workspace.js';
 import { LocalRepository, validatePath } from './repository.js';
+import { DiskRevisionStore } from './revision-store.js';
 import { safeMediaPath, validateMediaPath } from './media-files.js';
 import { validateUpload } from './media-upload.js';
 import { gitHttp, validateGitOptions, type GitOptions } from './git-repository.js';
 import { StudioError } from './errors.js';
-import { confirmationMatches, workspaceChanged, workspaceConfirmation } from '../shared/workspace-confirmation.js';
+import type { ReviewState } from '../shared/workspace-confirmation.js';
+import { nodeReviewSource, nodeWorkspaceReviews } from './review-store.js';
 
 function managed(path: string): boolean {
   try { validatePath(path); return true; } catch { /* Try media paths next. */ }
@@ -27,11 +29,11 @@ export class GitWorkspaceRepository implements Repository {
   private readonly http;
   private readonly auth;
 
-  constructor(private readonly options: GitOptions & { directory: string }) {
+  constructor(private readonly options: GitOptions & { directory: string; revisionDirectory?: string }) {
     validateGitOptions(options);
     this.root = resolve(options.directory);
     if (this.root === dirname(this.root)) throw new Error('Git 工作区不能使用文件系统根目录');
-    this.local = new LocalRepository(this.root);
+    this.local = new LocalRepository(this.root, new DiskRevisionStore(this.root, { directory: options.revisionDirectory }));
     this.http = gitHttp(options.url);
     this.auth = () => ({ username: options.username, password: options.token });
     this.workspace = {
@@ -52,6 +54,7 @@ export class GitWorkspaceRepository implements Repository {
         return commitBranchSnapshot({ ...this.gitOptions, author: { name: this.options.name, email: this.options.email } }, key, files);
       }),
       status: () => this.run(() => this.status()),
+      createReview: () => this.run(() => this.createReview()),
       commit: (message, confirmation) => this.run(() => this.commit(message, confirmation)),
       sync: confirmation => this.run(() => this.sync(confirmation)),
     };
@@ -119,36 +122,49 @@ export class GitWorkspaceRepository implements Repository {
     throw new StudioError(409, '上次同步中断，请先在本地检查 Git 工作区并完成恢复；现有内容已保留');
   }
 
-  private async rows() {
-    return (await git.statusMatrix({ ...this.gitOptions, filter: path => !internal(path) }))
+  private async rows(cache = {}) {
+    return (await git.statusMatrix({ ...this.gitOptions, cache, filter: path => !internal(path) }))
       .filter(([, head, worktree, stage]) => head !== worktree || head !== stage);
   }
-  private async status(): Promise<WorkspaceStatus> {
+  private async createReview(): Promise<WorkspaceStatus> {
+    await this.mutable();
+    const { status, review } = await this.inspect();
+    const result = await nodeWorkspaceReviews(this.root).createReview(review, nodeReviewSource(this.root));
+    return { ...status, confirmation: result.confirmation, confirmationExpiresAt: result.expiresAt };
+  }
+  private async validateReview(confirmation: string): Promise<void> {
+    const { review } = await this.inspect();
+    await nodeWorkspaceReviews(this.root).validateReview(confirmation, review, nodeReviewSource(this.root));
+  }
+  private async status(): Promise<WorkspaceStatus> { return (await this.inspect()).status; }
+  private async inspect(): Promise<{ status: WorkspaceStatus; review: ReviewState }> {
+    // In isomorphic-git 1.44.4, logs populate only the pack cache. Share it with
+    // one final matrix, then discard: never carry its index cache across mutations.
+    const cache = {};
     const head = await git.resolveRef({ ...this.gitOptions, ref: 'HEAD' });
     let remoteHead: string | null = null;
     try { remoteHead = await git.resolveRef({ ...this.gitOptions, ref: this.remoteRef }); } catch { /* A local branch may not have a remote tip yet. */ }
     let ahead = 0, behind = 0;
     if (remoteHead !== head) {
-      const localHistory = new Set((await git.log({ ...this.gitOptions, ref: head })).map(entry => entry.oid));
-      const remoteHistory = new Set(remoteHead ? (await git.log({ ...this.gitOptions, ref: remoteHead })).map(entry => entry.oid) : []);
+      const localHistory = new Set((await git.log({ ...this.gitOptions, cache, ref: head })).map(entry => entry.oid));
+      const remoteHistory = new Set(remoteHead ? (await git.log({ ...this.gitOptions, cache, ref: remoteHead })).map(entry => entry.oid) : []);
       ahead = [...localHistory].filter(oid => !remoteHistory.has(oid)).length;
       behind = [...remoteHistory].filter(oid => !localHistory.has(oid)).length;
     }
     let lastSync: string | null = null;
     try { lastSync = await readFile(join(this.root, '.git', 'wondershine-last-sync'), 'utf8'); } catch { /* Never synchronized yet. */ }
-    const rows = await this.rows();
+    const rows = await this.rows(cache);
     const managedChanges = rows.filter(([path]) => managed(path)).map(([path]) => path);
-    const confirmation = await workspaceConfirmation(this.options.branch, head, rows.filter(([path]) => managed(path)), async path => {
-      await safeMediaPath(this.root, path);
-      return readFile(join(this.root, path));
-    });
     const changes = rows.length;
-    return { branch: this.options.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, managedChanges, confirmation };
+    return {
+      status: { branch: this.options.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, managedChanges },
+      review: { scope: 'server:' + this.root, branch: this.options.branch, head, rows: rows.filter(([path]) => managed(path)) },
+    };
   }
 
   private async commit(message: string, confirmation?: string): Promise<WorkspaceStatus> {
     await this.mutable();
-    if (confirmation !== undefined && !confirmationMatches(confirmation, await this.status())) throw new StudioError(409, workspaceChanged);
+    if (confirmation !== undefined) await this.validateReview(confirmation);
     if (typeof message !== 'string' || !message.trim() || message.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)) throw new StudioError(400, '请输入不超过 500 字的提交说明');
     const rows = await this.rows();
     if ((await git.listFiles(this.gitOptions)).some(internal)) throw new StudioError(409, 'Git 暂存区包含创作中心备份文件，请先在 Git 工具中处理');
@@ -167,7 +183,7 @@ export class GitWorkspaceRepository implements Repository {
 
   private async sync(confirmation?: string): Promise<WorkspaceStatus> {
     await this.mutable();
-    if (confirmation !== undefined && !confirmationMatches(confirmation, await this.status())) throw new StudioError(409, workspaceChanged);
+    if (confirmation !== undefined) await this.validateReview(confirmation);
     if ((await this.rows()).length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
     try {
       await git.fetch({ ...this.gitOptions, http: this.http, url: this.options.url, remote: 'origin', ref: this.options.branch, singleBranch: true, onAuth: this.auth });
@@ -195,6 +211,7 @@ export class GitWorkspaceRepository implements Repository {
 
   read(path: string) { return this.run(() => this.local.read(path)); }
   list() { return this.run(() => this.local.list()); }
+  listForSummary() { return this.run(() => this.local.listForSummary()); }
   listMedia() { return this.run(() => this.local.listMedia()); }
   readMedia(path: string) { return this.run(() => this.local.readMedia(path)); }
   uploadMedia(directory: string, name: string, data: Uint8Array) {

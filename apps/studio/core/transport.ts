@@ -1,6 +1,8 @@
 import { requireWorkspaceConfirmation } from '../shared/workspace-confirmation.js';
 import { saveCapabilities } from './save.js';
 import { ContentService } from './content-service.js';
+import { createSummaryRuntime, requireSummaryRuntime, type SummaryRuntime } from './summary-runtime.js';
+import type { SummaryIndexStore } from './summary-index.js';
 import { TranslationService } from './translation.js';
 import { StudioError } from './errors.js';
 import { readUploadBody } from './media-validation.js';
@@ -15,6 +17,10 @@ import { MAX_UPLOAD_SIZE } from '../shared/media.js';
 export interface ContentTransportOptions {
   /** Use a workspace-specific identity to isolate local recovery drafts. */
   ai?: NativeAiGateway;
+  /** True only when this gateway writes exclusively through runtime.repository. */
+  aiUsesObservedRepository?: boolean;
+  runtime?: SummaryRuntime;
+  summaryStore?: SummaryIndexStore;
   identity?: Pick<Identity, 'id' | 'name'>;
   onLogout?: () => void | Promise<void>;
 }
@@ -29,6 +35,10 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
  * Deployments must use server/createApp, which performs real authentication/CSRF.
  */
 export function createContentTransport(repository: Repository, options: ContentTransportOptions = {}): (request: Request) => Promise<Response> {
+  const runtime = options.runtime ? requireSummaryRuntime(repository, options.runtime) : createSummaryRuntime(repository, {
+    scope: options.identity?.id ?? repository.saveScope ?? 'local-workspace', store: options.summaryStore,
+  });
+  repository = runtime.repository;
   const content = new ContentService(repository);
   const translation = new TranslationService(repository);
   const session = {
@@ -36,39 +46,14 @@ export function createContentTransport(repository: Repository, options: ContentT
     csrf: crypto.randomUUID(), expires: Number.MAX_SAFE_INTEGER,
   };
   let connected = true;
-  // Only derived summaries are cached, never repository reads or revision checks.
-  let generation = 0, mutations = 0;
-  let summaries: Promise<Awaited<ReturnType<ContentService['list']>>> | undefined;
-  const invalidate = () => { generation++; summaries = undefined; };
-  const list = () => {
-    if (summaries) return summaries;
-    const current = generation;
-    const pending = content.list();
-    if (!mutations) summaries = pending;
-    void pending.catch(() => {
-      if (generation === current && summaries === pending) summaries = undefined;
-    });
-    return pending;
-  };
   return async request => {
-    let mutating = false;
     try {
       const url = new URL(request.url), path = url.pathname, method = request.method;
       if (path === '/api/auth/config' && method === 'GET') return json({ password: false, oidc: null, local: true });
       if (!connected) throw new StudioError(401, '请先连接本地工作区');
-      // Invalidate on both boundaries, including partial failures. Reads while a
-      // mutation is pending cannot become a reusable snapshot.
-      mutating = (path === '/api/document' && ['PUT', 'DELETE'].includes(method))
-        || (path.startsWith('/api/settings/') && method === 'PUT')
-        || (['/api/translation', '/api/translation/manual', '/api/workspace/sync', '/api/auth/logout'].includes(path) && method === 'POST');
-      if (mutating) { mutations++; invalidate(); }
-      if (method === 'GET' && url.searchParams.get('refresh') === '1'
-        && ['/api/content', '/api/bootstrap'].includes(path)) {
-        invalidate();
-        repository.clearReadCache?.();
-      }
+      if (method === 'GET' && url.searchParams.get('refresh') === '1' && path === '/api/bootstrap') runtime.invalidate();
       if (path === '/api/auth/session' && method === 'GET') return json(session);
-      if (path === '/api/auth/logout' && method === 'POST') { options.ai?.dispose(); await options.onLogout?.(); connected = false; return json({ ok: true }); }
+      if (path === '/api/auth/logout' && method === 'POST') { options.ai?.dispose(); await options.onLogout?.(); runtime.dispose(); connected = false; return json({ ok: true }); }
       // Bound request bodies even for in-process callers. ContentService validates fields.
       const input = async <T>(): Promise<T> => {
         const bytes = await readUploadBody(request, 1024 * 1024);
@@ -80,6 +65,10 @@ export function createContentTransport(repository: Repository, options: ContentT
           groups: settingsSchemas.map(({ id, title, description }) => ({ id, title, description })) });
       }
       if (path === '/api/workspace' && method === 'GET' && repository.workspace) return json(await repository.workspace.status());
+      if (path === '/api/workspace/review' && method === 'POST' && repository.workspace) {
+        await readUploadBody(request, 1024 * 1024);
+        return json(await repository.workspace.createReview());
+      }
       if (path === '/api/workspace/commit' && method === 'POST' && repository.workspace) {
         const body = await input<{ message: string; confirmation?: string }>();
         return json(await repository.workspace.commit(body?.message, requireWorkspaceConfirmation(body?.confirmation)));
@@ -98,9 +87,10 @@ export function createContentTransport(repository: Repository, options: ContentT
         }
       }
       if (path === '/api/content-languages' && method === 'GET') return json(await content.languages());
+      if (path === '/api/content-preview' && method === 'GET') return json(await runtime.preview());
       if (path === '/api/content' && method === 'GET') {
         // Serialize for each caller: Response bodies are single-use streams.
-        return json(await list());
+        return json(await (url.searchParams.get('refresh') === '1' ? runtime.refresh() : runtime.list()));
       }
       if (path === '/api/document') {
         if (method === 'GET') return json(await content.document(url.searchParams.get('path') || ''));
@@ -118,9 +108,21 @@ export function createContentTransport(repository: Repository, options: ContentT
         if (method === 'PUT') return json(options.ai.configure(await input()));
         if (method === 'DELETE') return json(options.ai.clearKey());
       }
-      if (path === '/api/ai/text' && method === 'POST' && options.ai) return json(await options.ai.text(await input<AiTextRequest>()));
-      if (path === '/api/ai/image' && method === 'POST' && options.ai) return json(await options.ai.image(await input<{ prompt: string }>()));
-      if (path === '/api/translation' && method === 'POST' && options.ai) return json(await options.ai.translate(await input<TranslationRequest>()), 201);
+      if (path === '/api/ai/text' && method === 'POST' && options.ai) {
+        const body = await input<AiTextRequest>();
+        const generate = () => options.ai!.text(body);
+        return json(await (options.aiUsesObservedRepository ? generate() : runtime.withUnobservedMutation(generate)));
+      }
+      if (path === '/api/ai/image' && method === 'POST' && options.ai) {
+        const body = await input<{ prompt: string }>();
+        const generate = () => options.ai!.image(body);
+        return json(await (options.aiUsesObservedRepository ? generate() : runtime.withUnobservedMutation(generate)));
+      }
+      if (path === '/api/translation' && method === 'POST' && options.ai) {
+        const body = await input<TranslationRequest>();
+        const translate = () => options.ai!.translate(body);
+        return json(await (options.aiUsesObservedRepository ? translate() : runtime.withUnobservedMutation(translate)), 201);
+      }
       if (path === '/api/translation/config' && method === 'GET') return json(options.ai?.translationCapabilities() ?? { enabled: false });
       if (path === '/api/ai/config' && method === 'GET') return json(options.ai?.capabilities() ?? { text: false, image: false });
       if (path === '/api/translation/manual' && method === 'POST') return json(await translation.createManual(await input<TranslationRequest>()), 201);
@@ -147,8 +149,6 @@ export function createContentTransport(repository: Repository, options: ContentT
       if (error instanceof StudioError) return json({ error: error.message, messageKey: error.message, params: error.params }, error.status);
       if (error instanceof SyntaxError || error instanceof URIError) return json({ error: '内容格式不正确，请检查输入' }, 400);
       return json({ error: '操作失败，请检查本地工作区；未确认的更改请保留草稿' }, 500);
-    } finally {
-      if (mutating) { mutations--; invalidate(); }
     }
   };
 }

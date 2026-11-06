@@ -19,7 +19,8 @@ export function isDeepStrictEqual(left: unknown, right: unknown): boolean {
     && isDeepStrictEqual((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key]));
 }
 
-/** The revision format matches the existing Node repository SHA-256 digest. */
+/** Legacy-named stable identity hash for scopes and paths, not file-content revisions.
+ * Keep its output compatible with existing workspace IDs, drafts and state keys. */
 export async function revisionOf(text: string): Promise<string> {
   const bytes = new TextEncoder().encode(text);
   const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { checkWorkspaceNotice } from './workspace-notice.mjs';
+import { checkDashboardPreview } from './dashboard-preview.mjs';
 import { checkLegacyRecovery } from './legacy-recovery.mjs';
 import { existsSync } from 'node:fs';
 import { build } from 'esbuild';
@@ -53,6 +54,7 @@ if (!executablePath) throw new Error('Set STUDIO_TEST_BROWSER to Chrome/Chromium
 const browser = await puppeteer.launch({ headless: true, executablePath });
 try {
   await checkWorkspaceNotice(browser);
+  await checkDashboardPreview(browser);
   await checkLegacyRecovery(browser);
   const page = await browser.newPage(), errors = [], warnings = [];
   page.on('pageerror', error => errors.push(error.message));

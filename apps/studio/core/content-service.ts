@@ -2,23 +2,22 @@ import { saveBatch, validateSaveMode } from './save.js';
 import { translationReviewChanges } from './translation-review.js';
 import { posix } from './portable.js';
 import { parse } from 'smol-toml';
-import type { Article, ArticleSummary, ArticleReference, Json, Settings, Field } from '../shared/types.js';
+import type { Article, ArticleSummary, Json, Settings, Field } from '../shared/types.js';
 import { settingsSchemas, documentFields } from '../shared/settings.js';
 import { getValue, patchToml, splitDocument, updateDocument, formDocumentMetadata, removeTomlFields } from './content.js';
 import { type Repository, validatePath } from '../shared/repository.js';
 import { StudioError } from './errors.js';
-import { stringValues } from '../shared/choices.js';
 import { dateParts } from '../shared/form-fields.js';
-import { contentLink } from '../shared/content-links.js';
 import { fillFieldDefaults } from '../shared/form-defaults.js';
 import { prepareThreadTaxonomies, validateThreadTaxonomies, prepareLocalizedTaxonomies, validateLocalizedTaxonomies } from './thread-taxonomies.js';
 import { validateContentRelations } from './content-relations.js';
-import { topicPath, topicChanges } from './topics.js';
-import { threadLanguages, threadPath, threadWriteGuard, threadRouteChanges } from './threads.js';
+import { topicChanges } from './topics.js';
+import { threadLanguages, threadWriteGuard, threadRouteChanges } from './threads.js';
 import { pageSettingsSchemas } from '../shared/page-settings.js';
 import { translationLocation } from '../shared/translation.js';
 import { localeSectionWrites } from './content-locales.js';
 import { settingsSource } from './localized-settings.js';
+import { contentSummarySteps, createContentSummaryContext, readContentSummaryFacts } from './content-summary.js';
 
 const allSettingsSchemas = [...settingsSchemas, ...pageSettingsSchemas];
 
@@ -76,7 +75,7 @@ export class ContentService {
       this.repository.read('config.toml'),
     ]);
     const config = configFile ? asJson(parse(configFile.text)) as Record<string, Json> : {};
-    const languages = threadLanguages(config);
+    const context = createContentSummaryContext(config);
     // Timer tasks (not microtasks) let the native WebView handle input and paint.
     let sliceStarted = performance.now(), sliceItems = 0;
     const shouldYield = () => ++sliceItems >= 32 || performance.now() - sliceStarted >= 8;
@@ -84,52 +83,15 @@ export class ContentService {
       await new Promise<void>(resolve => setTimeout(resolve, 0));
       sliceStarted = performance.now(); sliceItems = 0;
     };
-    const summarize = (file: (typeof files)[number]): ArticleSummary => {
-      const kind = file.path.startsWith('content/articles/') ? 'article' : file.path.startsWith('content/pages/') ? 'page' : file.path.startsWith('content/threads/') ? 'thread' : file.path.startsWith('content/topics/') ? 'topic' : 'collection';
-      try {
-        const document = splitDocument(file.text);
-        const metadata = parse(document.header);
-        const localized = (kind === 'thread' || kind === 'topic') && !/\/_index(?:\.[^.]+)?\.md$/.test(file.path) ? (kind === 'topic' ? topicPath : threadPath)(file.path, languages) : undefined;
-        const locale = translationLocation(file.path, languages.defaultLanguage, languages);
-        return { path: file.path, title: String(metadata.title || (kind === 'thread' && localized ? document.body.replace(/[#*`>\[\]]/g, '').trim().slice(0, 80) : '') || file.path.split('/').slice(-2).join('/')), date: metadata.date instanceof Date ? metadata.date.toISOString() : typeof metadata.date === 'string' ? metadata.date : '',
-          lang: locale.sourceLanguage, translationKey: locale.translationKey,
-          ...(localized ? { id: String(getValue(metadata, 'extra.id') || '') } : {}),
-          references: (getValue(metadata, 'extra.references') || []) as ArticleReference[],
-          updated: metadata.updated instanceof Date ? metadata.updated.toISOString() : typeof metadata.updated === 'string' ? metadata.updated : '', topics: stringValues(getValue(metadata, 'extra.topics')),
-          draft: metadata.draft === true, kind, tags: stringValues(getValue(metadata, 'taxonomies.tags')), categories: stringValues(getValue(metadata, 'taxonomies.categories')),
-          displayTags: stringValues(getValue(metadata, 'extra.tags')), layout: typeof metadata.layout === 'string' ? metadata.layout : undefined,
-          // Link resolution only needs these fields, not potentially large custom metadata.
-          ...contentLink(file.path, asJson({ path: metadata.path, slug: metadata.slug }) as Record<string, Json>, config),
-          description: typeof metadata.description === 'string' ? metadata.description : '', render: metadata.render !== false,
-          weight: typeof metadata.weight === 'number' ? metadata.weight : 0 } satisfies ArticleSummary;
-      } catch {
-        let lang: string | undefined;
-        try { lang = kind === 'thread' || kind === 'topic' ? (kind === 'topic' ? topicPath : threadPath)(file.path, languages).lang : translationLocation(file.path, languages.defaultLanguage, languages).sourceLanguage; } catch { /* Unknown or malformed paths remain visible for repair. */ }
-        return { path: file.path, title: file.path, date: '', draft: false, kind, tags: [], categories: [], lang, error: 'TOML 格式需要检查' } satisfies ArticleSummary;
-      }
-    };
-    const summaries: ArticleSummary[] = [];
-    const languageGroups = new Map<string, string[]>();
-    for (const file of files) {
-      const item = summarize(file);
-      summaries.push(item);
-      if (item.translationKey && item.lang) {
-        let group = languageGroups.get(item.translationKey);
-        if (!group) languageGroups.set(item.translationKey, group = []);
-        group.push(item.lang);
-      }
+    // Parse lazily so timer slices still cover document parsing, not only projection.
+    const facts = function* () { for (const file of files) yield readContentSummaryFacts(file); };
+    const steps = contentSummarySteps(facts(), context);
+    let step = steps.next();
+    while (!step.done) {
       if (shouldYield()) await yieldToUI();
+      step = steps.next();
     }
-    for (const group of languageGroups.values()) {
-      group.sort();
-      if (shouldYield()) await yieldToUI();
-    }
-    for (const item of summaries) {
-      // Keep independent arrays and duplicate languages, as in the previous API.
-      item.availableLanguages = item.translationKey ? [...(languageGroups.get(item.translationKey) ?? [])] : [];
-      if (shouldYield()) await yieldToUI();
-    }
-    return summaries;
+    return step.value;
   }
   async document(path: string): Promise<Article> {
     documentPath(path);

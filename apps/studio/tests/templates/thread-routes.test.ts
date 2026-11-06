@@ -11,7 +11,7 @@ import { ContentService } from '../../server/content-service.js';
 const legacy = 'n_8d7af1f2de9740fc8909b42954e689a9';
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
   const root = await mkdtemp(join(tmpdir(), 'studio-astro-thread-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   await writeFile(join(root, 'config.toml'), 'base_url="https://example.test"\ndefault_language="zh"\n[languages.en]\n[extra.activity]\nenable=true\n');
   const repo = new LocalRepository(root);
   return { root, repo, content: new ContentService(repo) };

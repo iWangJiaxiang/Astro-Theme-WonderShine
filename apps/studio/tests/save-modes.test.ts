@@ -47,7 +47,7 @@ test('branch snapshots preserve HEAD, index, unrelated edits and reuse the branc
 
 test('save capability validation prevents unsupported modes from touching storage; partial success returns a usable revision', async t => {
   const root = await mkdtemp(join(tmpdir(), 'studio-save-core-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   const local = new LocalRepository(root);
   const path = 'content/articles/example/index.md';
   const entries = [{ path, text: 'saved', expectedRevision: null }];
@@ -57,6 +57,7 @@ test('save capability validation prevents unsupported modes from touching storag
   assert.equal(await local.read(path), null);
   let fail = true;
   const repository: Repository = Object.assign(local, { workspace: {
+    createReview: async () => { throw new Error('unused'); },
     status: async () => { throw new Error('unused'); }, commit: async () => { throw new Error('unused'); }, sync: async () => { throw new Error('unused'); },
     saveBranch: async () => { if (fail) throw new Error('disk full'); return { branch: 'studio/save-test', commit: 'abc' }; },
   } });
@@ -77,7 +78,7 @@ test('persistent server saves content, language sections and referenced media to
   const { GitWorkspaceRepository } = await import('../server/git-workspace.js');
   const { ContentService } = await import('../core/content-service.js');
   const root = await mkdtemp(join(tmpdir(), 'studio-save-workspace-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   const run = (...args: string[]) => execFileSync('git', args, { cwd: root, stdio: 'pipe' }).toString().trim();
   run('init', '-b', 'main'); run('remote', 'add', 'origin', 'https://git.example.test/blog.git');
   await writeFile(join(root, 'config.toml'), 'title="Site"\ndefault_language="zh-CN"\n[languages.en]\n');

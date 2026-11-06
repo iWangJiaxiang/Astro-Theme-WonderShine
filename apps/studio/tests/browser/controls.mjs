@@ -48,6 +48,18 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   const { readFile, writeFile, mkdir } = await import('node:fs/promises');
   const { patchToml, splitDocument } = await import('../../server/content.ts');
   const { parse } = await import('smol-toml');
+  const appearanceResponse = method => page.waitForResponse(response =>
+    new URL(response.url()).pathname === '/api/settings/appearance' && response.request().method() === method);
+  async function saveAppearance(expectedRevision) {
+    const [response] = await Promise.all([appearanceResponse('PUT'), click('本地保存')]);
+    const submitted = JSON.parse(response.request().postData());
+    if (expectedRevision !== undefined) assert.equal(submitted.revision, expectedRevision, 'save submits the revision returned by the fresh settings GET');
+    assert.equal(response.status(), 200, 'appearance save must succeed directly, without conflict retries');
+    await page.waitForFunction(() => {
+      const button = document.querySelector('.settings-page .page-heading .primary');
+      return button?.disabled && document.querySelector('.settings-page .notice.success') && !document.querySelector('.settings-page .notice.error');
+    });
+  }
   await click('外观样式'); await heading('外观样式');
   assert.equal(await page.$$eval('[data-field="extra.style.color_scheme"] input[type=radio]', nodes => nodes.length), 3);
   assert.equal(await page.$$eval('[data-field="extra.style.font_family"] input[type=radio]', nodes => nodes.length), 5, 'exactly five values remain flat');
@@ -55,13 +67,19 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await fill('[aria-label="选择浅色主题色"]', '#3355aa');
   assert.equal(await page.$eval('[name="extra.style.theme_light_skin"]', e => e.value), '#3355aa');
   assert.equal(await page.$eval('[data-field="extra.style.theme_light_skin"] .color-swatch', e => getComputedStyle(e).backgroundColor), 'rgb(51, 85, 170)');
-  await click('本地保存'); await page.waitForSelector('.notice.success');
+  await saveAppearance();
   assert.equal(parse(await readFile(base + '/site/config.toml', 'utf8')).extra.style.theme_light_skin, '#3355aa');
   await page.screenshot({ path: screenshots + '/form-colors.png', fullPage: true });
   await click('工作台'); await heading('今天，写点什么？');
   const configFile = base + '/site/config.toml';
   await writeFile(configFile, patchToml(await readFile(configFile, 'utf8'), { 'extra.style.font_family': 'Custom Font' }));
-  await click('外观样式'); await heading('外观样式');
+  const [freshResponse] = await Promise.all([appearanceResponse('GET'), click('外观样式')]);
+  assert.equal(freshResponse.status(), 200);
+  const freshAppearance = await freshResponse.json();
+  assert.equal(freshAppearance.values['extra.style.font_family'], 'Custom Font');
+  assert.equal(typeof freshAppearance.revision, 'string');
+  assert.ok(freshAppearance.revision);
+  await heading('外观样式');
   await page.waitForSelector('button[name="extra.style.font_family"]');
   assert.equal(await page.$('[data-field="extra.style.font_family"] fieldset'), null, 'six values use a modal, including existing custom value');
   await page.click('button[name="extra.style.font_family"]'); await page.waitForSelector('dialog[open]');
@@ -71,7 +89,8 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await click('取消');
   assert.ok(await page.$eval('button[name="extra.style.font_family"]', el => el.textContent.includes('Custom Font')));
   await choose('extra.style.font_family', 'PingFang SC');
-  await click('本地保存'); await page.waitForSelector('.notice.success');
+  await saveAppearance(freshAppearance.revision);
+  assert.equal(parse(await readFile(configFile, 'utf8')).extra.style.font_family, 'PingFang SC');
 
   await click('导航菜单'); await heading('导航菜单');
   const name = 'menu.nav_menu.0.menus.0.icon';

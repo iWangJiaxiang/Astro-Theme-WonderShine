@@ -4,6 +4,7 @@ import type { WriteGuard } from '../shared/repository.js';
 import { getValue, splitDocument, formDocumentMetadata } from './content.js';
 import type { ContentLanguages } from '../shared/types.js';
 import { StudioError } from './errors.js';
+import { listRepositoryText } from './repository-text.js';
 import { canonicalNativeThreadRoute } from '../shared/thread-routes.js';
 
 export function threadLanguages(config: Record<string, unknown>): ContentLanguages {
@@ -59,7 +60,7 @@ export function threadWriteGuard(path: string, text: string | null): WriteGuard 
     const languages = threadLanguages(config ? parse(config.text) : {});
     validateThread({ path, text }, languages);
     const location = threadPath(path, languages), canonical = canonicalNativeThreadRoute(location.id, location.lang, languages.defaultLanguage);
-    for (const file of await repository.list()) {
+    for (const file of await listRepositoryText(repository)) {
       if (file.path === path || !/^content\/threads\/[^/]+\/index(?:\.[A-Za-z0-9-]+)?\.md$/.test(file.path)) continue;
       let sibling;
       try { sibling = threadPath(file.path, languages); } catch { continue; }

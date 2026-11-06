@@ -52,7 +52,8 @@ test('HTTPS Git adapter clones, pushes only edited paths and rejects stale revis
     return originalFetch(`http://127.0.0.1:${port}${url.pathname}${url.search}`, init);
   };
   t.after(() => { globalThis.fetch = originalFetch; });
-  const repo = new GitRepository({ url: 'https://git.test/repo.git', branch: 'main', username: 'tester', token: 'test-token', name: 'Studio', email: 'studio@example.com' });
+  const options = { url: 'https://git.test/repo.git', branch: 'main', username: 'tester', token: 'test-token', name: 'Studio', email: 'studio@example.com' };
+  const repo = new GitRepository(options);
   t.after(() => repo.clearMediaCache());
   const before = cloneRequests;
   assert.equal((await repo.listMedia()).items[0].path, 'public/img/git.png');
@@ -68,6 +69,12 @@ test('HTTPS Git adapter clones, pushes only edited paths and rejects stale revis
   assert.ok(first); assert.equal(config?.text, 'title="Sample"\n'); assert.equal(listing.length, 1);
   assert.equal(cloneRequests - readsBefore, 1, 'content, settings and media share one concurrent checkout');
   assert.equal((await repo.list()).length, 1);
+  assert.deepEqual(await repo.listForSummary(), [{ path: first.path, text: first.text }]);
+  const cold = new GitRepository(options);
+  t.after(() => cold.clearReadCache());
+  assert.equal((await cold.read(first.path))!.revision, first.revision, 'cold checkouts retain existing blob identity');
+  const blob = run(['--git-dir=repo.git', 'rev-parse', `main:${first.path}`]);
+  assert.ok(first.revision.includes(blob), 'revision reuses Git object identity');
   // External commits remain protected even while readers have a cached snapshot.
   const oldConfig = await repo.read('config.toml');
   await writeFile(join(root, 'seed/config.toml'), 'title="External"\n');
@@ -77,12 +84,16 @@ test('HTTPS Git adapter clones, pushes only edited paths and rejects stale revis
   await assert.rejects(() => repo.write(first.path, first.text, first.revision, async checkout => {
     assert.equal(checkout.mode, 'local');
     assert.equal((await checkout.read('config.toml'))!.text, 'title="External"\n');
+    assert.equal((await checkout.read(first.path))!.revision, first.revision, 'fresh guard uses the same scoped blob strategy');
     throw new StudioError(409, 'guard blocked');
   }), /guard blocked/);
   await assert.rejects(() => repo.write('config.toml', 'title="Stale overwrite"\n', oldConfig!.revision), /已更新/);
   assert.equal((await repo.read('config.toml'))!.text, 'title="External"\n', 'conflict clears cached reads');
   await repo.write('config.toml', oldConfig!.text, (await repo.read('config.toml'))!.revision);
-  const saved = await repo.write(first.path, first.text.replace('Hello', 'Updated'), first.revision);
+  const saved = await cold.write(first.path, first.text.replace('Hello', 'Updated'), first.revision);
+  repo.clearReadCache();
+  assert.equal((await repo.read(first.path))!.revision, saved.revision, 'save returns committed blob identity, not a temporary baseline');
+  assert.equal((await cold.read(first.path))!.revision, saved.revision);
   assert.ok(saved.commit); assert.ok(receivedAuth);
   assert.match((await repo.read(first.path))!.text, /Updated/);
   assert.equal((await repo.read('config.toml'))!.text, 'title="Sample"\n');
@@ -118,4 +129,11 @@ test('HTTPS Git adapter clones, pushes only edited paths and rejects stale revis
   run(['push', '../repo.git', 'main'], join(root, 'seed'));
   await assert.rejects(() => content.removeDocument(topicPath, topic.revision), /仍被内容关联/);
   assert.ok(await repo.read(topicPath), 'fresh Git write guard protects the externally added dependency');
+  run(['--git-dir=repo.git', 'update-ref', 'refs/heads/other', 'refs/heads/main']);
+  const otherBranch = new GitRepository({ ...options, branch: 'other' });
+  t.after(() => otherBranch.clearReadCache());
+  const mainFile = (await repo.read(first.path))!, otherFile = (await otherBranch.read(first.path))!;
+  assert.equal(mainFile.text, otherFile.text);
+  assert.notEqual(mainFile.revision, otherFile.revision, 'identical blobs on distinct branches have distinct scopes');
+  await assert.rejects(otherBranch.write(first.path, 'wrong branch token', mainFile.revision), /已更新/);
 });

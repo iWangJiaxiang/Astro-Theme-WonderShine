@@ -41,6 +41,7 @@ export function tauriFiles(root: string, additionalRoots: string[] = []): Worksp
     return { path: result, info };
   }
   return {
+    revisionNamespace: 'tauri-device-filesystem-v1',
     readFile: (path, options) => run(async () => { const bytes = await native.readFile((await checked(path)).path); return options === 'utf8' || typeof options === 'object' && options !== null && 'encoding' in options ? new TextDecoder().decode(bytes) : bytes; }),
     readCheckedFile: (path, limit) => run(async () => {
       if (!Number.isSafeInteger(limit) || limit < 0) throw new Error('文件大小限制无效');

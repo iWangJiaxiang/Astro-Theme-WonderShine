@@ -17,13 +17,13 @@ function client(repository: Repository, options: ContentTransportOptions = {}) {
 }
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
   const root = await mkdtemp(join(tmpdir(), 'studio-summary-cache-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   const repository = new LocalRepository(root);
   await repository.write('config.toml', 'default_language="zh-CN"\n[languages.en]\n', null);
   await repository.write(path, text('Original'), null);
   let scans = 0;
-  const list = repository.list.bind(repository);
-  repository.list = () => { scans++; return list(); };
+  const list = repository.listForSummary.bind(repository);
+  repository.listForSummary = () => { scans++; return list(); };
   return { repository, request: client(repository), scans: () => scans };
 }
 function gate() {
@@ -58,29 +58,37 @@ test('external edits require refresh; documents and conflict checks are never ca
   assert.equal((await (await request()).json())[0].title, 'Bootstrap refresh');
 });
 
-test('save, translation, delete and settings invalidate summaries', async t => {
+test('existing edits, deletes and settings use deltas; new translations discover repository order', async t => {
   const { request, repository, scans } = await fixture(t);
   await request();
+  const incrementalRows = async () => {
+    const before = scans();
+    const rows = await (await request()).json();
+    assert.equal(scans(), before, 'summary reads after observed writes must not scan again');
+    return rows;
+  };
   const original = (await repository.read(path))!;
   assert.equal((await request('/document', 'PUT', { path, revision: original.revision, changes: { title: 'Saved' }, body: 'Body' })).status, 200);
-  assert.equal((await (await request()).json())[0].title, 'Saved');
+  assert.equal((await incrementalRows())[0].title, 'Saved');
   const revision = (await repository.read(path))!.revision;
   assert.equal((await request('/translation/manual', 'POST', { path, revision, language: 'en' })).status, 201);
+  const afterTranslation = scans();
   assert.equal((await (await request()).json()).length, 2);
+  assert.equal(scans(), afterTranslation + 1, 'new paths require discovery of adapter enumeration order');
   assert.equal((await request('/document', 'DELETE', { path, revision })).status, 200);
-  assert.equal((await (await request()).json()).length, 1);
+  assert.equal((await incrementalRows()).length, 1);
   const settings = await (await request('/settings/site')).json();
   assert.equal((await request('/settings/site', 'PUT', { revision: settings.revision, changes: { base_url: 'https://new.example.com' } })).status, 200);
   const before = scans();
   assert.equal((await request()).status, 200);
-  assert.equal(scans(), before + 1);
+  assert.equal(scans(), before, 'the list projection must reuse observed deltas; write guards may scan authoritative text');
 });
 
 test('failed scan retries and separate transports/workspaces never share snapshots', async t => {
   const a = await fixture(t), b = await fixture(t);
-  const list = a.repository.list.bind(a.repository);
+  const list = a.repository.listForSummary.bind(a.repository);
   let fail = true;
-  a.repository.list = async () => { if (fail) { fail = false; throw new Error('Unavailable'); } return list(); };
+  a.repository.listForSummary = async () => { if (fail) { fail = false; throw new Error('Unavailable'); } return list(); };
   assert.equal((await a.request()).status, 500);
   assert.equal((await a.request()).status, 200);
   await b.repository.write(path, text('Other workspace'), (await b.repository.read(path))!.revision);
@@ -92,9 +100,9 @@ test('failed scan retries and separate transports/workspaces never share snapsho
 
 test('late pre-refresh scan cannot replace the refreshed snapshot', async t => {
   const { repository } = await fixture(t);
-  const list = repository.list.bind(repository), started = gate(), release = gate();
+  const list = repository.listForSummary.bind(repository), started = gate(), release = gate();
   let first = true;
-  repository.list = async () => {
+  repository.listForSummary = async () => {
     const files = await list();
     if (first) { first = false; started.resolve(); await release.promise; }
     return files;
@@ -105,7 +113,7 @@ test('late pre-refresh scan cannot replace the refreshed snapshot', async t => {
   await repository.write(path, text('Fresh'), (await repository.read(path))!.revision);
   assert.equal((await (await request('/content?refresh=1')).json())[0].title, 'Fresh');
   release.resolve();
-  assert.equal((await (await old).json())[0].title, 'Original');
+  assert.equal((await (await old).json())[0].title, 'Fresh');
   assert.equal((await (await request()).json())[0].title, 'Fresh');
 });
 
@@ -135,7 +143,7 @@ test('reads during failed sync cannot seed a persistent stale snapshot', async t
   const { repository } = await fixture(t);
   const started = gate(), release = gate();
   const wrapped = Object.create(repository) as Repository;
-  Object.defineProperty(wrapped, 'workspace', { value: {
+  Object.defineProperty(wrapped, 'workspace', { configurable: true, value: {
     sync: async () => {
       started.resolve(); await release.promise;
       await repository.write(path, text('Partial sync'), (await repository.read(path))!.revision);
@@ -146,8 +154,9 @@ test('reads during failed sync cannot seed a persistent stale snapshot', async t
   await request();
   const sync = request('/workspace/sync', 'POST', { confirmation: 'SYNC' });
   await started.promise;
-  assert.equal((await (await request()).json())[0].title, 'Original');
+  const duringSync = request();
   release.resolve();
   assert.equal((await sync).status, 500);
+  assert.equal((await (await duringSync).json())[0].title, 'Partial sync');
   assert.equal((await (await request()).json())[0].title, 'Partial sync');
 });

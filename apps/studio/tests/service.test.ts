@@ -11,7 +11,7 @@ import { settingsSchemas } from '../shared/settings.js';
 import { pageSettingsSchemas } from '../shared/page-settings.js';
 import { sortLibrary } from '../shared/library.js';
 test('site URL edits require an absolute web URL so Astro can build them', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'studio-site-url-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tmpdir(), 'studio-site-url-')); t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   await writeFile(join(root, 'config.toml'), 'base_url="https://example.test"\n');
   const service = new ContentService(new LocalRepository(root));
   for (const value of ['', '/', 'example.test', 'javascript:alert(1)', 'https://', 'https://user:password@example.test', 'https://example.test/#fragment']) {
@@ -32,7 +32,7 @@ test('inserting fields keeps trailing comments on their original line', () => {
   assert.equal((parse(result).extra as any).enabled, true);
 });
 test('all real theme settings load and unrelated TOML survives edits', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'studio-real-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tmpdir(), 'studio-real-')); t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   for (const path of ['config.toml', 'data.toml', 'public/data/friends.json']) { await mkdir(join(root, path, '..'), { recursive: true }); await cp(new URL(`../../../examples/demo/${path}`, import.meta.url), join(root, path)); }
   const content = new ContentService(new LocalRepository(root));
   for (const schema of settingsSchemas) {
@@ -46,7 +46,7 @@ test('all real theme settings load and unrelated TOML survives edits', async t =
   parse(await readFile(join(root, 'config.toml'), 'utf8')); parse(await readFile(join(root, 'data.toml'), 'utf8'));
 });
 test('new collection entries require a parent and keep their rendering templates', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'studio-sections-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tmpdir(), 'studio-sections-')); t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   const repo = new LocalRepository(root), content = new ContentService(repo);
   const changes = { title: 'Tutorial', layout: 'collection-detail', child_layout: 'collection-content', render: true, insert_anchor_links: 'heading' };
   await assert.rejects(() => content.saveDocument('content/collections/docs/tutorial/_index.md', changes, '', null), /上级/);
@@ -58,7 +58,7 @@ test('new collection entries require a parent and keep their rendering templates
   assert.equal(parsed.child_layout, 'collection-content'); assert.equal(parsed.draft, true);
 });
 test('new published articles include theme-required taxonomies and a date', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'studio-new-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tmpdir(), 'studio-new-')); t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   const content = new ContentService(new LocalRepository(root));
   await content.saveDocument('content/articles/new/index.md', { title: 'New', draft: false }, '# New', null);
   const metadata = (await content.document('content/articles/new/index.md')).metadata;
@@ -67,14 +67,14 @@ test('new published articles include theme-required taxonomies and a date', asyn
 });
 
 test('new standalone pages use the theme page layout', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'studio-page-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tmpdir(), 'studio-page-')); t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   const content = new ContentService(new LocalRepository(root));
   await content.saveDocument('content/pages/new.md', { title: 'Page', draft: false }, '# Page', null);
   assert.equal((await content.document('content/pages/new.md')).metadata.layout, 'empty');
 });
 
 test('layout settings update the intended TOML file, preserve neighbors and reject stale shared config', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'studio-template-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tmpdir(), 'studio-template-')); t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   await writeFile(join(root, 'config.toml'), '# keep header\ntitle="Original"\n[extra.equipment]\nbig_title="Gear"\ncustom="keep me"\n[extra.tool.nav_music]\nid="old-playlist"\n');
   await writeFile(join(root, 'data.toml'), '# keep data\n[post]\ntags=[]\n[equipment]\ngroups=[]\n');
   const content = new ContentService(new LocalRepository(root));
@@ -104,7 +104,7 @@ test('list normalizes native TOML dates and string dates before chronological so
 });
 
 test('date clearing keeps optional fields valid and prevents removing required publication dates', async t => {
-  const root = await mkdtemp(join(tmpdir(), 'studio-calendar-')); t.after(() => rm(root, { recursive: true, force: true }));
+  const root = await mkdtemp(join(tmpdir(), 'studio-calendar-')); t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   const content = new ContentService(new LocalRepository(root));
   await content.saveDocument('content/articles/calendar/index.md', { title: 'Calendar', date: '2026-10-24T10:20:30+08:00', updated: '2026-10-25' }, '# Calendar', null);
   const article = await content.document('content/articles/calendar/index.md');

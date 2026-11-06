@@ -14,7 +14,7 @@ const uuid = '8d7af1f2-de97-40fc-8909-b42954e689a9';
 const legacy = 'n_8d7af1f2de9740fc8909b42954e689a9';
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
   const root = await mkdtemp(join(tmpdir(), 'studio-thread-route-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   await writeFile(join(root, 'config.toml'), 'base_url="https://example.test"\ndefault_language="zh"\ncompile_sass=false\n[languages.en]\n');
   const repo = new LocalRepository(root);
   return { root, repo, content: new ContentService(repo), translation: new TranslationService(repo) };

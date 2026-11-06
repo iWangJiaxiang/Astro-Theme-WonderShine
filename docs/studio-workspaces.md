@@ -28,6 +28,7 @@ After configuring the existing administrator authentication, set these server en
 
 ```dotenv
 STUDIO_STATE=file
+STUDIO_STATE_DIR=/absolute/private/path/to/studio-state
 STUDIO_GIT_URL=https://git.example.com/owner/site.git
 STUDIO_GIT_BRANCH=main
 STUDIO_GIT_USERNAME=your-provider-username
@@ -45,23 +46,38 @@ Once downloaded, content and media reads, saving, and committing work without ne
 
 Persistent workspaces are rejected with `STUDIO_STATE=blob`. Cloud-function ephemeral disks must continue using the online Git mode. A self-hosted Node deployment can use a persistent mounted directory; run only one Studio installation against a workspace and avoid simultaneous editing with other Git tools during synchronization.
 
+### Private state and upgrades
+
+For local and persistent Git modes, set `STUDIO_STATE_DIR` to an absolute private directory **outside the site/worktree and all HTTP/static serving roots**. Starting from the site directory with the default `.state` is no longer a suitable layout for persisted text baselines and is rejected. For example, use `/srv/studio-private/state` alongside `/srv/sites/example`, not inside it. Do not delete the old `.state` to bypass a configuration error: stop all workers, back up existing state, move it into the chosen private location, preserve ownership/permissions, then update the setting.
+
+Content revisions are opaque identities backed by private exact-text baselines, shared between Node workers using the same state directory. These files contain unpublished content and must not be committed, served, included in an image's public assets, or copied to an unprotected backup. POSIX stores use owner-only permissions. On Windows, mode bits do **not** establish private ACLs: before starting Studio, the administrator must provision and verify a service-account-only directory ACL, removing inherited access for unrelated users. Use a dedicated service identity; verify effective access with Windows Security → Advanced or your deployment ACL tooling. Do not deploy this store on Windows if that isolation cannot be guaranteed.
+
+Unknown, expired, evicted or pre-upgrade SHA-based revisions produce a conflict instead of silently adopting current content. Keep recovery drafts and merge against a freshly loaded document. Stable workspace IDs, save-scope hashes and authentication-state key names are unchanged.
+
+Node acquires the shared baseline lock before reading authoritative file text and holds it through revision registration. This prevents an old read waiting for the lock from later replacing a newer editing baseline. Native repositories likewise serialize snapshot reads by filesystem authority, root and path across repository instances. Batch mutations and recovery reserve all affected paths together; guards run before those reservations so they may read the repository without lock reentry. Saves recheck their revisions after waiting for those reservations, and recovery checks every affected file before restoring any file. Unrelated paths remain independently readable. These locks coordinate Studio operations only: external editors do not participate, and validation followed by a file write is not an atomic compare-and-write against external processes.
+
 ## Save, commit and synchronize
 
 Authenticated HTTP endpoints:
 
 | Endpoint | Behavior |
 | --- | --- |
-| `GET /api/workspace` | Local status and the last known remote tip; does not fetch |
-| `POST /api/workspace/commit` with `{ "message": "docs(content): update posts", "confirmation": "<status token>" }` | Commit changed managed content and media locally |
-| `POST /api/workspace/sync` with `{ "confirmation": "<status token>" }` | Fetch remote changes, fast-forward when safe, push local commits without force |
+| `GET /api/workspace` | Local status and the last known remote tip; does not fetch or create a review |
+| `POST /api/workspace/review` | Capture a private temporary review; returns status plus `confirmation` and `confirmationExpiresAt` |
+| `POST /api/workspace/commit` with `{ "message": "docs(content): update posts", "confirmation": "<review token>" }` | Validate the reviewed local state and commit managed content/media locally |
+| `POST /api/workspace/sync` with `{ "confirmation": "<review token>" }` | Validate the reviewed local state, fetch, fast-forward when safe, and push without force |
 
-HTTP and native in-process transport mutations require a nonempty string `confirmation` from the reviewed workspace status (400 if missing/invalid). Engines compare it against fresh status under the workspace lock and reject stale tokens with 409 before mutation. After committing, use the returned status token for sync, not the pre-commit token. Only trusted internal engine/test callers retain optional token omission for compatibility; this is not supported by user-facing transports.
+HTTP and native in-process transport mutations require a nonempty string `confirmation` from an explicit review (400 if missing/invalid). Engines compare the reviewed branch, local HEAD, managed rows and exact file bytes under the workspace lock; expired or stale tokens are rejected with 409 before mutation. Ordinary status and mutation responses do not contain a new token. After committing, create a new review and let the user confirm synchronization separately. Only trusted internal engine/test callers retain optional token omission for compatibility; this is not supported by user-facing transports.
+
+A review confirms **local workspace state**, not a fixed remote synchronization plan or a one-use authorization. Synchronization fetches the latest remote state and applies the existing clean-worktree, divergence and non-force rules. The displayed remote tip remains the last fetched observation, not a guarantee of what the next fetch will return.
+
+Review capture and validation stream exact bytes in 64 KiB chunks to private derived storage outside the worktree. The defaults allow a 512 MiB snapshot within a 1 GiB total logical-file-byte budget, including the previous snapshot and reserved manifest space during replacement; filesystem allocation overhead is additional. A failed capture immediately attempts to remove only its unpublished files, and never removes the previously published review. Native chunk IPC latency and throughput have not yet been measured; bounded memory is not a performance benchmark. Native review ownership uses a narrow Rust `File::try_lock()` provider (Rust 1.89+, no additional crate). It locks a fixed private AppData file for the app process lifetime, independent of the desktop single-instance plugin. The async `openNativeWorkspaceReviews(state, base)` factory must be awaited after the state directory exists and before runtime exposure; the native runtime awaits this factory before opening Git and exposing transport operations. Remote tests and platform validation are still required before claiming crash recovery works. Rust grants recovery only once per workspace per process, before any response is sent. Only a validated empty derived review lock may be removed, never Git journals/history. A new webview epoch or a leftover lock after that claim requires fully exiting and restarting the app—not reconnecting or waiting for a timeout. Normal review operations recheck Rust ownership and use a separate per-workspace review queue inside the existing mutation queue. IPC cancellation never releases the OS owner. Unsupported filesystem locking fails closed. AppData sandbox/ACL protection is still required; this does not defend against a hostile local process replacing private path ancestors.
 
 During commit-and-sync, local commit success confirms only the local step. If the sync response is lost or fails, the local commit is preserved but the remote outcome needs verification; refreshing local status is not proof that a push did not happen.
 
 Mutation endpoints use the same Origin and CSRF protections as existing writes. `/api/bootstrap` exposes `workspace: true` only when this capability is available. Other connection modes return 404 for workspace endpoints.
 
-The status includes `branch`, `dirty`, `changes`, `ahead`, `behind`, `diverged`, `head`, `remoteHead`, `lastSync`, `managedChanges`, and `confirmation`. Ahead/behind reflect the **last fetched** state. They are not a live remote health check. Synchronizing successfully means Git is up to date; it does not confirm a website deployment.
+The status includes `branch`, `dirty`, `changes`, `ahead`, `behind`, `diverged`, `head`, `remoteHead`, `lastSync` and `managedChanges`. Only explicit review responses add `confirmation` and `confirmationExpiresAt`. Ahead/behind reflect the **last fetched** state. They are not a live remote health check. Synchronizing successfully means Git is up to date; it does not confirm a website deployment.
 
 Revision checks still reject stale saves. Sync refuses uncommitted changes; committing refuses unrelated staged implementation files. Git history backups are never automatically committed. Push failures retain local commits, and retrying synchronization fetches the remote before pushing again.
 
@@ -71,7 +87,9 @@ If both devices created commits, Studio fetches the remote and reports divergenc
 
 A fast-forward writes `.git/wondershine-sync.json` before changing the working tree and branch. If interrupted, subsequent writes and syncs stop rather than guessing which files are safe to replace. Stop Studio, back up the workspace, inspect the recorded before/target commits and `git status`, and finish recovery with a Git tool. Remove the journal only after verifying the working tree, index and branch agree, then restart Studio.
 
-A process interruption can also leave a sibling `<workspace>.studio-lock` directory. Check that no Studio operation/process uses the workspace before removing this empty lock directory. Never delete the workspace to clear an error.
+A process interruption can also leave a sibling `<workspace>.studio-lock` directory or a `lock` in private revision/review storage. Stop **all** workers using that installation and confirm no operation still owns the lock before an administrator removes an empty lock directory. Age alone is not proof that a lock is abandoned. Never delete the workspace to clear an error.
+
+A `pending` marker in `content-revisions-v1` means baseline publication was interrupted. Removing only `lock` does not make this state valid. Back up the private state and inspect/recover it with the service stopped; do not remove `pending` just to bypass the check. If an administrator replaces a damaged baseline store with a new empty private store after preserving the backup, old editing tokens become invalid and open drafts must be reloaded and merged. Never restore an old baseline store while workers are active.
 
 ## Verified coverage
 

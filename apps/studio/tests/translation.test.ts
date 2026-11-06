@@ -18,7 +18,7 @@ const successfulFetch: typeof fetch = async (_url, init) => {
 };
 async function fixture(t: { after(fn: () => Promise<void>): void }, fetcher = successfulFetch) {
   const root = await mkdtemp(join(tmpdir(), 'studio-translation-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   await writeFile(join(root, 'config.toml'), 'default_language="zh-CN"\n[languages.en]\n');
   const repo = new LocalRepository(root), content = new ContentService(repo);
   const path = 'content/articles/story/index.md';
@@ -123,16 +123,40 @@ test('article translations remove taxonomies not configured in target language',
 
 test('simultaneous requests are bounded and a destination created during generation is not overwritten', async t => {
   const { repo, source } = await fixture(t);
-  let release!: () => void;
+  let release!: () => void, entered!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
-  const service = new TranslationService(repo, settings, async (url, init) => { await gate; return successfulFetch(url, init); });
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  let providerCalls = 0;
+  const service = new TranslationService(repo, settings, async (url, init) => {
+    providerCalls++;
+    entered();
+    await gate;
+    return successfulFetch(url, init);
+  });
   const input = { path: source.path, revision: source.revision, language: 'en' };
+  const destination = 'content/articles/story/index.en.md';
+  const existingText = '+++\ntitle="Existing"\n+++\nDo not overwrite';
   const first = service.create(input);
-  await assert.rejects(service.create(input), /另一份译文/);
-  await repo.write('content/articles/story/index.en.md', '+++\ntitle="Existing"\n+++\nDo not overwrite', null);
-  release();
-  await assert.rejects(first);
-  assert.match((await repo.read('content/articles/story/index.en.md'))!.text, /Do not overwrite/);
+  // Observe rejection immediately, including failures before the provider is reached.
+  const settled = Promise.allSettled([first]);
+  let existingRevision!: string;
+  try {
+    await Promise.race([
+      started,
+      settled.then(() => { assert.fail('Translation settled before reaching the provider gate'); }),
+    ]);
+    await assert.rejects(service.create(input), { status: 429, message: /另一份译文/ });
+    // Create the competing destination only after the initial absence check has passed.
+    existingRevision = (await repo.write(destination, existingText, null)).revision;
+  } finally {
+    release();
+    await settled;
+  }
+  await assert.rejects(first, { status: 409, message: /文件已更新/ });
+  assert.equal(providerCalls, 1);
+  const existing = await repo.read(destination);
+  assert.equal(existing?.text, existingText);
+  assert.equal(existing?.revision, existingRevision);
 });
 
 test('changed configuration and moved protected tokens reject provider results', async t => {
