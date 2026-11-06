@@ -171,11 +171,16 @@ async function returnContext(page, origin, context, userInput = false) {
 async function cancelledDraftNavigation(page, acceptDialog) {
   await page.select('.editor-page select[aria-label="自动保存间隔"]', '0');
   await page.click(source);
-  await page.keyboard.press('Control+End');
+  await page.keyboard.down('Control');
+  try { await page.keyboard.press('End'); }
+  finally { await page.keyboard.up('Control'); }
   await page.keyboard.type('\nUnsaved navigation context marker.');
-  await page.keyboard.press('Shift+ArrowLeft');
-  await page.keyboard.press('Shift+ArrowLeft');
-  await page.keyboard.press('Shift+ArrowLeft');
+  await page.keyboard.down('Shift');
+  try {
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowLeft');
+  } finally { await page.keyboard.up('Shift'); }
   await page.waitForFunction(selector => {
     const node = document.querySelector(selector);
     return node.value.includes('Unsaved navigation context marker.') && node.scrollTop > 0;
