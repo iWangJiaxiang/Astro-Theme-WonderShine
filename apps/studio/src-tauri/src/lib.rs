@@ -1,4 +1,5 @@
 mod cnb_account;
+mod native_review;
 #[cfg(all(debug_assertions, feature = "native-smoke", target_os = "macos"))]
 mod native_smoke;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -19,7 +20,8 @@ pub fn run() {
     #[cfg(all(debug_assertions, feature = "native-smoke", target_os = "macos"))]
     let context = native_smoke::configure(context);
     let builder = builder
-        .invoke_handler(tauri::generate_handler![cnb_account::cnb_account_get])
+        .manage(native_review::ReviewOwnership::default())
+        .invoke_handler(tauri::generate_handler![cnb_account::cnb_account_get, native_review::native_review_owner])
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())

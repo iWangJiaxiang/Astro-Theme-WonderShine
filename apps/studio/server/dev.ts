@@ -6,11 +6,14 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { createApp } from './app.js';
 import { loadStartupConfig } from './startup.js';
-const options = loadStartupConfig();
+const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
+// Vite serves source through /@fs as well as its configured root/publicDir.
+// Do not widen Vite's allowlist for optional preview persistence.
+const options = loadStartupConfig(vite.config.server.fs.strict ? { servingRoots: [vite.config.root, ...vite.config.server.fs.allow,
+  ...(vite.config.publicDir ? [vite.config.publicDir] : []), vditorRoot] } : undefined);
 const app = new Hono();
 app.route('/', createApp(options));
 app.get('/vendor/vditor/*', serveStatic({ root: vditorRoot, rewriteRequestPath: path => path.replace('/vendor/vditor', '') }));
-const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
 const listener = getRequestListener(app.fetch);
 const port = Number(new URL(options.config.origin).port || 5173);
 createHttpServer((req, res) => {

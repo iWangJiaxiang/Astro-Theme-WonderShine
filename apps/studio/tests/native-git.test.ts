@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { NativeGitEngine } from '../platform/git-engine.js';
+import { nodeReviewSource, nodeWorkspaceReviews } from '../server/review-store.js';
 import { createGitHttp } from '../platform/git-http.js';
 import type { WorkspaceFiles } from '../platform/filesystem.js';
 import { validateProfile, type WorkspaceProfile } from '../platform/hosting.js';
@@ -106,7 +107,11 @@ test('native Git persists offline commits, fast-forwards safely, preserves rejec
   offline = false; await retry.open(); assert.equal(failed.branch, 'release/blog');
   run(['--git-dir=remote.git', 'symbolic-ref', 'HEAD', 'refs/heads/main']);
   const root = join(base, 'workspace'), state = join(base, 'state');
-  const create = (fileApi = files, directory = root, metadata = state) => new NativeGitEngine(fileApi, directory, metadata, profile, createGitHttp(profile.url, localFetch), () => ({ username: 'tester', password: 'native-test-secret' }));
+  let reviewReads = 0;
+  const create = (fileApi = files, directory = root, metadata = state) => new NativeGitEngine(fileApi, directory, metadata, profile, createGitHttp(profile.url, localFetch), () => ({ username: 'tester', password: 'native-test-secret' }), {
+    store: nodeWorkspaceReviews(directory),
+    source: async path => { reviewReads++; return nodeReviewSource(directory)(path); },
+  });
   const beforeOpenRequests = requests;
   let engine = create(); await assert.rejects(engine.status(), /请先下载/); assert.equal(requests, beforeOpenRequests); await engine.open(); assert.equal((await engine.status()).dirty, false); assert.ok(authorized);
   const initialRequests = requests, initialHead = run(['--git-dir=remote.git', 'rev-parse', 'main']);
@@ -114,18 +119,34 @@ test('native Git persists offline commits, fast-forwards safely, preserves rejec
   await nodeFiles.writeFile(join(root, article), 'Offline writing');
   engine = create(); await engine.open(); assert.equal((await engine.status()).dirty, true);
   await assert.rejects(engine.sync(), /先提交/);
-  const preview = await engine.status();
+  const ordinary = await engine.status();
+  assert.equal(ordinary.confirmation, undefined);
+  assert.equal(ordinary.confirmationExpiresAt, undefined);
+  assert.equal(reviewReads, 0, 'ordinary status must not invoke the streaming review source');
+  await assert.rejects(nodeFiles.stat(root + '.studio-reviews-v1'), { code: 'ENOENT' });
+  const preview = await engine.createReview();
   assert.ok(preview.confirmation);
+  assert.ok(reviewReads > 0);
+  const reviewedReads = reviewReads;
+  assert.deepEqual(await engine.status(), ordinary);
+  assert.equal(reviewReads, reviewedReads, 'polling must not revalidate or recapture a review');
   assert.ok(preview.managedChanges?.length);
   await assert.rejects(engine.commit('stale', 'stale'), /重新确认/);
   assert.equal((await engine.status()).head, preview.head);
+  engine = create(); // Another engine instance must validate the persisted review.
   const local = await engine.commit('docs(content): offline draft', preview.confirmation);
+  assert.equal(local.confirmation, undefined);
+  assert.equal(local.confirmationExpiresAt, undefined);
   await assert.rejects(engine.sync(preview.confirmation), /重新确认/);
   assert.equal(local.ahead, 1); assert.equal(requests, initialRequests);
   await assert.rejects(engine.sync(), /本地文件和提交已保留/);
   assert.equal(run(['--git-dir=remote.git', 'rev-parse', 'main']), initialHead);
   offline = false;
-  const synced = await engine.sync(); assert.equal(synced.ahead, 0); assert.ok(synced.lastSync);
+  const syncReview = await engine.createReview();
+  assert.ok(syncReview.confirmation);
+  assert.notEqual(syncReview.confirmation, preview.confirmation);
+  const synced = await engine.sync(syncReview.confirmation); assert.equal(synced.ahead, 0); assert.ok(synced.lastSync);
+  assert.equal(synced.confirmation, undefined);
   assert.match(run(['--git-dir=remote.git', 'show', `main:${article}`]), /Offline writing/);
   assert.equal(run(['--git-dir=remote.git', 'ls-tree', 'main', 'themes/wondershine']), `160000 commit ${themeCommit}\tthemes/wondershine`, 'native content commit must preserve the theme gitlink');
   run(['clone', '--no-checkout', seed, join(root, 'themes/wondershine')]);

@@ -12,6 +12,7 @@ import type { HttpClient } from 'isomorphic-git';
 import type { FileSnapshot, SaveResult } from '../shared/types.js';
 import { LocalRepository, type Repository, validatePath } from './repository.js';
 import { StudioError } from './errors.js';
+import { gitBlobRevision } from '../core/revision.js';
 
 export interface GitOptions { url: string; branch: string; username: string; token: string; name: string; email: string }
 export function validateGitOptions(options: GitOptions): void {
@@ -45,12 +46,27 @@ export class GitRepository implements Repository {
     this.http = gitHttp(options.url);
   }
   private http: HttpClient;
+  private localRepository(directory: string): LocalRepository {
+    const scope = JSON.stringify([new URL(this.options.url).href, this.options.branch]);
+    return new LocalRepository(directory, { revision: async (path, text) => {
+      const head = await git.resolveRef({ fs, dir: directory, ref: 'HEAD' });
+      try {
+        const { oid, blob } = await git.readBlob({ fs, dir: directory, oid: head, filepath: path });
+        // Never assign a committed blob identity to different working-tree text.
+        // This also handles LocalRepository's intermediate, pre-add save result.
+        return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(blob) === text ? gitBlobRevision(scope, path, oid) : null;
+      } catch (error) {
+        if ((error as { code?: string }).code === 'NotFoundError') return null;
+        throw error;
+      }
+    } });
+  }
   private readCheckout = new MediaCheckout(async () => {
     const directory = await mkdtemp(join(tmpdir(), 'wondershine-read-'));
     try {
       await git.clone({ fs, http: this.http, dir: directory, url: this.options.url, ref: this.options.branch,
         singleBranch: true, depth: 1, onAuth: () => ({ username: this.options.username, password: this.options.token }) });
-      return { directory, repo: new LocalRepository(directory) };
+      return { directory, repo: this.localRepository(directory) };
     } catch {
       await rm(directory, { recursive: true, force: true });
       throw new StudioError(502, 'Git 操作失败，请检查仓库连接、权限和分支；本次修改尚未确认发布');
@@ -81,7 +97,7 @@ export class GitRepository implements Repository {
     try {
       await git.clone({ fs, http: this.http, dir: directory, url: this.options.url, ref: this.options.branch,
         singleBranch: true, depth: 1, onAuth: () => ({ username: this.options.username, password: this.options.token }) });
-      return await operation(new LocalRepository(directory), directory);
+      return await operation(this.localRepository(directory), directory);
     } catch (error) {
       if (error instanceof StudioError) throw error;
       throw new StudioError(502, 'Git 操作失败，请检查仓库连接、权限和分支；本次修改尚未确认发布');
@@ -89,6 +105,7 @@ export class GitRepository implements Repository {
   }
   async read(path: string): Promise<FileSnapshot | null> { validatePath(path); return this.readCheckout.use(value => value.repo.read(path)); }
   async list(): Promise<FileSnapshot[]> { return this.readCheckout.use(value => value.repo.list()); }
+  async listForSummary(): Promise<Pick<FileSnapshot, 'path' | 'text'>[]> { return this.readCheckout.use(value => value.repo.listForSummary()); }
   async write(path: string, text: string | null, expectedRevision: string | null, guard?: WriteGuard): Promise<SaveResult> {
     return this.writeBatch([{ path, text, expectedRevision }], guard);
   }
@@ -107,7 +124,8 @@ export class GitRepository implements Repository {
           force: false, onAuth: () => ({ username: this.options.username, password: this.options.token }) });
         if (!pushed.ok) throw new Error('push rejected');
       } catch { throw new StudioError(409, 'Git 推送未确认，可能有新提交或分支保护。请重新加载检查，勿重复覆盖'); }
-      return { ...saved, commit, message: '已提交到 Git；网站是否上线请以部署平台结果为准' };
+      const revision = entries[0].text === null ? '' : (await repo.read(entries[0].path))!.revision;
+      return { ...saved, revision, commit, message: '已提交到 Git；网站是否上线请以部署平台结果为准' };
     });
   }
 }

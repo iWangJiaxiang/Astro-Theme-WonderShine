@@ -4,6 +4,7 @@ import type { Repository } from '../shared/repository.js';
 import { formDocumentMetadata, splitDocument, getValue } from './content.js';
 import { threadLanguages } from './threads.js';
 import { StudioError } from './errors.js';
+import { listRepositoryText } from './repository-text.js';
 
 export function topicPath(path: string, languages: ContentLanguages) {
   const match = path.match(/^content\/topics\/([a-zA-Z0-9][a-zA-Z0-9_-]*)\/index(?:\.([A-Za-z0-9-]+))?\.md$/);
@@ -22,7 +23,7 @@ export async function topicChanges(repository: Repository, path: string, current
   const languages = threadLanguages(config ? parse(config.text) : {});
   const location = topicPath(path, languages);
   const existing = current ? topicMetadata(current) : undefined;
-  const siblings = current ? [] : (await repository.list()).filter(file => file.path !== path && file.path.startsWith(`content/topics/${location.id}/index`));
+  const siblings = current ? [] : (await listRepositoryText(repository)).filter(file => file.path !== path && file.path.startsWith(`content/topics/${location.id}/index`));
   const sibling = siblings[0] ? topicMetadata(siblings[0]) : undefined;
   return { 'extra.kind': 'topic', 'extra.id': location.id, layout: 'topic', ...changes,
     date: String(existing?.date ?? sibling?.date ?? now.toISOString()), updated: now.toISOString() };

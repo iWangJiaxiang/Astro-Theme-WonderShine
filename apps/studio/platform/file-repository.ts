@@ -6,15 +6,20 @@ import { StudioError } from '../core/errors';
 import { validateUpload, validateMediaPath } from '../core/media-validation';
 import { ensureDirectory, missingFile, parentPath, type WorkspaceFiles } from './filesystem';
 import { withWorkspaceLock } from './queue';
+import { contentRevisions, type RevisionRegistry } from '../core/revision';
 
-async function revision(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+const filesystemScopes = new WeakMap<WorkspaceFiles, string>();
+function filesystemScope(files: WorkspaceFiles): string {
+  if (files.revisionNamespace) return files.revisionNamespace;
+  let scope = filesystemScopes.get(files);
+  if (!scope) { scope = crypto.randomUUID(); filesystemScopes.set(files, scope); }
+  return scope;
 }
 interface JournalEntry { path: string; previous: string | null; next: string | null }
 export class FileRepository implements Repository {
   readonly mode: 'local' | 'git' = 'local';
-  constructor(readonly files: WorkspaceFiles, readonly root: string, private stateRoot: string, private assertWritable: () => Promise<void> = async () => {}) {}
+  constructor(readonly files: WorkspaceFiles, readonly root: string, private stateRoot: string, private assertWritable: () => Promise<void> = async () => {}, private revisions: RevisionRegistry = contentRevisions) {}
+  private get revisionScope() { return JSON.stringify(['native', filesystemScope(this.files), this.root.replace(/\\/g, '/').replace(/\/+$/, '')]); }
   private check(path: string): string {
     if (!isRepositoryPath(path)) throw new StudioError(400, '不允许访问此文件路径');
     return this.root + '/' + path;
@@ -46,12 +51,14 @@ export class FileRepository implements Repository {
       return bytes;
     } catch (error) { if (missingFile(error)) return null; throw error; }
   }
-  async read(path: string): Promise<FileSnapshot | null> {
+  private async readText(path: string): Promise<Pick<FileSnapshot, 'path' | 'text'> | null> {
     this.check(path);
     const bytes = await this.bytes(path, 1024 * 1024);
-    if (!bytes) return null;
-    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    return { path, text, revision: await revision(text) };
+    return bytes ? { path, text: new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes) } : null;
+  }
+  async read(path: string): Promise<FileSnapshot | null> {
+    const file = await this.readText(path);
+    return file ? { ...file, revision: this.revisions.revision(this.revisionScope, path, file.text) } : null;
   }
   private async walk(directory: string, accept: (path: string) => boolean, limit = 20000): Promise<{ paths: string[]; truncated: boolean }> {
     const paths: string[] = []; let visited = 0, truncated = false;
@@ -86,11 +93,7 @@ export class FileRepository implements Repository {
     return this.listFiles(path => this.read(path));
   }
   async listForSummary(): Promise<Pick<FileSnapshot, 'path' | 'text'>[]> {
-    return this.listFiles(async path => {
-      this.check(path);
-      const bytes = await this.bytes(path, 1024 * 1024);
-      return bytes ? { path, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) } : null;
-    });
+    return this.listFiles(path => this.readText(path));
   }
   private async listFiles<T>(read: (path: string) => Promise<T | null>): Promise<T[]> {
     const paths: string[] = [];
@@ -155,7 +158,7 @@ export class FileRepository implements Repository {
     } catch (error) { if (missingFile(error)) return; throw error; }
     // Preflight every file before rollback: external edits after a crash must survive.
     for (const entry of entries) {
-      const current = (await this.read(entry.path))?.text ?? null;
+      const current = (await this.readText(entry.path))?.text ?? null;
       if (current !== entry.previous && current !== entry.next) throw new StudioError(409, '恢复时发现新的本地修改，请先备份并检查工作区；现有文件未被覆盖');
     }
     for (const entry of entries) {
@@ -199,7 +202,7 @@ export class FileRepository implements Repository {
         // Keep immutable history outside the Git worktree; it is never published.
         await this.files.rename(journal, this.stateRoot + `/history-${crypto.randomUUID()}.json`);
       } catch (error) { await this.recoverUnlocked(); throw error; }
-      return { revision: entries[0].text === null ? '' : await revision(entries[0].text), message: '已保存到设备；提交并同步后更新 Git 仓库' };
+      return { revision: entries[0].text === null ? '' : this.revisions.revision(this.revisionScope, entries[0].path, entries[0].text), message: '已保存到设备；提交并同步后更新 Git 仓库' };
     });
   }
 }

@@ -18,7 +18,7 @@ const successfulFetch: typeof fetch = async (_url, init) => {
 };
 async function fixture(t: { after(fn: () => Promise<void>): void }, fetcher = successfulFetch) {
   const root = await mkdtemp(join(tmpdir(), 'studio-translation-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   await writeFile(join(root, 'config.toml'), 'default_language="zh-CN"\n[languages.en]\n');
   const repo = new LocalRepository(root), content = new ContentService(repo);
   const path = 'content/articles/story/index.md';

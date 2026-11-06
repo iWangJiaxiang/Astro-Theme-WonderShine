@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "studio-native-review",
+  "description": "Bundled main WebView only, desktop and mobile: process ownership for private review storage. No remote origins.",
+  "local": true,
+  "webviews": ["main"],
+  "permissions": ["allow-native-review-owner"]
+}

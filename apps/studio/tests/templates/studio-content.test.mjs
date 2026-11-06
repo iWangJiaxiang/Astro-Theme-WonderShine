@@ -13,7 +13,7 @@ import { routes } from '../../../../packages/theme/src/lib/routes.ts';
 
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'studio-astro-compatibility-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   await writeFile(path.join(root, 'config.toml'), `base_url="https://example.test"
 default_language="zh-CN"
 taxonomies=[{name="tags"},{name="categories"}]

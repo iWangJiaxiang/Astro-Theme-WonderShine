@@ -11,7 +11,7 @@ const settings = { baseUrl: 'http://127.0.0.1:12345/v1', model: 'fixture-text', 
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNwinr/HwAE+AKLJh4rzQAAAABJRU5ErkJggg==';
 async function fixture(t: { after(fn: () => Promise<void>): void }, fetcher: typeof fetch) {
   const root = await mkdtemp(join(tmpdir(), 'native-ai-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   const repository = new LocalRepository(root);
   await repository.write('config.toml', 'title="Native AI"\ndefault_language="zh-CN"\n[languages.en]\n', null);
   const saved = new Map<string, string>();

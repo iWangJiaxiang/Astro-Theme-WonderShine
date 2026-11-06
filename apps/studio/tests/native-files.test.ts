@@ -4,10 +4,11 @@ import * as fs from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { FileRepository } from '../platform/file-repository';
+import { RevisionRegistry } from '../core/revision';
 import type { WorkspaceFiles } from '../platform/filesystem';
 import { hostingProviders, validateBranch, validateProfile, validateRemote } from '../platform/hosting';
 import { createGitHttp } from '../platform/git-http';
-const nativeFiles = fs as unknown as WorkspaceFiles;
+const nativeFiles: WorkspaceFiles = { ...fs as unknown as WorkspaceFiles, revisionNamespace: 'node-test-filesystem' };
 const path = 'content/articles/hello/index.md';
 async function fixture(run: (repo: FileRepository, root: string, state: string) => Promise<void>) {
   const base = await fs.mkdtemp(join(tmpdir(), 'studio-native-files-'));
@@ -27,6 +28,51 @@ test('native files preserve offline saves, revisions and backups across reopen',
   assert.equal((await fs.readdir(state)).filter(name => name.startsWith('history-')).length, 2);
   assert.equal((await fs.readdir(root)).includes('.studio-history'), false);
 }));
+test('native revisions detect BOM-only edits and preserve BOM in history and rollback', async () => fixture(async (repo, root, state) => {
+  const first = await repo.write(path, 'same', null);
+  await fs.writeFile(root + '/' + path, '\ufeffsame');
+  await assert.rejects(repo.write(path, 'stale', first.revision), /文件已更新/);
+  const bom = (await repo.read(path))!;
+  assert.equal(bom.text, '\ufeffsame'); assert.notEqual(bom.revision, first.revision);
+  await fs.writeFile(root + '/' + path, 'same');
+  await assert.rejects(repo.write(path, 'stale', bom.revision), /文件已更新/);
+  await fs.writeFile(root + '/' + path, '\ufeffsame');
+  const current = (await repo.read(path))!;
+  await repo.write(path, 'saved', current.revision);
+  const histories = await Promise.all((await fs.readdir(state)).filter(name => name.startsWith('history-')).map(name => fs.readFile(state + '/' + name, 'utf8')));
+  assert.ok(histories.some(text => JSON.parse(text)[0].previous === '\ufeffsame'));
+  await fs.writeFile(state + '/transaction.json', JSON.stringify([{ path, previous: '\ufeffsame', next: 'saved' }]));
+  await repo.recover();
+  assert.equal(await fs.readFile(root + '/' + path, 'utf8'), '\ufeffsame');
+}));
+
+test('unrelated filesystem adapters cannot exchange tokens at identical paths', async () => fixture(async (_repo, root, state) => {
+  await fs.mkdir(root + '/content/articles/hello', { recursive: true });
+  await fs.writeFile(root + '/' + path, 'same');
+  const firstFiles = { ...nativeFiles, revisionNamespace: undefined }, secondFiles = { ...nativeFiles, revisionNamespace: undefined };
+  const first = new FileRepository(firstFiles, root, state), second = new FileRepository(secondFiles, root, state);
+  const snapshot = (await first.read(path))!;
+  assert.equal((await new FileRepository(firstFiles, root, state).read(path))!.revision, snapshot.revision);
+  assert.notEqual((await second.read(path))!.revision, snapshot.revision);
+  await assert.rejects(second.write(path, 'wrong filesystem token', snapshot.revision), /文件已更新/);
+}));
+
+test('native exact baselines reject same-mtime edits and unknown, evicted or restarted tokens', async () => fixture(async (_repo, root, state) => {
+  const registry = new RevisionRegistry({ maxEntries: 1 });
+  const repo = new FileRepository(nativeFiles, root, state, undefined, registry);
+  const first = await repo.write(path, 'aaaa', null);
+  const info = await fs.stat(root + '/' + path);
+  await fs.writeFile(root + '/' + path, 'bbbb'); await fs.utimes(root + '/' + path, info.atime, info.mtime);
+  await assert.rejects(repo.write(path, 'cccc', first.revision), /文件已更新/);
+  const current = (await repo.read(path))!;
+  const restarted = new FileRepository(nativeFiles, root, state, undefined, new RevisionRegistry());
+  await assert.rejects(restarted.write(path, 'restart', current.revision), /文件已更新/);
+  await fs.writeFile(root + '/config.toml', 'same'); await repo.read('config.toml');
+  await assert.rejects(repo.write(path, 'evicted', current.revision), /文件已更新/);
+  await assert.rejects(repo.write(path, 'unknown', 'unknown'), /文件已更新/);
+  assert.equal(await fs.readFile(root + '/' + path, 'utf8'), 'bbbb');
+}));
+
 test('native batch rolls back all writes after a disk failure and recovers interrupted writes on reopen', async () => fixture(async (repo, root, state) => {
   const first = await repo.write(path, 'original', null);
   let fail = true;
@@ -104,7 +150,9 @@ test('native listing drains failed batches and retains size, UTF-8 and symlink c
   }
 }));
 
-test('summary listing skips hashes but preserves fallback reads, order and full document revisions', async context => fixture(async (repo, root) => {
+test('summary and document reads are hash-free and summary reads do not allocate baselines', async context => fixture(async (_repo, root, state) => {
+  const registry = new RevisionRegistry();
+  const repo = new FileRepository(nativeFiles, root, state, undefined, registry);
   await fs.mkdir(root + '/content/articles', { recursive: true });
   await fs.writeFile(root + '/content/articles/z.md', 'last');
   await fs.writeFile(root + '/content/articles/a.md', 'first');
@@ -113,10 +161,11 @@ test('summary listing skips hashes but preserves fallback reads, order and full 
     { path: 'content/articles/a.md', text: 'first' }, { path: 'content/articles/z.md', text: 'last' },
   ]);
   assert.equal(digest.mock.callCount(), 0, 'summary-only reads do not hash file bodies');
+  assert.equal(registry.size, 0);
   const full = await repo.list();
-  assert.equal(digest.mock.callCount(), 2);
+  assert.equal(registry.size, 2);
   assert.equal(full[0].revision, (await repo.read(full[0].path))!.revision);
-  assert.equal(digest.mock.callCount(), 3);
+  assert.equal(digest.mock.callCount(), 0, 'full reads also avoid content hashes');
 }));
 
 test('summary listing drains bounded fallback reads and preserves size, UTF-8 and fresh symlink checks', async () => fixture(async (_repo, root, state) => {

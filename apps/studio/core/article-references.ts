@@ -4,6 +4,7 @@ import { translationLocation } from '../shared/translation.js';
 import { getValue, splitDocument } from './content.js';
 import { validatePath, type Repository } from '../shared/repository.js';
 import { StudioError } from './errors.js';
+import { listRepositoryText } from './repository-text.js';
 
 const isArticle = (path: string) => /^content\/(articles|collections)\//.test(path) && !path.startsWith('content/collections/album/') && !/\/_index(?:\.[A-Za-z0-9-]+)?\.md$/.test(path);
 function references(file: Pick<FileSnapshot, 'path' | 'text'>, languages: ContentLanguages): ArticleReference[] {
@@ -39,7 +40,7 @@ export async function validateArticleReferences(repository: Repository, path: st
   if (text !== null) {
     const links = references({ path, text }, languages).filter(ref => ref.kind === 'internal');
     if (!links.length) return;
-    const files = await repository.list();
+    const files = await listRepositoryText(repository);
     for (const ref of links) {
       const matches = files.filter(file => isArticle(file.path) && translationLocation(file.path, languages.defaultLanguage, languages).translationKey === `content/${ref.path}`);
       if (!matches.length) throw new StudioError(400, '引用的本站文章不存在：{path}', { path: ref.path });
@@ -48,7 +49,7 @@ export async function validateArticleReferences(repository: Repository, path: st
     return;
   }
   const identity = translationLocation(path, languages.defaultLanguage, languages).translationKey;
-  const remaining = (await repository.list()).filter(file => file.path !== path);
+  const remaining = (await listRepositoryText(repository)).filter(file => file.path !== path);
   if (remaining.some(file => isArticle(file.path) && translationLocation(file.path, languages.defaultLanguage, languages).translationKey === identity)) return;
   for (const file of remaining) {
     if (references(file, languages).some(ref => ref.kind === 'internal' && `content/${ref.path}` === identity)) throw new StudioError(409, '文章仍被 {path} 引用，请先移除引用再删除最后一个语言版本', { path: file.path });

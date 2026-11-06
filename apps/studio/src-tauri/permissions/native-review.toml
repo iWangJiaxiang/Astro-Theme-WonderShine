@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-native-review-owner"
+description = "Acquire process-lifetime ownership of fixed app-private review storage and claim once-per-workspace recovery. No caller-selected paths."
+commands.allow = ["native_review_owner"]

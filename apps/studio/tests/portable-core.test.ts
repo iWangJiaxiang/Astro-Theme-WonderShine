@@ -14,7 +14,7 @@ import type { Article, Settings } from '../shared/types.js';
 
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
   const root = await mkdtemp(join(tmpdir(), 'studio-core-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   const repository = new LocalRepository(root);
   await repository.write('config.toml', 'title="Portable studio"\nbase_url="https://example.com"\ndefault_language="zh-CN"\ntaxonomies=[{name="tags"},{name="categories"}]\n[languages.en]\ntaxonomies=[{name="tags"},{name="categories"}]\n', null);
   await repository.write('data.toml', '', null);
@@ -33,7 +33,7 @@ test('portable content core bundles for the browser without Node polyfills or ex
   assert.equal(Object.values(result.metafile.outputs).some(output => output.imports.some(item => item.external)), false);
 });
 
-test('portable revisions match server SHA-256 and TOML comparisons preserve meaningful values', async () => {
+test('stable identity hashes retain SHA-256 compatibility and TOML comparisons preserve meaningful values', async () => {
   for (const text of ['', '文章\n😀', 'a'.repeat(5000)]) assert.equal(await revisionOf(text), createHash('sha256').update(text).digest('hex'));
   assert.equal(isDeepStrictEqual({ a: 1, b: ['x'] }, { b: ['x'], a: 1 }), true);
   assert.equal(isDeepStrictEqual([1, 2], [2, 1]), false);

@@ -58,7 +58,7 @@ test('checked content reads need one fresh path traversal and one read, not repe
   await article(root);
   const snapshot = await repo.read(path);
   assert.equal(snapshot?.text, 'hello');
-  assert.equal(snapshot?.revision, '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824');
+  assert.ok(snapshot?.revision.startsWith('baseline:'));
   assert.deepEqual(calls.map(call => call.command), [...Array(5).fill('plugin:fs|lstat'), 'plugin:fs|read_file']);
   calls.length = 0;
   assert.equal((await files.stat(root + '/' + path)).size, 5);
@@ -68,6 +68,15 @@ test('checked content reads need one fresh path traversal and one read, not repe
   const fallback = new FileRepository({ ...files, readCheckedFile: undefined }, root, root + '/state');
   assert.deepEqual(await fallback.read(path), snapshot);
   assert.equal(calls.length, 15, 'fallback still performs repository checks; old native stat added a 16th call');
+}));
+
+test('checked reads compare exact text rather than trusting unchanged file size and mtime', async () => fixture(async ({ root, repo }) => {
+  await article(root);
+  const first = (await repo.read(path))!, info = await fs.stat(root + '/' + path);
+  assert.equal((await repo.read(path))!.revision, first.revision);
+  await fs.writeFile(root + '/' + path, 'world'); await fs.utimes(root + '/' + path, info.atime, info.mtime);
+  const changed = (await repo.read(path))!;
+  assert.equal(changed.text, 'world'); assert.notEqual(changed.revision, first.revision);
 }));
 
 test('native directory metadata avoids per-entry lstat, preserves ordering and excludes symlinks', async () => fixture(async ({ root, calls, repo }) => {

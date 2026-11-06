@@ -2,11 +2,19 @@ import { inspectTranslationSettings } from './translation-config.js';
 import { inspectImageSettings } from './ai-config.js';
 import type { ImageGenerationSettings } from '../shared/ai.js';
 import type { TranslationSettings } from '../shared/translation.js';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { DiskRevisionStore, assertRevisionDirectoryOutside } from './revision-store.js';
 import { LocalRepository, type Repository } from './repository.js';
 import { GitRepository } from './git-repository.js';
 import { GitWorkspaceRepository } from './git-workspace.js';
 import { FileState, BlobState, type StateStore } from './state.js';
+import { createFileSummaryStore } from './summary-store.js';
+import type { SummaryIndexStore } from '../core/summary-index.js';
+
+export interface SummaryPersistenceOptions {
+  /** Every actual HTTP/static serving root. Omission disables durable previews. */
+  servingRoots: readonly string[];
+}
 
 export interface OidcSettings { issuer: string; clientId: string; clientSecret?: string; subjects: string[]; label: string }
 export interface StudioConfig {
@@ -38,15 +46,37 @@ export function inspectConfig(env: NodeJS.ProcessEnv = process.env): { config: S
   const gitOptions = { url: env.STUDIO_GIT_URL || '', branch: env.STUDIO_GIT_BRANCH || 'master',
     username: env.STUDIO_GIT_USERNAME || 'x-access-token', token: env.STUDIO_GIT_TOKEN || '',
     name: env.STUDIO_GIT_AUTHOR || 'Creator Studio', email: env.STUDIO_GIT_EMAIL || 'studio@localhost' };
+  const stateDirectory = resolve(env.STUDIO_STATE_DIR || '.state');
+  const revisionDirectory = join(stateDirectory, 'content-revisions-v1');
+  const checkout = env.STUDIO_GIT_URL ? env.STUDIO_GIT_WORKSPACE : env.STUDIO_SITE_ROOT;
+  if (checkout) assertRevisionDirectoryOutside(checkout, revisionDirectory);
   const repository = env.STUDIO_GIT_URL
-    ? env.STUDIO_GIT_WORKSPACE ? new GitWorkspaceRepository({ ...gitOptions, directory: env.STUDIO_GIT_WORKSPACE }) : new GitRepository(gitOptions)
-    : new LocalRepository(resolve(env.STUDIO_SITE_ROOT!));
+    ? env.STUDIO_GIT_WORKSPACE ? new GitWorkspaceRepository({ ...gitOptions, directory: env.STUDIO_GIT_WORKSPACE, revisionDirectory }) : new GitRepository(gitOptions)
+    : new LocalRepository(resolve(env.STUDIO_SITE_ROOT!), new DiskRevisionStore(env.STUDIO_SITE_ROOT!, { directory: revisionDirectory }));
   if (env.STUDIO_STATE === 'blob' && repository.mode !== 'git') throw new Error('Makers 部署必须配置 Git 仓库，不能保存到临时文件系统');
   if (env.STUDIO_STATE && !['file', 'blob'].includes(env.STUDIO_STATE)) throw new Error('STUDIO_STATE 必须是 file 或 blob');
   return { config: { origin: origin.origin, secureCookies: origin.protocol === 'https:', sessionSecret: secret,
-    sessionSeconds: 8 * 3600, username, passwordHash, oidc, translation: inspectTranslationSettings(env), imageGeneration: inspectImageSettings(env) }, repository, stateMode: env.STUDIO_STATE === 'blob' ? 'blob' : 'file', stateDirectory: resolve(env.STUDIO_STATE_DIR || '.state') };
+    sessionSeconds: 8 * 3600, username, passwordHash, oidc, translation: inspectTranslationSettings(env), imageGeneration: inspectImageSettings(env) }, repository, stateMode: env.STUDIO_STATE === 'blob' ? 'blob' : 'file', stateDirectory };
 }
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): { config: StudioConfig; repository: Repository; state: StateStore } {
+export function loadConfig(env: NodeJS.ProcessEnv = process.env, persistence?: SummaryPersistenceOptions): {
+  config: StudioConfig; repository: Repository; state: StateStore; summaryStore?: SummaryIndexStore; summaryScope?: string;
+} {
   const { config, repository, stateMode, stateDirectory } = inspectConfig(env);
-  return { config, repository, state: stateMode === 'blob' ? new BlobState() : new FileState(stateDirectory) };
+  const checkout = env.STUDIO_GIT_URL ? env.STUDIO_GIT_WORKSPACE : env.STUDIO_SITE_ROOT;
+  let summaryStore: SummaryIndexStore | undefined;
+  let summaryScope: string | undefined;
+  // Cloud Blob and temporary online Git have no proven private local boundary.
+  // Custom servers must identify their serving roots before persistence is enabled.
+  if (stateMode === 'file' && checkout && persistence) {
+    const root = resolve(checkout);
+    try {
+      summaryStore = createFileSummaryStore(join(stateDirectory, 'summary-preview-v1'), [root, ...persistence.servingRoots.map(path => resolve(path))]);
+      summaryScope = JSON.stringify(['server-summary-v1', config.origin, repository.mode, root,
+        env.STUDIO_GIT_URL ?? '', env.STUDIO_GIT_URL ? env.STUDIO_GIT_BRANCH || 'master' : '']);
+    } catch {
+      // Optional derived state must never make startup fail. Async permission,
+      // missing-parent and alias checks remain lazy and fail closed in the index.
+    }
+  }
+  return { config, repository, state: stateMode === 'blob' ? new BlobState() : new FileState(stateDirectory), summaryStore, summaryScope };
 }

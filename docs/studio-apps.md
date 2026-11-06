@@ -35,11 +35,21 @@ Local transaction journals and history backups live outside the native Git check
 
 Downloaded repositories use the private App data directory; selected desktop repositories stay in their original location. The App does not yet provide a visual merge resolver, Git LFS, submodule management, background mobile synchronization or secure persistent token storage. Do not uninstall the App before syncing/backing up offline work. Native direct mode supports manual and AI translations, AI summaries and cover generation through client-configured OpenAI-compatible endpoints. Server mode continues to use the server operator’s AI configuration.
 
-## Native loading performance
+## Cross-platform content loading
 
 Native content reads combine fresh path/symlink checks with file metadata and bounded reads instead of repeating the same checks at both repository and filesystem layers. Directory enumeration reuses native entry types for discovery, but every subsequent read or recursive traversal rechecks its path. Checks are never cached across operations. Generic filesystem adapters retain the previous fallback checks. Checkout also reuses metadata already obtained during each `stat` operation, but still performs fresh per-component checks when writing.
 
-Content summaries read complete text without computing unused document revision hashes. Opening documents, saving and conflict detection continue to compute authoritative revisions from actual files. This is not a persistent content index or a shallow clone: initial listing still scans all content, and Git still downloads the selected branch's full history without recursively downloading submodules. Regression tests compare native call counts; device timing improvements must be measured separately.
+Studio no longer derives document revisions by hashing file contents. Local files use opaque versions backed by exact text baselines; saves still read the actual file inside the repository write lock. Online Git uses the existing committed blob identity, scoped to repository, branch and path, so reads and saves do not require the same server process. Git object integrity, authentication/PKCE and stable workspace/path identity hashes remain unchanged.
+
+Summary scans and relationship guards use fresh text-only reads without populating document baselines. The shared summary index retains compact facts, updates existing documents from actual successful repository writes, and reprojects configuration changes without rereading every Markdown file. New paths trigger a fresh scan to preserve repository enumeration order. Overlapping or uncertain writes and Git synchronization invalidate the index. Malformed article references are normalized to an empty summary reference list rather than retaining arbitrary metadata; this does not rewrite source documents.
+
+Persistent summary previews are private, bounded, display-only data. Even a clean preview is an **unverified previous result**, never a save revision or proof that external files are unchanged. Reopening and explicit refresh still reconcile actual files. There is no public static content cache or cloud Blob preview adapter. Initial verified listing still scans content; this is not a shallow clone, and Git still downloads the selected branch's full history without recursively downloading submodules.
+
+Old SHA-based drafts and expired/evicted baseline tokens are not silently upgraded to the latest revision. Keep the draft, reload the actual document and merge changes before saving. Draft form values alone cannot reconstruct the complete original document or inherited settings dependencies.
+
+Ordinary Git status queries do not capture file contents. Entering the confirmation step creates a private, temporary, exact-byte review using bounded chunks. Commit and sync validate that review under the workspace lock; expiry or changed files require a new review. After committing, synchronization requires a separate confirmation of the new state. External editors do not participate in Studio's lock, so this does not eliminate every filesystem race between validation and Git staging.
+
+These changes require remote regression verification and platform-specific measurements. Reduced parsing, hashing or duplicate requests alone is not evidence of lower device latency or memory usage.
 
 ## Native loading diagnostics
 

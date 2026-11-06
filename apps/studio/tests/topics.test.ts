@@ -8,7 +8,7 @@ import { LocalRepository } from '../server/repository.js';
 
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
   const root = await mkdtemp(join(tmpdir(), 'studio-topics-'));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   await writeFile(join(root, 'config.toml'), 'default_language="zh"\n[languages.en]\n');
   const repo = new LocalRepository(root);
   let now = new Date('2026-10-27T01:00:00Z');

@@ -1,9 +1,9 @@
-import { loadConfig } from './config.js';
+import { loadConfig, type SummaryPersistenceOptions } from './config.js';
 import { english } from '../shared/messages.js';
 import { resolveLocale, translate } from '../shared/i18n.js';
 
-export function loadStartupConfig(): ReturnType<typeof loadConfig> {
-  try { return loadConfig(); }
+export function loadStartupConfig(persistence?: SummaryPersistenceOptions): ReturnType<typeof loadConfig> {
+  try { return loadConfig(process.env, persistence); }
   catch (error) {
     const locale = resolveLocale([(process.env.LC_ALL || process.env.LC_MESSAGES || process.env.LANG || '').replaceAll('_', '-')]);
     const key = error instanceof Error ? error.message : '';

@@ -14,15 +14,26 @@ import { Authentication, type Session } from './auth.js';
 import { OidcAuthentication } from './oidc.js';
 import { verifyPassword } from './password.js';
 import { ContentService } from './content-service.js';
+import { createSummaryRuntime, requireSummaryRuntime, type SummaryRuntime } from '../core/summary-runtime.js';
+import type { SummaryIndexStore } from '../core/summary-index.js';
+import { GitRepository } from './git-repository.js';
 import { StudioError } from './errors.js';
 import { settingsSchemas } from '../shared/settings.js';
 import { MAX_UPLOAD_SIZE } from '../shared/media.js';
 import { readUploadBody } from './media-upload.js';
-export interface AppOptions { config: StudioConfig; repository: Repository; state: StateStore; mediaLimit?: number; translationFetch?: typeof fetch; aiFetch?: typeof fetch; oidcDiscover?: () => Promise<Configuration> }
+export interface AppOptions { config: StudioConfig; repository: Repository; state: StateStore; mediaLimit?: number; translationFetch?: typeof fetch; aiFetch?: typeof fetch; oidcDiscover?: () => Promise<Configuration>; summaryRuntime?: SummaryRuntime; summaryStore?: SummaryIndexStore; summaryScope?: string }
 export function createApp(options: AppOptions) {
   const app = new Hono<{ Variables: { session: Session } }>();
   const auth = new Authentication(options.config, options.state);
   const oidc = new OidcAuthentication(auth, options.oidcDiscover);
+  const runtime = options.summaryRuntime ? requireSummaryRuntime(options.repository, options.summaryRuntime) : createSummaryRuntime(options.repository, {
+    scope: options.summaryScope ?? options.repository.saveScope ?? options.config.origin,
+    store: options.summaryStore,
+    // Online Git already enforces a bounded checkout lifetime shared by bootstrap.
+    preserveReadCacheOnScan: options.repository instanceof GitRepository,
+  });
+  // All services and workspace sync share exactly one observed repository.
+  options = { ...options, repository: runtime.repository };
   const translation = new TranslationService(options.repository, options.config.translation, options.translationFetch);
   const content = new ContentService(options.repository);
   const mediaLimit = Math.min(options.mediaLimit ?? MAX_UPLOAD_SIZE, MAX_UPLOAD_SIZE);
@@ -89,7 +100,7 @@ export function createApp(options: AppOptions) {
   });
   app.post('/api/auth/logout', async c => { await auth.revoke(c); return c.json({ ok: true }); });
   app.get('/api/bootstrap', async c => {
-    if (c.req.query('refresh') === '1') options.repository.clearReadCache?.();
+    if (c.req.query('refresh') === '1') runtime.invalidate();
     const [site, appearance] = await Promise.all([content.settings('site'), content.settings('appearance')]);
     return c.json({ site: site.values, appearance: appearance.values, saveScope: await scopeHash(options.repository.saveScope ?? options.config.origin), saveCapabilities: saveCapabilities(options.repository), mode: options.repository.mode, workspace: !!options.repository.workspace,
       groups: settingsSchemas.map(({ id, title, description }) => ({ id, title, description })) });
@@ -99,6 +110,7 @@ export function createApp(options: AppOptions) {
     return options.repository.workspace;
   };
   app.get('/api/workspace', async c => c.json(await workspace().status()));
+  app.post('/api/workspace/review', async c => c.json(await workspace().createReview()));
   app.post('/api/workspace/commit', async c => {
     const input = await c.req.json<{ message: string; confirmation?: string }>();
     return c.json(await workspace().commit(input?.message, requireWorkspaceConfirmation(input?.confirmation)));
@@ -141,9 +153,11 @@ export function createApp(options: AppOptions) {
   app.post('/api/translation', async c => c.json(await translation.create(await c.req.json<TranslationRequest>()), 201));
   app.post('/api/translation/manual', async c => c.json(await translation.createManual(await c.req.json<TranslationRequest>()), 201));
   app.get('/api/content-languages', async c => c.json(await content.languages()));
+  app.get('/api/content-preview', async c => c.json(await runtime.preview()));
   app.get('/api/content', async c => {
-    if (c.req.query('refresh') === '1') options.repository.clearReadCache?.();
-    return c.json(await content.list());
+    // Local files and other server workers may change without an observed write.
+    // Only in-flight work is shared; no completed server summary lease is assumed.
+    return c.json(await (c.req.query('refresh') === '1' ? runtime.refresh() : runtime.list({ fresh: true })));
   });
   app.get('/api/document', async c => c.json(await content.document(c.req.query('path') || '')));
   app.put('/api/document', async c => {

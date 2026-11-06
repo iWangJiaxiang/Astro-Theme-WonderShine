@@ -4,7 +4,7 @@ import { createContentTransport } from '../core/transport.js';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtemp, rm, mkdir, writeFile, readFile, chmod } from 'node:fs/promises';
+import { mkdtemp, rm, mkdir, writeFile, readFile, chmod, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { GitWorkspaceRepository } from '../server/git-workspace.js';
@@ -82,12 +82,21 @@ test('persistent workspaces retain offline edits, recover on reopen and synchron
   assert.equal((await reopened.workspace.status()).changes, 1, 'history backups are not content changes');
   await assert.rejects(workspace.write(articlePath, 'stale', first.revision), /已更新/);
   await assert.rejects(workspace.workspace.sync(), /先提交/);
-  const preview = await reopened.workspace.status();
+  const ordinary = await reopened.workspace.status();
+  assert.equal(ordinary.confirmation, undefined);
+  assert.equal(ordinary.confirmationExpiresAt, undefined);
+  await assert.rejects(stat(directory + '.studio-reviews-v1'), { code: 'ENOENT' }, 'status must not create review storage');
+  const preview = await reopened.workspace.createReview();
+  const manifest = await readFile(join(directory + '.studio-reviews-v1', 'manifest.json'));
+  assert.deepEqual(await reopened.workspace.status(), ordinary);
+  assert.deepEqual(await readFile(join(directory + '.studio-reviews-v1', 'manifest.json')), manifest, 'polling must not replace or renew a review');
   assert.deepEqual(preview.managedChanges, [articlePath]);
   assert.ok(preview.confirmation);
   await assert.rejects(reopened.workspace.commit('stale confirmation', 'stale'), /重新确认/);
   assert.equal((await reopened.workspace.status()).head, preview.head);
-  const committed = await reopened.workspace.commit('docs(content): offline edit', preview.confirmation);
+  const committed = await new GitWorkspaceRepository(options).workspace.commit('docs(content): offline edit', preview.confirmation);
+  assert.equal(committed.confirmation, undefined);
+  assert.equal(committed.confirmationExpiresAt, undefined);
   await assert.rejects(reopened.workspace.sync(preview.confirmation), /重新确认/);
   assert.equal(committed.ahead, 1);
   assert.equal(committed.dirty, false);
@@ -95,7 +104,11 @@ test('persistent workspaces retain offline edits, recover on reopen and synchron
   assert.equal((await reopened.workspace.status()).head, committed.head);
   assert.equal(run(['--git-dir=repo.git', 'rev-parse', 'main']), originalRemote);
   offline = false;
-  const synced = await reopened.workspace.sync();
+  const syncReview = await reopened.workspace.createReview();
+  assert.ok(syncReview.confirmation);
+  assert.notEqual(syncReview.confirmation, preview.confirmation);
+  const synced = await reopened.workspace.sync(syncReview.confirmation);
+  assert.equal(synced.confirmation, undefined);
   assert.equal(synced.ahead, 0);
   assert.equal(run(['--git-dir=repo.git', 'ls-tree', 'main', 'themes/wondershine']), `160000 commit ${themeCommit}\tthemes/wondershine`, 'content commits must preserve the pinned theme gitlink');
   assert.ok(synced.lastSync);
@@ -212,6 +225,7 @@ test('workspace status requires authentication and commits/sync require CSRF', a
   const status = { branch: 'main', dirty: false, changes: 0, ahead: 0, behind: 0, diverged: false, head: null, remoteHead: null, lastSync: null };
   const repository = Object.assign(new LocalRepository(root), { workspace: {
     status: async () => status,
+    createReview: async () => ({ ...status, confirmation: 'preview', confirmationExpiresAt: Date.now() + 60_000 }),
     commit: async (message: string, confirmation?: string) => { assert.equal(message, 'save content'); if (confirmation !== 'preview') throw new StudioError(409, '工作区已变化，请刷新并重新确认提交范围'); commits++; return status; },
     sync: async (confirmation?: string) => { if (confirmation !== 'committed') throw new StudioError(409, '工作区已变化，请刷新并重新确认提交范围'); syncs++; return status; },
   } });

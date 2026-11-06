@@ -5,6 +5,7 @@ import { getValue, splitDocument } from './content.js';
 import { threadLanguages } from './threads.js';
 import { topicPath, validateTopic } from './topics.js';
 import { StudioError } from './errors.js';
+import { listRepositoryText } from './repository-text.js';
 import { validateArticleReferences } from './article-references.js';
 
 const isTopic = (path: string) => /^content\/topics\/[^/]+\/index(?:\.[A-Za-z0-9-]+)?\.md$/.test(path);
@@ -27,7 +28,7 @@ export async function validateContentRelations(repository: Repository, path: str
   if (text === null && !isTopic(path)) return;
   if (text === null) {
     const removed = topicPath(path, languages);
-    const remaining = (await repository.list()).filter(file => file.path !== path);
+    const remaining = (await listRepositoryText(repository)).filter(file => file.path !== path);
     const sibling = remaining.find(file => isTopic(file.path) && file.path.startsWith(`content/topics/${removed.id}/`));
     if (sibling) { validateTopic(sibling, languages); return; }
     for (const file of remaining) {
@@ -39,12 +40,12 @@ export async function validateContentRelations(repository: Repository, path: str
   const ids = topicIds(candidate);
   if (isTopic(path)) {
     const identity = validateTopic(candidate, languages);
-    const siblings = (await repository.list()).filter(file => file.path !== path && isTopic(file.path) && file.path.startsWith(`content/topics/${identity.id}/`));
+    const siblings = (await listRepositoryText(repository)).filter(file => file.path !== path && isTopic(file.path) && file.path.startsWith(`content/topics/${identity.id}/`));
     for (const sibling of siblings) if (validateTopic(sibling, languages).date !== identity.date) throw new StudioError(409, '话题译文必须保留原话题的创建时间，请重新加载后保存');
   }
   if (!ids.length) return;
-  const topics = (await repository.list()).filter(file => file.path !== path && isTopic(file.path));
-  if (isTopic(path)) topics.push({ ...candidate, revision: '' });
+  const topics = (await listRepositoryText(repository)).filter(file => file.path !== path && isTopic(file.path));
+  if (isTopic(path)) topics.push(candidate);
   for (const id of ids) {
     const matches = topics.filter(file => file.path.startsWith(`content/topics/${id}/`));
     if (!matches.length) throw new StudioError(400, '内容 {path} 的关联话题 {id} 不存在', { path, id });
