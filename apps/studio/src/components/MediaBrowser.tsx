@@ -21,12 +21,13 @@ import {
   classes,
   component,
   domEvent,
+  domRef,
   element,
   renderList,
   type EventHandler,
   type StudioComponent,
 } from "../react-component";
-import { computed, onMounted, ref, watch } from "../reactivity";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "../reactivity";
 import Icon from "./Icon";
 import LoadingState from "./LoadingState";
 import MediaDirectoryNode from "./MediaDirectoryNode";
@@ -59,6 +60,29 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
     );
     const tree = computed(() => mediaDirectoryTree(eligible.value));
     const uploadExpanded = ref(false);
+    // This browser is client-only. Reset the default only when crossing the
+    // layout breakpoint, so manual disclosure choices survive ordinary renders.
+    const narrowLayout = window.matchMedia("(max-width: 760px)");
+    const browseExpanded = ref(!narrowLayout.matches);
+    const browseDisclosure = ref<HTMLDetailsElement>();
+    function layoutChanged(event: MediaQueryListEvent) {
+      const disclosure = browseDisclosure.value;
+      if (event.matches && disclosure?.contains(document.activeElement))
+        disclosure.querySelector("summary")?.focus({ preventScroll: true });
+      browseExpanded.value = !event.matches;
+    }
+    narrowLayout.addEventListener("change", layoutChanged);
+    onBeforeUnmount(() => {
+      narrowLayout.removeEventListener("change", layoutChanged);
+    });
+    const browseDisclosureProps = () => ({
+      ref: domRef(browseDisclosure),
+      open: browseExpanded.value,
+      onToggle: domEvent(($event: Event) => {
+        if ($event.target !== $event.currentTarget) return;
+        browseExpanded.value = ($event.currentTarget as HTMLDetailsElement).open;
+      }),
+    });
     const folders = computed(() => [
       { value: "", label: t("全部文件夹") },
       ...[...new Set(eligible.value.map((item) => item.directory))]
@@ -128,54 +152,62 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
           },
           props.mode === "library"
             ? element(
-                "nav",
+                "details",
                 {
-                  "aria-label": t("图片目录"),
-                  className: classes("media-directory-tree"),
+                  ...browseDisclosureProps(),
+                  className: classes("media-directory-disclosure"),
                 },
                 element(
-                  "div",
-                  { className: classes("media-tree-heading") },
-                  element("strong", null, t("图片目录")),
-                ),
-                element(
-                  "button",
-                  {
-                    className: classes("directory-all", {
-                      active: !folder.value,
-                    }),
-                    onClick: domEvent(($event: Event) => {
-                      folder.value = "";
-                    }),
-                  },
-                  t("全部图片"),
-                  element("small", null, eligible.value.length),
-                ),
-                element(
-                  "ul",
+                  "summary",
                   null,
-                  renderList(tree.value).map((node) =>
-                    element(MediaDirectoryNode, {
-                      key: node.path,
-                      node: node,
-                      selected: folder.value,
-                      depth: 0,
-                      onSelect: (($event) => {
-                        folder.value = $event;
-                      }) satisfies EventHandler<
-                        typeof MediaDirectoryNode,
-                        "onSelect"
-                      >,
-                    }),
-                  ),
+                  element("strong", null, t("图片目录")),
+                  element("span", null, folder.value || t("全部图片")),
                 ),
-                !tree.value.length
-                  ? element(
-                      "p",
-                      { className: classes("muted small") },
-                      t("上传后显示图片目录"),
-                    )
-                  : null,
+                element(
+                  "nav",
+                  {
+                    "aria-label": t("图片目录"),
+                    className: classes("media-directory-tree"),
+                  },
+                  element(
+                    "button",
+                    {
+                      className: classes("directory-all", {
+                        active: !folder.value,
+                      }),
+                      onClick: domEvent(($event: Event) => {
+                        folder.value = "";
+                      }),
+                    },
+                    t("全部图片"),
+                    element("small", null, eligible.value.length),
+                  ),
+                  element(
+                    "ul",
+                    null,
+                    renderList(tree.value).map((node) =>
+                      element(MediaDirectoryNode, {
+                        key: node.path,
+                        node: node,
+                        selected: folder.value,
+                        depth: 0,
+                        onSelect: (($event) => {
+                          folder.value = $event;
+                        }) satisfies EventHandler<
+                          typeof MediaDirectoryNode,
+                          "onSelect"
+                        >,
+                      }),
+                    ),
+                  ),
+                  !tree.value.length
+                    ? element(
+                        "p",
+                        { className: classes("muted small") },
+                        t("上传后显示图片目录"),
+                      )
+                    : null,
+                ),
               )
             : null,
           element(
@@ -244,49 +276,79 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
             ),
             props.mode !== "library"
               ? element(
-                  "div",
-                  { className: classes("media-filters") },
-                  props.mode === "document"
-                    ? element(
-                        "div",
-                        { className: classes("media-filter-control") },
-                        element("span", { "aria-hidden": "true" }, t("图片来源")),
-                        element(SelectionField, {
-                          modelValue: source.value,
-                          name: "media-source",
-                          label: t("图片来源"),
-                          compact: true,
-                          options: [
-                            { value: "all", label: t("全部") },
-                            { value: "public", label: t("公共图片") },
-                            { value: "content", label: t("内容配图") },
-                          ],
-                          onUpdateModelValue: (($event) => {
-                            source.value = String($event);
-                          }) satisfies EventHandler<
-                            typeof SelectionField,
-                            "onUpdateModelValue"
-                          >,
-                        }),
-                      )
-                    : null,
+                  "details",
+                  {
+                    ...browseDisclosureProps(),
+                    className: classes("media-filter-disclosure"),
+                  },
+                  element(
+                    "summary",
+                    null,
+                    props.mode === "document"
+                      ? element(
+                          "span",
+                          null,
+                          element("strong", null, t("图片来源"), "："),
+                          source.value === "public"
+                            ? t("公共图片")
+                            : source.value === "content"
+                              ? t("内容配图")
+                              : t("全部"),
+                          " · ",
+                        )
+                      : null,
+                    element(
+                      "span",
+                      null,
+                      element("strong", null, t("文件夹"), "："),
+                      folder.value || t("全部文件夹"),
+                    ),
+                  ),
                   element(
                     "div",
-                    { className: classes("media-filter-control") },
-                    element("span", { "aria-hidden": "true" }, t("文件夹")),
-                    element(SelectionField, {
-                      modelValue: folder.value,
-                      name: "media-folder",
-                      label: t("文件夹"),
-                      compact: true,
-                      options: folders.value,
-                      onUpdateModelValue: (($event) => {
-                        folder.value = String($event);
-                      }) satisfies EventHandler<
-                        typeof SelectionField,
-                        "onUpdateModelValue"
-                      >,
-                    }),
+                    { className: classes("media-filters") },
+                    props.mode === "document"
+                      ? element(
+                          "div",
+                          { className: classes("media-filter-control") },
+                          element("span", { "aria-hidden": "true" }, t("图片来源")),
+                          element(SelectionField, {
+                            modelValue: source.value,
+                            name: "media-source",
+                            label: t("图片来源"),
+                            compact: true,
+                            options: [
+                              { value: "all", label: t("全部") },
+                              { value: "public", label: t("公共图片") },
+                              { value: "content", label: t("内容配图") },
+                            ],
+                            onUpdateModelValue: (($event) => {
+                              source.value = String($event);
+                            }) satisfies EventHandler<
+                              typeof SelectionField,
+                              "onUpdateModelValue"
+                            >,
+                          }),
+                        )
+                      : null,
+                    element(
+                      "div",
+                      { className: classes("media-filter-control") },
+                      element("span", { "aria-hidden": "true" }, t("文件夹")),
+                      element(SelectionField, {
+                        modelValue: folder.value,
+                        name: "media-folder",
+                        label: t("文件夹"),
+                        compact: true,
+                        options: folders.value,
+                        onUpdateModelValue: (($event) => {
+                          folder.value = String($event);
+                        }) satisfies EventHandler<
+                          typeof SelectionField,
+                          "onUpdateModelValue"
+                        >,
+                      }),
+                    ),
                   ),
                 )
               : null,

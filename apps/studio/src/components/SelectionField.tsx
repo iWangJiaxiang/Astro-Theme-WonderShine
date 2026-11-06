@@ -145,7 +145,20 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       if (creating.value) return;
       modal.close();
       opened.value = false;
-      trigger.value?.focus();
+      let target: HTMLElement | null | undefined = trigger.value;
+      // A portaled chooser can outlive a responsive disclosure's open state.
+      // Use the outermost folded ancestor's summary, never reopen its contents.
+      for (let parent = target?.parentElement; parent; parent = parent.parentElement) {
+        if (!parent.matches("details:not([open])")) continue;
+        const summary = parent.querySelector<HTMLElement>(":scope > summary");
+        if (!summary?.contains(target ?? null)) target = summary;
+      }
+      if (!target?.isConnected || target.closest("[hidden], [inert]") || target.matches(":disabled") || !target.getClientRects().length) return;
+      const style = getComputedStyle(target);
+      if (style.visibility === "hidden" || style.visibility === "collapse") return;
+      const activeModal = document.activeElement?.closest("dialog:modal");
+      if (activeModal && !activeModal.contains(target)) return;
+      target.focus({ preventScroll: true });
     }
     function confirm() {
       if (creating.value) return;
