@@ -69,6 +69,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
       const disclosure = browseDisclosure.value;
       if (event.matches && disclosure?.contains(document.activeElement))
         disclosure.querySelector("summary")?.focus({ preventScroll: true });
+      if (disclosure) disclosure.open = !event.matches;
       browseExpanded.value = !event.matches;
     }
     narrowLayout.addEventListener("change", layoutChanged);

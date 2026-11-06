@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { checkWorkspaceNotice } from './workspace-notice.mjs';
 import { checkDashboardPreview } from './dashboard-preview.mjs';
 import { checkLegacyRecovery } from './legacy-recovery.mjs';
+import { checkMediaDisclosureRace } from './media-disclosure-race.mjs';
 import { existsSync } from 'node:fs';
 import { build } from 'esbuild';
 import puppeteer from 'puppeteer-core';
@@ -56,6 +57,7 @@ try {
   await checkWorkspaceNotice(browser);
   await checkDashboardPreview(browser);
   await checkLegacyRecovery(browser);
+  await checkMediaDisclosureRace(browser);
   const page = await browser.newPage(), errors = [], warnings = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') warnings.push(message.text()); });

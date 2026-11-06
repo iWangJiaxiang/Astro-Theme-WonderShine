@@ -14,6 +14,7 @@ const layout = `    function layoutChanged(event: MediaQueryListEvent) {
       const disclosure = browseDisclosure.value;
       if (event.matches && disclosure?.contains(document.activeElement))
         disclosure.querySelector("summary")?.focus({ preventScroll: true });
+      if (disclosure) disclosure.open = !event.matches;
       browseExpanded.value = !event.matches;
     }`;
 const toggle = `      onToggle: domEvent(($event: Event) => {
