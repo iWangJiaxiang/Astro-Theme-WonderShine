@@ -475,12 +475,26 @@ try {
   await page.waitForSelector('.native-ai-settings form');
   const fillSetting = async (label, value) => {
     const input = await page.evaluateHandle(label => [...document.querySelectorAll('.native-ai-settings label')].find(node => node.querySelector('span')?.textContent === label)?.querySelector('input'), label);
-    await input.type(value); await input.dispose();
+    try {
+      await input.type(value);
+      assert.equal(await input.evaluate((node, expected) => node.value === expected, value), true, `After input: ${label} input retained expected value`);
+    } finally {
+      await input.dispose();
+    }
   };
-  await fillSetting('API 地址', 'http://127.0.0.1:18361/v1');
-  await fillSetting('文本模型', 'fixture-text');
-  await fillSetting('图片模型（可选）', 'fixture-image');
-  await fillSetting('API Key', 'browser-fixture-secret');
+  const apiSettings = [
+    ['API 地址', 'http://127.0.0.1:18361/v1'],
+    ['文本模型', 'fixture-text'],
+    ['图片模型（可选）', 'fixture-image'],
+    ['API Key', 'browser-fixture-secret'],
+  ];
+  for (const [label, value] of apiSettings) await fillSetting(label, value);
+  const beforeApiSubmit = await page.evaluate(settings => ({
+    retained: settings.map(([label, expected]) => [...document.querySelectorAll('.native-ai-settings label')].find(node => node.querySelector('span')?.textContent === label)?.querySelector('input')?.value === expected),
+    valid: document.querySelector('.native-ai-settings form')?.checkValidity() === true,
+  }), apiSettings);
+  for (const [index, [label]] of apiSettings.entries()) assert.equal(beforeApiSubmit.retained[index], true, `Before submit: ${label} input retained expected value`);
+  assert.equal(beforeApiSubmit.valid, true, 'Before submit: API settings form passed validity checks');
   await click('保存 API 配置'); await page.waitForSelector('.native-ai-settings .notice.success');
   assert.equal(await page.$eval('.native-ai-settings input[type="password"]', input => input.value), '');
   assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('browser-fixture-secret')), false);
