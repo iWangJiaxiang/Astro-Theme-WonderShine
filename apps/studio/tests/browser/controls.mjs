@@ -44,7 +44,7 @@ export function chooser(page) {
   };
 }
 
-export async function checkControls({ page, click, heading, fill, base, screenshots, choose }) {
+export async function checkControls({ page, click, heading, fill, base, screenshots, choose, chooserDiagnostics }) {
   const { readFile, writeFile, mkdir } = await import('node:fs/promises');
   const { patchToml, splitDocument } = await import('../../server/content.ts');
   const { parse } = await import('smol-toml');
@@ -110,21 +110,52 @@ export async function checkControls({ page, click, heading, fill, base, screensh
     const bottom = (view?.offsetTop ?? 0) + (view?.height ?? innerHeight);
     return results.clientHeight > 0 && results.scrollHeight > results.clientHeight && footer.getBoundingClientRect().bottom <= bottom;
   }), 'long option lists scroll within the visible viewport and keep confirmation reachable');
+  await chooserDiagnostics?.install();
+  const diagnosticHook = chooserDiagnostics?.hook, diagnosticOwner = chooserDiagnostics?.owner;
   for (const width of [1440, 390]) {
     await page.setViewport({ width, height: width === 390 ? 844 : 1000 });
     const selector = '.selection-dialog[open] .selection-results';
-    const target = await page.$eval(selector, node => {
+    // Reuse the original target evaluation: no extra pre-input evaluate round trip.
+    const target = await page.$eval(selector, (node, hook, owner) => {
       const rect = node.getBoundingClientRect();
-      return { x:rect.left + rect.width / 2, y:rect.top + rect.height / 2, top:node.scrollTop };
-    });
+      const target = { x:rect.left + rect.width / 2, y:rect.top + rect.height / 2, top:node.scrollTop };
+      target.diagnostic = hook && window[hook]?.owner === owner ? window[hook].target(node, target.x, target.y) : null;
+      return target;
+    }, diagnosticHook, diagnosticOwner);
+    chooserDiagnostics?.rememberTarget(target.diagnostic);
     await page.mouse.move(target.x, target.y);
+    const downWait = chooserDiagnostics?.nextWait(width, 'down', target.top);
     await page.mouse.wheel({ deltaY:160 });
-    await page.waitForFunction(({selector,top}) => document.querySelector(selector).scrollTop > top + 1, {}, {selector,top:target.top});
+    let downOutcome = 'failed';
+    try {
+      await page.waitForFunction(({selector,top,hook,owner,waitId}) => {
+        // Preserve the original query/null-throw and predicate before sampling.
+        const node = document.querySelector(selector), matched = node.scrollTop > top + 1;
+        if (hook && window[hook]?.owner === owner) window[hook].sampleWait(waitId, node, matched);
+        return matched;
+      }, {}, {selector,top:target.top,hook:diagnosticHook,owner:diagnosticOwner,waitId:downWait});
+      downOutcome = 'passed';
+    } finally {
+      await chooserDiagnostics?.endWait(downWait, downOutcome);
+    }
     const down = await page.$eval(selector, node => node.scrollTop);
+    const upWait = chooserDiagnostics?.nextWait(width, 'up', down);
     await page.mouse.wheel({ deltaY:-160 });
-    await page.waitForFunction(({selector,top}) => document.querySelector(selector).scrollTop < top - 1, {}, {selector,top:down});
+    let upOutcome = 'failed';
+    try {
+      await page.waitForFunction(({selector,top,hook,owner,waitId}) => {
+        const node = document.querySelector(selector), matched = node.scrollTop < top - 1;
+        if (hook && window[hook]?.owner === owner) window[hook].sampleWait(waitId, node, matched);
+        return matched;
+      }, {}, {selector,top:down,hook:diagnosticHook,owner:diagnosticOwner,waitId:upWait});
+      upOutcome = 'passed';
+    } finally {
+      await chooserDiagnostics?.endWait(upWait, upOutcome);
+    }
     await page.screenshot({ path: screenshots + `/form-icon-scroll-${width}.png` });
   }
+  // Failed loops stay active until smoke's original failure screenshot is attempted.
+  await chooserDiagnostics?.stop('passed');
   await page.setViewport({ width:1440, height:1000 });
   await fill('.selection-dialog[open] input[type=search]', 'github');
   await page.click('.selection-dialog[open] input[value="icon-github"]');

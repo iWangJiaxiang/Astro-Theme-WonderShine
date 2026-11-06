@@ -8,6 +8,7 @@ import { checkOnboarding } from './onboarding.mjs';
 import { checkMedia } from './media.mjs';
 import { checkUploads } from './uploads.mjs';
 import { createMediaDisclosureDiagnostics } from './media-disclosure-diagnostics.mjs';
+import { createChooserScrollDiagnostics } from './chooser-scroll-diagnostics.mjs';
 import { chooser, checkControls } from './controls.mjs';
 import { checkPageManagement } from './pages.mjs';
 import assert from 'node:assert/strict';
@@ -38,7 +39,7 @@ const server = spawn(process.execPath, process.env.STUDIO_TEST_DEV ? ['--import'
   STUDIO_ADMIN_USER: 'owner', STUDIO_ADMIN_PASSWORD_HASH: await hashPassword('studio-browser-test-2026'), STUDIO_SESSION_SECRET: randomBytes(32).toString('hex') }, stdio: ['ignore', 'pipe', 'pipe'] });
 let logs = ''; server.stderr.on('data', data => { logs += data; });
 const executablePath = process.env.STUDIO_TEST_BROWSER || ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
-let browser, emulationOwner, smokeFailure, mediaDiagnostics;
+let browser, emulationOwner, smokeFailure, mediaDiagnostics, chooserDiagnostics;
 const emulationOwnerReport = { schemaVersion:1, created:false, scope:'smoke-page',
   disposalMode:'browser-close', result:'not-created', serverCleanupGuaranteed:false };
 const recordFailure = error => {
@@ -208,7 +209,10 @@ try {
   await click('进入编辑器'); await heading('Browser page'); await fill('.markdown-source', '# Browser page');
   await page.$eval('.metadata-card input[type=checkbox]', el => el.click()); await click('本地保存'); await page.waitForSelector('.notice.success');
   await checkPageManagement({ page, base, screenshots, click, heading, fill, delayNextDocumentSave });
-  await checkControls({ page, click, heading, fill, base, screenshots, choose });
+  chooserDiagnostics = createChooserScrollDiagnostics({ page, reportPath: `${screenshots}/chooser-scroll-diagnostics.json`, withTimeout });
+  await checkControls({ page, click, heading, fill, base, screenshots, choose, chooserDiagnostics });
+  const chooserDiagnosticErrors = chooserDiagnostics.takeErrors();
+  if (chooserDiagnosticErrors.length) throw new AggregateError(chooserDiagnosticErrors, 'Chooser scroll diagnostics failed');
   await checkMedia({ page, base, theme, screenshots, click, heading, fill });
   mediaDiagnostics = createMediaDisclosureDiagnostics({ page, reportPath: `${screenshots}/media-disclosure-diagnostics.json`, withTimeout });
   await mediaDiagnostics.install();
@@ -281,7 +285,8 @@ try {
   console.log('PASS: configuration recovery after full reload; screenshots in studio/test-results.');
 } catch (error) {
   recordFailure(error);
-  // The active uploads collector brackets the existing screenshot, not a retry.
+  // Active collectors bracket the existing screenshot, not a retry.
+  await chooserDiagnostics?.snapshot('failure-before-screenshot');
   await mediaDiagnostics?.snapshot('failure-before-screenshot');
   let failurePage;
   try {
@@ -295,6 +300,7 @@ try {
     recordFailure(diagnosticError);
   } finally {
     // Also attempted if screenshot/page lookup fails or its timeout expires.
+    await chooserDiagnostics?.snapshot('failure-after-screenshot');
     await mediaDiagnostics?.snapshot('failure-after-screenshot');
   }
   try {
@@ -304,11 +310,15 @@ try {
   } catch (diagnosticError) {
     recordFailure(diagnosticError);
   } finally {
+    await chooserDiagnostics?.stop('failed');
+    for (const diagnosticError of chooserDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
     await mediaDiagnostics?.stop('failed');
     for (const diagnosticError of mediaDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
   }
 } finally {
   // Also covers partial installation; report serialization needs no live page.
+  await chooserDiagnostics?.stop('interrupted');
+  for (const diagnosticError of chooserDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
   await mediaDiagnostics?.stop('interrupted');
   for (const diagnosticError of mediaDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
   let browserProcess;
@@ -392,6 +402,11 @@ try {
       try { await withTimeout(() => rm(base, { recursive: true, force: true }), 'Fixture removal'); }
       catch (error) { recordFailure(error); }
     }
+  }
+  try {
+    if (chooserDiagnostics) await withTimeout(() => chooserDiagnostics.writeReport(), 'Chooser scroll report write');
+  } catch (error) {
+    recordFailure(error);
   }
   try {
     if (mediaDiagnostics) await withTimeout(() => mediaDiagnostics.writeReport(), 'Media disclosure report write');
