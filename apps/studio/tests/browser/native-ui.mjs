@@ -19,7 +19,12 @@ const profile = { id: 'f6347560-bbe9-4c35-9d89-b0429108882b', label: '本地写�
 const root = join(appData, 'workspaces', profile.id, 'repo');
 const localRoot = join(base, 'selected local blog');
 let selectedFolder = null, folderGranted = false;
-let browser, server;
+let browser, server, page;
+const errors = [], cspErrors = [], failedResources = [], ipcFailures = [];
+const commands = new Set();
+const reviewClaims = new Set();
+let reviewEpoch;
+const reviewRestart = '创作窗口已重新加载，请完全退出并重启应用后重新确认工作区';
 let allowOAuthHttp = false, oauthApproved = false, oauthFailureStage = null;
 let accountGate = Promise.resolve(), releaseAccount = () => {};
 let allowCloneHttp = false, failNextHttp = false, failNextBranchWrite = false;
@@ -73,7 +78,7 @@ try {
   const executablePath = process.env.STUDIO_TEST_BROWSER || ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge', '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
   if (!executablePath) throw new Error('Set STUDIO_TEST_BROWSER to an installed Chromium executable.');
   browser = await puppeteer.launch({ headless: true, executablePath });
-  const page = await browser.newPage(), errors = [], cspErrors = [], failedResources = [];
+  page = await browser.newPage();
   const loadedScripts = new Set();
   const runtimeChunks = (await fs.readdir(join(distribution, 'assets'))).filter(name => /^native-runtime-.*\.js$/.test(name));
   assert.ok(runtimeChunks.length > 0, 'Native runtime must be a separate on-demand chunk');
@@ -85,12 +90,27 @@ try {
   page.on('dialog', dialog => { if (dismissNextDialog) { dismissNextDialog = false; void dialog.dismiss(); } else void dialog.accept(); });
   await page.setRequestInterception(true);
   page.on('request', request => request.url().startsWith(origin + '/') || request.url().startsWith('data:') || request.url().startsWith('blob:') ? request.continue() : request.abort());
-  const commands = new Set();
   await page.exposeFunction('tauriInvoke', async (command, args, options) => {
     commands.add(command);
     try {
       let value;
-      if (command === 'plugin:dialog|open') { value = selectedFolder; folderGranted = !!value; }
+      if (command === 'native_review_owner') {
+        // Mirror the process-lifetime Rust IPC contract, not its OS lock implementation.
+        assert.deepEqual(Object.keys(args).sort(), ['claimRecovery', 'epoch', 'workspaceId']);
+        const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+        assert.match(args.workspaceId, uuid); assert.match(args.epoch, uuid);
+        assert.equal(typeof args.claimRecovery, 'boolean');
+        if (reviewEpoch !== undefined && reviewEpoch !== args.epoch) throw new Error(reviewRestart);
+        reviewEpoch ??= args.epoch;
+        if (args.claimRecovery) {
+          assert.ok(reviewClaims.size < 4096 || reviewClaims.has(args.workspaceId));
+          value = !reviewClaims.has(args.workspaceId);
+          reviewClaims.add(args.workspaceId);
+        } else {
+          assert.ok(reviewClaims.has(args.workspaceId), 'Review operations require a prior recovery claim');
+          value = false;
+        }
+      } else if (command === 'plugin:dialog|open') { value = selectedFolder; folderGranted = !!value; }
       else if (command === 'plugin:path|resolve_directory') value = appData;
       else if (command === 'plugin:fs|write_file') {
         const path = confined(decodeURIComponent(options.headers.path));
@@ -196,9 +216,15 @@ try {
         } else throw new Error('Unexpected HTTP operation: ' + operation);
       } else throw new Error('Unexpected native command, external HTTP is disabled: ' + command);
       return { value };
-    } catch (error) { return { error: error.message }; }
+    } catch (error) {
+      // Record command names only: arguments and assertion messages can contain credentials.
+      ipcFailures.push({ command, error: error.name, code: error.code ?? null });
+      if (ipcFailures.length > 100) ipcFailures.shift();
+      return { error: error.message };
+    }
   });
   await page.evaluateOnNewDocument(profile => {
+    if (location.href === 'about:blank') return;
     Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN'] });
     if (!localStorage.getItem('wondershine.native.workspaces.v1')) localStorage.setItem('wondershine.native.workspaces.v1', JSON.stringify([profile, { id: 'a6347560-bbe9-4c35-9d89-b0429108882b', source: 'service', label: 'Saved Studio', address: 'https://studio.example.test' }]));
     window.__TAURI_INTERNALS__ = {
@@ -219,7 +245,19 @@ try {
     await page.waitForFunction(text => [...document.querySelectorAll('button')].some(button => button.textContent.trim() === text && !button.disabled), {}, text);
     await page.evaluate(text => [...document.querySelectorAll('button')].find(button => button.textContent.trim() === text && !button.disabled).click(), text);
   };
-  const heading = text => page.waitForFunction(text => [...document.querySelectorAll('h1')].some(node => node.textContent.trim() === text), {}, text);
+  const heading = async text => {
+    const dashboard = ['今天，写点什么？', 'What will you write today?'].includes(text);
+    await page.waitForFunction((text, dashboard) => [...document.querySelectorAll('h1')].some(node => node.textContent.trim() === text)
+      || dashboard && document.querySelector('.native-connect [role="alert"]'), {}, text, dashboard);
+    if (dashboard) assert.equal(await page.$eval('body', node => node.querySelector('.native-connect [role="alert"]')?.textContent ?? null), null, 'Workspace connection failed before dashboard');
+  };
+  const restartNativeFixture = async () => {
+    // Destroy the old WebView before simulating process exit. Plain reload must
+    // retain the owner; only this explicit restart grants a fresh epoch/recovery.
+    await page.goto('about:blank');
+    reviewEpoch = undefined; reviewClaims.clear();
+    await page.goto(origin, { waitUntil: 'networkidle0' });
+  };
   const noOverflow = async label => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, label + ' must fit viewport');
   const screenshot = async name => {
     await page.evaluate(async () => { window.scrollTo(0, 0); await document.fonts.ready; for (const animation of document.getAnimations()) { if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) { try { animation.finish(); } catch {} } } await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
@@ -346,9 +384,14 @@ try {
   assert.equal(git(['rev-parse', 'HEAD']), originalHead);
   await click('站点信息'); await page.waitForSelector('.settings-grid');
   assert.equal(await page.$eval('.save-button-main', e => e.textContent), 'Git 分支保存', 'default persists across editors');
-  await page.reload({waitUntil:'networkidle0'}); await heading('连接创作工作区'); await click('打开工作区'); await heading('今天，写点什么？');
+  await page.reload({waitUntil:'networkidle0'}); await heading('连接创作工作区'); await click('打开工作区');
+  await page.waitForSelector('.native-connect [role="alert"]');
+  assert.equal(await page.$eval('.native-connect [role="alert"]', node => node.textContent), reviewRestart, 'WebView reload cannot replace the live process owner');
+  assert.equal(await page.$('.studio-shell'), null, 'Reloaded WebView cannot expose workspace operations');
+  await screenshot('connection-reload-requires-restart');
+  await restartNativeFixture(); await heading('连接创作工作区'); await click('打开工作区'); await heading('今天，写点什么？');
   await page.waitForSelector('.thread-composer .save-button-main');
-  assert.equal(await page.$eval('.thread-composer .save-button-main', e => e.textContent), '分支保存 · 可发布', 'default persists across app reload');
+  assert.equal(await page.$eval('.thread-composer .save-button-main', e => e.textContent), '分支保存 · 可发布', 'default persists across app restart');
   await page.evaluate(() => [...document.querySelectorAll('.content-row')].find(node => node.textContent.includes('离线文章示例')).click());
   await page.waitForSelector('.markdown-source');
   await click('可视化编辑'); await page.waitForSelector('.vditor-ir [contenteditable="true"]', { timeout: 20000 });
@@ -388,7 +431,7 @@ try {
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.select('.language-switcher select', 'zh-CN'); await heading('客户端 API 设置');
   await click('清除密钥'); await page.waitForFunction(() => document.querySelector('.native-ai-settings')?.textContent.includes('尚未配置密钥'));
-  await page.reload({ waitUntil: 'networkidle0' }); await heading('连接创作工作区');
+  await restartNativeFixture(); await heading('连接创作工作区');
   await click('打开工作区'); await heading('今天，写点什么？');
   await click('客户端 API 设置'); await page.waitForSelector('.native-ai-settings form');
   assert.equal(await page.$eval('.native-ai-settings input[type="url"]', input => input.value), 'http://127.0.0.1:18361/v1');
@@ -407,7 +450,7 @@ try {
   assert.equal(await page.$('.folder-picker'), null, 'Returning from remote service uses the mobile repository URL mode');
 
   await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1');
-  await page.reload({waitUntil:'networkidle0'}); await heading('连接创作工作区');
+  await restartNativeFixture(); await heading('连接创作工作区');
   assert.equal(await page.$eval('html', node => node.dataset.nativeMobile), 'true');
   assert.match(await page.$eval('meta[name=viewport]', node => node.content), /maximum-scale=1/);
   assert.equal(await page.evaluate(() => {const event = new Event('gesturestart', {cancelable:true}); document.dispatchEvent(event); return event.defaultPrevented;}), true);
@@ -529,7 +572,23 @@ try {
   console.log('Native UI passed: desktop/mobile connection modes, offline dashboard, source save, bundled Vditor, native asset preview, client API settings, secret redaction, configuration reopen, logout.');
   console.log('Screenshots: ' + screenshots);
 } catch (error) {
-  if (browser) { const pages = await browser.pages(); await pages.at(-1)?.screenshot({ path: join(screenshots, 'failure.png'), fullPage: true }); }
+  const diagnostics = { failure: String(error), commands: [...commands], ipcFailures, errors, cspErrors, failedResources };
+  if (page && !page.isClosed()) {
+    try {
+      diagnostics.ui = await page.evaluate(() => ({
+        headings: [...document.querySelectorAll('h1')].map(node => node.textContent),
+        alerts: [...document.querySelectorAll('[role="alert"]')].map(node => node.textContent),
+      }));
+    } catch (diagnosticError) { diagnostics.uiError = diagnosticError.message; }
+    try { await page.screenshot({ path: join(screenshots, 'failure.png'), fullPage: true }); }
+    catch (diagnosticError) { diagnostics.screenshotError = diagnosticError.message; }
+  }
+  try {
+    await fs.mkdir(screenshots, { recursive: true });
+    const report = JSON.stringify(diagnostics, null, 2).replace(/browser-fixture-secret|oauth-fixture-token|device-fixture|TEST-CODE/g, '[redacted]');
+    await fs.writeFile(join(screenshots, 'failure.json'), report + '\n');
+    console.error(report);
+  } catch (diagnosticError) { console.error('Could not write native UI failure diagnostics:', diagnosticError.message); }
   throw error;
 } finally {
   releaseDownload(); releaseCheckout(); releaseWrite(); releaseAccount();

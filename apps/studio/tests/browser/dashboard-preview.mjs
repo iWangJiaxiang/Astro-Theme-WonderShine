@@ -87,9 +87,11 @@ export { Child as LegacyRecovery, Child as NativeAiSettings, Child as WorkspaceP
     await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
     await page.setRequestInterception(true);
     page.on('request', request => request.isNavigationRequest()
-      ? request.respond({ status: 200, contentType: 'text/html', body: '<!doctype html><html lang="zh-CN"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div><p class="notice" data-fixture-caption>测试 fixture · 合成数据 · 子组件已隔离；非完整 App / native 验收。</p></body></html>' })
+      ? request.respond({ status: 200, contentType: 'text/html; charset=utf-8', body: '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div><p class="notice" data-fixture-caption>测试 fixture · 合成数据 · 子组件已隔离；非完整 App / native 验收。</p></body></html>' })
       : request.abort());
     await page.goto('https://dashboard.example');
+    assert.equal(await page.evaluate(() => document.characterSet), 'UTF-8');
+    assert.equal(await page.$eval('[data-fixture-caption]', node => node.textContent), '测试 fixture · 合成数据 · 子组件已隔离；非完整 App / native 验收。');
     await page.addStyleTag({ content: css });
     await page.addScriptTag({ content: fixture.outputFiles[0].text });
     const pending = path => page.waitForFunction(path => window.fixture.count(path) > 0, {}, path);
