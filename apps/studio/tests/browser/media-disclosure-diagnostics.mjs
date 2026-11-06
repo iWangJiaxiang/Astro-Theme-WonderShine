@@ -1,14 +1,16 @@
 import { writeFile } from 'node:fs/promises';
 
-// Test-only DOM evidence. Node IDs are not React refs; no component state is read.
+// DOM IDs and controller-trace IDs are independent namespaces, not interchangeable refs.
 const hook = '__mediaDisclosureDiagnostics';
+const controllerTraceExpected = process.env.STUDIO_TEST_MEDIA_TRACE_EXPECTED === '1';
 const caps = { events: 120, waits: 96, checkpoints: 16, failures: 24, animations: 4, mutationNodes: 8, previewSamples: 2, previewCandidates: 24, previewFaults: 8 };
 let nextOwner = 0;
 
 export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout }) {
   const owner = ++nextOwner;
   const report = {
-    schemaVersion: 2, scope: 'checkUploads', limitation: 'DOM identity only; not React refs or proof of a shared root cause; instrumentation may affect timing',
+    schemaVersion: 2, scope: 'checkUploads', limitation: 'DOM and optional test-build controller observations are not proof of a shared root cause; instrumentation may affect timing',
+    controllerTraceExpectation: controllerTraceExpected ? 'expected' : 'not-enabled',
     previewSemantics: {
       predicate: 'Original some order, geometry, hit tests and body-scroll short circuit; matched computed before additional DOM reads',
       measurements: 'Candidate/body/footer rectangles and hits reused from predicate; atSampling context and hit roles read afterward, not an atomic snapshot or causal evidence',
@@ -34,16 +36,27 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
     try { return await withTimeout(action, `Media disclosure diagnostic: ${stage}`); }
     catch (error) { failure(stage, error); }
   };
-  const retain = data => { if (data) report.browser = data; };
+  const retain = data => {
+    if (!data) return;
+    report.browser = data;
+    if (controllerTraceExpected) {
+      const trace = data.controllerTrace;
+      if (trace?.status !== 'available' || trace.version !== 1 || !Array.isArray(trace.records) || !Array.isArray(trace.faults) || trace.faults.length || trace.droppedFaults) {
+        failure('controller-trace-unavailable-or-partial', new Error('Media controller trace unavailable or partial'));
+      }
+    }
+  };
   return {
     async install() {
       active = true; report.active = true; report.installation = 'attempted';
-      const data = await attempt('install', () => page.evaluate(({ hook, caps, owner }) => {
+      const data = await attempt('install', () => page.evaluate(({ hook, caps, owner, controllerTraceExpected }) => {
         if (Object.hasOwn(window, hook)) throw new Error('Media diagnostic hook already exists');
         const ids = new WeakMap();
         let nextId = 0, enabled = true, observer;
         const listeners = [];
+        let controllerAPI = null, controllerStarted = false;
         const data = {
+          controllerTrace: { version: null, status: controllerTraceExpected ? 'unavailable' : 'not-enabled' },
           installed: false, identity: null, events: [], waits: [], checkpoints: [], failures: [],
           droppedEvents: 0, droppedWaits: 0, droppedCheckpoints: 0, droppedFailures: 0,
         };
@@ -56,6 +69,24 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
         const fault = stage => {
           if (data.failures.length < caps.failures) data.failures.push({ stage });
           else data.droppedFailures++;
+        };
+        const exportControllerTrace = () => {
+          if (!controllerTraceExpected) return;
+          try {
+            if (!controllerStarted || !controllerAPI) throw new Error('Controller trace not started');
+            const trace = controllerAPI.snapshot(owner);
+            if (trace?.version !== 1 || trace.owner !== owner || trace.active !== true ||
+                !['available', 'partial'].includes(trace.status) || !Array.isArray(trace.records) ||
+                !Array.isArray(trace.faults) || trace.records.length > 256 || trace.faults.length > 16) {
+              throw new Error('Controller trace snapshot invalid');
+            }
+            data.controllerTrace = trace;
+            if (trace.status !== 'available' || trace.faults.length || trace.droppedFaults) fault('controller-trace-partial');
+          } catch {
+            // Never label stale evidence as a successful current snapshot.
+            data.controllerTrace = { version: 1, status: 'unavailable' };
+            fault('controller-trace-snapshot');
+          }
         };
         const queries = ['(max-width: 760px)', '(max-width: 1180px)'];
         const media = [];
@@ -126,11 +157,23 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
           export(waitId, outcome) {
             const wait = waits.get(waitId);
             if (wait) wait.outcome = outcome;
+            exportControllerTrace();
             return data;
           },
           cleanup(kind) {
             enabled = false;
-            if (kind === 'observer') observer?.disconnect();
+            if (kind === 'observer') {
+              const failures = [];
+              // Both resources are attempted independently in the existing cleanup RPC.
+              try { observer?.disconnect(); } catch (error) { failures.push(error); }
+              const wasControllerStarted = controllerStarted;
+              try {
+                if (controllerStarted && controllerAPI.stop(owner) !== true) throw new Error('Controller trace stop refused');
+                controllerStarted = false;
+              } catch (error) { failures.push(error); }
+              if (failures.length) throw new AggregateError(failures, 'Media diagnostic observer/controller cleanup failed');
+              return controllerTraceExpected ? wasControllerStarted ? 'completed-controller-trace-stopped' : 'completed-controller-trace-not-started' : 'completed';
+            }
             if (kind === 'listeners') {
               const failures = [];
               for (const [target, type, handler, capture] of listeners) {
@@ -140,6 +183,22 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
             }
           },
         };
+        // The cleanup hook is published before start, so later DOM setup failures cannot leak the session.
+        if (controllerTraceExpected) {
+          try {
+            if (Object.hasOwn(window, '__studioMediaDisclosureTraceUnavailable')) throw new Error('Controller trace global collision');
+            controllerAPI = window.__studioMediaDisclosureTrace;
+            if (controllerAPI?.version !== 1 || controllerAPI.status !== 'ready' ||
+                typeof controllerAPI.start !== 'function' || typeof controllerAPI.snapshot !== 'function' ||
+                typeof controllerAPI.stop !== 'function') throw new Error('Controller trace API unavailable');
+            if (controllerAPI.start(owner) !== true) throw new Error('Controller trace start refused');
+            controllerStarted = true;
+            exportControllerTrace();
+          } catch {
+            data.controllerTrace = { version: 1, status: 'unavailable' };
+            fault('controller-trace-start');
+          }
+        }
         const listen = (target, type, handler, capture = false) => {
           listeners.push([target, type, handler, capture]);
           target.addEventListener(type, handler, capture);
@@ -189,8 +248,9 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
         });
         observer.observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['open', 'inert', 'class', 'style'] });
         data.identity = context(); data.installed = true; checkpoint('installed');
+        exportControllerTrace();
         return data;
-      }, { hook, caps, owner }));
+      }, { hook, caps, owner, controllerTraceExpected }));
       retain(data);
       report.installation = data?.installed ? 'installed' : 'failed-or-partial';
       if (!data?.installed && !report.diagnosticFailures.length) failure('install-unavailable', new Error('Media diagnostic installation returned no state'));
@@ -251,7 +311,7 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
             if (!Object.hasOwn(window, hook)) return 'absent-in-current-document';
             if (window[hook]?.owner !== owner) throw new Error('Refusing to clean up an unowned media diagnostic hook');
             if (kind === 'hook') { delete window[hook]; return 'completed'; }
-            window[hook].cleanup(kind); return 'completed';
+            return window[hook].cleanup(kind) ?? 'completed';
           }, { hook, kind, owner }));
           report.cleanup[kind] = result ?? 'failed';
         }

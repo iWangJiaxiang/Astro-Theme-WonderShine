@@ -91,6 +91,8 @@ jobs:
       - run: node --test apps/studio/tests/release-scripts.test.mjs
       - run: npm run build
       - run: npm run studio:build
+        env:
+          STUDIO_TEST_MEDIA_TRACE: ${{ github.event_name != 'release' && !startsWith(github.ref, 'refs/tags/') && !inputs.publish && needs.prepare.outputs.release != 'true' && needs.prepare.outputs.iosRelease != 'true' && '1' || '0' }}
       - uses: browser-actions/setup-chrome@v2.2.0
         id: chrome
       - name: Enable Chromium sandbox namespaces on the ephemeral runner
@@ -100,6 +102,7 @@ jobs:
       - run: npm run test:browser -w @wondershine/studio
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+          STUDIO_TEST_MEDIA_TRACE_EXPECTED: ${{ github.event_name != 'release' && !startsWith(github.ref, 'refs/tags/') && !inputs.publish && needs.prepare.outputs.release != 'true' && needs.prepare.outputs.iosRelease != 'true' && '1' || '0' }}
       - run: node apps/studio/tests/browser/app-updates.mjs
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
