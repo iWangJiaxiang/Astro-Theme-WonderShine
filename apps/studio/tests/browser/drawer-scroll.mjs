@@ -104,23 +104,27 @@ async function settleScroll(page) {
   }));
 }
 
-export async function checkDrawerScroll({ page, screenshots, waitForDrawer }) {
+export async function checkDrawerScroll({ page, screenshots, waitForDrawer, emulationOwner }) {
   const viewport = page.viewport();
   assert.ok(viewport && ((viewport.width === 320 && viewport.height === 568) ||
     (viewport.width === 390 && viewport.height === 844)), 'Drawer acceptance has two explicit sizes');
   const size = `${viewport.width}x${viewport.height}`;
-  const report = { schemaVersion:1, size, status:'running', phase:'setup', steps:[], methods:{},
+  const report = { schemaVersion:2, size, status:'running', phase:'setup', steps:[], methods:{},
+    ownership:{ emulationOwner:{createdBy:'smoke-harness',scope:'smoke-page',disposalMode:'browser-close',detachedByHelper:false},
+      inputOnly:{createdBy:'drawer-check',scope:'single-size',commands:['Input.dispatchTouchEvent'],disposalMode:'inputOnlyDetach'},
+      ordinaryViewport:'puppeteer', cleanupContract:'restore-via-owner-before-inputOnlyDetach-then-verify' },
     limitations:['Headless Chromium wheel and one-finger CDP dispatch only; not real-device or native WebView evidence.',
-      'Logout is checked without activation; pinch, keyboard occlusion and safe-area hardware are not covered.'], cleanup:{} };
-  let client, baseline, touchState = 'idle', failure;
-  const configure = () => configureGestureEmulation(page,client,{...viewport,mobile:true,hasTouch:true});
+      'Logout is checked without activation; pinch, keyboard occlusion and safe-area hardware are not covered.',
+      'Post-restore/inputOnlyDetach preservation only; the emulation owner remains attached until browser close. Owner-detach UI preservation is not tested.'], cleanup:{} };
+  let inputClient, baseline, touchState = 'idle', failure;
+  const configure = () => configureGestureEmulation(page,emulationOwner,{...viewport,mobile:true,hasTouch:true});
   const record = async phase => {
     report.phase = phase;
     const entry = { phase, state:await snapshot(page) }; report.steps.push(entry); return entry.state;
   };
   const touch = async (type, points) => {
     touchState = 'unknown';
-    await client.send('Input.dispatchTouchEvent',{type,touchPoints:points.map(({x,y}) => ({id:0,x,y,radiusX:1,radiusY:1,force:1}))});
+    await inputClient.send('Input.dispatchTouchEvent',{type,touchPoints:points.map(({x,y}) => ({id:0,x,y,radiusX:1,radiusY:1,force:1}))});
     touchState = type === 'touchEnd' || type === 'touchCancel' ? 'idle' : 'active';
   };
   const input = async (method, direction, phase) => {
@@ -180,8 +184,10 @@ export async function checkDrawerScroll({ page, screenshots, waitForDrawer }) {
     assertInputState(await record(`${phase}-open`));
   };
   try {
+    assert.ok(emulationOwner, 'Smoke harness must supply its long-lived emulation owner');
     baseline = await record('before-emulation');
-    client = await page.createCDPSession();
+    inputClient = await page.createCDPSession();
+    assert.notEqual(inputClient,emulationOwner,'Input-only session must not own emulation');
     await configure();
     const initial = await record('initial');
     assertInputState(initial);
@@ -241,23 +247,31 @@ export async function checkDrawerScroll({ page, screenshots, waitForDrawer }) {
     };
     await cleanup('finalObservation',async () => { report.finalObservation = await snapshot(page); });
     report.cleanup.touchStateBefore = touchState;
-    if (client) {
+    if (inputClient) {
       if (touchState !== 'idle') await cleanup('cancelTouch',() => touch('touchCancel',[]));
       else report.cleanup.cancelTouch = 'skipped-idle';
-      // Detaching can revoke this session's metrics override. Restore only after
-      // detach, through Puppeteer's surviving emulation owner, not this client.
-      await cleanup('detach',() => client.detach());
       report.cleanup.requestedEmulation = {width:viewport.width,height:viewport.height,
         deviceScaleFactor:viewport.deviceScaleFactor ?? 1,isMobile:viewport.isMobile ?? false,
-        hasTouch:viewport.hasTouch ?? false,isLandscape:viewport.isLandscape ?? false};
-      await cleanup('restoreEmulation',async () => {
-        // In pinned Puppeteer 25.16.0, emulateViewport creates a fresh state
-        // object per call; #applyViewport's cache uses object identity. A fresh
-        // call reissues metrics/touch without toggling mobile flags or reloading.
-        await page.setViewport({...viewport});
+        hasTouch:viewport.hasTouch ?? false,isLandscape:viewport.isLandscape ?? false,
+        maxTouchPoints:baseline.runtime.maxTouchPoints,pageScaleFactor:baseline.visual.scale};
+      await cleanup('restoreViaEmulationOwner',async () => {
+        const requested = report.cleanup.requestedEmulation;
+        // Restore raw overrides on their still-attached owner. Never change
+        // Puppeteer's viewport flags, reload, reopen or repair focus in cleanup.
+        await emulationOwner.send('Emulation.setDeviceMetricsOverride', {
+          width:requested.width,height:requested.height,deviceScaleFactor:requested.deviceScaleFactor,mobile:requested.isMobile,
+          screenOrientation:{type:requested.isLandscape ? 'landscapePrimary' : 'portraitPrimary',angle:requested.isLandscape ? 90 : 0},
+        });
+        await emulationOwner.send('Emulation.setTouchEmulationEnabled', {
+          enabled:requested.hasTouch,maxTouchPoints:requested.maxTouchPoints || 5,
+        });
+        await emulationOwner.send('Emulation.setPageScaleFactor',{pageScaleFactor:requested.pageScaleFactor});
         await settleScroll(page);
       });
-      await cleanup('verifyRestoredEmulation',async () => {
+      // This session has sent input only: owner teardown is a separate harness
+      // contract at browser destruction, not a mid-page preservation assertion.
+      await cleanup('inputOnlyDetach',() => inputClient.detach());
+      await cleanup('verifyRestoredAfterInputOnlyDetach',async () => {
         const state = report.cleanup.restoredObservation = await snapshot(page);
         const requested = report.cleanup.requestedEmulation;
         const actual = page.viewport();
@@ -268,26 +282,26 @@ export async function checkDrawerScroll({ page, screenshots, waitForDrawer }) {
         assert.equal(actual.isMobile ?? false,requested.isMobile);
         assert.equal(actual.hasTouch ?? false,requested.hasTouch);
         assert.equal(actual.isLandscape ?? false,requested.isLandscape);
-        assert.equal(state.layout.width,requested.width,'Post-detach layout width must be restored');
-        assert.equal(state.layout.height,requested.height,'Post-detach layout height must be restored');
+        assert.equal(state.layout.width,requested.width,'Post-input-only-detach layout width must be restored');
+        assert.equal(state.layout.height,requested.height,'Post-input-only-detach layout height must be restored');
         assert.equal(state.visual.width,requested.width);
         assert.equal(state.visual.height,requested.height);
-        assert.equal(state.visual.scale,1,'Post-detach visual scale must remain one');
+        assert.equal(state.visual.scale,1,'Post-input-only-detach visual scale must remain one');
         assert.equal(state.visual.left,0);
         assert.equal(state.visual.top,0);
         assert.equal(state.runtime.devicePixelRatio,requested.deviceScaleFactor);
         assert.equal(state.runtime.maxTouchPoints,baseline.runtime.maxTouchPoints,'Restore original touch capability');
         assert.equal(state.runtime.maxTouchPoints > 0,requested.hasTouch,'Touch capability must agree with Puppeteer flags');
         assert.equal(state.runtime.timeOrigin,baseline.runtime.timeOrigin,'Cleanup must not reload the document');
-        assert.ok(state.sidebar?.open && !state.sidebar.inert,'Post-detach drawer must remain open');
-        assert.equal(state.closeFocused,true,'Post-detach close must still own focus');
-        assert.equal(state.controls.first.current,true,'Post-detach dashboard must remain active');
-        assertControl(state.controls.logout,'Post-detach logout (not activated)');
+        assert.ok(state.sidebar?.open && !state.sidebar.inert,'Post-input-only-detach drawer must remain open');
+        assert.equal(state.closeFocused,true,'Post-input-only-detach close must still own focus');
+        assert.equal(state.controls.first.current,true,'Post-input-only-detach dashboard must remain active');
+        assertControl(state.controls.logout,'Post-input-only-detach logout (not activated)');
       });
     }
     report.cleanup.touchStateAfter = touchState;
     // Always preserve per-size structural evidence, including failed assertions.
-    await writeFile(`${screenshots}/navigation-scroll-${size}.json`,JSON.stringify(report,null,2)+'\n');
+    await cleanup('writeReport',() => writeFile(`${screenshots}/navigation-scroll-${size}.json`,JSON.stringify(report,null,2)+'\n'));
   }
   if (failure) throw failure;
 }

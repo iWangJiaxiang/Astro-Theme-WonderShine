@@ -103,7 +103,7 @@ async function checkBreakpointFocus(page) {
   }
 }
 
-export async function checkNavigationAccessibility({ page, screenshots }) {
+export async function checkNavigationAccessibility({ page, screenshots, emulationOwner }) {
   for (const [width, height] of [[320, 568], [320, 844], [390, 844], [760, 844]]) {
     const imageSize = height === 844 ? String(width) : `${width}x${height}`;
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
@@ -124,7 +124,7 @@ export async function checkNavigationAccessibility({ page, screenshots }) {
     await assertFocusedControl(page, '.navigation-close');
     await page.screenshot({ path: `${screenshots}/navigation-open-${imageSize}.png` });
     if ((width === 320 && height === 568) || (width === 390 && height === 844)) {
-      await checkDrawerScroll({ page, screenshots, waitForDrawer });
+      await checkDrawerScroll({ page, screenshots, waitForDrawer, emulationOwner });
     }
     await page.keyboard.down('Shift');
     try { await page.keyboard.press('Tab'); }
