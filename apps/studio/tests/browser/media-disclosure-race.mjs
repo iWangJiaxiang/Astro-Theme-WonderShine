@@ -3,6 +3,7 @@ import { AssertionError } from 'node:assert';
 import { build } from 'esbuild';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fixtureAssetPlugin } from './fixture-asset-plugin.mjs';
 
 // This isolates scheduling, not trusted pointer activation, CSS, or native WebView behavior.
 // summary.click() is intentionally untrusted; the browser still performs native activation
@@ -14,7 +15,7 @@ export async function checkMediaDisclosureRace(browser, { componentSource, expec
   const componentPath = fileURLToPath(new URL('../../src/components/MediaBrowser.tsx', import.meta.url));
   let overrideHits = 0;
   const fixture = await build({
-    plugins: componentSource === undefined ? [] : [{
+    plugins: [fixtureAssetPlugin(), ...(componentSource === undefined ? [] : [{
       name: 'media-disclosure-component-override',
       setup(builder) {
         const exactPath = new RegExp(`^${componentPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
@@ -24,7 +25,9 @@ export async function checkMediaDisclosureRace(browser, { componentSource, expec
           return { contents: componentSource, loader: 'tsx', resolveDir: dirname(componentPath) };
         });
       },
-    }],
+    }])],
+    // This fixture checks scheduling, not CSS or external SVG rendering.
+    loader: { '.css': 'empty' },
     stdin: {
       resolveDir: fileURLToPath(new URL('../../', import.meta.url)),
       loader: 'tsx',
