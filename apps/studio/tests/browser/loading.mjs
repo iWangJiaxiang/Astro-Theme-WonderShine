@@ -6,6 +6,11 @@ export async function checkLoading({ browser, origin, screenshots }) {
   let holdInitial = true, failContent = false, failDocument = false;
   const requests = [], responses = [], failures = [], pageErrors = [];
   const workspaceRetry = '.main-content > .notice.error button';
+  const waitForHeldReads = (language, count) => Promise.all(['/api/bootstrap', '/api/content'].map(path =>
+    page.waitForRequest(request => new URL(request.url()).origin === origin
+      && new URL(request.url()).pathname === path
+      && request.headers()['accept-language'] === language
+      && pending.get(path)?.length === count)));
   page.on('response', response => {
     const url = new URL(response.url());
     if (url.origin === origin && ['/api/bootstrap', '/api/content', '/api/content-languages', '/api/settings/taxonomies', '/api/document'].includes(url.pathname)) {
@@ -34,7 +39,8 @@ export async function checkLoading({ browser, origin, screenshots }) {
       }
       return request.continue();
     });
-    await page.goto(origin, { waitUntil: 'domcontentloaded' });
+    const initialReads = waitForHeldReads('zh-CN', 1);
+    await Promise.all([page.goto(origin, { waitUntil: 'domcontentloaded' }), initialReads]);
     await page.waitForSelector('.home-grid .loading-panel');
     assert.equal(pending.size, 2, 'bootstrap and content start in parallel');
     const counts = await page.$$eval('.stat-card strong', nodes => nodes.map(node => node.textContent));
@@ -42,28 +48,38 @@ export async function checkLoading({ browser, origin, screenshots }) {
     assert.equal(await page.$('.home-grid .empty-state'), null, 'loading is not an empty library');
     await page.waitForFunction(() => document.body.innerText.includes('加载比平时久一些'), { timeout: 12_000 });
     await page.screenshot({ path: screenshots + '/loading-desktop.png', fullPage: true });
-    await page.select('.language-switcher select', 'en');
+    await Promise.all([waitForHeldReads('en', 2), page.select('.language-switcher select', 'en')]);
     await page.waitForFunction(() => document.body.innerText.includes('This is taking longer than usual.'));
-    await page.select('.language-switcher select', 'zh-CN');
+    await Promise.all([waitForHeldReads('zh-CN', 3), page.select('.language-switcher select', 'zh-CN')]);
     await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
     assert.equal(await page.$eval('.loading-spinner', node => getComputedStyle(node).animationName), 'none');
     await page.setViewport({ width: 390, height: 844 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'loading fits mobile');
     await page.screenshot({ path: screenshots + '/loading-mobile.png', fullPage: true });
     await page.setViewport({ width: 1280, height: 900 });
-    // Locale changes invalidate the held content read before its injected 502.
-    // Its error is visible while bootstrap is still pending, so a raw click here
-    // would silently target a disabled workspace retry button.
-    await page.waitForFunction(() => document.querySelector('.main-content > .notice.error')?.textContent.includes('连接已更换，请重试'));
-    assert.equal(await page.$eval(workspaceRetry, button => button.disabled), true, 'workspace retry waits for the outstanding bootstrap');
+    // Each locale replaces the App's pending reads without surfacing old-scope
+    // errors. Keep all three generations held until the current pair is observed.
+    const heldBootstrap = pending.get('/api/bootstrap'), heldContent = pending.get('/api/content');
+    assert.equal(heldBootstrap.length, 3, 'each locale starts one bootstrap read');
+    assert.equal(heldContent.length, 3, 'each locale starts one shared content read');
+    assert.equal(await page.$('.main-content > .notice.error'), null, 'obsolete reads do not surface an App stale-scope error');
     holdInitial = false;
-    await Promise.all(pending.get('/api/bootstrap').map(request => request.continue()));
-    await Promise.all(pending.get('/api/content').map(request => request.respond({ status: 502, contentType: 'application/json', body: '{"error":"请求失败，请稍后再试"}' })));
+    // Content invalidation already aborts older fetches: leave their obsolete
+    // interception IDs alone. Bootstrap is not aborted, so release every generation.
+    // Only the last content request is live; its interception failures must propagate.
+    await Promise.all(heldBootstrap.map(request => request.continue()));
+    const currentContent = heldContent.at(-1);
+    const [initialFailure] = await Promise.all([
+      page.waitForResponse(response => response.request() === currentContent),
+      currentContent.respond({ status: 502, contentType: 'application/json', body: '{"error":"请求失败，请稍后再试"}' }),
+    ]);
+    assert.equal(initialFailure.status(), 502, 'current-locale content receives the injected failure');
     pending.clear();
+    await page.waitForFunction(() => document.querySelector('.main-content > .notice.error')?.textContent.includes('请求失败，请稍后再试'));
     await page.waitForSelector(workspaceRetry + ':not(:disabled)');
     assert.equal(await page.$('.home-grid .empty-state'), null, 'failure must not claim there is no content');
-    // Exercise a live 502 as well: the original content request was cancelled by
-    // the language change and its response cannot prove transport-error recovery.
+    // Exercise another live 502 through the original forced workspace retry,
+    // then recover through the same manual retry path.
     failContent = true;
     const [failedRetry] = await Promise.all([
       page.waitForResponse(response => response.url() === origin + '/api/content?refresh=1'),

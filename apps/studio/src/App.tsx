@@ -23,7 +23,7 @@ import LoadingState from "./components/LoadingState";
 import { navigationPosition } from "./navigation-position";
 import { mediaUploading } from "./media-store";
 import { subscribeWorkspaceChanged } from "./workspace-events";
-import { t, type Message } from "./i18n";
+import { locale, t, type Message } from "./i18n";
 import { ref, watch, onMounted, onBeforeUnmount, computed } from "./reactivity";
 import type { Json, ArticleSummary } from "../shared/types";
 import { api, session, reauthentication, errorMessage, pendingMutations } from "./api";
@@ -151,6 +151,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
     const showingPreview = computed(() => !articlesReady.value && dashboardPreview.value !== null);
     const dashboardRows = computed(() => articlesReady.value ? articles.value : dashboardPreview.value?.rows || []);
     let generation = 0, articleRequest = 0, bootstrapRequest = 0, workspaceRequest = 0;
+    let workspaceRefreshPending = false;
     const dashboardArticles = computed(() =>
       sortLibrary(
         dashboardRows.value.filter(
@@ -272,18 +273,23 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         if (isCurrent()) loadingArticles.value = false;
       }
     }
-    async function refreshWorkspace() {
+    async function refreshWorkspace(clearError = true) {
       const current = generation, request = ++workspaceRequest;
-      error.value = "";
+      workspaceRefreshPending = true;
+      if (clearError) error.value = "";
       // Invalidate old content/preview callbacks before awaiting the checkout refresh.
       articleRequest++;
       dashboardPreview.value = null;
       loadingArticles.value = true;
-      // Bootstrap must not race a content refresh against an already warm checkout.
-      // Continue with the authoritative content read even if bootstrap reports an error.
-      await bootstrap(true);
-      if (current !== generation || request !== workspaceRequest) return;
-      await loadArticles(true);
+      try {
+        // Bootstrap must not race a content refresh against an already warm checkout.
+        // Continue with the authoritative content read even if bootstrap reports an error.
+        await bootstrap(true);
+        if (current !== generation || request !== workspaceRequest) return;
+        await loadArticles(true);
+      } finally {
+        if (current === generation && request === workspaceRequest) workspaceRefreshPending = false;
+      }
     }
     async function reloadWorkspace() {
       if (loadingSite.value || loadingArticles.value) return;
@@ -302,8 +308,31 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       () => session.value?.identity.method,
       () => session.value?.csrf,
       () => session.value?.expires,
-    ] as const, async ([value]) => {
+      locale,
+    ] as const, async (next, previous) => {
       generation++;
+      const [value] = next;
+      const sessionChanged = next.slice(0, 5).some((item, index) => !Object.is(item, previous[index]));
+      if (!sessionChanged) {
+        if (checking.value) {
+          await checkSession();
+          return;
+        }
+        if (!value) return;
+        // Locale invalidates pending reads, not the mounted editing context.
+        if (workspaceRefreshPending) {
+          await refreshWorkspace(false);
+          return;
+        }
+        await Promise.all([
+          loadingSite.value || !data.value ? bootstrap() : Promise.resolve(),
+          loadingArticles.value || !articlesReady.value ? loadArticles() : Promise.resolve(),
+        ]);
+        return;
+      }
+      workspaceRequest++;
+      workspaceRefreshPending = false;
+      checking.value = false;
       dashboardPreview.value = null;
       articles.value = [];
       articlesReady.value = false;
@@ -320,7 +349,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         error.value = "";
       }
     });
-    onMounted(async () => {
+    async function checkSession() {
       const current = generation;
       try {
         const result = await api<NonNullable<typeof session.value>>("/auth/session");
@@ -328,9 +357,10 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       } catch {
         /* Login is shown for an absent session. */
       } finally {
-        checking.value = false;
+        if (current === generation) checking.value = false;
       }
-    });
+    }
+    onMounted(checkSession);
     function leave() {
       if (pendingMutations.value || libraryBusy.value || editorView.value?.isBusy?.()) {
         alert(t("正在保存或生成译文，请稍候。"));

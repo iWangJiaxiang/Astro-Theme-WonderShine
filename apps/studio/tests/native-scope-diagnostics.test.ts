@@ -188,6 +188,96 @@ test('native scope plugin: explicit CI build and exact-source fail-closed contra
     assert.throws(() => plugin.load(resolvedVirtualId), /exactly once/);
   });
 
+  await t.test('real App locale watcher keeps its branch and records bit 5 immediately after generation increments', () => {
+    const target = targets.find(target => target.name === 'App.tsx');
+    assert.ok(target);
+    const watcherStart = `    watch([
+      session,
+      () => session.value?.identity.id,
+      () => session.value?.identity.method,
+      () => session.value?.csrf,
+      () => session.value?.expires,
+      locale,
+    ] as const, async (next, previous) => {
+      generation++;`;
+    const localeBranch = `      const [value] = next;
+      const sessionChanged = next.slice(0, 5).some((item, index) => !Object.is(item, previous[index]));
+      if (!sessionChanged) {
+        if (checking.value) {
+          await checkSession();
+          return;
+        }
+        if (!value) return;
+        // Locale invalidates pending reads, not the mounted editing context.
+        if (workspaceRefreshPending) {
+          await refreshWorkspace(false);
+          return;
+        }
+        await Promise.all([
+          loadingSite.value || !data.value ? bootstrap() : Promise.resolve(),
+          loadingArticles.value || !articlesReady.value ? loadArticles() : Promise.resolve(),
+        ]);
+        return;
+      }`;
+    const watcherEnd = '    async function checkSession() {';
+    assert.equal(target.source.split(watcherStart).length - 1, 1);
+    assert.equal(target.source.split(watcherEnd).length - 1, 1);
+    const watcher = target.source.slice(target.source.indexOf(watcherStart), target.source.indexOf(watcherEnd));
+    assert.ok(watcher.startsWith(`${watcherStart}\n${localeBranch}`));
+    const result = configuredPlugin().transform(target.source, target.id);
+    assert.ok(result);
+    const event = '      __studioNativeScope.event(null, "app-generation", () => ({ generation, reasonMask: previous ? next.reduce((mask, item, index) => mask | (!Object.is(item, previous[index]) ? 1 << index : 0), 0) : null }));';
+    const instrumentedStart = `${watcherStart}\n${event}`;
+    assert.equal(result.code.split(instrumentedStart).length - 1, 1);
+    assert.equal(result.code.split(event).length - 1, 1);
+    const instrumentedWatcher = result.code.slice(result.code.indexOf(watcherStart), result.code.indexOf(watcherEnd));
+    assert.equal(instrumentedWatcher, watcher.replace(watcherStart, instrumentedStart),
+      'Only the diagnostic event may be inserted; callback arguments and all business branches must remain original');
+
+    // Evaluate only the generated increment/event fragment, never App business callbacks.
+    const incrementAt = instrumentedWatcher.indexOf('      generation++;');
+    const branchAt = instrumentedWatcher.indexOf('      const [value] = next;');
+    assert.ok(incrementAt >= 0 && branchAt > incrementAt);
+    const fragment = instrumentedWatcher.slice(incrementAt, branchAt);
+    assert.equal(fragment, `      generation++;\n${event}\n`);
+    const f = runtimeFixture();
+    assert.ok(f.hook);
+    assert.ok(f.hook.start(13));
+    const sessionReference = {};
+    const previous = [sessionReference, 'private-identity', 'private-method', 'private-csrf', 100, 'en'] as const;
+    for (const [next, old] of [
+      [[...previous.slice(0, 5), 'zh-CN'], previous],
+      [[{}, ...previous.slice(1, 5), 'zh-CN'], previous],
+      [previous, previous],
+      [previous, undefined],
+    ] as const) {
+      const generation = 40;
+      assert.equal(runInNewContext(`${fragment}\ngeneration;`, {
+        __studioNativeScope: f.trace, generation, next, previous: old,
+      }), generation + 1);
+    }
+    const terminal = f.hook.finish(13);
+    assert.ok(terminal);
+    const records = projectNativeScopeTerminal(terminal, 13).records;
+    assert.deepEqual(Array.from(records, record => [record[2], record[3], record[9], record[18]]), [
+      ['app-generation', 'other', 41, 32],
+      ['app-generation', 'other', 41, 33],
+      ['app-generation', 'other', 41, 0],
+      ['app-generation', 'other', 41, null],
+    ]);
+    assertPrivateFree(JSON.stringify(terminal));
+
+    const sentinel = '    ] as const, async (next, previous) => {\n      generation++;';
+    for (const changed of [
+      target.source.replace(sentinel, '    ] as const, async ([value]) => {\n      generation++;'),
+      target.source.replace(sentinel, '    ] as const, async (next, previous) => {\n      generation += 1;'),
+      `${target.source}\n${sentinel}`,
+    ]) {
+      assert.notEqual(changed, target.source);
+      assert.throws(() => configuredPlugin().transform(changed, target.id), /sentinels changed/);
+    }
+  });
+
   await t.test('missing, duplicate, changed, pre-instrumented and SSR source cannot pass', () => {
     for (const target of targets) {
       const plugin = configuredPlugin();

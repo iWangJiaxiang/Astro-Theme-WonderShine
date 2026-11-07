@@ -175,7 +175,7 @@ const appEdits = () => [
   ...callerEdits(),
   ['        if (!isCurrent()) return;\n        configureSaving', `        const __nsGuard = !isCurrent();\n        ${trace}.event(__nsCaller, "guard", () => ({ guard: __nsGuard, generation, counter: bootstrapRequest }));\n        if (__nsGuard) return;\n        configureSaving`],
   ['        if (isCurrent()) {\n          articles.value = result;', `        const __nsGuard = isCurrent();\n        ${trace}.event(__nsCaller, "guard", () => ({ guard: __nsGuard, generation, counter: articleRequest }));\n        if (__nsGuard) {\n          articles.value = result;`],
-  ['    ] as const, async ([value]) => {\n      generation++;', `    ] as const, async (__nsNew, __nsOld) => {\n      const [value] = __nsNew;\n      generation++;\n      ${trace}.event(null, "app-generation", () => ({ generation, reasonMask: __nsOld ? __nsNew.reduce((mask, item, index) => mask | (!Object.is(item, __nsOld[index]) ? 1 << index : 0), 0) : null }));`],
+  ['    ] as const, async (next, previous) => {\n      generation++;', `    ] as const, async (next, previous) => {\n      generation++;\n      ${trace}.event(null, "app-generation", () => ({ generation, reasonMask: previous ? next.reduce((mask, item, index) => mask | (!Object.is(item, previous[index]) ? 1 << index : 0), 0) : null }));`],
   ['    onBeforeUnmount(() => {\n      generation++;\n      window.removeEventListener("beforeunload", beforeUnload);', `    onBeforeUnmount(() => {\n      generation++;\n      ${trace}.event(null, "app-unmount", () => ({ generation }));\n      window.removeEventListener("beforeunload", beforeUnload);`],
 ];
 const settingsEdits = () => [
