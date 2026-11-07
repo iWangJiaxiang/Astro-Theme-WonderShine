@@ -84,25 +84,49 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+        id: install
       - run: npm run typecheck -w @wondershine/studio
       - run: npm test -w @wondershine/studio
       - name: Measure content response operation budgets
         run: npx --no-install tsx --test tests/responsiveness-budgets.test.ts
       - run: node --test apps/studio/tests/release-scripts.test.mjs
       - run: npm run build
+        id: theme-build
       - run: npm run studio:build
+        id: studio-build
         env:
           STUDIO_TEST_MEDIA_TRACE: ${{ github.event_name != 'release' && !startsWith(github.ref, 'refs/tags/') && !inputs.publish && needs.prepare.outputs.release != 'true' && needs.prepare.outputs.iosRelease != 'true' && '1' || '0' }}
       - uses: browser-actions/setup-chrome@v2.2.0
         id: chrome
       - name: Enable Chromium sandbox namespaces on the ephemeral runner
+        id: sandbox
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Install fonts for multilingual browser screenshots
+        id: fonts
         run: sudo apt-get update && sudo apt-get install -y fonts-noto-cjk fonts-noto-color-emoji
-      - run: npm run test:browser -w @wondershine/studio
+      - name: Studio production browser smoke
+        timeout-minutes: 10
+        run: npx --no-install tsx apps/studio/tests/browser/smoke.mjs
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
           STUDIO_TEST_MEDIA_TRACE_EXPECTED: ${{ github.event_name != 'release' && !startsWith(github.ref, 'refs/tags/') && !inputs.publish && needs.prepare.outputs.release != 'true' && needs.prepare.outputs.iosRelease != 'true' && '1' || '0' }}
+      - name: Studio React lifecycle (independent of smoke outcome)
+        timeout-minutes: 5
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.theme-build.outcome == 'success' && steps.studio-build.outcome == 'success' && steps.chrome.outcome == 'success' && steps.sandbox.outcome == 'success' && steps.fonts.outcome == 'success' }}
+        run: node apps/studio/tests/browser/react-lifecycle.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Fetch fixed historical disclosure baseline
+        timeout-minutes: 2
+        id: disclosure-baseline
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.theme-build.outcome == 'success' && steps.studio-build.outcome == 'success' && steps.chrome.outcome == 'success' && steps.sandbox.outcome == 'success' && steps.fonts.outcome == 'success' }}
+        run: git fetch --no-tags --depth=1 origin d078ced2858bafeecfd7194baf2882bb3ab3cf1a
+      - name: Historical MediaBrowser expected-red scheduling checks
+        timeout-minutes: 5
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.theme-build.outcome == 'success' && steps.studio-build.outcome == 'success' && steps.chrome.outcome == 'success' && steps.sandbox.outcome == 'success' && steps.fonts.outcome == 'success' && steps.disclosure-baseline.outcome == 'success' }}
+        run: node apps/studio/tests/browser/media-disclosure-old-red.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - run: node apps/studio/tests/browser/app-updates.mjs
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}

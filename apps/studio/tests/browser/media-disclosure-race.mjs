@@ -1,12 +1,30 @@
 import assert from 'node:assert/strict';
+import { AssertionError } from 'node:assert';
 import { build } from 'esbuild';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // This isolates scheduling, not trusted pointer activation, CSS, or native WebView behavior.
 // summary.click() is intentionally untrusted; the browser still performs native activation
 // and queues its own toggle. No synthetic toggle or forced details.open is used.
-export async function checkMediaDisclosureRace(browser) {
+export async function checkMediaDisclosureRace(browser, { componentSource, expectedRed = false } = {}) {
+  assert.equal(typeof expectedRed, 'boolean', 'expectedRed must be an explicit boolean');
+  if (componentSource !== undefined) assert.equal(typeof componentSource, 'string', 'componentSource must be source text');
+  if (expectedRed) assert.equal(typeof componentSource, 'string', 'expectedRed requires an explicit componentSource');
+  const componentPath = fileURLToPath(new URL('../../src/components/MediaBrowser.tsx', import.meta.url));
+  let overrideHits = 0;
   const fixture = await build({
+    plugins: componentSource === undefined ? [] : [{
+      name: 'media-disclosure-component-override',
+      setup(builder) {
+        const exactPath = new RegExp(`^${componentPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+        builder.onLoad({ filter: exactPath, namespace: 'file' }, ({ path }) => {
+          assert.equal(path, componentPath, 'Only the exact MediaBrowser source may be overridden');
+          overrideHits++;
+          return { contents: componentSource, loader: 'tsx', resolveDir: dirname(componentPath) };
+        });
+      },
+    }],
     stdin: {
       resolveDir: fileURLToPath(new URL('../../', import.meta.url)),
       loader: 'tsx',
@@ -167,6 +185,7 @@ window.mediaDisclosureRace = {
     bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false,
     define: { 'process.env.NODE_ENV': '"development"' },
   });
+  if (componentSource !== undefined) assert.equal(overrideHits, 1, 'The MediaBrowser source override must be loaded exactly once');
 
   // "public" is the actual MediaMode used for global images; "global" is not valid.
   for (const mode of ['library', 'document', 'public']) {
@@ -194,6 +213,8 @@ window.mediaDisclosureRace = {
       };
       const paths = ['public/uploads/race-keep.svg', 'public/uploads/other.svg'];
       const failures = [];
+      let phase = 'setup', failurePhase;
+      const raceAfterMessage = `${label}: breakpoint must synchronously override the stale ref`;
       try {
         await page.setContent('<!doctype html><div id="root"></div>');
         await page.addScriptTag({ content: fixture.outputFiles[0].text });
@@ -206,8 +227,11 @@ window.mediaDisclosureRace = {
         // on mobile it opens it and sets that ref true.
         check(await page.evaluate(() => window.mediaDisclosureRace.activate()), initiallyNarrow, initiallyNarrow, true, paths);
         const race = await page.evaluate(() => window.mediaDisclosureRace.race());
+        phase = 'race.before';
         assert.equal(race.before, !initiallyNarrow, `${label}: native activation must change DOM synchronously`);
-        assert.equal(race.after, initiallyNarrow, `${label}: breakpoint must synchronously override the stale ref`);
+        phase = 'race.after';
+        assert.equal(race.after, initiallyNarrow, raceAfterMessage);
+        phase = 'race.snapshot';
         const { before, after, ...synchronousState } = race;
         check(synchronousState, initiallyNarrow, !initiallyNarrow, true, paths);
 
@@ -218,8 +242,10 @@ window.mediaDisclosureRace = {
           return cards.length === 1 && cards[0].getAttribute('data-media-path') === 'public/uploads/race-keep.svg';
         });
         check(await page.evaluate(() => window.mediaDisclosureRace.snapshot()), initiallyNarrow, !initiallyNarrow, true, [paths[0]], 'race-keep');
-      } catch (error) { failures.push(error); }
-      finally {
+      } catch (error) {
+        failurePhase = phase;
+        failures.push(error);
+      } finally {
         try {
           const remainingListeners = await page.evaluate(() => window.mediaDisclosureRace?.cleanup());
           assert.equal(remainingListeners, 0, `${label}: unmount must remove production MQL listeners`);
@@ -233,8 +259,25 @@ window.mediaDisclosureRace = {
         try { await page.close(); }
         catch (error) { failures.push(error); }
       }
+      // Classify only after every cleanup/error check. Never unwrap aggregates or
+      // count setup, timeout, page/console, or cleanup failures as the expected red.
+      if (expectedRed && failures.length === 1 && failurePhase === 'race.after') {
+        const error = failures[0];
+        const expectedMessage = new AssertionError({
+          message: raceAfterMessage, actual: !initiallyNarrow, expected: initiallyNarrow, operator: 'strictEqual',
+        }).message;
+        if (error instanceof AssertionError && error.constructor === AssertionError
+          && error.code === 'ERR_ASSERTION' && error.operator === 'strictEqual'
+          && error.message === expectedMessage
+          && error.actual === !initiallyNarrow && error.expected === initiallyNarrow) {
+          console.log(`EXPECTED RED: ${label}; stage=race.after actual=${error.actual} expected=${error.expected}`);
+          continue;
+        }
+      }
       if (failures.length === 1) throw failures[0];
       if (failures.length > 1) throw new AggregateError(failures, `${label}: regression and cleanup failures`, { cause: failures[0] });
+      if (expectedRed) throw new Error(`${label}: unexpected pass; expected the precise race.after assertion failure`);
+      console.log(`PASS: media disclosure race ${label}`);
     }
   }
 }
