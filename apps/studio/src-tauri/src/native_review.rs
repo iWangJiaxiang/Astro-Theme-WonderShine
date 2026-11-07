@@ -269,7 +269,7 @@ mod tests {
     }
     #[test]
     fn diagnostic_io_adapters_keep_fixed_mapping_and_return() {
-        use diagnostic::{Attempt, Check, Failure, IoKind, Stage};
+        use super::diagnostic::{Attempt, Check, Failure, IoKind, Stage};
         use std::io::{Error, ErrorKind};
         for (kind, expected) in [
             (ErrorKind::NotFound, IoKind::NotFound),
@@ -296,7 +296,7 @@ mod tests {
     }
     #[test]
     fn diagnostic_lock_adapter_distinguishes_would_block_variants() {
-        use diagnostic::{Attempt, Check, Failure, IoKind, LockKind, Stage};
+        use super::diagnostic::{Attempt, Check, Failure, IoKind, LockKind, Stage};
         use std::{fs::TryLockError, io::{Error, ErrorKind}};
         for (error, expected) in [
             (TryLockError::WouldBlock, LockKind::WouldBlock),
@@ -313,7 +313,7 @@ mod tests {
     }
     #[test]
     fn diagnostic_validation_annotation_keeps_first_failure_and_check() {
-        use diagnostic::{Attempt, Check, Failure, IoKind, Stage};
+        use super::diagnostic::{Attempt, Check, Failure, IoKind, Stage};
         diagnostic::reset(Attempt::SameProcessReacquire);
         let result = owner_ordinary!(validation_adapter(true), ExistingFile);
         let later: Result<(), &'static str> = owner_io!(Err::<(), _>(std::io::Error::from(std::io::ErrorKind::NotFound)), Base, Metadata);
@@ -330,7 +330,7 @@ mod tests {
     }
     #[test]
     fn diagnostic_reset_take_disarm_and_thread_isolation() {
-        use diagnostic::{Attempt, Check, Failure, IoKind, Stage};
+        use super::diagnostic::{Attempt, Check, Failure, IoKind, Stage};
         assert_eq!(diagnostic::take(), None);
         assert_eq!(validation_adapter(true), Err(UNAVAILABLE));
         assert_eq!(diagnostic::take(), None);
