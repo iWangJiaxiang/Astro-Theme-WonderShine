@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { mediaTraceStages, mediaTraceCaps } from './media-disclosure-trace-contract.mjs';
 
 const virtualId = 'virtual:studio-test-media-disclosure-trace';
 const resolvedVirtualId = `\0${virtualId}`;
@@ -41,26 +42,42 @@ const picker = `              ? element(
                     null,`;
 
 // Serialized into the virtual module. No project runtime import or UI mutation.
-function installRuntime(cloneElement, untracked) {
+function installRuntime(cloneElement, untracked, plan, caps) {
   const key = '__studioMediaDisclosureTrace';
   const unavailableKey = '__studioMediaDisclosureTraceUnavailable';
-  const limit = 256, faultLimit = 16, maximum = 2147483647;
+  const { recordsPerSegment: limit, faultsPerSegment: faultLimit, numericMaximum: maximum } = caps;
   const faultCodes = [
     'clock', 'identity', 'expanded-read', 'disclosure-read', 'mql-read', 'details-read',
     'target-read', 'current-target-read', 'event-matches-read', 'toggle-state-read',
     'summary-parent-read', 'render-props-read', 'summary-clone', 'record', 'snapshot', 'global-install',
+    'segment', 'callback',
   ];
   const stages = ['entry', 'exit', 'render-requested', 'summary-ref-attach', 'summary-ref-detach'];
   const kinds = ['mq', 'toggle', 'browse'];
   const nodeIds = new WeakMap(), controllerIds = new WeakMap(), renderIds = new WeakMap(), callbackIds = new WeakMap();
   let nextNode = 0, nextController = 0, nextRender = 0, nextCallback = 0, nextSession = 0;
-  let session = null, available = false;
-  const increment = value => Math.min(maximum, value + 1);
+  let session = null, available = false, callbackDepth = 0;
+  const increment = value => {
+    if (value >= maximum - 1) {
+      // A sticky flag fails strict validation without recursively incrementing faults.
+      if (session) session.saturated = true;
+      return maximum;
+    }
+    return value + 1;
+  };
   const fault = code => {
     try {
-      if (!session?.active) return;
-      if (session.faults.length < faultLimit) session.faults.push(code);
-      else session.droppedFaults = increment(session.droppedFaults);
+      // Snapshot reads after stop must still make the returned evidence partial.
+      if (!session) return;
+      const { segment, totals } = session;
+      totals.faultAttempts = increment(totals.faultAttempts);
+      if (segment.faults.length < faultLimit && totals.retainedFaults < caps.totalFaults) {
+        segment.faults.push(faultCodes.includes(code) ? code : 'record');
+        totals.retainedFaults = increment(totals.retainedFaults);
+      } else {
+        segment.droppedFaults = increment(segment.droppedFaults);
+        totals.droppedFaults = increment(totals.droppedFaults);
+      }
     } catch { /* Diagnostics must never escape into UI callbacks. */ }
   };
   const read = (code, getter, fallback = null) => {
@@ -90,44 +107,92 @@ function installRuntime(cloneElement, untracked) {
     domOpen: node ? read('details-read', () => boolean(node.open)) : null,
   });
   const toggleState = value => value === 'open' || value === 'closed' ? value : null;
+  const createSegment = (segmentId, startedAt, startAttempt) => ({
+    segmentId, stage: plan[segmentId - 1], owner: session.owner, sessionId: session.id,
+    state: 'active', status: 'available', startedAt, endedAt: null,
+    previousSegmentId: segmentId === 1 ? null : segmentId - 1,
+    startAttempt, endAttempt: session.totals.attempts,
+    attempts: 0, droppedRecords: 0, records: [], faults: [], droppedFaults: 0,
+    historyBaseline: segmentId === 1 ? 'session-start-unknown' : 'carried-within-session',
+  });
+  const copySegment = segment => ({
+    ...segment,
+    status: segment.faults.length || segment.droppedFaults || segment.droppedRecords ? 'partial' : 'available',
+    records: segment.records.map(record => ({ ...record })),
+    faults: [...segment.faults],
+  });
+  const envelope = (timestamp, segments) => ({
+    version: 2,
+    status: session.saturated || session.totals.faultAttempts || session.totals.droppedRecords || session.totals.droppedFaults ? 'partial' : 'available',
+    owner: session.owner, active: session.active, sessionId: session.id,
+    idNamespace: 'studio-media-controller-trace-v2',
+    startedAt: session.startedAt, stoppedAt: session.stoppedAt,
+    timestamp, timeOrigin: session.timeOrigin,
+    caps: { ...caps }, plan: [...plan], saturated: session.saturated,
+    codes: { stages: [...stages], kinds: [...kinds], faultCodes: [...faultCodes], toggleStates: ['open', 'closed', null] },
+    totals: { ...session.totals }, segments,
+  });
   const snapshot = owner => {
     if (!session || session.owner !== owner) return null;
     try {
+      // Read first: any diagnostic fault must be included in this very snapshot.
       const timestamp = clock();
-      return {
-        version: 1, status: session.faults.length || session.droppedFaults || session.droppedRecords ? 'partial' : 'available',
-        owner, active: session.active, sessionId: session.id,
-        idNamespace: 'studio-media-controller-trace-v1',
-        startedAt: session.startedAt, stoppedAt: session.stoppedAt,
-        timestamp, timeOrigin: session.timeOrigin,
-        caps: { records: limit, faults: faultLimit, numericMaximum: maximum },
-        codes: { stages, kinds, faultCodes, toggleStates: ['open', 'closed', null] },
-        attempts: session.attempts, droppedRecords: session.droppedRecords,
-        records: session.records.map(record => ({ ...record })),
-        faults: [...session.faults], droppedFaults: session.droppedFaults,
-      };
+      return envelope(timestamp, [copySegment(session.segment)]);
     } catch { fault('snapshot'); return null; }
   };
   const api = {
-    version: 1, status: 'ready',
+    version: 2, status: 'ready',
     start(owner) {
       if (!Number.isSafeInteger(owner) || owner <= 0 || owner > maximum) return false;
       // A stopped owner's last snapshot remains readable, but cannot stop another session.
       if (session?.active) return session.owner === owner;
-      if (nextSession === maximum) return false;
+      if (nextSession >= maximum - 1) return false;
       session = {
         id: ++nextSession, owner, active: true, startedAt: null, stoppedAt: null, timeOrigin: null,
-        attempts: 0, droppedRecords: 0, records: [], faults: [], droppedFaults: 0,
+        saturated: false,
+        totals: { attempts: 0, retainedRecords: 0, droppedRecords: 0, faultAttempts: 0, retainedFaults: 0, droppedFaults: 0 },
+        segment: null,
       };
-      session.startedAt = clock();
+      session.segment = createSegment(1, null, 1);
+      session.startedAt = session.segment.startedAt = clock();
       session.timeOrigin = read('clock', () => numeric(performance.timeOrigin));
       return true;
     },
     snapshot,
+    rotate(owner, expectedSessionId, expectedSegmentId, nextStage) {
+      const reject = code => {
+        fault(code);
+        throw new Error('Media disclosure trace rotation refused');
+      };
+      if (!session || session.owner !== owner || !session.active ||
+          session.id !== expectedSessionId || session.segment.segmentId !== expectedSegmentId) reject('segment');
+      if (callbackDepth !== 0) reject('callback');
+      const current = session.segment;
+      if (current.state !== 'active' || session.saturated || current.segmentId >= caps.segments ||
+          current.segmentId >= plan.length || nextStage !== plan[current.segmentId]) reject('segment');
+      // Attribute boundary clock faults to the segment being sealed, not its successor.
+      const timestamp = clock();
+      const startAttempt = increment(session.totals.attempts);
+      if (session.saturated) reject('segment');
+      const sealed = copySegment(current);
+      sealed.state = 'sealed';
+      sealed.endedAt = timestamp;
+      const next = createSegment(current.segmentId + 1, timestamp, startAttempt);
+      // Only the active segment is retained. The collector owns its sealed copy.
+      session.segment = next;
+      return envelope(timestamp, [sealed, copySegment(next)]);
+    },
     stop(owner) {
       if (!session || session.owner !== owner) return false;
-      if (session.active) { session.stoppedAt = clock(); session.active = false; }
-      return true;
+      if (!session.active) return true;
+      const idle = callbackDepth === 0;
+      if (!idle) fault('callback');
+      const timestamp = clock();
+      session.segment.state = 'stopped';
+      session.segment.endedAt = session.stoppedAt = timestamp;
+      session.active = false;
+      // A non-idle stop still stops capture, but cannot claim a clean boundary.
+      return idle;
     },
   };
   try {
@@ -149,15 +214,22 @@ function installRuntime(cloneElement, untracked) {
     const active = () => available && session?.active;
     const emit = (stage, kind, event, extra = {}) => {
       if (!active()) return;
+      const { segment, totals } = session;
       try {
-        const seq = session.attempts = increment(session.attempts);
-        if (seq > limit) { session.droppedRecords = increment(session.droppedRecords); return; }
+        const seq = totals.attempts = increment(totals.attempts);
+        segment.attempts = increment(segment.attempts);
+        segment.endAttempt = seq;
+        if (session.saturated || segment.records.length >= limit || totals.retainedRecords >= caps.totalRecords) {
+          segment.droppedRecords = increment(segment.droppedRecords);
+          totals.droppedRecords = increment(totals.droppedRecords);
+          return;
+        }
         const refNode = read('disclosure-read', disclosure);
         const targetNode = event ? read('target-read', () => event.target) : null;
         const currentNode = event ? read('current-target-read', () => event.currentTarget) : null;
         const targetId = identity(nodeIds, targetNode, 'node');
         const currentTargetId = identity(nodeIds, currentNode, 'node');
-        session.records.push({
+        segment.records.push({
           seq, timestamp: clock(), stage, kind,
           controllerId: identity(controllerIds, controller, 'controller'),
           refExpanded: read('expanded-read', () => boolean(expanded())),
@@ -173,16 +245,29 @@ function installRuntime(cloneElement, untracked) {
           toggleNewState: kind === 'toggle' ? read('toggle-state-read', () => toggleState(event.newState)) : null,
           ...extra,
         });
-      } catch { fault('record'); }
+        totals.retainedRecords = increment(totals.retainedRecords);
+      } catch {
+        segment.droppedRecords = increment(segment.droppedRecords);
+        totals.droppedRecords = increment(totals.droppedRecords);
+        fault('record');
+      }
     };
     return {
       callback(kind, stage, event, callbackId = null) {
-        if (!active()) return null;
+        // Count all production callbacks across tracers, including inactive capture.
+        if (stage === 'entry') callbackDepth = increment(callbackDepth);
         try {
+          if (!active()) return null;
           if (stage === 'entry') callbackId = identity(callbackIds, {}, 'callback');
           emit(stage, kind, event, { callbackId });
           return callbackId;
-        } catch { fault('record'); return null; }
+        } catch { fault('callback'); return null; }
+        finally {
+          if (stage === 'exit') {
+            if (callbackDepth > 0) callbackDepth--;
+            else fault('callback');
+          }
+        }
       },
       renderBrowse(factory, tag, props, summary, ...children) {
         let renderedSummary = summary;
@@ -260,7 +345,7 @@ export function mediaDisclosureBuildPlugin() {
       if (id !== resolvedVirtualId) return;
       if (!configured) throw new Error('Media disclosure tracing was not configured');
       loaded++;
-      return `import { cloneElement } from 'react';\nimport { untracked } from '@preact/signals-react';\nexport const createMediaDisclosureTracer = (${installRuntime.toString()})(cloneElement, untracked);\n`;
+      return `import { cloneElement } from 'react';\nimport { untracked } from '@preact/signals-react';\nexport const createMediaDisclosureTracer = (${installRuntime.toString()})(cloneElement, untracked, ${JSON.stringify(mediaTraceStages)}, ${JSON.stringify(mediaTraceCaps)});\n`;
     },
     transform(source, id, options) {
       if (id.replaceAll('\\', '/') !== target) return;

@@ -27,7 +27,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   };
   const finished = () => page.waitForFunction(() => !document.querySelector('.upload-progress') && document.querySelector('.upload-results li'));
   const selected = () => page.$eval('.media-card.selected', el => el.dataset.mediaPath);
-  const disclosureState = async (selector, open) => {
+  const disclosureState = async (selector, open, nextTraceStage) => {
     const waitId = mediaDiagnostics?.nextWait();
     let outcome = 'failed';
     try {
@@ -41,7 +41,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
       outcome = 'passed';
     } finally {
       // The collector retains diagnostic errors, never replaces this wait's error.
-      await mediaDiagnostics?.endWait(waitId, outcome);
+      await mediaDiagnostics?.endWait(waitId, outcome, { nextTraceStage });
     }
     assert.equal(await page.$eval(`${selector} > summary`, node => {
       const minimum = document.documentElement.dataset.nativePlatform === 'android' ? 48 : 44;
@@ -197,7 +197,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
       await Promise.all(handles.map(handle => handle.dispose()));
     }
   };
-  const checkResponsiveChooserClose = async (name, candidate) => {
+  const checkResponsiveChooserClose = async (name, candidate, confirmTraceStage) => {
     const picker = 'dialog.media-dialog[open]', disclosure = `${picker} .media-filter-disclosure`;
     const trigger = `${picker} button[name="${name}"]`, chooser = '.selection-dialog[open]';
     const parentState = () => page.$eval(picker, dialog => ({
@@ -207,7 +207,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
     const before = await parentState();
     for (const confirm of [false, true]) {
       await page.setViewport({ width: 1440, height: 1000 });
-      await disclosureState(disclosure, true);
+      await disclosureState(disclosure, true, confirm ? confirmTraceStage : undefined);
       const current = await page.$eval(trigger, node => node.textContent);
       await page.locator(trigger).click();
       await page.waitForSelector(chooser, { visible: true });
@@ -240,7 +240,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await disclosureState(libraryDisclosure, true);
   await page.$eval(`${libraryDisclosure} .directory-all`, node => node.focus({ preventScroll: true }));
   await page.setViewport({ width: 320, height: 568 });
-  await disclosureState(libraryDisclosure, false);
+  await disclosureState(libraryDisclosure, false, 'library-mobile');
   assert.equal(await page.$eval(`${libraryDisclosure} > summary`, node => node === document.activeElement), true, 'crossing to mobile moves focus from the folding tree to its summary');
   await initialPreview('.media-library .media-browser');
   await page.screenshot({ path: screenshots + '/media-library-initial-320x568.png' });
@@ -287,7 +287,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await page.waitForFunction(() => document.querySelector('.sidebar').getBoundingClientRect().right <= 0);
   await openImagePicker(page, 'extra.site.logo');
   const filterDisclosure = 'dialog.media-dialog[open] .media-filter-disclosure';
-  await disclosureState(filterDisclosure, false);
+  await disclosureState(filterDisclosure, false, 'public-picker-initial');
   assert.match(await page.$eval(`${filterDisclosure} > summary`, node => node.textContent), /Folder.*All folders/, 'closed picker summary describes its current filter');
   await initialPreview('dialog.media-dialog[open] .media-browser');
   await page.screenshot({ path: screenshots + '/media-picker-initial-320x568-en.png' });
@@ -349,7 +349,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await page.setViewport({ width: 1440, height: 1000 });
   await disclosureState(filterDisclosure, true);
   await page.setViewport({ width: 390, height: 844 });
-  await disclosureState(filterDisclosure, false);
+  await disclosureState(filterDisclosure, false, 'held-upload-responsive');
   assert.equal(await page.$eval(`${filterDisclosure} > summary`, node => node === document.activeElement), true, 'crossing to mobile moves focus from folded filters to their summary');
   await page.locator(`${filterDisclosure} > summary`).click();
   await disclosureState(filterDisclosure, true);
@@ -447,7 +447,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
     const folderTrigger = `${picker} button[name="media-folder"]`;
     const chooser = '.selection-dialog[open]';
     await revealField(page, folderTrigger);
-    await disclosureState(filterDisclosure, true);
+    await disclosureState(filterDisclosure, true, 'nested-choosers');
     const defaultDestination = await page.$eval(`${picker} .upload-destination`, el => el.textContent);
     assert.match(defaultDestination, /public\/uploads$/, 'public picker keeps the default upload destination');
     const pending = await page.$eval(`${picker} .media-pending`, el => el.textContent);
@@ -531,7 +531,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await page.setViewport({ width: 1440, height: 1000 });
   await page.select('.language-switcher select', 'zh-CN');
   await openImagePicker(page, 'extra.site.logo');
-  await disclosureState(filterDisclosure, true);
+  await disclosureState(filterDisclosure, true, 'reopened-picker');
   await fill('dialog.media-dialog[open] [aria-label="搜索仓库图片"]', 'cover-upload.png');
   await page.waitForSelector('[data-media-path="public/uploads/cover-upload.png"]');
   await page.click('[data-media-path="public/uploads/cover-upload.png"]'); await click('使用这张图片');
@@ -552,7 +552,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   assert.equal(await page.$eval('[name="extra.cover"]', el => el.value), 'cover-upload.png');
   await page.$eval('.markdown-source', el => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); });
   await click('插入图片'); await page.waitForSelector('dialog.media-dialog[open]');
-  await disclosureState(filterDisclosure, true);
+  await disclosureState(filterDisclosure, true, 'document-insert');
   await revealField(page, 'dialog.media-dialog[open] button[name="media-source"]');
   assert.match(await page.$eval(`${filterDisclosure} > summary`, node => node.textContent), /图片来源.*全部.*文件夹.*全部文件夹/, 'document picker summary describes both active source and folder');
   assert.deepEqual(await page.$$eval('dialog.media-dialog[open] .media-filter-control', controls => controls.map(control => {
@@ -565,7 +565,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
     { label: '图片来源', visible: true, compact: true, flatOptions: 0 },
     { label: '文件夹', visible: true, compact: true, flatOptions: 0 },
   ], 'document picker source and folder filters both use labelled compact triggers');
-  await checkResponsiveChooserClose('media-source', 'public');
+  await checkResponsiveChooserClose('media-source', 'public', 'media-source-final');
   await revealField(page, 'dialog.media-dialog[open] button[name="media-source"]');
   await page.locator('dialog.media-dialog[open] button[name="media-source"]').click();
   await page.waitForSelector('.selection-dialog[open]', { visible: true });
