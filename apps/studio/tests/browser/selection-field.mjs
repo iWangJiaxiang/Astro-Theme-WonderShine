@@ -178,7 +178,10 @@ window.selectionFixture = {
 
         // Focus was returned by production close(); no DOM click or forced focus.
         await page.keyboard.press('Enter');
-        await page.waitForFunction(() => document.activeElement?.matches('.selection-dialog input[type="search"]'));
+        // showModal() starts at the first focusable control, before the search field.
+        await page.waitForFunction(() => document.activeElement?.matches('.selection-dialog .card-heading button'));
+        await page.keyboard.press('Tab');
+        assert.equal(await page.evaluate(() => document.activeElement?.matches('.selection-dialog input[type="search"]')), true);
         await page.keyboard.press('Tab');
         assert.equal(await page.evaluate(() => document.activeElement?.matches('.selection-dialog input[type="radio"][value=""]')), true);
         await page.keyboard.press('ArrowDown');
