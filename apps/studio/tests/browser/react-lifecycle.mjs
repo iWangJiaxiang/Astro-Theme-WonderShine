@@ -6,6 +6,7 @@ import { checkMediaDisclosureRace } from './media-disclosure-race.mjs';
 import { checkSelectionField } from './selection-field.mjs';
 import { checkAppLocaleScope } from './app-locale-scope.mjs';
 import { checkAppLocaleEditors } from './app-locale-editors.mjs';
+import { checkLocalizedContentOwnership } from './localized-content-ownership.mjs';
 import { existsSync } from 'node:fs';
 import { build } from 'esbuild';
 import puppeteer from 'puppeteer-core';
@@ -66,6 +67,10 @@ try {
   console.log('PASS: App locale read ownership, forced refresh ordering, current errors, startup auth and mutation non-replay (synthetic scheduling fixture).');
   await checkAppLocaleEditors(browser);
   console.log('PASS: real Settings/source-document locale preservation, drafts, pending mutations and revision-correct saves (synthetic transport fixture).');
+  const localizedOwnershipStarted = performance.now();
+  const localizedOwnership = await checkLocalizedContentOwnership(browser);
+  console.log(JSON.stringify({ fixture: 'localized-content-ownership', realmCount: localizedOwnership.realmCount, elapsedMilliseconds: Math.round(performance.now() - localizedOwnershipStarted) }));
+  console.log('PASS: localized content read/mutation ownership and source-editor preservation (synthetic transport fixture; not native acceptance).');
   const page = await browser.newPage(), errors = [], warnings = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('console', message => { if (message.type() === 'error') warnings.push(message.text()); });
