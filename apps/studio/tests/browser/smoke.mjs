@@ -10,6 +10,7 @@ import { checkUploads } from './uploads.mjs';
 import { createMediaDisclosureDiagnostics } from './media-disclosure-diagnostics.mjs';
 import { createChooserScrollDiagnostics } from './chooser-scroll-diagnostics.mjs';
 import { createFolderClearDiagnostics } from './folder-clear-diagnostics.mjs';
+import { createSkillChooserDiagnostics } from './skill-chooser-diagnostics.mjs';
 import { chooser, checkControls } from './controls.mjs';
 import { checkPageManagement } from './pages.mjs';
 import assert from 'node:assert/strict';
@@ -40,7 +41,7 @@ const server = spawn(process.execPath, process.env.STUDIO_TEST_DEV ? ['--import'
   STUDIO_ADMIN_USER: 'owner', STUDIO_ADMIN_PASSWORD_HASH: await hashPassword('studio-browser-test-2026'), STUDIO_SESSION_SECRET: randomBytes(32).toString('hex') }, stdio: ['ignore', 'pipe', 'pipe'] });
 let logs = ''; server.stderr.on('data', data => { logs += data; });
 const executablePath = process.env.STUDIO_TEST_BROWSER || ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
-let browser, emulationOwner, smokeFailure, mediaDiagnostics, chooserDiagnostics, folderClearDiagnostics;
+let browser, emulationOwner, smokeFailure, mediaDiagnostics, chooserDiagnostics, folderClearDiagnostics, skillChooserDiagnostics;
 const emulationOwnerReport = { schemaVersion:1, created:false, scope:'smoke-page',
   disposalMode:'browser-close', result:'not-created', serverCleanupGuaranteed:false };
 const recordFailure = error => {
@@ -211,7 +212,10 @@ try {
   await page.$eval('.metadata-card input[type=checkbox]', el => el.click()); await click('本地保存'); await page.waitForSelector('.notice.success');
   await checkPageManagement({ page, base, screenshots, click, heading, fill, delayNextDocumentSave });
   chooserDiagnostics = createChooserScrollDiagnostics({ page, reportPath: `${screenshots}/chooser-scroll-diagnostics.json`, withTimeout });
-  await checkControls({ page, click, heading, fill, base, screenshots, choose, chooserDiagnostics });
+  skillChooserDiagnostics = createSkillChooserDiagnostics({ page, reportPath: `${screenshots}/skill-chooser-diagnostics.json`, withTimeout });
+  await checkControls({ page, click, heading, fill, base, screenshots, choose, chooserDiagnostics, skillChooserDiagnostics });
+  const skillChooserDiagnosticErrors = skillChooserDiagnostics.takeErrors();
+  if (skillChooserDiagnosticErrors.length) throw new AggregateError(skillChooserDiagnosticErrors, 'Skill chooser diagnostics failed');
   const chooserDiagnosticErrors = chooserDiagnostics.takeErrors();
   if (chooserDiagnosticErrors.length) throw new AggregateError(chooserDiagnosticErrors, 'Chooser scroll diagnostics failed');
   await checkMedia({ page, base, theme, screenshots, click, heading, fill });
@@ -410,6 +414,16 @@ try {
       try { await withTimeout(() => rm(base, { recursive: true, force: true }), 'Fixture removal'); }
       catch (error) { recordFailure(error); }
     }
+  }
+  try {
+    skillChooserDiagnostics?.noteBrowserOwner(emulationOwnerReport.browserProcessEnded === true);
+    for (const diagnosticError of skillChooserDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
+    if (skillChooserDiagnostics) await withTimeout(() => skillChooserDiagnostics.writeReport(), 'Skill chooser report write');
+  } catch (error) {
+    recordFailure(error);
+  } finally {
+    // Report size/lifecycle checks can add faults even when the file write succeeds.
+    for (const diagnosticError of skillChooserDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
   }
   try {
     if (chooserDiagnostics) await withTimeout(() => chooserDiagnostics.writeReport(), 'Chooser scroll report write');

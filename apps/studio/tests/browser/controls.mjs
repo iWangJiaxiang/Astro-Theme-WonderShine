@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
+import { collectSkillReveal, skillChooserReady } from './skill-chooser-diagnostics.mjs';
 
-export async function revealField(page, selector) {
+export async function revealField(page, selector, diagnosticContext) {
   await page.waitForSelector(selector);
   // Structured forms now start collapsed; open their summaries from the outside in.
-  const handles = await page.evaluateHandle(selector => {
+  const handles = diagnosticContext
+    ? await page.evaluateHandle(collectSkillReveal, { selector, owner: diagnosticContext.owner })
+    : await page.evaluateHandle(selector => {
     const summaries = [];
     for (let node = document.querySelector(selector)?.parentElement; node; node = node.parentElement) {
       if (node instanceof HTMLDetailsElement && !node.open) summaries.unshift(node.querySelector(':scope > summary'));
@@ -24,27 +27,44 @@ export async function revealField(page, selector) {
 
 // Exercise real radios/checkboxes and the dialog, without hidden native selects.
 export function chooser(page) {
-  return async (name, value) => {
-    const root = `[data-field="${name}"]`;
-    await page.waitForSelector(root);
-    await revealField(page, root);
-    await page.waitForFunction(root => { const el = document.querySelector(root); return el && !el.querySelector('fieldset:disabled, button.choice-trigger:disabled'); }, {}, root);
-    const trigger = await page.$(`${root} > .choice-trigger`);
-    if (trigger) {
-      await trigger.click();
-      await page.waitForSelector('.selection-dialog[open]');
-      await page.waitForSelector(`.selection-dialog[open] input[value="${value}"]`);
-      await page.click(`.selection-dialog[open] input[value="${value}"]`);
-      await page.click('.selection-dialog[open] .selection-footer button');
-      await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
-    } else {
-      await page.waitForSelector(`${root} input[value="${value}"]`);
-      await page.click(`${root} input[value="${value}"]`);
+  return async (name, value, diagnostics) => {
+    const context = diagnostics?.begin();
+    let outcome = 'failed';
+    try {
+      const root = `[data-field="${name}"]`;
+      await page.waitForSelector(root);
+      await revealField(page, root, context);
+      if (context) await page.waitForFunction(skillChooserReady, {}, { root, owner: context.owner });
+      else await page.waitForFunction(root => { const el = document.querySelector(root); return el && !el.querySelector('fieldset:disabled, button.choice-trigger:disabled'); }, {}, root);
+      diagnostics?.phase('ready');
+      diagnostics?.phase('query');
+      const trigger = await page.$(`${root} > .choice-trigger`);
+      if (trigger) {
+        diagnostics?.phase('trigger');
+        await trigger.click();
+        diagnostics?.phase('dialog');
+        await page.waitForSelector('.selection-dialog[open]');
+        await page.waitForSelector(`.selection-dialog[open] input[value="${value}"]`);
+        diagnostics?.phase('option');
+        await page.click(`.selection-dialog[open] input[value="${value}"]`);
+        diagnostics?.phase('confirm');
+        await page.click('.selection-dialog[open] .selection-footer button');
+        await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
+        diagnostics?.phase('closed');
+      } else {
+        diagnostics?.phase('fallback');
+        await page.waitForSelector(`${root} input[value="${value}"]`);
+        await page.click(`${root} input[value="${value}"]`);
+      }
+      outcome = 'passed';
+    } finally {
+      // One explicit diagnostic export after the operation; never retry its inputs.
+      if (diagnostics) await diagnostics.finish(outcome);
     }
   };
 }
 
-export async function checkControls({ page, click, heading, fill, base, screenshots, choose, chooserDiagnostics }) {
+export async function checkControls({ page, click, heading, fill, base, screenshots, choose, chooserDiagnostics, skillChooserDiagnostics }) {
   const { readFile, writeFile, mkdir } = await import('node:fs/promises');
   const { patchToml, splitDocument } = await import('../../server/content.ts');
   const { parse } = await import('smol-toml');
@@ -225,7 +245,7 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await page.waitForSelector('.content-row[data-path="content/pages/about.md"]');
   await page.click('.content-row[data-path="content/pages/about.md"]'); await page.waitForSelector('.page-editor-tabs'); await click('页面设置');
   await click('技能清单'); await page.waitForSelector('[name="skill.items.0.name"]');
-  await choose('skill.items.0.svg_symbol_id', 'python');
+  await choose('skill.items.0.svg_symbol_id', 'python', skillChooserDiagnostics);
   await page.waitForFunction(() => document.querySelector('[data-field="skill.items.0.svg_symbol_id"] use')?.getAttribute('href')?.endsWith('#python'));
   await click('本地保存设置'); await page.waitForSelector('.embedded-settings .notice.success');
   const skills = parse(await readFile(base + '/site/data.toml', 'utf8')).skill;
