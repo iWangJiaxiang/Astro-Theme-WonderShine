@@ -429,6 +429,8 @@ try {
     if (chooserDiagnostics) await withTimeout(() => chooserDiagnostics.writeReport(), 'Chooser scroll report write');
   } catch (error) {
     recordFailure(error);
+  } finally {
+    for (const diagnosticError of chooserDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
   }
   try {
     if (mediaDiagnostics) await withTimeout(() => mediaDiagnostics.writeReport(), 'Media disclosure report write');
@@ -438,8 +440,13 @@ try {
     // Terminal resource validation may add faults after all earlier error drains.
     for (const diagnosticError of mediaDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
   }
-  await folderClearDiagnostics?.writeReport();
-  for (const diagnosticError of folderClearDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
+  try {
+    await folderClearDiagnostics?.writeReport();
+  } catch (error) {
+    recordFailure(error);
+  } finally {
+    for (const diagnosticError of folderClearDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
+  }
   try {
     await withTimeout(() => writeFile(`${screenshots}/navigation-emulation-owner.json`,JSON.stringify(emulationOwnerReport,null,2)+'\n'), 'Lifecycle report write');
   } catch (error) {

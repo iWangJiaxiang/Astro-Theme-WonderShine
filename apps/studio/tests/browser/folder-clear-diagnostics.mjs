@@ -22,7 +22,11 @@ export function createFolderClearDiagnostics({ page, reportPath, withTimeout }) 
     report.diagnosticFailureCount++;
     if (report.diagnosticFailures.length < caps.failures) {
       report.diagnosticFailures.push({ stage }); errors.push(error);
-    } else report.droppedFailures++;
+    } else {
+      report.droppedFailures++;
+      // Draining the queue must not hide later faults after the archive fills.
+      if (errors.length === 0) errors.push(new Error('Folder clear diagnostic failure budget exceeded'));
+    }
   };
   const attempt = async (stage, action) => {
     try { return await withTimeout(action, `Folder clear diagnostic: ${stage}`); }
