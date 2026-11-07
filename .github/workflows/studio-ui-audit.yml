@@ -69,6 +69,7 @@ jobs:
         if: ${{ !cancelled() && matrix.shard == 1 && steps.service-build.outcome == 'success' && steps.chrome.outcome == 'success' }}
         run: npm run build:app -w @wondershine/studio
         env:
+          STUDIO_TEST_NATIVE_SCOPE_TRACE: '1'
           VITE_STUDIO_GITHUB_CLIENT_ID: studio-ci-github
           VITE_STUDIO_CNB_CLIENT_ID: studio-ci-cnb
       - name: Existing mocked-Tauri native UI complement (not physical devices)
@@ -76,6 +77,7 @@ jobs:
         timeout-minutes: 15
         run: node apps/studio/tests/browser/native-ui.mjs
         env:
+          STUDIO_TEST_NATIVE_SCOPE_TRACE: '1'
           STUDIO_TEST_GESTURES: 'true'
           STUDIO_TEST_OAUTH: fixture
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}

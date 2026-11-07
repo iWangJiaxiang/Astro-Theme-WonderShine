@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { configureGestureEmulation, inspectGestureEnvironment, exerciseScroll, exercisePinch } from './ui-audit-gestures.mjs';
 import { startNativeInputDiagnostics } from './native-input-diagnostics.mjs';
+import { createNativeScopeDiagnostics } from './native-scope-diagnostics.mjs';
 
 // Real production React/native adapter code; only the Tauri IPC host is mocked.
 const studio = fileURLToPath(new URL('../../', import.meta.url));
@@ -22,6 +23,8 @@ const root = join(appData, 'workspaces', profile.id, 'repo');
 const localRoot = join(base, 'selected local blog');
 let selectedFolder = null, folderGranted = false;
 let browser, server, page;
+const nativeScopeDiagnostics = createNativeScopeDiagnostics(process.env.STUDIO_TEST_NATIVE_SCOPE_TRACE === '1');
+let nativeScopePrimaryFailure = false;
 let firstApiInputDiagnostics, firstApiInputAttempted = false;
 const apiInputTracePath = join(screenshots, 'api-address-input-trace.json');
 const errors = [], cspErrors = [], failedResources = [], ipcFailures = [];
@@ -671,6 +674,8 @@ try {
     await setViewport({width,height,isMobile:true,hasTouch:true});await screenshot('clone-progress-'+name);await noOverflow('clone progress '+name);
   }
   await page.select('.language-switcher select','en');await screenshot('clone-progress-en-mobile');
+  // One new setup RPC perturbs timing; capture begins only in this final realm.
+  if (nativeScopeDiagnostics) await nativeScopeDiagnostics.begin(page);
   console.log('PASS: real clone progress at three widths.'); releaseCheckout();await heading('What will you write today?');
   const saved = await page.evaluate(()=>JSON.parse(localStorage.getItem('wondershine.native.workspaces.v1')));
   assert.equal(saved[0].branch,'release/blog');
@@ -686,6 +691,8 @@ try {
   console.log('Native UI passed: desktop/mobile connection modes, offline dashboard, source save, bundled Vditor, native asset preview, client API settings, secret redaction, configuration reopen, logout.');
   console.log('Screenshots: ' + screenshots);
 } catch (error) {
+  nativeScopePrimaryFailure = true;
+  try {
   // Reuse the stopped first-address trace even if a later model/key guard fails.
   await firstApiInputDiagnostics?.persist(apiInputTracePath, 'failed');
   const diagnostics = { failure:String(error), stack:error.stack, viewport:page?.viewport(), commands:[...commands], ipcFailures, errors, cspErrors, failedResources,
@@ -727,10 +734,27 @@ try {
     await fs.writeFile(join(screenshots, 'failure.json'), report + '\n');
     console.error(report);
   } catch (diagnosticError) { console.error('Could not write native UI failure diagnostics:', diagnosticError.message); }
-  throw error;
+  } finally {
+    // Catch diagnostics must not replace the original business failure.
+    throw error;
+  }
 } finally {
   releaseDownload(); releaseCheckout(); releaseWrite(); releaseAccount();
-  await browser?.close();
-  if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
-  await fs.rm(base, { recursive: true, force: true });
+  try {
+    // Sole terminal RPC runs after original catch diagnostics, before browser close.
+    // It covers late tasks up to this boundary, not an atomic failure snapshot.
+    if (nativeScopeDiagnostics) await nativeScopeDiagnostics.finish(page, join(screenshots, 'native-scope-diagnostics.json'), nativeScopePrimaryFailure ? 'failed' : 'passed');
+  } catch {
+    process.exitCode = 1;
+    console.error('Native scope final export/write failed.');
+  }
+  // Teardown is independent, but cannot overwrite an existing primary exception.
+  let teardownFailure;
+  try { await browser?.close(); } catch (error) { teardownFailure = error; }
+  try {
+    if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
+  } catch (error) { teardownFailure ??= error; }
+  try { await fs.rm(base, { recursive: true, force: true }); }
+  catch (error) { teardownFailure ??= error; }
+  if (teardownFailure && !nativeScopePrimaryFailure) throw teardownFailure;
 }
