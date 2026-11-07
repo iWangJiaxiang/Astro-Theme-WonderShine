@@ -451,7 +451,9 @@ export async function checkLocalizedContentOwnership(browser) {
       // Only after proving dirty preservation, explicitly revert via normal input
       // so the unchanged latestUI checks can exercise enabled language actions.
       await page.click(source);
-      await page.keyboard.press('Control+a');
+      await page.keyboard.down('Control');
+      try { await page.keyboard.press('a'); }
+      finally { await page.keyboard.up('Control'); }
       await page.type(source, 'Synthetic saved body');
       await page.waitForFunction(selector => document.querySelector(selector)?.disabled === true, {}, save);
       await latestUI(page);
