@@ -136,13 +136,34 @@ export async function checkControls({ page, click, heading, fill, base, screensh
     await page.setViewport({ width, height: width === 390 ? 844 : 1000 });
     const selector = '.selection-dialog[open] .selection-results';
     // Reuse the original target evaluation: no extra pre-input evaluate round trip.
-    const target = await page.$eval(selector, (node, hook, owner) => {
+    const target = await page.$eval(selector, (node, hook, owner, expected) => {
       const rect = node.getBoundingClientRect();
       const target = { x:rect.left + rect.width / 2, y:rect.top + rect.height / 2, top:node.scrollTop };
+      const view = window.visualViewport, root = document.documentElement.style;
+      const hit = document.elementFromPoint(target.x, target.y);
+      target.validity = {
+        unique: document.querySelectorAll(expected.selector).length === 1,
+        connected: node.isConnected,
+        viewportMatches: innerWidth === expected.width && innerHeight === expected.height &&
+          (!view || (view.width === expected.width && view.height === expected.height && view.scale === 1 && view.offsetLeft === 0 && view.offsetTop === 0)),
+        trackerMatches: parseFloat(root.getPropertyValue('--studio-visible-width')) === (view?.width ?? innerWidth) &&
+          parseFloat(root.getPropertyValue('--native-visible-height')) === (view?.height ?? innerHeight) &&
+          parseFloat(root.getPropertyValue('--studio-visible-left')) === (view?.offsetLeft ?? 0) &&
+          parseFloat(root.getPropertyValue('--native-visible-top')) === (view?.offsetTop ?? 0),
+        finitePoint: Number.isFinite(target.x) && Number.isFinite(target.y),
+        pointInViewport: target.x >= 0 && target.x < innerWidth && target.y >= 0 && target.y < innerHeight,
+        hitInResults: !!hit && node.contains(hit),
+        downwardRange: node.scrollHeight > node.clientHeight && node.scrollTop < node.scrollHeight - node.clientHeight,
+      };
       target.diagnostic = hook && window[hook]?.owner === owner ? window[hook].target(node, target.x, target.y) : null;
       return target;
-    }, diagnosticHook, diagnosticOwner);
+    }, diagnosticHook, diagnosticOwner, { selector, width, height: width === 390 ? 844 : 1000 });
     chooserDiagnostics?.rememberTarget(target.diagnostic);
+    // Fail before dispatch; never repair, clamp or retry an invalid input target.
+    assert.deepEqual(target.validity, {
+      unique:true, connected:true, viewportMatches:true, trackerMatches:true,
+      finitePoint:true, pointInViewport:true, hitInResults:true, downwardRange:true,
+    }, 'Icon chooser wheel target invalid or viewport/layout snapshot mismatched');
     await page.mouse.move(target.x, target.y);
     const downWait = chooserDiagnostics?.nextWait(width, 'down', target.top);
     await page.mouse.wheel({ deltaY:160 });
