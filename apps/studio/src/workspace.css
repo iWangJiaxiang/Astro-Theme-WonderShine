@@ -80,7 +80,6 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 .structured .compact-object { column-gap: 16px; }
 .settings-card .compact-object > .field-inline { grid-template-columns: auto minmax(0,1fr); gap: 8px; }
 .settings-card .compact-object > .value-number { flex: 0 1 130px; }
-.choice-trigger > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 @media (min-width: 1181px) {
   .editor-page > .page-heading > div:first-child { flex: 1; }
   .editor-page > .page-heading > .row { max-width: 48%; }

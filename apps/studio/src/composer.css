@@ -55,8 +55,6 @@
 .thread-composer .reference-compact .reference-heading > button:hover:not(:disabled),
 .thread-composer .composer-tool[aria-expanded=true] { color: var(--wjx-theme); background: color-mix(in srgb,var(--wjx-theme) 6%,var(--studio-card)); }
 .thread-composer .choice-compact { display: block; margin: 0; max-width: 220px; }
-.thread-composer .choice-compact .choice-trigger > span:not(.choice-count) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.choice-count { font-size: 10px; min-width: 17px; height: 17px; padding: 0 4px; display: grid; place-items: center; background: color-mix(in srgb,var(--wjx-theme) 10%,var(--studio-card)); color: var(--wjx-theme); border-radius: 5px; }
 .thread-composer .reference-compact { display: flex; padding: 0; gap: 4px; max-width: 100%; }
 .thread-composer .reference-compact .reference-heading { gap: 2px; }
 .thread-composer .reference-compact .reference-heading > .small { font-size: 10px; }

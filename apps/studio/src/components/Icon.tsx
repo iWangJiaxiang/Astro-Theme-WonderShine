@@ -26,6 +26,7 @@ const Icon: StudioComponent<Props, Events> = component<Props, Events>(
       moon: "M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10Z",
       sun: "M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM12 1v2M12 21v2M1 12h2M21 12h2M4 4l2 2M18 18l2 2M4 20l2-2M18 6l2-2",
       arrow: "M5 12h14M14 7l5 5-5 5",
+      "chevron-down": "m6 9 6 6 6-6",
       plus: "M12 5v14M5 12h14",
       logout: "M9 3H4v18h5M9 12h12M17 8l4 4-4 4",
       search: "M16 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0ZM15 15l6 6",

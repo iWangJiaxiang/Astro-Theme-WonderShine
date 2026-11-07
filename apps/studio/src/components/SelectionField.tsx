@@ -302,27 +302,20 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                       : null,
                     element(
                       "span",
-                      { id: `${id}-value` },
+                      { id: `${id}-value`, className: classes("choice-value") },
                       compactValues.value.length
                         ? compactValues.value
                             .map((value) => labels.value.get(value) || value)
                             .join(" · ")
                         : props.label,
                     ),
-                    selected.value.filter(Boolean).length
-                      ? element(
-                          "span",
-                          { className: classes("choice-count") },
-                          selected.value.filter(Boolean).length,
-                        )
-                      : null,
                   )
                 : element(
                     Fragment,
                     null,
                     element(
                       "span",
-                      { id: `${id}-value` },
+                      { id: `${id}-value`, className: classes("choice-value") },
                       props.multiple
                         ? t("选择{p0}{p1}", {
                             p0: props.label,
@@ -334,8 +327,19 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                           })
                         : labels.value.get(selected.value[0]) || t("请选择…"),
                     ),
-                    element("span", { "aria-hidden": "true" }, "⌄"),
                   ),
+              element(
+                "span",
+                { className: classes("choice-trailing"), "aria-hidden": "true" },
+                props.compact && props.multiple && selected.value.filter(Boolean).length
+                  ? element(
+                      "span",
+                      { className: classes("choice-count") },
+                      selected.value.filter(Boolean).length,
+                    )
+                  : null,
+                element(Icon, { name: "chevron-down", size: 16 }),
+              ),
             ),
         !props.compact && props.multiple && selected.value.length
           ? element(

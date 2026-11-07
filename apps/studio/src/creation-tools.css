@@ -61,7 +61,7 @@
 .upload-directory-control > span, .media-filter-control > span { color: var(--form-label); font-size: 12px; font-weight: 500; }
 .upload-directory-control > .choice-compact, .media-filter-control > .choice-compact { display: block; min-width: 0; margin: 0; }
 .upload-directory-control .choice-trigger, .media-filter-control .choice-trigger { width: 100%; min-width: 0; }
-.upload-directory-control .choice-trigger > span:first-child, .media-filter-control .choice-trigger > span:first-child { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
+.upload-directory-control .choice-value, .media-filter-control .choice-value { overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; }
 .media-filters > .media-filter-control { flex: 1; min-width: min(170px, 100%); }
 .media-library .media-toolbar { align-items: center; gap: 10px; margin-bottom: 12px; }
 .media-library .media-search { display: block; }

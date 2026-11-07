@@ -387,7 +387,13 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
             label: label?.textContent, visibleLabel: rendered(label), trigger: rendered(trigger),
             accessibleLabel: !!innerLabel && trigger?.getAttribute('aria-labelledby')?.split(' ').includes(innerLabel.id),
             fullWidth: !!trigger && Math.abs(trigger.getBoundingClientRect().width - control.getBoundingClientRect().width) <= 2,
-            wraps: !!trigger && getComputedStyle(trigger.querySelector('span')).whiteSpace !== 'nowrap',
+            wraps: !!trigger && getComputedStyle(trigger.querySelector('.choice-value')).whiteSpace !== 'nowrap',
+            singleCount: trigger?.querySelectorAll('.choice-count').length,
+            chevron: !!trigger?.querySelector('.choice-trailing[aria-hidden="true"] > svg'),
+            valueAtStart: !!trigger && (() => {
+              const style = getComputedStyle(trigger), value = trigger.querySelector('.choice-value');
+              return !!value && Math.abs(value.getBoundingClientRect().left - trigger.getBoundingClientRect().left - parseFloat(style.borderLeftWidth) - parseFloat(style.paddingLeft)) <= 2;
+            })(),
             flatOptions: control.querySelectorAll('.choice-options').length,
           };
         };
@@ -416,6 +422,8 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
         assert.equal(control.label, label);
         assert.ok(control.visibleLabel && control.trigger && control.accessibleLabel && control.fullWidth && control.wraps, `${width}px ${label} stays a labelled full-width compact trigger with wrapping text`);
         assert.equal(control.flatOptions, 0, `${label} does not render an inline option grid`);
+        assert.equal(control.singleCount, 0, `${width}px ${label} single selection has no multi-selection count`);
+        assert.ok(control.chevron && control.valueAtStart, `${width}px ${label} keeps its value at the start and a separate trailing expand affordance`);
       }
       assert.match(layout.folderValue.text, /All folders/, `${width}px empty folder selection displays its matched option label`);
       assert.equal(layout.folderValue.name, 'Folder All folders', `${width}px folder accessible name resolves both label and selected value IDs`);
