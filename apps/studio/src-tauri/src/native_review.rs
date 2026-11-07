@@ -6,6 +6,161 @@ const UNAVAILABLE: &str = "工作区确认所有权不可用，请完全退出�
 const RESTART: &str = "创作窗口已重新加载，请完全退出并重启应用后重新确认工作区";
 const INVALID: &str = "Invalid native review ownership request";
 
+// Test adapters never retain filesystem data or errors, only one fixed classification.
+#[cfg(test)]
+mod diagnostic {
+    use std::{cell::Cell, fs::TryLockError, io::{Error, ErrorKind}};
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(super) enum Attempt { SameProcessReacquire }
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(super) enum Stage {
+        Base, CreateDirectory, Ordinary, Directory, CreateFile, ExistingFile,
+        FinalFile, OpenedFile, NamedFile, TryLock,
+    }
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(super) enum Check { Operation, Metadata, Type, Permissions, Identity, Lock }
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(super) enum IoKind {
+        NotFound, PermissionDenied, AlreadyExists, WouldBlock, InvalidInput,
+        Unsupported, Interrupted, Other, Unknown,
+    }
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(super) enum LockKind { WouldBlock, Error(IoKind), Unknown }
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(super) enum Failure { Io(IoKind), Validation, Lock(LockKind) }
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(super) struct Snapshot {
+        pub(super) attempt: Attempt,
+        pub(super) stage: Stage,
+        pub(super) check: Check,
+        pub(super) failure: Failure,
+    }
+    #[derive(Clone, Copy, Default)]
+    struct Capture { attempt: Option<Attempt>, snapshot: Option<Snapshot> }
+    std::thread_local! {
+        static CAPTURE: Cell<Capture> = const { Cell::new(Capture { attempt: None, snapshot: None }) };
+    }
+    pub(super) fn reset(attempt: Attempt) {
+        CAPTURE.with(|slot| slot.set(Capture { attempt: Some(attempt), snapshot: None }));
+    }
+    pub(super) fn take() -> Option<Snapshot> {
+        CAPTURE.with(|slot| slot.replace(Capture::default()).snapshot)
+    }
+    fn record(stage: Stage, check: Check, failure: Failure) {
+        CAPTURE.with(|slot| {
+            let mut capture = slot.get();
+            if let Some(attempt) = capture.attempt {
+                if capture.snapshot.is_none() {
+                    capture.snapshot = Some(Snapshot { attempt, stage, check, failure });
+                    slot.set(capture);
+                }
+            }
+        });
+    }
+    fn io_kind(error: &Error) -> IoKind {
+        match error.kind() {
+            ErrorKind::NotFound => IoKind::NotFound,
+            ErrorKind::PermissionDenied => IoKind::PermissionDenied,
+            ErrorKind::AlreadyExists => IoKind::AlreadyExists,
+            ErrorKind::WouldBlock => IoKind::WouldBlock,
+            ErrorKind::InvalidInput => IoKind::InvalidInput,
+            ErrorKind::Unsupported => IoKind::Unsupported,
+            ErrorKind::Interrupted => IoKind::Interrupted,
+            ErrorKind::Other => IoKind::Other,
+            _ => IoKind::Unknown,
+        }
+    }
+    pub(super) fn io(stage: Stage, check: Check, error: &Error) {
+        record(stage, check, Failure::Io(io_kind(error)));
+    }
+    pub(super) fn validation(stage: Stage, check: Check) {
+        record(stage, check, Failure::Validation);
+    }
+    #[allow(unreachable_patterns)]
+    pub(super) fn lock(error: &TryLockError) {
+        let kind = match error {
+            TryLockError::WouldBlock => LockKind::WouldBlock,
+            TryLockError::Error(error) => LockKind::Error(io_kind(error)),
+            _ => LockKind::Unknown,
+        };
+        record(Stage::TryLock, Check::Lock, Failure::Lock(kind));
+    }
+    // Only label an ordinary() failure after it returns; do not repeat its checks.
+    pub(super) fn annotate(stage: Stage) {
+        CAPTURE.with(|slot| {
+            let mut capture = slot.get();
+            if let Some(snapshot) = &mut capture.snapshot {
+                if snapshot.stage == Stage::Ordinary {
+                    snapshot.stage = stage;
+                    slot.set(capture);
+                }
+            }
+        });
+    }
+}
+
+// Non-test expansions keep the original maps/conditions without observer calls.
+#[cfg(test)]
+macro_rules! owner_io {
+    ($result:expr, $stage:ident, $check:ident) => {
+        ($result).map_err(|error| {
+            diagnostic::io(diagnostic::Stage::$stage, diagnostic::Check::$check, &error);
+            UNAVAILABLE
+        })
+    };
+}
+#[cfg(not(test))]
+macro_rules! owner_io {
+    ($result:expr, $stage:ident, $check:ident) => { ($result).map_err(|_| UNAVAILABLE) };
+}
+#[cfg(test)]
+macro_rules! owner_io_return {
+    ($error:expr, $stage:ident) => {{
+        diagnostic::io(diagnostic::Stage::$stage, diagnostic::Check::Operation, &$error);
+        return Err(UNAVAILABLE);
+    }};
+}
+#[cfg(not(test))]
+macro_rules! owner_io_return {
+    ($error:expr, $stage:ident) => { return Err(UNAVAILABLE) };
+}
+#[cfg(test)]
+macro_rules! owner_reject {
+    ($condition:expr, $stage:ident, $check:ident) => {
+        if $condition {
+            diagnostic::validation(diagnostic::Stage::$stage, diagnostic::Check::$check);
+            return Err(UNAVAILABLE);
+        }
+    };
+}
+#[cfg(not(test))]
+macro_rules! owner_reject {
+    ($condition:expr, $stage:ident, $check:ident) => {
+        if $condition { return Err(UNAVAILABLE); }
+    };
+}
+#[cfg(test)]
+macro_rules! owner_ordinary {
+    ($result:expr, $stage:ident) => {
+        ($result).inspect_err(|_| diagnostic::annotate(diagnostic::Stage::$stage))
+    };
+}
+#[cfg(not(test))]
+macro_rules! owner_ordinary {
+    ($result:expr, $stage:ident) => { $result };
+}
+#[cfg(test)]
+macro_rules! owner_lock {
+    ($result:expr) => {
+        ($result).map_err(|error| { diagnostic::lock(&error); UNAVAILABLE })
+    };
+}
+#[cfg(not(test))]
+macro_rules! owner_lock {
+    ($result:expr) => { ($result).map_err(|_| UNAVAILABLE) };
+}
+
 #[derive(Default)]
 pub struct ReviewOwnership(Mutex<Owner>);
 #[derive(Default)]
@@ -21,28 +176,28 @@ fn uuid(value: &str) -> bool {
     })
 }
 fn ordinary(path: &Path, directory: bool) -> Result<(), &'static str> {
-    let info = fs::symlink_metadata(path).map_err(|_| UNAVAILABLE)?;
-    if info.file_type().is_symlink() || (if directory { !info.is_dir() } else { !info.is_file() }) { return Err(UNAVAILABLE); }
+    let info = owner_io!(fs::symlink_metadata(path), Ordinary, Metadata)?;
+    owner_reject!(info.file_type().is_symlink() || (if directory { !info.is_dir() } else { !info.is_file() }), Ordinary, Type);
     #[cfg(unix)] {
         use std::os::unix::fs::MetadataExt;
-        if info.mode() & 0o077 != 0 || (!directory && info.nlink() != 1) { return Err(UNAVAILABLE); }
+        owner_reject!(info.mode() & 0o077 != 0 || (!directory && info.nlink() != 1), Ordinary, Permissions);
     }
     Ok(())
 }
 fn acquire(base: &Path) -> Result<File, &'static str> {
     // AppData is supplied by Tauri, never by JavaScript. Its private child is not
     // in the plugin-fs workspace grant and is never unlinked/replaced by cleanup.
-    let info = fs::symlink_metadata(base).map_err(|_| UNAVAILABLE)?;
-    if info.file_type().is_symlink() || !info.is_dir() { return Err(UNAVAILABLE); }
+    let info = owner_io!(fs::symlink_metadata(base), Base, Metadata)?;
+    owner_reject!(info.file_type().is_symlink() || !info.is_dir(), Base, Type);
     let directory = base.join(".studio-review-owner-v1");
     let mut builder = fs::DirBuilder::new();
     #[cfg(unix)] { use std::os::unix::fs::DirBuilderExt; builder.mode(0o700); }
     match builder.create(&directory) {
         Ok(()) => (),
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => (),
-        Err(_) => return Err(UNAVAILABLE),
+        Err(_error) => owner_io_return!(_error, CreateDirectory),
     }
-    ordinary(&directory, true)?;
+    owner_ordinary!(ordinary(&directory, true), Directory)?;
     let path = directory.join("owner.lock");
     let mut options = OpenOptions::new();
     options.read(true).write(true).create_new(true);
@@ -50,21 +205,21 @@ fn acquire(base: &Path) -> Result<File, &'static str> {
     let file = match options.open(&path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            ordinary(&path, false)?;
-            OpenOptions::new().read(true).write(true).open(&path).map_err(|_| UNAVAILABLE)?
+            owner_ordinary!(ordinary(&path, false), ExistingFile)?;
+            owner_io!(OpenOptions::new().read(true).write(true).open(&path), ExistingFile, Operation)?
         },
-        Err(_) => return Err(UNAVAILABLE),
+        Err(_error) => owner_io_return!(_error, CreateFile),
     };
-    ordinary(&path, false)?;
-    let info = file.metadata().map_err(|_| UNAVAILABLE)?;
-    if !info.is_file() { return Err(UNAVAILABLE); }
+    owner_ordinary!(ordinary(&path, false), FinalFile)?;
+    let info = owner_io!(file.metadata(), OpenedFile, Metadata)?;
+    owner_reject!(!info.is_file(), OpenedFile, Type);
     #[cfg(unix)] {
         use std::os::unix::fs::MetadataExt;
-        let named = fs::symlink_metadata(&path).map_err(|_| UNAVAILABLE)?;
-        if info.dev() != named.dev() || info.ino() != named.ino() || info.nlink() != 1 || info.mode() & 0o077 != 0 { return Err(UNAVAILABLE); }
+        let named = owner_io!(fs::symlink_metadata(&path), NamedFile, Metadata)?;
+        owner_reject!(info.dev() != named.dev() || info.ino() != named.ino() || info.nlink() != 1 || info.mode() & 0o077 != 0, OpenedFile, Identity);
     }
     // Unsupported filesystem/target is an error, never a queue-only fallback.
-    file.try_lock().map_err(|_| UNAVAILABLE)?;
+    owner_lock!(file.try_lock())?;
     Ok(file)
 }
 impl Owner {
@@ -100,6 +255,116 @@ mod tests {
     }
     const ID: &str = "00000000-0000-4000-8000-000000000001";
     const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
+
+    // Synthetic adapters only: these do not exercise filesystem/security branches.
+    fn validation_adapter(reject: bool) -> Result<(), &'static str> {
+        owner_reject!(reject, Ordinary, Type);
+        Ok(())
+    }
+    fn io_return_adapter(error: std::io::Error) -> Result<(), &'static str> {
+        owner_io_return!(error, CreateDirectory)
+    }
+    fn expected_snapshot(stage: diagnostic::Stage, check: diagnostic::Check, failure: diagnostic::Failure) -> Option<diagnostic::Snapshot> {
+        Some(diagnostic::Snapshot { attempt: diagnostic::Attempt::SameProcessReacquire, stage, check, failure })
+    }
+    #[test]
+    fn diagnostic_io_adapters_keep_fixed_mapping_and_return() {
+        use diagnostic::{Attempt, Check, Failure, IoKind, Stage};
+        use std::io::{Error, ErrorKind};
+        for (kind, expected) in [
+            (ErrorKind::NotFound, IoKind::NotFound),
+            (ErrorKind::PermissionDenied, IoKind::PermissionDenied),
+            (ErrorKind::AlreadyExists, IoKind::AlreadyExists),
+            (ErrorKind::WouldBlock, IoKind::WouldBlock),
+            (ErrorKind::InvalidInput, IoKind::InvalidInput),
+            (ErrorKind::Unsupported, IoKind::Unsupported),
+            (ErrorKind::Interrupted, IoKind::Interrupted),
+            (ErrorKind::Other, IoKind::Other),
+            (ErrorKind::TimedOut, IoKind::Unknown),
+        ] {
+            diagnostic::reset(Attempt::SameProcessReacquire);
+            let result: Result<(), &'static str> = owner_io!(Err::<(), _>(Error::from(kind)), Base, Metadata);
+            let snapshot = diagnostic::take();
+            assert_eq!(result, Err(UNAVAILABLE), "{snapshot:?}");
+            assert_eq!(snapshot, expected_snapshot(Stage::Base, Check::Metadata, Failure::Io(expected)));
+        }
+        diagnostic::reset(Attempt::SameProcessReacquire);
+        let result = io_return_adapter(Error::from(ErrorKind::PermissionDenied));
+        let snapshot = diagnostic::take();
+        assert_eq!(result, Err(UNAVAILABLE), "{snapshot:?}");
+        assert_eq!(snapshot, expected_snapshot(Stage::CreateDirectory, Check::Operation, Failure::Io(IoKind::PermissionDenied)));
+    }
+    #[test]
+    fn diagnostic_lock_adapter_distinguishes_would_block_variants() {
+        use diagnostic::{Attempt, Check, Failure, IoKind, LockKind, Stage};
+        use std::{fs::TryLockError, io::{Error, ErrorKind}};
+        for (error, expected) in [
+            (TryLockError::WouldBlock, LockKind::WouldBlock),
+            (TryLockError::Error(Error::from(ErrorKind::WouldBlock)), LockKind::Error(IoKind::WouldBlock)),
+            (TryLockError::Error(Error::from(ErrorKind::PermissionDenied)), LockKind::Error(IoKind::PermissionDenied)),
+            (TryLockError::Error(Error::from(ErrorKind::TimedOut)), LockKind::Error(IoKind::Unknown)),
+        ] {
+            diagnostic::reset(Attempt::SameProcessReacquire);
+            let result: Result<(), &'static str> = owner_lock!(Err::<(), _>(error));
+            let snapshot = diagnostic::take();
+            assert_eq!(result, Err(UNAVAILABLE), "{snapshot:?}");
+            assert_eq!(snapshot, expected_snapshot(Stage::TryLock, Check::Lock, Failure::Lock(expected)));
+        }
+    }
+    #[test]
+    fn diagnostic_validation_annotation_keeps_first_failure_and_check() {
+        use diagnostic::{Attempt, Check, Failure, IoKind, Stage};
+        diagnostic::reset(Attempt::SameProcessReacquire);
+        let result = owner_ordinary!(validation_adapter(true), ExistingFile);
+        let later: Result<(), &'static str> = owner_io!(Err::<(), _>(std::io::Error::from(std::io::ErrorKind::NotFound)), Base, Metadata);
+        let snapshot = diagnostic::take();
+        assert_eq!(result, Err(UNAVAILABLE), "{snapshot:?}");
+        assert_eq!(later, Err(UNAVAILABLE), "{snapshot:?}");
+        assert_eq!(snapshot, expected_snapshot(Stage::ExistingFile, Check::Type, Failure::Validation));
+
+        diagnostic::reset(Attempt::SameProcessReacquire);
+        let result: Result<(), &'static str> = owner_ordinary!(owner_io!(Err::<(), _>(std::io::Error::from(std::io::ErrorKind::NotFound)), Ordinary, Metadata), Directory);
+        let snapshot = diagnostic::take();
+        assert_eq!(result, Err(UNAVAILABLE), "{snapshot:?}");
+        assert_eq!(snapshot, expected_snapshot(Stage::Directory, Check::Metadata, Failure::Io(IoKind::NotFound)));
+    }
+    #[test]
+    fn diagnostic_reset_take_disarm_and_thread_isolation() {
+        use diagnostic::{Attempt, Check, Failure, IoKind, Stage};
+        assert_eq!(diagnostic::take(), None);
+        assert_eq!(validation_adapter(true), Err(UNAVAILABLE));
+        assert_eq!(diagnostic::take(), None);
+        diagnostic::reset(Attempt::SameProcessReacquire);
+        assert_eq!(validation_adapter(true), Err(UNAVAILABLE));
+        diagnostic::reset(Attempt::SameProcessReacquire);
+        assert_eq!(validation_adapter(false), Ok(()));
+        assert_eq!(diagnostic::take(), None);
+        assert_eq!(validation_adapter(true), Err(UNAVAILABLE));
+        assert_eq!(diagnostic::take(), None);
+
+        diagnostic::reset(Attempt::SameProcessReacquire);
+        assert_eq!(validation_adapter(true), Err(UNAVAILABLE));
+        let handles = [
+            (std::io::ErrorKind::NotFound, IoKind::NotFound),
+            (std::io::ErrorKind::PermissionDenied, IoKind::PermissionDenied),
+        ].map(|(kind, expected)| std::thread::spawn(move || {
+            assert_eq!(diagnostic::take(), None);
+            assert_eq!(validation_adapter(true), Err(UNAVAILABLE));
+            assert_eq!(diagnostic::take(), None);
+            diagnostic::reset(Attempt::SameProcessReacquire);
+            let result: Result<(), &'static str> = owner_io!(Err::<(), _>(std::io::Error::from(kind)), Base, Metadata);
+            let snapshot = diagnostic::take();
+            assert_eq!(result, Err(UNAVAILABLE), "{snapshot:?}");
+            assert_eq!(snapshot, expected_snapshot(Stage::Base, Check::Metadata, Failure::Io(expected)));
+            assert_eq!(validation_adapter(true), Err(UNAVAILABLE));
+            assert_eq!(diagnostic::take(), None);
+        }));
+        let joined = handles.map(|handle| handle.join().is_ok());
+        assert_eq!(joined, [true, true]);
+        assert_eq!(diagnostic::take(), expected_snapshot(Stage::Ordinary, Check::Type, Failure::Validation));
+        assert_eq!(validation_adapter(true), Err(UNAVAILABLE));
+        assert_eq!(diagnostic::take(), None);
+    }
     #[test]
     fn command_capability_is_local_main_only_on_desktop_and_mobile() {
         let capability: serde_json::Value = serde_json::from_str(include_str!("../capabilities/native-review.json")).unwrap();
@@ -125,7 +390,11 @@ mod tests {
         assert!(acquire(&base).is_err());
         drop(owner);
         let mut restarted = Owner::default();
-        assert_eq!(restarted.authorize(&base, ID, ID, true), Ok(true));
+        diagnostic::reset(diagnostic::Attempt::SameProcessReacquire);
+        let result = restarted.authorize(&base, ID, ID, true);
+        let snapshot = diagnostic::take();
+        // None is honest: authorize guards are outside the acquire adapters.
+        assert_eq!(result, Ok(true), "{snapshot:?}");
         drop(restarted); fs::remove_dir_all(base).unwrap();
     }
     #[test]
