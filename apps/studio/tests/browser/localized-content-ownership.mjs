@@ -674,15 +674,16 @@ export async function checkLocalizedContentOwnership(browser) {
     });
   }
 
-  for (const boundary of ['path', 'kind', 'session', 'id', 'method', 'csrf', 'expires', 'unmount']) for (const outcome of ['success', 'conflict']) for (const phase of phases) {
-    designedCases.push(`direct-child: ${boundary} roundtrip fences pending POST ${outcome} at ${phase}, no stale open/error/working callback`);
+  for (const kind of ['manual', 'ai']) for (const boundary of ['path', 'kind', 'session', 'id', 'method', 'csrf', 'expires', 'unmount']) for (const outcome of ['success', 'conflict']) for (const phase of phases) {
+    designedCases.push(`direct-child: ${boundary} roundtrip fences pending ${kind} POST ${outcome} at ${phase}, no stale open/error/working callback`);
     await inRealm(browser, bundle, 'direct-child', null, async page => {
       await ready(page);
       await idle(page);
       await page.click(add);
-      await page.click(manual);
-      const post = await held(page, 'manual', 1);
+      await page.click(kind === 'manual' ? manual : ai);
+      const post = await held(page, kind, 1);
       await page.waitForFunction(() => window.ownership.observe().working.at(-1) === true);
+      assert.equal(await page.evaluate(kind => window.ownership.matchesMutation(kind), kind), true, 'POST uses the original saved revision and selected target exactly once');
       await atBoundary(page, post, phase, outcome === 'conflict' ? { status: 409, conflict: true } : {});
       await event(page, boundary);
       if (boundary === 'path' || boundary === 'kind') await event(page, boundary + '-return');
@@ -698,7 +699,7 @@ export async function checkLocalizedContentOwnership(browser) {
       const state = await observe(page);
       assert.equal(state.opens, 0, 'Stale mutation result cannot navigate');
       assert.deepEqual(state.working, afterBoundary, 'Stale mutation finally cannot emit working into the new owner');
-      assert.equal(state.jobs.filter(job => job.kind === 'manual').length, 1, 'Session/prop change never replays a mutation');
+      assert.equal(state.jobs.filter(job => job.kind === kind).length, 1, 'Session/prop change never replays a mutation');
       assert.equal(await page.evaluate(() => window.ownership.hasConflict()), boundary === 'unmount' ? undefined : false, 'Stale conflict cannot poison the new context');
       if (boundary === 'path' || boundary === 'kind') await latestUI(page);
       else if (boundary !== 'unmount') {
