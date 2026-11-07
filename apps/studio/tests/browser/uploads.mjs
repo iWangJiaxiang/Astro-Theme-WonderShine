@@ -102,8 +102,9 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
         });
         const matched = imageMatched && (!body || (bodyScrollReadForPredicate = true, (bodyScrollTopForPredicate = body.scrollTop) === 0));
         // No extra DOM reads precede matched; retained rectangles/hits are from the predicate.
-        let sample;
+        let sample, resourceSampled = false, resourceFinished = false;
         try {
+          try { resourceSampled = window.__mediaDisclosureDiagnostics?.sampleImages(images, browser.closest('.media-library') ? 'library' : 'picker') === true; } catch {}
           const faults = [];
           let droppedFaults = 0;
           const read = (stage, action) => {
@@ -170,7 +171,11 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
           if (captureFailed) { if (faults.length < 8) faults.push('candidate-capture'); else sample.droppedFaults++; }
           if (faults.length || sample.droppedFaults || sample.droppedCandidates || sample.droppedImageLayouts) sample.status = 'partial';
         } catch { sample = { status: 'unavailable', faults: ['post-predicate'], droppedFaults: 0 }; }
-        return { matched, sample };
+        finally {
+          // Browser-side window end does not depend on matched, sample success or RPC delivery.
+          try { resourceFinished = window.__mediaDisclosureDiagnostics?.finishImages() === true; } catch {}
+        }
+        return { matched, sample, resourceSampled, resourceFinished };
       });
     } catch (error) {
       try { mediaDiagnostics?.recordPreview(target, null, 'rpc-failed'); } catch {}

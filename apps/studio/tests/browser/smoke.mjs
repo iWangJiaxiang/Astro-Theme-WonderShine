@@ -434,6 +434,9 @@ try {
     if (mediaDiagnostics) await withTimeout(() => mediaDiagnostics.writeReport(), 'Media disclosure report write');
   } catch (error) {
     recordFailure(error);
+  } finally {
+    // Terminal resource validation may add faults after all earlier error drains.
+    for (const diagnosticError of mediaDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);
   }
   await folderClearDiagnostics?.writeReport();
   for (const diagnosticError of folderClearDiagnostics?.takeErrors() ?? []) recordFailure(diagnosticError);

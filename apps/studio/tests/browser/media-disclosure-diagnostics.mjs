@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises';
 import { mediaTraceStages, mediaTraceCaps } from './media-disclosure-trace-contract.mjs';
+import { mediaResourceCaps, mediaResourceNamespace, validateMediaResource, unavailableMediaResource } from './media-resource-contract.mjs';
 
 const traceNamespace = 'studio-media-controller-trace-v2';
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
@@ -170,6 +171,7 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
       continuity: controllerTraceExpected ? 'not-established' : 'not-enabled',
       memory: 'Node owns at most 8 segments (2048 records/128 faults); browser latest envelope and in-flight RPC contain at most 2 segments (512 records/32 faults) each; report.browser omits the transient controllerTrace cache',
     },
+    imageResources: unavailableMediaResource(owner),
     browser: null, waits: [], droppedWaits: 0, cleanup: {}, diagnosticFailures: [], droppedFailures: 0,
   };
   const errors = [];
@@ -222,10 +224,61 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
       if (final) archive.finalization = 'invalid-or-unavailable';
     }
   };
+  let resourceFailed = false, resourceFinal = false, resourceErrorQueued = false;
+  const resourceNodeFaults = [];
+  let resourceNodeDropped = 0, resourceBrowserDropped = 0;
+  let resourceBrowserFaults = [];
+  const mergeResourceFaults = value => {
+    const faults = [...resourceBrowserFaults, ...resourceNodeFaults];
+    const droppedFaults = Math.min(mediaResourceCaps.numericMaximum, resourceBrowserDropped + resourceNodeDropped + Math.max(0, faults.length - mediaResourceCaps.faults));
+    return { ...value, status: resourceFailed && value.status === 'available' ? 'partial' : value.status,
+      faults: faults.slice(0, mediaResourceCaps.faults), droppedFaults,
+      saturated: value.saturated || droppedFaults === mediaResourceCaps.numericMaximum };
+  };
+  const resourceError = () => {
+    resourceFailed = true;
+    if (!resourceErrorQueued) {
+      resourceErrorQueued = true;
+      // Independent error delivery even if the older DOM collector's failure cap is full.
+      errors.push(new Error('Media image DOM diagnostics unavailable or partial'));
+    }
+  };
+  const resourceFault = code => {
+    resourceError();
+    if (resourceNodeFaults.length + resourceBrowserFaults.length < mediaResourceCaps.faults) resourceNodeFaults.push(code);
+    else resourceNodeDropped = Math.min(mediaResourceCaps.numericMaximum, resourceNodeDropped + 1);
+  };
+  const retainResource = (value, final = false) => {
+    let valid;
+    try {
+      valid = validateMediaResource(value, owner, final);
+      resourceBrowserFaults = [...valid.faults]; resourceBrowserDropped = valid.droppedFaults;
+      const remaining = mediaResourceCaps.faults - resourceBrowserFaults.length;
+      if (resourceNodeFaults.length > remaining) {
+        resourceNodeDropped = Math.min(mediaResourceCaps.numericMaximum, resourceNodeDropped + resourceNodeFaults.length - remaining);
+        resourceNodeFaults.length = remaining;
+      }
+      if (final) resourceFinal = true;
+    } catch {
+      resourceFault(final ? 'invalid-final' : 'invalid-export');
+      valid = unavailableMediaResource(owner);
+    }
+    if (valid.status !== 'available') resourceError();
+    // The incoming projection is cumulative; merge Node faults once, never append snapshots.
+    const merged = mergeResourceFaults(valid);
+    try {
+      validateMediaResource(merged, owner, final && resourceFinal);
+      report.imageResources = merged;
+    } catch {
+      resourceFault('projection-size');
+      report.imageResources = mergeResourceFaults(unavailableMediaResource(owner));
+    }
+  };
   const retain = (data, options) => {
-    if (!data) { retainTrace(undefined, options); return; }
-    // Do not serialize the browser's latest transient envelope a second time.
-    const { controllerTrace, ...domData } = data;
+    if (!data) { retainResource(undefined); retainTrace(undefined, options); return; }
+    // Neither resource evidence nor the controller envelope is duplicated in browser data.
+    const { controllerTrace, imageResources, ...domData } = data;
+    retainResource(imageResources);
     report.browser = domData;
     retainTrace(controllerTrace, options);
     if (controllerTraceExpected && (domData.failures?.some(({ stage }) => stage.startsWith('controller-trace-')) || domData.droppedFailures)) {
@@ -235,7 +288,7 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
   return {
     async install() {
       active = true; report.active = true; report.installation = 'attempted';
-      const data = await attempt('install', () => page.evaluate(({ hook, caps, owner, controllerTraceExpected, tracePlan, traceCaps }) => {
+      const data = await attempt('install', () => page.evaluate(({ hook, caps, owner, controllerTraceExpected, tracePlan, traceCaps, resourceCaps, resourceNamespace }) => {
         if (Object.hasOwn(window, hook)) throw new Error('Media diagnostic hook already exists');
         const ids = new WeakMap();
         let nextId = 0, enabled = true, observer;
@@ -348,9 +401,152 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
         };
         const waits = new Map();
         const previewSeen = new Set();
+        const resourceIds = new WeakMap();
+        const resourceRegistrations = { load: false, error: false };
+        const resource = {
+          version: 1, idNamespace: resourceNamespace, owner, status: 'available', active: true,
+          startedAt: 0, timestamp: 0, endedAt: null, endReason: 'open', baseline: 'unknown', saturated: false, omitted: false,
+          listeners: resourceRegistrations, cleanup: { windowEnd: 'pending', terminal: 'pending' },
+          totals: { observedEvents: 0, retainedEvents: 0, droppedEvents: 0, assignedEvents: 0, refusedEvents: 0, identityRefusals: 0, observedBatches: 0, retainedBatches: 0, droppedBatches: 0, totalSamples: 0, retainedSamples: 0, droppedSamples: 0 },
+          summaries: [], events: [], batches: [], faults: [], droppedFaults: 0,
+        };
+        const resourceFault = code => {
+          resource.status = 'partial';
+          if (resource.faults.length < resourceCaps.faults) resource.faults.push(code);
+          else if (resource.droppedFaults < resourceCaps.numericMaximum) resource.droppedFaults++;
+          if (resource.droppedFaults === resourceCaps.numericMaximum) resource.saturated = true;
+        };
+        const resourceAdd = (object, key, amount = 1) => {
+          const next = object[key] + amount;
+          if (!Number.isSafeInteger(next) || next >= resourceCaps.numericMaximum) {
+            object[key] = resourceCaps.numericMaximum; resource.saturated = true; resourceFault('numeric-saturation');
+          } else object[key] = next;
+        };
+        const resourceTime = () => {
+          try {
+            const now = performance.now();
+            if (!Number.isFinite(now) || now < resource.timestamp || now >= resourceCaps.numericMaximum) {
+              resource.saturated = now >= resourceCaps.numericMaximum || resource.saturated;
+              resourceFault('clock'); return resource.timestamp;
+            }
+            resource.timestamp = now; return now;
+          } catch { resourceFault('clock'); return resource.timestamp; }
+        };
+        const resourceScope = image => image.matches('.media-library .media-browser .media-thumbnail img') ? 'library'
+          : image.matches('dialog.media-dialog[open] .media-browser .media-thumbnail img') ? 'picker' : null;
+        const resourceId = image => {
+          const known = resourceIds.get(image);
+          if (known !== undefined) return known;
+          if (resource.summaries.length >= resourceCaps.identities) {
+            // Refusals count allocation attempts, not distinct omitted images.
+            resourceAdd(resource.totals, 'identityRefusals'); resourceFault('identity-cap'); return null;
+          }
+          const imageId = resource.summaries.length + 1;
+          resourceIds.set(image, imageId);
+          resource.summaries.push({ imageId, loadCount: 0, errorCount: 0, firstAt: null, lastAt: null });
+          return imageId;
+        };
+        const resourceEvent = event => {
+          if (!resource.active) return;
+          try {
+            const image = event.target;
+            if (!(image instanceof HTMLImageElement)) return;
+            const scope = resourceScope(image);
+            if (!scope) return;
+            const timestamp = resourceTime(), imageId = resourceId(image);
+            resourceAdd(resource.totals, 'observedEvents');
+            if (imageId === null) resourceAdd(resource.totals, 'refusedEvents');
+            else {
+              resourceAdd(resource.totals, 'assignedEvents');
+              const summary = resource.summaries[imageId - 1];
+              resourceAdd(summary, event.type === 'load' ? 'loadCount' : 'errorCount');
+              summary.firstAt ??= timestamp; summary.lastAt = timestamp;
+            }
+            // Truncation affects retention only: assigned-ID accounting continues.
+            if (resource.events.length < resourceCaps.events) {
+              resource.events.push({ seq: resource.totals.observedEvents, kind: event.type, scope, imageId, trusted: event.isTrusted, connected: image.isConnected, timestamp });
+              resourceAdd(resource.totals, 'retainedEvents');
+            } else { resourceAdd(resource.totals, 'droppedEvents'); resourceFault('event-cap'); }
+          } catch { resourceFault('event-read'); }
+        };
+        const removeResourceListeners = () => {
+          for (const type of ['load', 'error']) {
+            if (!resourceRegistrations[type]) continue;
+            try { document.removeEventListener(type, resourceEvent, true); resourceRegistrations[type] = false; }
+            catch { resourceFault('listener-remove'); }
+          }
+          return !resourceRegistrations.load && !resourceRegistrations.error;
+        };
+        const endResourceWindow = reason => {
+          if (resource.active) {
+            resource.active = false; resource.endedAt = resourceTime(); resource.endReason = reason;
+          }
+          resource.cleanup.windowEnd = removeResourceListeners() ? 'completed' : 'failed';
+        };
+        const sampleImages = (images, scope) => {
+          // No-throw hook; uploads invokes finishImages from its browser finally.
+          let batch;
+          try {
+            resourceAdd(resource.totals, 'observedBatches');
+            const timestamp = resourceTime();
+            const total = images.length;
+            if (!Number.isSafeInteger(total) || total < 0 || total >= resourceCaps.numericMaximum) { resourceFault('numeric-saturation'); resource.saturated = true; return false; }
+            resourceAdd(resource.totals, 'totalSamples', total);
+            if (!resource.active) {
+              resourceAdd(resource.totals, 'droppedBatches'); resourceAdd(resource.totals, 'droppedSamples', total); resourceFault('sample-inactive'); return false;
+            }
+            if (resource.batches.length >= resourceCaps.batches) {
+              resourceAdd(resource.totals, 'droppedBatches'); resourceAdd(resource.totals, 'droppedSamples', total); resourceFault('batch-cap'); return false;
+            }
+            const retained = Math.min(total, resourceCaps.samplesPerBatch), dropped = total - retained;
+            batch = { attempt: resource.totals.observedBatches, scope, timestamp, total, retained, dropped, samples: [], status: 'available' };
+            resource.batches.push(batch); resourceAdd(resource.totals, 'retainedBatches');
+            resourceAdd(resource.totals, 'retainedSamples', retained); resourceAdd(resource.totals, 'droppedSamples', dropped);
+            if (dropped) { batch.status = 'partial'; resourceFault('sample-cap'); }
+            for (let ordinal = 0; ordinal < retained; ordinal++) {
+              const state = { ordinal, imageId: null, loadCount: null, errorCount: null, firstAt: null, lastAt: null, complete: null, naturalWidthPositive: null, loading: null, decoding: null, connected: null };
+              batch.samples.push(state);
+              try {
+                const image = images[ordinal];
+                if (!(image instanceof HTMLImageElement) || resourceScope(image) !== scope) { resourceFault('sample-scope'); batch.status = 'partial'; continue; }
+                const imageId = resourceId(image);
+                if (imageId !== null) Object.assign(state, resource.summaries[imageId - 1]);
+                else batch.status = 'partial';
+                state.complete = image.complete; state.naturalWidthPositive = image.naturalWidth > 0;
+                const loading = image.loading, decoding = image.decoding;
+                state.loading = ['eager', 'lazy'].includes(loading) ? loading : 'unknown';
+                state.decoding = ['sync', 'async', 'auto'].includes(decoding) ? decoding : 'unknown';
+                state.connected = image.isConnected;
+              } catch { batch.status = 'partial'; resourceFault('sample-read'); }
+            }
+            return true;
+          } catch { if (batch) batch.status = 'partial'; resourceFault('sample-read'); return false; }
+        };
+        let resourcePreviewAttempts = 0;
+        const finishImages = () => {
+          try {
+            resourcePreviewAttempts = Math.min(resourceCaps.batches, resourcePreviewAttempts + 1);
+            if (resourcePreviewAttempts === resourceCaps.batches) endResourceWindow('second-preview-finally');
+            return true;
+          } catch { resourceFault('sample-read'); return false; }
+        };
+        const exportResource = () => {
+          try {
+            resourceTime();
+            let projection = JSON.parse(JSON.stringify(resource));
+            if (new TextEncoder().encode(JSON.stringify(projection)).length > resourceCaps.bytes) {
+              resourceFault('projection-size');
+              projection = { ...resource, status: 'unavailable', omitted: true, summaries: [], events: [], batches: [] };
+            }
+            return projection;
+          } catch {
+            resourceFault('projection-export');
+            return { ...resource, status: 'unavailable', omitted: true, summaries: [], events: [], batches: [] };
+          }
+        };
         // Publish before acquiring resources so partial installation can be cleaned up.
         window[hook] = {
-          owner, checkpoint,
+          owner, checkpoint, sampleImages, finishImages,
           sampleWait(waitId, node, matched, expected, target) {
             if (!enabled || !Number.isInteger(waitId)) return;
             try {
@@ -376,6 +572,7 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
             const wait = waits.get(waitId);
             if (wait) wait.outcome = outcome;
             exportControllerTrace(nextTraceStage);
+            data.imageResources = exportResource();
             return data;
           },
           cleanup(kind) {
@@ -384,6 +581,9 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
               let status = 'completed';
               // Disconnect, stop and final snapshot are independent in this same RPC.
               try { observer?.disconnect(); } catch { status = 'failed'; fault('observer-disconnect'); }
+              endResourceWindow('early-cleanup');
+              resource.cleanup.terminal = !resource.active && !resourceRegistrations.load && !resourceRegistrations.error ? 'completed' : 'failed';
+              if (resource.cleanup.terminal !== 'completed') status = 'failed';
               if (controllerTraceExpected) {
                 try {
                   if (!controllerAPI || controllerAPI.stop(owner) !== true) throw new Error('Controller trace stop refused');
@@ -392,9 +592,11 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
                 exportControllerTrace(undefined, true);
                 if (data.controllerTrace.status === 'unavailable') status = 'failed';
               }
-              return { status, ...(controllerTraceExpected ? { controllerTrace: data.controllerTrace } : {}), failures: data.failures, droppedFailures: data.droppedFailures };
+              return { status, imageResources: exportResource(), ...(controllerTraceExpected ? { controllerTrace: data.controllerTrace } : {}), failures: data.failures, droppedFailures: data.droppedFailures };
             }
             if (kind === 'listeners') {
+              // Only still-owned local registrations are removed; no RPC is retried.
+              endResourceWindow('early-cleanup');
               const failures = [];
               for (const [target, type, handler, capture] of listeners) {
                 try { target.removeEventListener(type, handler, capture); } catch (error) { failures.push(error); }
@@ -403,6 +605,13 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
             }
           },
         };
+        resource.startedAt = resourceTime();
+        for (const type of ['load', 'error']) {
+          // Ownership is published, and registration is tracked before acquisition.
+          resourceRegistrations[type] = true;
+          try { document.addEventListener(type, resourceEvent, { capture: true, passive: true }); }
+          catch { resourceFault('listener-install'); }
+        }
         // The cleanup hook is published before start, so later DOM setup failures cannot leak the session.
         if (controllerTraceExpected) {
           try {
@@ -470,8 +679,9 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
         observer.observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['open', 'inert', 'class', 'style'] });
         data.identity = context(); data.installed = true; checkpoint('installed');
         exportControllerTrace();
+        data.imageResources = exportResource();
         return data;
-      }, { hook, caps, owner, controllerTraceExpected, tracePlan: [...mediaTraceStages], traceCaps: { ...mediaTraceCaps } }));
+      }, { hook, caps, owner, controllerTraceExpected, tracePlan: [...mediaTraceStages], traceCaps: { ...mediaTraceCaps }, resourceCaps: { ...mediaResourceCaps }, resourceNamespace: mediaResourceNamespace }));
       retain(data);
       report.installation = data?.installed ? 'installed' : 'failed-or-partial';
       if (!data?.installed && !report.diagnosticFailures.length) failure('install-unavailable', new Error('Media diagnostic installation returned no state'));
@@ -480,6 +690,8 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
       // Synchronous Node cache only: no export RPC, disk write or active-hook dependency.
       report.previewAttempts++;
       try {
+        if (unavailableStage === 'rpc-failed') resourceFault('preview-rpc');
+        else if (result?.resourceSampled !== true || result?.resourceFinished !== true) resourceFault('missing-hook');
         const sample = result?.sample;
         const partial = sample?.status === 'partial' || (sample?.faults?.length ?? 0) > 0 || (sample?.droppedFaults ?? 0) > 0 || (sample?.droppedCandidates ?? 0) > 0 || (sample?.droppedImageLayouts ?? 0) > 0;
         const available = sample?.status === 'available' && !partial;
@@ -550,6 +762,7 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
           report.cleanup[kind] = typeof result === 'string' ? result : result?.status ?? 'failed';
           if (kind === 'observer') {
             // Retain the final inactive envelope before listener/hook cleanup.
+            retainResource(result?.imageResources, true);
             if (controllerTraceExpected) retainTrace(result?.controllerTrace, { final: true });
             if (result && report.browser) {
               report.browser.failures = result.failures ?? report.browser.failures;
@@ -557,12 +770,14 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
             }
           }
           if (report.cleanup[kind] !== 'completed') {
+            resourceFault('missing-cleanup');
             failure(`cleanup-${kind}-incomplete`, new Error('Media diagnostic cleanup incomplete'));
             if (controllerTraceExpected) traceFailure(`controller-trace-cleanup-${kind}`, true);
           }
         }
         active = false; report.active = false;
       }
+      if (outcome === 'passed' && (report.imageResources.totals.retainedBatches !== mediaResourceCaps.batches || report.imageResources.endReason !== 'second-preview-finally')) resourceFault('missing-sample');
       const archive = report.controllerTrace;
       if (controllerTraceExpected) {
         const completePlan = archive.segments.length === mediaTraceCaps.segments && archive.boundaries.length === mediaTraceStages.length - 1 && archive.missing.length === 0;
@@ -579,10 +794,27 @@ export function createMediaDisclosureDiagnostics({ page, reportPath, withTimeout
         if (controllerTraceExpected) traceFailure('controller-trace-browser-dropped-failures');
       }
     },
-    takeErrors() { return errors.splice(0); },
+    takeErrors() { resourceErrorQueued = false; return errors.splice(0); },
     async writeReport() {
+      // Terminal validation can add errors after the earlier drains; smoke drains again.
+      if (!resourceFinal) resourceFault('missing-cleanup');
+      if (report.outcome === 'passed' && report.imageResources.totals.retainedBatches !== mediaResourceCaps.batches) resourceFault('missing-sample');
+      try {
+        validateMediaResource(report.imageResources, owner, resourceFinal);
+        // Recompute from the latest browser counters, not the previously merged cache.
+        report.imageResources = mergeResourceFaults(report.imageResources);
+        validateMediaResource(report.imageResources, owner, resourceFinal);
+      } catch {
+        resourceFault('invalid-final');
+        report.imageResources = mergeResourceFaults(unavailableMediaResource(owner));
+      }
+      // Embed the validated resource projection compactly so the byte budget covers
+      // its actual serialized representation, without charging unrelated trace data.
+      const { imageResources, ...otherReport } = report;
+      const formatted = JSON.stringify(otherReport, null, 2);
+      const serialized = formatted.slice(0, -2) + ',\n  "imageResources": ' + JSON.stringify(imageResources) + '\n}\n';
       // Cached Node data remains writable even after page/browser destruction.
-      await writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
+      await writeFile(reportPath, serialized);
     },
   };
 }
