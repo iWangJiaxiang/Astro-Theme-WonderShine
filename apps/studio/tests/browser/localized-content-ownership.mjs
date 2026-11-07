@@ -206,7 +206,7 @@ window.ownership = {
           if (args.importer.endsWith('/src/App.tsx') && isolated.has(args.path)) return { path: args.path, namespace: 'ownership-unrelated-child' };
         });
         builder.onLoad({ filter: /.*/, namespace: 'ownership-unrelated-child' }, () => ({
-          loader: 'tsx', contents: `import React from 'react'; const Child = React.forwardRef(() => null); export default Child; export { Child as LegacyRecovery, Child as NativeAiSettings, Child as WorkspacePanel };`,
+          loader: 'tsx', resolveDir: studio, contents: `import React from 'react'; const Child = React.forwardRef(() => null); export default Child; export { Child as LegacyRecovery, Child as NativeAiSettings, Child as WorkspacePanel };`,
         }));
         builder.onResolve({ filter: /^vditor$/ }, () => ({ path: 'vditor', namespace: 'ownership-unused-rich' }));
         builder.onLoad({ filter: /.*/, namespace: 'ownership-unused-rich' }, () => ({ loader: 'js', contents: 'export default class UnusedRichEditor { constructor() { throw new Error("Source-mode fixture must not instantiate Vditor"); } }' }));
