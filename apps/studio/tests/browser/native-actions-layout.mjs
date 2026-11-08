@@ -18,6 +18,41 @@ const output = join(studio, 'test-results/native-actions-layout');
 const caps = Object.freeze({ workerMs: 150000, operationMs: 5000, bytes: 196608, faults: 8, tabs: 16, wheels: 16, pngs: 36 });
 const codes = new Set(['setup', 'bundle', 'css', 'browser', 'fixture', 'theme', 'ready', 'counter', 'transport', 'oauth', 'label', 'intrinsic', 'geometry', 'wrap', 'gap', 'alignment', 'grow', 'padding', 'target', 'overflow', 'visibility', 'focus', 'focus-identity', 'focus-visible', 'focus-style', 'focus-width', 'focus-offset', 'focus-color', 'focus-disabled', 'focus-repeat', 'focus-order', 'focus-tabs', 'input', 'busy', 'pending', 'draft', 'cancel', 'drain', 'cleanup', 'deadline', 'report', 'matrix', 'worker', 'page', 'console', 'resource', 'unhandled', 'screenshot']);
 const need = (value, code) => { if (!value) throw new Error(code); };
+// Closed transport table: never infer a site or primary from token structure.
+const reverseTokens = new Map([
+  ['reverse-start-focus-identity', 'focus-identity'], ['reverse-start-focus-disabled', 'focus-disabled'],
+  ['reverse-first-button-legacy-node', 'visibility'], ['reverse-first-button-legacy-ancestor', 'visibility'],
+  ['reverse-first-button-legacy-box', 'visibility'], ['reverse-first-button-legacy-hit', 'visibility'],
+  ['reverse-first-button-viewport', 'visibility'], ['reverse-first-button-ancestor', 'visibility'],
+  ['reverse-first-button-box', 'visibility'], ['reverse-first-button-heading-overlap', 'visibility'], ['reverse-first-button-hit', 'visibility'],
+  ['reverse-second-input-viewport', 'visibility'], ['reverse-second-input-ancestor', 'visibility'],
+  ['reverse-second-input-box', 'visibility'], ['reverse-second-input-heading-overlap', 'visibility'], ['reverse-second-input-hit', 'visibility'],
+  ['reverse-second-label-viewport', 'visibility'], ['reverse-second-label-ancestor', 'visibility'],
+  ['reverse-second-label-box', 'visibility'], ['reverse-second-label-heading-overlap', 'visibility'], ['reverse-second-label-hit', 'visibility'],
+  ['reverse-second-label-paint', 'visibility'],
+  ['reverse-first-button-heading-viewport', 'visibility'], ['reverse-first-button-heading-ancestor', 'visibility'],
+  ['reverse-second-input-heading-viewport', 'visibility'], ['reverse-second-input-heading-ancestor', 'visibility'],
+  ['reverse-second-label-heading-viewport', 'visibility'], ['reverse-second-label-heading-ancestor', 'visibility'],
+  ['reverse-first-other-geometry', 'geometry'], ['reverse-first-other-label', 'label'],
+  ['reverse-first-other-focus-identity', 'focus-identity'], ['reverse-first-other-focus-order', 'focus-order'],
+  ['reverse-first-other-focus-disabled', 'focus-disabled'], ['reverse-first-other-focus-visible', 'focus-visible'],
+  ['reverse-first-other-focus-style', 'focus-style'], ['reverse-first-other-focus-width', 'focus-width'],
+  ['reverse-first-other-focus-offset', 'focus-offset'], ['reverse-first-other-focus-color', 'focus-color'],
+  ['reverse-second-other-geometry', 'geometry'], ['reverse-second-other-label', 'label'],
+  ['reverse-second-other-focus-identity', 'focus-identity'], ['reverse-second-other-focus-order', 'focus-order'],
+  ['reverse-second-other-focus-disabled', 'focus-disabled'], ['reverse-second-other-focus-visible', 'focus-visible'],
+  ['reverse-second-other-focus-style', 'focus-style'], ['reverse-second-other-focus-width', 'focus-width'],
+  ['reverse-second-other-focus-offset', 'focus-offset'], ['reverse-second-other-focus-color', 'focus-color'],
+]);
+const reverseValues = new Set(['not-applicable', 'not-run', 'incomplete', 'passed', ...reverseTokens.keys()]);
+const reverseRow = row => row.id === 0 || row.id === 14;
+const reverseValue = value => reverseValues.has(value) && /^[a-z-]+$/.test(value) && Buffer.byteLength(JSON.stringify(value)) <= 64;
+// Inspect only a bounded suffix, without retaining or publishing RPC text.
+const assertionSuffix = error => {
+  if (typeof error?.message !== 'string') return null;
+  const tail = error.message.slice(-256);
+  return tail.match(error.message.length <= 256 ? /(?:^|Error:\s*)([a-z-]+)\s*$/ : /Error:\s*([a-z-]+)\s*$/)?.[1] ?? null;
+};
 const fixed = (error, fallback) => codes.has(error?.message) ? error.message : fallback;
 const fault = (list, code) => { if (list.length < caps.faults) list.push(code); else list[caps.faults - 1] = 'counter'; };
 const ua = {
@@ -37,13 +72,14 @@ export function nativeActionCases() {
   return rows.map(Object.freeze);
 }
 const designed = Object.freeze(nativeActionCases());
-const inventory = () => designed.map(row => ({ ...row, status: 'not-run', primary: null, secondary: [], measurements: [], focus: [], counts: null, pngCount: 0, drained: false }));
+const inventory = () => designed.map(row => ({ ...row, status: 'not-run', primary: null, secondary: [], measurements: [], focus: [], counts: null, pngCount: 0, drained: false, reverseDiagnostic: reverseRow(row) ? 'not-run' : 'not-applicable' }));
 
-async function bounded(action, ms = caps.operationMs) {
+async function bounded(action, ms = caps.operationMs, gate) {
   let timer;
+  if (gate) gate.deadline = Date.now() + ms;
   try {
-    return await Promise.race([Promise.resolve().then(action), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('deadline')), ms); })]);
-  } finally { clearTimeout(timer); }
+    return await Promise.race([Promise.resolve().then(action), new Promise((_, reject) => { timer = setTimeout(() => { if (gate) gate.open = false; reject(new Error('deadline')); }, ms); })]);
+  } finally { if (gate) gate.open = false; clearTimeout(timer); }
 }
 function observe(child) {
   return new Promise(done => {
@@ -180,16 +216,18 @@ async function tabGroup(page, surface) {
   }
   throw new Error('focus-tabs');
 }
-async function workspaceReverse(page) {
+async function workspaceReverse(page, receive) {
   // Original action2-focused Workspace PNG is already captured. Never seed or
   // seek a starting focus, and never reveal between these two source-route inputs.
-  await page.evaluate(() => window.nativeActionGeometry.workspaceReverseStart());
+  try { await page.evaluate(() => window.nativeActionGeometry.workspaceReverseStart()); }
+  catch (error) { receive(error); throw error; }
   try {
     live(page); await page.keyboard.down('Shift');
     for (const index of [2, 1]) {
       live(page); await page.keyboard.press('Tab');
       await settle(page);
-      await page.evaluate(index => window.nativeActionGeometry.landing('workspace', index), index);
+      try { await page.evaluate(index => window.nativeActionGeometry.landing('workspace', index, false, true), index); }
+      catch (error) { receive(error); throw error; }
     }
   } finally { await page.keyboard.up('Shift'); }
 }
@@ -216,6 +254,55 @@ function validateCounts(state, row, drained) {
   validateCompletion(state.completion, row, false);
   need(state.get === row.get && state.review === row.review && state.unexpected === 0 && state.oauth === 0 && state.unhandled === 0 && !state.saturated && state.faults.length === 0, 'transport');
   if (drained) need(!state.held && state.active === 0 && state.mutations === 0 && state.started === state.done, 'drain');
+}
+
+function reversePrerequisites(row) {
+  const login = row.focus.filter(f => f.surface === 'login'), workspace = row.focus.filter(f => f.surface === 'workspace');
+  const finite = n => Number.isFinite(n) && Math.abs(n) < 100000;
+  const measurement = m => ['login', 'workspace'].includes(m.surface) && finite(m.capacity) && m.capacity > 0 &&
+    Array.isArray(m.buttons) && m.buttons.length >= 1 && m.buttons.length <= 3 && m.buttons.every((b, i) => b.id === i &&
+      Array.isArray(b.box) && b.box.length === 4 && b.box.every(finite) && finite(b.natural) && b.natural > 0 &&
+      Number.isInteger(b.textLines) && b.textLines > 0 && b.textLines <= 64 && typeof b.disabled === 'boolean') &&
+    Array.isArray(m.rows) && m.rows.length <= 3 && m.rows.every(r => Array.isArray(r) && r.length > 0) &&
+    m.rows.flat().length === m.buttons.length && m.rows.flat().every((id, i) => id === i);
+  return row.focus.length === 2 && login.length === 1 && workspace.length === 1 &&
+    (JSON.stringify(login[0].ids) === '[0,1]' || JSON.stringify(login[0].ids) === '[1,0]') &&
+    JSON.stringify(workspace[0].ids) === '[0,2]' && row.pngCount === 2 && row.measurements.length === 2 &&
+    row.measurements.filter(m => m.surface === 'login').length === 1 && row.measurements.filter(m => m.surface === 'workspace').length === 1 &&
+    row.measurements.every(measurement);
+}
+function validReverseDiagnostic(row, value) {
+  if (!reverseValue(value)) return false;
+  if (!reverseRow(row)) return value === 'not-applicable';
+  if (row.status === 'not-run') return value === 'not-run';
+  if (row.status === 'passed') return value === 'passed' && reversePrerequisites(row);
+  if (value === 'not-run') return true;
+  if (value === 'incomplete') return reversePrerequisites(row) || row.secondary.includes('report');
+  if (value === 'passed') return reversePrerequisites(row);
+  return reverseTokens.has(value) && reversePrerequisites(row) &&
+    (row.primary === reverseTokens.get(value) || (row.primary !== null && row.secondary.includes('report')));
+}
+function reverseBudget(records) {
+  need(records.reduce((bytes, row) => bytes + Buffer.byteLength(',"reverseDiagnostic":' + JSON.stringify(row.reverseDiagnostic)), 0) <= 836, 'report');
+}
+function diagnosticReport(row) {
+  if (row.secondary.includes('report')) return;
+  fault(row.secondary, 'report');
+  // Keep the association marker and the original saturated-list counter at cap8.
+  if (!row.secondary.includes('report')) row.secondary[caps.faults - 2] = 'report';
+}
+function validateWorkerDiagnostics(records) {
+  for (const row of records) {
+    // Preserve timely frozen tokens even when release/deadline masked their code.
+    const frozen = reverseRow(row) && reverseTokens.has(row.reverseDiagnostic);
+    if (frozen && row.primary !== reverseTokens.get(row.reverseDiagnostic)) diagnosticReport(row);
+    if (!validReverseDiagnostic(row, row.reverseDiagnostic)) {
+      if (!frozen) row.reverseDiagnostic = 'incomplete';
+      diagnosticReport(row);
+      row.status = 'failed';
+    }
+  }
+  reverseBudget(records);
 }
 
 async function reviewCase(page, row, record) {
@@ -288,8 +375,8 @@ async function runCase(browser, row, bundle, record) {
     else { increment('resource'); track(request.abort()); }
   };
   const dialog = event => { increment('dialog'); track(event.dismiss()); };
-  const step = async action => {
-    try { return await bounded(action); }
+  const step = async (action, gate) => {
+    try { return await bounded(action, caps.operationMs, gate); }
     catch (error) { if (fixed(error, '') === 'deadline') { stalled = true; if (page) retiredPages.add(page); } throw error; }
   };
   try {
@@ -338,7 +425,18 @@ async function runCase(browser, row, bundle, record) {
           need(JSON.stringify(workspace.buttons.map(b => b.disabled)) === '[false,true,false]', 'busy');
           if (keyboard) { stage = 'focus'; record.focus.push({ surface: 'workspace', ids: await step(() => tabGroup(page, 'workspace')) }); }
           stage = 'screenshot'; await step(() => capture(page, record, 'workspace', '.workspace-sync-actions'));
-          if (keyboard) { stage = 'focus'; await step(() => workspaceReverse(page)); }
+          if (keyboard) {
+            stage = 'focus'; record.reverseDiagnostic = 'incomplete';
+            const owner = page, gate = { open: true, deadline: 0 };
+            const current = () => Date.now() < gate.deadline && page === owner && !retiredPages.has(owner) && !owner.isClosed() && record.id === row.id && record.status === 'failed';
+            const receive = error => {
+              const token = assertionSuffix(error);
+              if (gate.open && current() && record.reverseDiagnostic === 'incomplete' && reverseTokens.has(token) && reverseValue(token)) record.reverseDiagnostic = token;
+            };
+            await step(() => workspaceReverse(page, receive), gate);
+            // Only this timely enclosing-step caller can commit local success.
+            if (current()) record.reverseDiagnostic = 'passed';
+          }
         }
       }
     }
@@ -349,7 +447,7 @@ async function runCase(browser, row, bundle, record) {
     // Browser RPC errors are never persisted verbatim. Only exact allowlisted
     // assertion suffixes may supply a more specific fixed failure enum.
     const suffix = typeof error?.message === 'string' ? error.message.match(/(?:^|Error:\s*)([a-z-]+)\s*$/)?.[1] : null;
-    record.primary = codes.has(suffix) ? suffix : fixed(error, stage);
+    record.primary = reverseTokens.get(assertionSuffix(error)) ?? (codes.has(suffix) ? suffix : fixed(error, stage));
     if (record.primary === 'deadline' || error?.name === 'TimeoutError') stalled = true;
   }
   finally {
@@ -388,7 +486,7 @@ async function runCase(browser, row, bundle, record) {
 }
 
 async function worker(base) {
-  const report = { schema: 1, synthetic: true, status: 'failed', primary: null, secondary: [], bundles: 0, browsers: 0, records: inventory(), wrapEvidence: [] };
+  const report = { schema: 2, synthetic: true, status: 'failed', primary: null, secondary: [], bundles: 0, browsers: 0, records: inventory(), wrapEvidence: [] };
   let chrome, settled, browser, stage = 'setup';
   try {
     stage = 'bundle';
@@ -414,6 +512,7 @@ async function worker(base) {
       stage = 'fixture';
       if (!await runCase(browser, row, bundles.get(row.providers), report.records[row.id])) break;
     }
+    validateWorkerDiagnostics(report.records);
     for (const surface of ['login', 'workspace']) {
       const candidates = report.records.filter(r => r.kind === 'layout' && r.locale === 'en' && r.status === 'passed');
       const narrow = candidates.find(r => r.measurements.find(m => m.surface === surface)?.rows.length > 1);
@@ -490,8 +589,8 @@ async function parentIO(operation, base = '', input = '') {
   return Buffer.concat(chunks);
 }
 
-function projectReport(report) {
-  need(report.schema === 1 && report.synthetic === true && report.records?.length === 20 && Array.isArray(report.secondary) && report.secondary.length <= caps.faults && report.secondary.every(code => codes.has(code)) && (report.primary === null || codes.has(report.primary)), 'report');
+function projectReport(report, diagnosticFailure) {
+  need(report.schema === 2 && report.synthetic === true && report.records?.length === 20 && Array.isArray(report.secondary) && report.secondary.length <= caps.faults && report.secondary.every(code => codes.has(code)) && (report.primary === null || codes.has(report.primary)), 'report');
   const finite = n => Number.isFinite(n) && Math.abs(n) < 100000;
   const integer = n => Number.isInteger(n) && n >= 0 && n <= 64;
   const only = (object, keys) => need(object && typeof object === 'object' && !Array.isArray(object) && Object.keys(object).every(key => keys.includes(key)) && keys.every(key => Object.hasOwn(object, key)), 'report');
@@ -499,7 +598,9 @@ function projectReport(report) {
   need(integer(report.bundles) && integer(report.browsers) && ['passed', 'failed'].includes(report.status), 'report');
   const records = report.records.map((row, i) => {
     const design = designed[i];
-    only(row, [...Object.keys(design), 'status', 'primary', 'secondary', 'measurements', 'focus', 'counts', 'pngCount', 'drained', ...(row.status === 'not-run' ? [] : ['events'])]);
+    // Diagnostic presence/value is deliberately deferred until ALL core and wrap checks.
+    const coreKeys = [...Object.keys(design), 'status', 'primary', 'secondary', 'measurements', 'focus', 'counts', 'pngCount', 'drained', ...(row.status === 'not-run' ? [] : ['events'])];
+    need(row && typeof row === 'object' && !Array.isArray(row) && Object.keys(row).every(key => coreKeys.includes(key) || key === 'reverseDiagnostic') && coreKeys.every(key => Object.hasOwn(row, key)), 'report');
     for (const [key, value] of Object.entries(design)) need(row[key] === value, 'report');
     need(['not-run', 'passed', 'failed'].includes(row.status) && (row.primary === null || codes.has(row.primary)) && Array.isArray(row.secondary) && row.secondary.length <= caps.faults && row.secondary.every(code => codes.has(code)) && typeof row.drained === 'boolean' && integer(row.pngCount) && row.pngCount <= design.pngs, 'report');
     need(Array.isArray(row.measurements) && row.measurements.length <= 2 && Array.isArray(row.focus) && row.focus.length <= 2, 'report');
@@ -546,7 +647,21 @@ function projectReport(report) {
     return { surface: w.surface, before: w.before, after: w.after };
   });
   if (report.status === 'passed') need(new Set(wrapEvidence.map(w => w.surface)).size === 2, 'matrix');
-  return { schema: 1, synthetic: true, status: report.status, primary: report.primary, secondary: [...report.secondary], bundles: report.bundles, browsers: report.browsers, records, wrapEvidence };
+  let recovered = false;
+  for (const row of records) {
+    const value = report.records[row.id].reverseDiagnostic;
+    if (validReverseDiagnostic(row, value)) row.reverseDiagnostic = value;
+    else {
+      // Recovery is diagnostic-only, after full core validation, for original failed 0/14 only.
+      need(row.status === 'failed' && reverseRow(row), 'report');
+      row.reverseDiagnostic = 'incomplete';
+      diagnosticReport(row);
+      recovered = true;
+    }
+  }
+  reverseBudget(records);
+  if (recovered) diagnosticFailure();
+  return { schema: 2, synthetic: true, status: report.status, primary: report.primary, secondary: [...report.secondary], bundles: report.bundles, browsers: report.browsers, records, wrapEvidence };
 }
 export async function mainRunner() {
   let child, settled, certain = true, owned = false, report = null, primary = null;
@@ -570,7 +685,7 @@ export async function mainRunner() {
     try { await stopGroup(child, settled); }
     catch { certain = false; canRead = false; if (primary) fault(secondary, 'cleanup'); else primary = 'cleanup'; }
     if (canRead) {
-      try { report = projectReport(JSON.parse((await parentIO('read')).toString('utf8'))); }
+      try { report = projectReport(JSON.parse((await parentIO('read')).toString('utf8')), () => { if (primary) fault(secondary, 'report'); else primary = 'report'; }); }
       catch (error) {
         observeUncertainty(error);
         if (primary) fault(secondary, fixed(error, 'report')); else throw error;
@@ -588,7 +703,7 @@ export async function mainRunner() {
     try { await stopGroup(child, settled); } catch { certain = false; fault(secondary, 'cleanup'); }
     // Publish while the fixture still exists. If summary IO has uncertain exit,
     // retain it; never delete first and only then discover an unknown IO group.
-    const summary = { schema: 1, synthetic: true, status: primary || secondary.length ? 'failed' : 'passed', primary, secondary: [...secondary], workerPrimary: report?.primary ?? null, workerSecondary: report?.secondary || [], publication: 'pre-cleanup-snapshot', groupGone: 'unconfirmed', groupsGoneBeforePublication: certain, fixtureRetainedAtPublication: owned || !certain,
+    const summary = { schema: 2, synthetic: true, status: primary || secondary.length ? 'failed' : 'passed', primary, secondary: [...secondary], workerPrimary: report?.primary ?? null, workerSecondary: report?.secondary || [], publication: 'pre-cleanup-snapshot', groupGone: 'unconfirmed', groupsGoneBeforePublication: certain, fixtureRetainedAtPublication: owned || !certain,
       plannedCases: 20, plannedGet: 17, plannedReview: 1, plannedPng: caps.pngs, actualZoom: 'not-run', osTextSize: 'not-run', pinch: 'not-run', records: report?.records || inventory(), wrapEvidence: report?.wrapEvidence || [] };
     try { await parentIO('summary', '', JSON.stringify(summary) + '\n'); }
     catch (error) { observeUncertainty(error); fault(secondary, 'report'); }

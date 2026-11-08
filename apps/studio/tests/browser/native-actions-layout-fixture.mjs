@@ -9,12 +9,46 @@ const studio = fileURLToPath(new URL('../../', import.meta.url));
 // Runs inside the fixture realm. Only fixed enums, numbers, booleans and local
 // ordinals leave it. Labels and the entered draft are compared here, not exported.
 function installGeometry() {
-  const need = (value, code) => { if (!value) throw new Error(code); };
+  const need = (value, code, diagnostic) => { if (!value) throw new Error(diagnostic?.[code] ?? code); };
+  // Per-call contexts select source constants only; no cross-call observation state.
+  const firstOther = {
+    geometry: 'reverse-first-other-geometry', label: 'reverse-first-other-label',
+    'focus-identity': 'reverse-first-other-focus-identity', 'focus-order': 'reverse-first-other-focus-order',
+    'focus-disabled': 'reverse-first-other-focus-disabled', 'focus-visible': 'reverse-first-other-focus-visible',
+    'focus-style': 'reverse-first-other-focus-style', 'focus-width': 'reverse-first-other-focus-width',
+    'focus-offset': 'reverse-first-other-focus-offset', 'focus-color': 'reverse-first-other-focus-color',
+  };
+  const secondOther = {
+    geometry: 'reverse-second-other-geometry', label: 'reverse-second-other-label',
+    'focus-identity': 'reverse-second-other-focus-identity', 'focus-order': 'reverse-second-other-focus-order',
+    'focus-disabled': 'reverse-second-other-focus-disabled', 'focus-visible': 'reverse-second-other-focus-visible',
+    'focus-style': 'reverse-second-other-focus-style', 'focus-width': 'reverse-second-other-focus-width',
+    'focus-offset': 'reverse-second-other-focus-offset', 'focus-color': 'reverse-second-other-focus-color',
+  };
+  const reverseButton = {
+    ...firstOther,
+    legacyNode: 'reverse-first-button-legacy-node', legacyAncestor: 'reverse-first-button-legacy-ancestor',
+    legacyBox: 'reverse-first-button-legacy-box', legacyHit: 'reverse-first-button-legacy-hit',
+    viewport: 'reverse-first-button-viewport', ancestor: 'reverse-first-button-ancestor',
+    boundsBox: 'reverse-first-button-box', overlap: 'reverse-first-button-heading-overlap', hit: 'reverse-first-button-hit',
+    heading: { ...firstOther, viewport: 'reverse-first-button-heading-viewport', ancestor: 'reverse-first-button-heading-ancestor' },
+  };
+  const reverseInput = {
+    ...secondOther, viewport: 'reverse-second-input-viewport', ancestor: 'reverse-second-input-ancestor',
+    boundsBox: 'reverse-second-input-box', overlap: 'reverse-second-input-heading-overlap', hit: 'reverse-second-input-hit',
+    heading: { ...secondOther, viewport: 'reverse-second-input-heading-viewport', ancestor: 'reverse-second-input-heading-ancestor' },
+  };
+  const reverseLabel = {
+    ...secondOther, viewport: 'reverse-second-label-viewport', ancestor: 'reverse-second-label-ancestor',
+    boundsBox: 'reverse-second-label-box', overlap: 'reverse-second-label-heading-overlap', hit: 'reverse-second-label-hit',
+    paint: 'reverse-second-label-paint',
+    heading: { ...secondOther, viewport: 'reverse-second-label-heading-viewport', ancestor: 'reverse-second-label-heading-ancestor' },
+  };
   const near = (a, b) => Math.abs(a - b) <= 1;
-  const number = value => { need(Number.isFinite(value) && Math.abs(value) < 100000, 'geometry'); return value; };
-  const box = node => {
+  const number = (value, diagnostic) => { need(Number.isFinite(value) && Math.abs(value) < 100000, 'geometry', diagnostic); return value; };
+  const box = (node, diagnostic) => {
     const r = node.getBoundingClientRect();
-    return [r.left, r.top, r.right, r.bottom].map(number);
+    return [r.left, r.top, r.right, r.bottom].map(value => number(value, diagnostic));
   };
   const content = node => {
     const r = box(node), s = getComputedStyle(node);
@@ -23,11 +57,11 @@ function installGeometry() {
       r[2] - parseFloat(s.borderRightWidth) - parseFloat(s.paddingRight),
       r[3] - parseFloat(s.borderBottomWidth) - parseFloat(s.paddingBottom)].map(number);
   };
-  const fragments = node => {
+  const fragments = (node, diagnostic) => {
     const range = document.createRange(); range.selectNodeContents(node);
     const rects = [...range.getClientRects()].filter(r => r.width > 0 && r.height > 0);
-    need(rects.length > 0 && rects.length <= 32, 'label');
-    return rects.map(r => [r.left, r.top, r.right, r.bottom].map(number));
+    need(rects.length > 0 && rects.length <= 32, 'label', diagnostic);
+    return rects.map(r => [r.left, r.top, r.right, r.bottom].map(value => number(value, diagnostic)));
   };
   const lines = rects => {
     const tops = [];
@@ -113,64 +147,64 @@ function installGeometry() {
     need(document.documentElement.scrollWidth <= innerWidth + 1, 'overflow');
     return { surface, capacity, rows, buttons: samples };
   }
-  function visible(node, focus = false) {
-    need(!!node, 'visibility');
-    const r = box(node), view = visualViewport;
+  function visible(node, focus = false, diagnostic) {
+    need(!!node, diagnostic?.legacyNode ?? 'visibility');
+    const r = box(node, diagnostic), view = visualViewport;
     let left = view?.offsetLeft ?? 0, top = view?.offsetTop ?? 0;
     let right = left + (view?.width ?? innerWidth), bottom = top + (view?.height ?? innerHeight);
     for (let p = node.parentElement; p; p = p.parentElement) {
-      const s = getComputedStyle(p), b = box(p);
-      need(s.display !== 'none' && s.visibility === 'visible' && !p.inert, 'visibility');
+      const s = getComputedStyle(p), b = box(p, diagnostic);
+      need(s.display !== 'none' && s.visibility === 'visible' && !p.inert, diagnostic?.legacyAncestor ?? 'visibility');
       if (/(hidden|clip|auto|scroll)/.test(s.overflowX)) { left = Math.max(left, b[0] + p.clientLeft); right = Math.min(right, b[0] + p.clientLeft + p.clientWidth); }
       if (/(hidden|clip|auto|scroll)/.test(s.overflowY)) { top = Math.max(top, b[1] + p.clientTop); bottom = Math.min(bottom, b[1] + p.clientTop + p.clientHeight); }
     }
     const margin = focus ? 6 : 0;
-    need(r[2] > r[0] && r[3] > r[1] && r[0] - margin >= left - 1 && r[2] + margin <= right + 1 && r[1] - margin >= top - 1 && r[3] + margin <= bottom + 1, 'visibility');
-    need([[.5, .5], [.08, .08], [.92, .08], [.08, .92], [.92, .92]].every(([x, y]) => node.contains(document.elementFromPoint(r[0] + (r[2] - r[0]) * x, r[1] + (r[3] - r[1]) * y))), 'visibility');
+    need(r[2] > r[0] && r[3] > r[1] && r[0] - margin >= left - 1 && r[2] + margin <= right + 1 && r[1] - margin >= top - 1 && r[3] + margin <= bottom + 1, diagnostic?.legacyBox ?? 'visibility');
+    need([[.5, .5], [.08, .08], [.92, .08], [.08, .92], [.92, .92]].every(([x, y]) => node.contains(document.elementFromPoint(r[0] + (r[2] - r[0]) * x, r[1] + (r[3] - r[1]) * y))), diagnostic?.legacyHit ?? 'visibility');
     if (focus) {
       const s = getComputedStyle(node);
-      need(node === document.activeElement, 'focus-identity');
-      need(node.matches(':focus-visible'), 'focus-visible');
-      need(s.outlineStyle === 'solid', 'focus-style');
-      need(near(parseFloat(s.outlineWidth), 3), 'focus-width');
-      need(near(parseFloat(s.outlineOffset), 3), 'focus-offset');
-      need(s.outlineColor !== 'rgba(0, 0, 0, 0)', 'focus-color');
+      need(node === document.activeElement, 'focus-identity', diagnostic);
+      need(node.matches(':focus-visible'), 'focus-visible', diagnostic);
+      need(s.outlineStyle === 'solid', 'focus-style', diagnostic);
+      need(near(parseFloat(s.outlineWidth), 3), 'focus-width', diagnostic);
+      need(near(parseFloat(s.outlineOffset), 3), 'focus-offset', diagnostic);
+      need(s.outlineColor !== 'rgba(0, 0, 0, 0)', 'focus-color', diagnostic);
     }
     return true;
   }
   // First-landing assertions are synchronous and read-only. No reveal, style
   // repair or later sample can replace the state observed by this evaluation.
-  function landingBounds(node, clipSelf = false) {
+  function landingBounds(node, clipSelf = false, diagnostic) {
     const view = visualViewport;
-    const left = number(view?.offsetLeft ?? 0), top = number(view?.offsetTop ?? 0);
-    const width = number(view?.width ?? innerWidth), height = number(view?.height ?? innerHeight);
-    need(width > 0 && height > 0, 'visibility');
-    const bounds = [left, top, number(left + width), number(top + height)];
+    const left = number(view?.offsetLeft ?? 0, diagnostic), top = number(view?.offsetTop ?? 0, diagnostic);
+    const width = number(view?.width ?? innerWidth, diagnostic), height = number(view?.height ?? innerHeight, diagnostic);
+    need(width > 0 && height > 0, diagnostic?.viewport ?? 'visibility');
+    const bounds = [left, top, number(left + width, diagnostic), number(top + height, diagnostic)];
     for (let p = node; p; p = p.parentElement) {
       const s = getComputedStyle(p);
-      need(s.display !== 'none' && s.visibility === 'visible' && number(Number(s.opacity)) > 0 && !p.inert, 'visibility');
+      need(s.display !== 'none' && s.visibility === 'visible' && number(Number(s.opacity), diagnostic) > 0 && !p.inert, diagnostic?.ancestor ?? 'visibility');
       if (p === node && !clipSelf) continue;
-      const b = box(p);
+      const b = box(p, diagnostic);
       if (/(hidden|clip|auto|scroll)/.test(s.overflowX)) {
-        const start = number(b[0] + number(p.clientLeft)), end = number(start + number(p.clientWidth));
+        const start = number(b[0] + number(p.clientLeft, diagnostic), diagnostic), end = number(start + number(p.clientWidth, diagnostic), diagnostic);
         bounds[0] = Math.max(bounds[0], start); bounds[2] = Math.min(bounds[2], end);
       }
       if (/(hidden|clip|auto|scroll)/.test(s.overflowY)) {
-        const start = number(b[1] + number(p.clientTop)), end = number(start + number(p.clientHeight));
+        const start = number(b[1] + number(p.clientTop, diagnostic), diagnostic), end = number(start + number(p.clientHeight, diagnostic), diagnostic);
         bounds[1] = Math.max(bounds[1], start); bounds[3] = Math.min(bounds[3], end);
       }
     }
     return bounds;
   }
   const overlaps = (a, b) => Math.min(a[2], b[2]) > Math.max(a[0], b[0]) && Math.min(a[3], b[3]) > Math.max(a[1], b[1]);
-  function landingVisible(node, margin, heading, insideHeading = false, rects = [box(node)]) {
-    const bounds = landingBounds(node, margin === 0), h = box(heading), clip = landingBounds(heading);
+  function landingVisible(node, margin, heading, insideHeading = false, diagnostic, rects = [box(node, diagnostic)]) {
+    const bounds = landingBounds(node, margin === 0, diagnostic), h = box(heading, diagnostic), clip = landingBounds(heading, false, diagnostic?.heading);
     const header = [Math.max(h[0], clip[0]), Math.max(h[1], clip[1]), Math.min(h[2], clip[2]), Math.min(h[3], clip[3])];
     for (const r of rects) {
-      const outer = [r[0] - margin, r[1] - margin, r[2] + margin, r[3] + margin].map(number);
-      need(r[2] > r[0] && r[3] > r[1] && outer[0] >= bounds[0] && outer[1] >= bounds[1] && outer[2] <= bounds[2] && outer[3] <= bounds[3], 'visibility');
-      need(insideHeading || !overlaps(outer, header), 'visibility');
-      need([[.5, .5], [.08, .08], [.92, .08], [.08, .92], [.92, .92]].every(([x, y]) => node.contains(document.elementFromPoint(number(r[0] + (r[2] - r[0]) * x), number(r[1] + (r[3] - r[1]) * y)))), 'visibility');
+      const outer = [r[0] - margin, r[1] - margin, r[2] + margin, r[3] + margin].map(value => number(value, diagnostic));
+      need(r[2] > r[0] && r[3] > r[1] && outer[0] >= bounds[0] && outer[1] >= bounds[1] && outer[2] <= bounds[2] && outer[3] <= bounds[3], diagnostic?.boundsBox ?? 'visibility');
+      need(insideHeading || !overlaps(outer, header), diagnostic?.overlap ?? 'visibility');
+      need([[.5, .5], [.08, .08], [.92, .08], [.08, .92], [.92, .92]].every(([x, y]) => node.contains(document.elementFromPoint(number(r[0] + (r[2] - r[0]) * x, diagnostic), number(r[1] + (r[3] - r[1]) * y, diagnostic)))), diagnostic?.hit ?? 'visibility');
     }
   }
   // Computed colors may use legacy rgba() or modern color()/slash alpha syntax.
@@ -184,12 +218,12 @@ function installGeometry() {
     const alpha = token.endsWith('%') ? Number(token.slice(0, -1)) / 100 : Number(token);
     return Number.isFinite(alpha) && alpha > 0 && alpha <= 1;
   }
-  function inputFocus(node, heading) {
-    need(node === document.activeElement, 'focus-identity');
-    need(!node.disabled && !node.readOnly && node.type === 'text', 'focus-disabled');
-    need(node.matches(':focus-visible'), 'focus-visible');
+  function inputFocus(node, heading, diagnostic) {
+    need(node === document.activeElement, 'focus-identity', diagnostic);
+    need(!node.disabled && !node.readOnly && node.type === 'text', 'focus-disabled', diagnostic);
+    need(node.matches(':focus-visible'), 'focus-visible', diagnostic);
     const s = getComputedStyle(node);
-    need(['Top', 'Right', 'Bottom', 'Left'].every(side => Number.isFinite(parseFloat(s[`border${side}Width`])) && parseFloat(s[`border${side}Width`]) > 0 && !['none', 'hidden'].includes(s[`border${side}Style`]) && painted(s[`border${side}Color`])), 'focus-style');
+    need(['Top', 'Right', 'Bottom', 'Left'].every(side => Number.isFinite(parseFloat(s[`border${side}Width`])) && parseFloat(s[`border${side}Width`]) > 0 && !['none', 'hidden'].includes(s[`border${side}Style`]) && painted(s[`border${side}Color`])), 'focus-style', diagnostic);
     // Split shadows only at top-level commas (color functions contain commas).
     const shadows = []; let depth = 0, start = 0;
     for (let i = 0; i < s.boxShadow.length; i++) {
@@ -207,21 +241,22 @@ function installGeometry() {
       const [x, y, blur, spread] = lengths.map(value => Number(value.slice(0, -2)));
       // forms.css ends at 3px; the existing settle can sample its transition.
       return x === 0 && y === 0 && blur === 0 && spread > 0 && spread <= 3;
-    }), 'focus-style');
-    landingVisible(node, 3, heading);
+    }), 'focus-style', diagnostic);
+    landingVisible(node, 3, heading, false, diagnostic);
     const label = node.parentElement, span = label?.querySelector(':scope > span');
-    need(label?.matches('label.field') && label.control === node && [...node.labels].includes(label) && span?.parentElement === label && !!span.textContent.trim(), 'label');
-    need(painted(getComputedStyle(span).color), 'visibility');
-    landingVisible(span, 0, heading, false, fragments(span));
+    need(label?.matches('label.field') && label.control === node && [...node.labels].includes(label) && span?.parentElement === label && !!span.textContent.trim(), 'label', diagnostic);
+    need(painted(getComputedStyle(span).color), diagnostic ? reverseLabel.paint : 'visibility');
+    landingVisible(span, 0, heading, false, diagnostic ? reverseLabel : undefined, fragments(span, diagnostic));
   }
-  function landing(surface, index, allowBoundary = false) {
+  function landing(surface, index, allowBoundary = false, reverse = false) {
+    const diagnostic = reverse ? (index === 2 ? reverseButton : reverseInput) : undefined;
     const panel = document.querySelector('.workspace-panel'), heading = panel?.querySelector(':scope > .page-heading');
     const refresh = heading?.querySelector('button'), input = panel?.querySelector('.field > input');
     const actions = [...(panel?.querySelector('.workspace-sync-actions')?.children || [])];
-    need(heading && refresh?.tagName === 'BUTTON' && input?.tagName === 'INPUT' && actions.length === 3 && actions.every(node => node.tagName === 'BUTTON'), 'focus-identity');
+    need(heading && refresh?.tagName === 'BUTTON' && input?.tagName === 'INPUT' && actions.length === 3 && actions.every(node => node.tagName === 'BUTTON'), 'focus-identity', diagnostic);
     let route;
     if (surface === 'workspace') {
-      need(!refresh.disabled && !input.disabled && !actions[0].disabled && actions[1].disabled && !actions[2].disabled, 'focus-disabled');
+      need(!refresh.disabled && !input.disabled && !actions[0].disabled && actions[1].disabled && !actions[2].disabled, 'focus-disabled', diagnostic);
       route = [refresh, input, actions[0], actions[2]];
     } else {
       need(surface === 'confirmation', 'focus-identity');
@@ -231,19 +266,19 @@ function installGeometry() {
     }
     const active = document.activeElement;
     if (allowBoundary && index === 0 && (active === document.body || active === document.documentElement)) return -1;
-    need(route.includes(active), 'focus-identity');
-    need(active === route[index], 'focus-order');
-    need(!active.disabled, 'focus-disabled');
-    if (active === input) inputFocus(active, heading);
-    else { visible(active, true); landingVisible(active, 6, heading, active === refresh); }
+    need(route.includes(active), 'focus-identity', diagnostic);
+    need(active === route[index], 'focus-order', diagnostic);
+    need(!active.disabled, 'focus-disabled', diagnostic);
+    if (active === input) inputFocus(active, heading, diagnostic);
+    else { visible(active, true, diagnostic); landingVisible(active, 6, heading, active === refresh, diagnostic); }
     return index;
   }
   window.nativeActionGeometry = {
     inspect, visible, landing,
     workspaceReverseStart() {
       const action = document.querySelector('.workspace-sync-actions > button:nth-child(3)');
-      need(action && document.activeElement === action, 'focus-identity');
-      need(!action.disabled, 'focus-disabled');
+      need(action && document.activeElement === action, 'reverse-start-focus-identity');
+      need(!action.disabled, 'reverse-start-focus-disabled');
     },
     target(surface) { return selector(surface); },
     focus(surface) {
