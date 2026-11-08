@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { createServer } from 'node:net';
+import { createServer, Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -27,6 +27,154 @@ async function until(thunk, end) {
   try { return await Promise.race([task, new Promise((_, no) => { timer = setTimeout(() => no(new Error('timeout')), ms); })]); }
   finally { clearTimeout(timer); }
 }
+// Independent attempt-only terminal channel; never an outcome authority.
+const unavailableTerminal = (() => {
+  try { return Object.freeze({ v: 1, record: null }); }
+  catch { return { v: 1, record: null }; }
+})();
+let terminalState = null, terminalClaimed = false, terminalWriter = null, terminalWritable = false;
+let terminalFreezers;
+try { terminalFreezers = new WeakMap(); } catch { /* Missing diagnostics are allowed. */ }
+function terminalDomain(row) {
+  if (!Array.isArray(row) || row.length !== 11 || !row.every(n => Number.isInteger(n) && n >= 0)) return false;
+  const boundary = (n, steps) => n === 0 || n === 1 || Math.floor(n / 10) >= 1 && Math.floor(n / 10) <= steps && n % 10 >= 1 && n % 10 <= 3;
+  const site = row[4], owner = Math.floor(site / 100), local = site % 100;
+  return row[0] === 1 && row[1] <= 4 && row[2] <= 14 && row[3] <= 6 &&
+    (site === 0 || site === 11 || owner >= 1 && owner <= 3 && local >= 1 && local <= 10) &&
+    row[5] <= 25 && row[6] <= 2 && row[7] <= 2 && boundary(row[8], 7) && boundary(row[9], 5) && row[10] <= 2;
+}
+function terminalNote(owner, kind, value) {
+  try {
+    if (terminalClaimed || !terminalState) return;
+    const row = terminalState;
+    if (kind === 'site') { if (row[4] === 0) row[4] = owner === 0 ? 11 : owner * 100 + value; return; }
+    if (kind === 'branch') { row[3] = value; return; }
+    if (kind === 'select') {
+      row[1] = owner; row[2] = 3; row[5] = 0; row[6] = 0; row[7] = 0; row[8] = 1; row[9] = 1; row[10] = 0;
+      return;
+    }
+    if (row[1] !== owner) return;
+    if (kind === 'stage') row[2] = value;
+    else if (kind === 'primary') {
+      const index = ['setup', 'fixture', 'service', 'auth', 'browser', 'request', 'open', 'probe', 'identity', 'wheel', 'wheel-range', 'tail', 'edge', 'top', 'path', 'keyboard', 'controller', 'screenshot', 'counter', 'timeout', 'cleanup', 'report', 'worker', 'blocked'].indexOf(value);
+      row[5] = value === null ? 1 : index < 0 ? 0 : index + 2;
+    } else if (kind === 'tracker') { row[6] = 1; row[7] = 1; }
+    else if (kind === 'failed') { row[6] = 2; row[7] = 2; }
+    else if (kind === 'stopped') row[7] = 2;
+    else if (kind === 'safe') row[10] = value;
+    else if (kind === 'cleanup') row[8] = value;
+    else if (kind === 'report') row[9] = value;
+    else if (kind === 'cleanupFailed' || kind === 'reportFailed') {
+      const slot = kind === 'cleanupFailed' ? 8 : 9, current = row[slot];
+      row[slot] = current >= 11 && current % 10 === 1 ? current + 2 : 0;
+    }
+  } catch { terminalState = null; }
+}
+function startTerminal(SocketCtor = Socket) {
+  let socket, errorSink = false;
+  try {
+    terminalState = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    terminalState[1] = 4; terminalState[2] = 1;
+    socket = new SocketCtor({ fd: 3, readable: false, writable: true });
+    const sink = () => { try { if (!terminalClaimed) terminalWritable = false; } catch { /* Sink only. */ } };
+    socket.on('error', sink); errorSink = true;
+    socket.on('end', sink); socket.on('close', sink);
+    socket.unref(); terminalWriter = socket; terminalWritable = true;
+  } catch {
+    terminalWritable = false;
+    if (socket && errorSink) { try { socket.destroy(); } catch { /* Local diagnostic handle only. */ } }
+  }
+}
+function emitTerminal() {
+  try {
+    if (terminalClaimed) return;
+    terminalClaimed = true;
+    if (!terminalState) return;
+    const row = Object.freeze([...terminalState]);
+    if (!terminalDomain(row)) return;
+    const frame = Buffer.from(JSON.stringify(row) + '\n', 'ascii');
+    if (frame.length > 256 || !terminalWritable || !terminalWriter || terminalWriter.destroyed) return;
+    terminalWriter.write(frame, () => {});
+  } catch { /* No retry, fallback record, or change to the original exit. */ }
+}
+function attachTerminal(child) {
+  let freeze, invalidate;
+  try {
+    let frozen = false, invalid = false, naturalEnd = false, length = 0, candidate = null;
+    let observation = unavailableTerminal;
+    const buffer = Buffer.alloc(256), stream = child.stdio?.[3];
+    freeze = () => {
+      try {
+        if (frozen) return observation;
+        frozen = true;
+        if (!invalid && naturalEnd && candidate) observation = Object.freeze({ v: 1, record: Object.freeze([...candidate]) });
+      } catch { observation = unavailableTerminal; }
+      return observation;
+    };
+    const data = chunk => {
+      try {
+        if (frozen || invalid) return;
+        if (naturalEnd || !Buffer.isBuffer(chunk) || chunk.length > 256 - length) { invalidate(); return; }
+        for (let i = 0; i < chunk.length; i++) {
+          const byte = chunk[i];
+          if (length && buffer[length - 1] === 10 || !(byte >= 48 && byte <= 57 || byte === 91 || byte === 93 || byte === 44 || byte === 10)) { invalidate(); return; }
+          buffer[length++] = byte;
+        }
+      } catch { invalidate(); }
+    };
+    invalidate = () => {
+      try {
+        if (frozen) return;
+        invalid = true; candidate = null; length = 0;
+        stream?.removeListener('data', data); stream?.pause();
+      } catch { /* Sticky invalid even if listener retirement fails. */ }
+    };
+    // Keep error sinks even if association/attachment cannot complete.
+    stream?.on('error', invalidate);
+    child.on('error', invalidate);
+    // Register before data attachment: no candidate may outlive release.
+    terminalFreezers.set(child, freeze);
+    if (!stream) { invalidate(); freeze(); return { freeze }; }
+    stream.on('close', () => { try { if (!naturalEnd) invalidate(); } catch { invalidate(); } });
+    stream.on('end', () => {
+      try {
+        if (frozen || invalid || naturalEnd) return;
+        naturalEnd = true;
+        const text = buffer.toString('ascii', 0, length);
+        if (!/^\[(?:0|[1-9][0-9]*)(?:,(?:0|[1-9][0-9]*)){10}\]\n$/.test(text)) { invalidate(); return; }
+        const row = JSON.parse(text);
+        if (!terminalDomain(row)) { invalidate(); return; }
+        candidate = row;
+      } catch { invalidate(); }
+    });
+    stream.on('data', data);
+    return { freeze };
+  } catch {
+    try { invalidate?.(); freeze?.(); } catch { /* Attachment failure stays unavailable. */ }
+    return null;
+  }
+}
+function freezeTerminal(observer) {
+  try { return observer?.freeze() || unavailableTerminal; }
+  catch { return unavailableTerminal; }
+}
+function freezeReleasedTerminal(child) {
+  try { terminalFreezers?.get(child)?.(); }
+  catch { /* The original release must still run. */ }
+}
+// Test controls never open, close, or expose transport handles.
+function resetForTest() {
+  terminalState = null; terminalClaimed = false; terminalWriter = null; terminalWritable = false;
+  terminalFreezers = new WeakMap();
+}
+function inspectForTest() {
+  return { state: terminalState === null ? null : [...terminalState], claimed: terminalClaimed, writable: terminalWritable };
+}
+export const residualTerminalDiagnostic = Object.freeze({
+  domain: terminalDomain, note: terminalNote, start: startTerminal, emit: emitTerminal,
+  attach: attachTerminal, freeze: freezeTerminal, freezeReleased: freezeReleasedTerminal,
+  resetForTest, inspectForTest,
+});
 // Closed parent-only diagnostics. Never retain event objects or process handles.
 const invalidDiagnostic = Object.freeze({ invalid: true, value: null });
 const diagnosticKeys = ['v', 'phase', 'worker', 'io', 'reads', 'ownership', 'firstFault'];
@@ -144,15 +292,15 @@ function preparePublication(state, primary, secondary) {
   if (reportRequired && !next.includes('report')) next.push('report');
   return { diagnostic, primary, secondary: next, status: primary || next.length ? 'failed' : 'passed', reportRequired };
 }
-function buildPublication(kind, prepared, certain, owned, reports) {
+function buildPublication(kind, prepared, certain, owned, reports, workerTerminal = unavailableTerminal) {
   const diagnostic = prepared.diagnostic === null ? null : copyDiagnostic({ invalid: false, value: prepared.diagnostic });
   const common = { schema: 2, status: prepared.status, primary: prepared.primary, secondary: [...prepared.secondary] };
   if (kind === 'summary') return {
     ...common, synthetic: true, publication: 'pre-cleanup-snapshot', groupsGoneBeforePublication: certain, fixtureRetainedAtPublication: owned || !certain,
-    plannedCases: 3, caseStatus: reports.map(r => r.status), casePrimary: reports.map(r => r.primary), counts: reports.map(r => r.status === 'unavailable' ? null : [...r.counts]), requests: reports.map(r => r.status === 'unavailable' ? null : [...r.requests]), pngCount: reports.some(r => r.status === 'unavailable') ? null : reports.reduce((n, r) => n + r.pngs.filter(p => p.bytes > 0).length, 0), workerMs: 90000, parentMs: 143000, finalConsoleMs: 1000, unusedReserveMs: 5000, diagnostic,
+    plannedCases: 3, caseStatus: reports.map(r => r.status), casePrimary: reports.map(r => r.primary), counts: reports.map(r => r.status === 'unavailable' ? null : [...r.counts]), requests: reports.map(r => r.status === 'unavailable' ? null : [...r.requests]), pngCount: reports.some(r => r.status === 'unavailable') ? null : reports.reduce((n, r) => n + r.pngs.filter(p => p.bytes > 0).length, 0), workerMs: 90000, parentMs: 143000, finalConsoleMs: 1000, unusedReserveMs: 5000, diagnostic, workerTerminal,
   };
   need(kind === 'receipt', 'report');
-  return { ...common, groupGone: certain, fixtureRetention: !certain ? 'unconfirmed' : owned ? 'retained' : 'removed-or-not-created', plannedCases: 3, caseStatus: reports.map(r => r.status), delivery: 'attempt-only', diagnostic };
+  return { ...common, groupGone: certain, fixtureRetention: !certain ? 'unconfirmed' : owned ? 'retained' : 'removed-or-not-created', plannedCases: 3, caseStatus: reports.map(r => r.status), delivery: 'attempt-only', diagnostic, workerTerminal };
 }
 export const residualDiagnostic = Object.freeze({ createDiagnostic, reduceDiagnostic, projectDiagnostic, classifyWorkerExit, classifySpawnFault, preparePublication, buildPublication });
 
@@ -167,6 +315,7 @@ function observe(child, record) {
 }
 function release(child, record) {
   if (!child) return;
+  freezeReleasedTerminal(child);
   for (const stream of child.stdio || []) if (stream) { stream.on('error', () => {}); stream.destroy(); stream.unref?.(); }
   child.unref(); // Keep late error sinks; unref is not exit evidence.
   record?.('release', 1);
@@ -255,32 +404,32 @@ function inventory(index) {
   // This runner emits no positive not-started ledger, so never synthesizes blocked.
   return { schema: 2, synthetic: true, index, width: SIZES[index][0], height: SIZES[index][1], status: 'unavailable', primary: 'report', secondary: [], phases: Array(index === 2 ? 8 : 5).fill(false), counts: Array(17).fill(0), requests: Array(8).fill(0), samples: [], events: [], pngs: [], cleanup: [false, false, false, false], consoleFirst: null };
 }
-function tracker(normalEnd, cleanupEnd, report) {
+function tracker(normalEnd, cleanupEnd, report, owner) {
   const pending = new Set(); let mode = 'normal', failed = false;
-  const fail = code => { fault(report.secondary, code); failed = true; mode = 'stopped'; };
+  const fail = code => { fault(report.secondary, code); failed = true; mode = 'stopped'; terminalNote(owner, 'failed'); };
   const dispatch = (thunk, ms = 6000, closing = false) => {
     need(mode !== 'stopped' && (mode === 'normal' || closing) && pending.size < CAPS.pending, 'counter');
     const operationEnd = deadline(mode === 'normal' ? normalEnd : cleanupEnd, ms); remaining(operationEnd);
     // Registration is synchronous and precedes thunk execution, including events.
     const task = Promise.resolve().then(thunk);
     pending.add(task); report.counts[COUNT.peak] = Math.max(report.counts[COUNT.peak], pending.size);
-    void task.catch(() => fail('request'));
+    void task.catch(() => { fail('request'); terminalNote(owner, 'site', 1); });
     void task.then(() => pending.delete(task), () => pending.delete(task));
     const waited = until(() => task, operationEnd);
-    void waited.catch(() => fail('timeout'));
+    void waited.catch(() => { fail('timeout'); terminalNote(owner, 'site', 2); });
     return waited;
   };
   const call = (thunk, ms) => dispatch(thunk, ms);
   const callback = thunk => {
-    try { const task = dispatch(thunk, 6000, mode === 'closing'); void task.catch(() => fail('request')); }
-    catch { fail('counter'); } // Do not dispatch an untracked abort on overflow.
+    try { const task = dispatch(thunk, 6000, mode === 'closing'); void task.catch(() => { fail('request'); terminalNote(owner, 'site', 4); }); }
+    catch { fail('counter'); terminalNote(owner, 'site', 3); } // Do not dispatch an untracked abort on overflow.
   };
   const drain = async () => {
     const end = mode === 'normal' ? normalEnd : cleanupEnd;
     while (pending.size) await until(() => Promise.allSettled([...pending]), end);
     need(pending.size === 0 && !failed, 'cleanup');
   };
-  return { call, callback, drain, close: thunk => dispatch(thunk, 1500, true), beginClose: () => { need(mode === 'normal' && !failed, 'cleanup'); mode = 'closing'; }, stop: () => { mode = 'stopped'; }, healthy: () => mode === 'normal' && !failed };
+  return { call, callback, drain, close: thunk => dispatch(thunk, 1500, true), beginClose: () => { need(mode === 'normal' && !failed, 'cleanup'); mode = 'closing'; }, stop: () => { mode = 'stopped'; terminalNote(owner, 'stopped'); }, healthy: () => mode === 'normal' && !failed };
 }
 async function reservePort(call) {
   const server = createServer();
@@ -300,10 +449,10 @@ async function readiness(thunk, end, call, report) {
   }
   throw new Error('timeout');
 }
-function installSentinels(page, report, tracked, origin, consoleWindow) {
+function installSentinels(page, report, tracked, origin, consoleWindow, owner) {
   const increment = key => { need(report.counts[key] < 2147483647, 'counter'); report.counts[key]++; };
   const bad = (key, code) => { increment(key); fault(report.secondary, code); };
-  const event = fn => (...args) => { try { fn(...args); } catch { fault(report.secondary, 'counter'); tracked.stop(); } };
+  const event = fn => (...args) => { try { fn(...args); } catch { terminalNote(owner, 'site', 5); fault(report.secondary, 'counter'); tracked.stop(); } };
   page.on('pageerror', event(() => bad(COUNT.page, 'browser')));
   page.on('console', event(message => {
     const type = message.type();
@@ -339,26 +488,32 @@ function installSentinels(page, report, tracked, origin, consoleWindow) {
 }
 async function runCase(index, base, globalEnd) {
   const report = inventory(index); report.primary = null; report.status = 'failed'; report.consoleFirst = [1, 0, 0, 0, 0];
+  terminalNote(index + 1, 'primary', null);
   let consoleWindow = index === 2 ? 6 : 0;
   const end = deadline(globalEnd, CAPS.slices[index]);
   // Reserve cleanup AND terminal report inside this same slice, never restart it.
   const normalEnd = end - 3000;
-  const tracked = tracker(normalEnd, end - 500, report), { call } = tracked;
+  const tracked = tracker(normalEnd, end - 500, report, index + 1), { call } = tracked;
+  terminalNote(index + 1, 'tracker');
   const directory = join(output, `case-${index}`);
   let browser, page, client, chrome, chromeExit, service, serviceExit, safe = true;
+  terminalNote(index + 1, 'safe', 2);
   const reserve = (key, cap) => { need(report.counts[key] < cap && tracked.healthy(), 'counter'); remaining(normalEnd); report.counts[key]++; };
   const children = [];
   try {
+    terminalNote(index + 1, 'stage', 4);
     await call(() => mkdir(directory, { recursive: true }));
     const { default: puppeteer } = await call(() => import('puppeteer-core'));
     let origin, password;
     if (index < 2) {
+      terminalNote(index + 1, 'stage', 5);
       const site = join(base, `site-${index}`); await fixtureSite(site, call);
       const port = await reservePort(call); origin = `http://localhost:${port}`;
       password = randomBytes(24).toString('hex');
       const { hashPassword } = await call(() => import('../../server/password.ts'));
       const hash = await call(() => hashPassword(password));
       remaining(normalEnd);
+      terminalNote(index + 1, 'stage', 6);
       service = spawn(process.execPath, ['dist/server.mjs'], { cwd: studio, env: { ...process.env, STUDIO_ORIGIN: origin, STUDIO_HOST: '127.0.0.1', PORT: String(port), STUDIO_SITE_ROOT: site, STUDIO_STATE: 'file', STUDIO_STATE_DIR: join(base, `state-${index}`), STUDIO_GIT_URL: '', STUDIO_GIT_WORKSPACE: '', STUDIO_OIDC_ISSUER: '', STUDIO_ADMIN_USER: 'owner', STUDIO_ADMIN_PASSWORD_HASH: hash, STUDIO_SESSION_SECRET: randomBytes(32).toString('hex') }, stdio: 'ignore' });
       serviceExit = observe(service); children.push([service, serviceExit]);
       await readiness(async ms => {
@@ -369,6 +524,7 @@ async function runCase(index, base, globalEnd) {
         } catch { return false; } // Bounded readiness only, never business/input retry.
       }, deadline(normalEnd, 10000), call, report);
     }
+    terminalNote(index + 1, 'stage', 7);
     const executable = process.env.STUDIO_TEST_BROWSER || ['/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
     need(executable, 'browser');
     const profile = join(base, `profile-${index}`); await call(() => mkdir(profile));
@@ -389,8 +545,9 @@ async function runCase(index, base, globalEnd) {
     }, deadline(normalEnd, 10000), call);
     browser = await call(() => puppeteer.connect({ browserURL, protocolTimeout: Math.min(6000, remaining(normalEnd)) }));
     page = await call(() => browser.newPage()); page.setDefaultTimeout(Math.min(5000, remaining(normalEnd))); page.setDefaultNavigationTimeout(Math.min(10000, remaining(normalEnd)));
-    installSentinels(page, report, tracked, origin, () => consoleWindow);
+    installSentinels(page, report, tracked, origin, () => consoleWindow, index + 1);
     if (index < 2) {
+      terminalNote(index + 1, 'stage', 8);
       await call(() => page.evaluateOnNewDocument(() => Object.defineProperty(navigator, 'languages', { get: () => ['en'] })));
       const cookie = await call(async () => {
         const response = await fetch(origin + '/api/auth/login', { method: 'POST', signal: AbortSignal.timeout(Math.min(5000, remaining(normalEnd))), headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify({ username: 'owner', password }) });
@@ -398,6 +555,7 @@ async function runCase(index, base, globalEnd) {
       }, 5000);
       const split = cookie.indexOf('='); await call(() => browser.setCookie({ name: cookie.slice(0, split), value: cookie.slice(split + 1), domain: 'localhost', path: '/', httpOnly: true }));
       password = null;
+      terminalNote(index + 1, 'stage', 9);
       await call(() => page.setRequestInterception(true));
       await call(() => page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 }));
       consoleWindow = 1;
@@ -414,44 +572,63 @@ async function runCase(index, base, globalEnd) {
         need(matches.length === 1, 'open'); reserve(COUNT.click, 2); await call(() => matches[0].click());
       } finally { for (const button of buttons) await call(() => button.dispose()); }
       client = await call(() => page.createCDPSession());
+      terminalNote(index + 1, 'stage', 10);
       await mediaCase({ page, client, report, directory, call, reserve });
       need(report.requests[6] === 1 && report.requests[7] >= 1 && report.requests[7] <= 2, 'request');
     } else {
+      terminalNote(index + 1, 'stage', 11);
       await call(() => page.setRequestInterception(true));
       await controllerCase({ page, report, call, reserve, studio });
       need(report.counts[COUNT.get] === 0 && report.counts[COUNT.external] === 0, 'controller');
     }
     need(report.phases.every(Boolean) && report.secondary.length === 0 && tracked.healthy(), 'probe');
-  } catch (error) { report.primary = fixed(error, index === 2 ? 'controller' : 'setup'); }
+  } catch (error) { terminalNote(index + 1, 'site', 6); report.primary = fixed(error, index === 2 ? 'controller' : 'setup'); terminalNote(index + 1, 'primary', report.primary); }
   finally {
+    terminalNote(index + 1, 'stage', 12);
     consoleWindow = 5;
     // The original tracker cannot dispatch more normal work after this boundary.
     try {
-      await tracked.drain(); report.cleanup[0] = true;
+      terminalNote(index + 1, 'cleanup', 11);
+      await tracked.drain(); terminalNote(index + 1, 'cleanup', 12); report.cleanup[0] = true;
+      terminalNote(index + 1, 'cleanup', 21);
       tracked.beginClose();
+      terminalNote(index + 1, 'cleanup', 22);
       // Existing listeners use the SAME closing lane, original capacity and slice.
-      if (page) await tracked.close(() => page.close());
-      if (browser) await tracked.close(() => browser.close());
-      if (service && !serviceExit.exited()) { remaining(end - 500); service.kill('SIGTERM'); }
-      await tracked.drain(); report.cleanup[1] = true;
+      if (page) { terminalNote(index + 1, 'cleanup', 31); await tracked.close(() => page.close()); terminalNote(index + 1, 'cleanup', 32); }
+      if (browser) { terminalNote(index + 1, 'cleanup', 41); await tracked.close(() => browser.close()); terminalNote(index + 1, 'cleanup', 42); }
+      if (service && !serviceExit.exited()) { terminalNote(index + 1, 'cleanup', 51); remaining(end - 500); service.kill('SIGTERM'); terminalNote(index + 1, 'cleanup', 52); }
+      terminalNote(index + 1, 'cleanup', 61);
+      await tracked.drain(); terminalNote(index + 1, 'cleanup', 62); report.cleanup[1] = true;
+      terminalNote(index + 1, 'cleanup', 71);
       for (const [child, observed] of children) { const result = await until(() => observed.promise, end - 500); need(result.exited, 'cleanup'); }
+      terminalNote(index + 1, 'cleanup', 72);
       report.cleanup[2] = true;
-    } catch { safe = false; fault(report.secondary, 'cleanup'); }
+    } catch { terminalNote(index + 1, 'cleanupFailed'); terminalNote(index + 1, 'site', 7); safe = false; terminalNote(index + 1, 'safe', 1); fault(report.secondary, 'cleanup'); }
     // No uncertain child retirement permits another case or evidence RPC.
     if (!safe) tracked.stop();
     report.cleanup[3] = safe;
     report.status = report.primary || report.secondary.length || !safe ? 'failed' : 'passed';
+    terminalNote(index + 1, 'stage', 13);
     try {
+      terminalNote(index + 1, 'report', 11);
       need(safe, 'cleanup'); // No terminal evidence IO after uncertain retirement.
+      terminalNote(index + 1, 'report', 12);
       // Only tuple failure is representable without losing the original primary.
       // Other projection/IO failures still take the existing uncertainty exit.
-      try { report.consoleFirst = projectConsoleFirst(report.consoleFirst, report.counts[COUNT.warning]); }
-      catch { report.consoleFirst = null; fault(report.secondary, 'report'); report.status = 'failed'; }
+      try { terminalNote(index + 1, 'report', 21); report.consoleFirst = projectConsoleFirst(report.consoleFirst, report.counts[COUNT.warning]); terminalNote(index + 1, 'report', 22); }
+      catch { terminalNote(index + 1, 'reportFailed'); terminalNote(index + 1, 'site', 8); report.consoleFirst = null; fault(report.secondary, 'report'); report.status = 'failed'; }
+      terminalNote(index + 1, 'report', 31);
       const projected = projectReport(report, index);
+      terminalNote(index + 1, 'report', 32);
+      terminalNote(index + 1, 'report', 41);
       const text = JSON.stringify(projected) + '\n'; need(Buffer.byteLength(text) <= (index === 2 ? CAPS.controllerBytes : CAPS.mediaBytes), 'report');
+      terminalNote(index + 1, 'report', 42);
+      terminalNote(index + 1, 'report', 51);
       await until(() => writeFile(join(directory, 'report.json'), text, { flag: 'wx' }), end);
-    } catch { safe = false; fault(report.secondary, 'report'); }
+      terminalNote(index + 1, 'report', 52);
+    } catch { terminalNote(index + 1, 'reportFailed'); terminalNote(index + 1, 'site', 9); safe = false; terminalNote(index + 1, 'safe', 1); fault(report.secondary, 'report'); }
   }
+  terminalNote(index + 1, 'stage', 14);
   return { safe, passed: safe && report.status === 'passed' };
 }
 
@@ -602,21 +779,24 @@ async function parentIO(op, outer, base = '', index = 0, input = '', record) {
   return Buffer.concat(chunks);
 }
 async function worker(base, end) {
+  terminalNote(4, 'stage', 2);
   need(end > now() && end - now() <= CAPS.workerMs, 'timeout'); let passed = true;
   for (let index = 0; index < 3; index++) {
-    if (now() >= end) return false;
+    if (now() >= end) { terminalNote(0, 'branch', 5); return false; }
     let result;
-    try { result = await runCase(index, base, end); }
-    catch { return null; }
+    try { terminalNote(index + 1, 'select'); result = await runCase(index, base, end); }
+    catch { terminalNote(index + 1, 'site', 10); terminalNote(0, 'branch', 1); return null; }
     passed &&= result.passed;
-    if (!result.safe) return null; // Dedicated uncertainty exit; retain fixture.
+    if (!result.safe) { terminalNote(0, 'branch', 2); return null; } // Dedicated uncertainty exit; retain fixture.
   }
+  terminalNote(0, 'branch', passed ? 3 : 4);
   return passed;
 }
 export async function mainRunner() {
   const end = now() + CAPS.parentMs;
   const workEnd = end - 1000; // Final bounded console receipt is inside 143s.
   let child, observed, primary = null, certain = true, owned = false, result;
+  let terminalObserver = null, workerTerminal = unavailableTerminal;
   const secondary = [], reports = Array.from({ length: 3 }, (_, i) => inventory(i));
   let diagnostic = createDiagnostic(), parentOwner = 8;
   const recorder = owner => (type, a = null, b = null, c = null) => {
@@ -650,7 +830,8 @@ export async function mainRunner() {
     await parentIO('create', workEnd, base, 0, '', recorder(2)); recorder(2)('ownership', 1, 1);
     const workerEnd = deadline(workEnd, CAPS.workerMs); remaining(workerEnd);
     parentOwner = 0; workerRecord('phase', 3); workerRecord('attempt', 1); workerRecord('spawn', 1);
-    child = spawn(process.execPath, [...process.execArgv, self, '--residual-worker', base, String(workerEnd)], { cwd: studio, detached: true, stdio: 'ignore' }); observed = observe(child, workerRecord);
+    child = spawn(process.execPath, [...process.execArgv, self, '--residual-worker', base, String(workerEnd)], { cwd: studio, detached: true, stdio: ['ignore', 'ignore', 'ignore', 'pipe'] }); observed = observe(child, workerRecord);
+    terminalObserver = attachTerminal(child);
     workerRecord('phase', 4); workerRecord('wait', 1);
     try { result = await until(() => observed.promise, workerEnd); workerRecord('wait', 2); }
     catch (error) { primary = fixed(error, 'worker'); workerRecord('waitError', error); }
@@ -684,12 +865,13 @@ export async function mainRunner() {
     need(result && !result.failed && reports.every(r => r.status === 'passed'), 'worker');
   } catch (error) { uncertainty(error, parentOwner); if (primary) fault(secondary, fixed(error, 'worker')); else primary = fixed(error, 'worker'); recorder(parentOwner)('fault', 5); }
   finally {
+    workerTerminal = freezeTerminal(terminalObserver);
     // Do not restart the worker stop budget. A previous uncertain stop is sticky.
     if (child && !certain) release(child, workerRecord);
     recorder(6)('phase', 9);
     const prepared = preparePublication(diagnostic, primary, secondary);
     if (prepared.reportRequired) fault(secondary, 'report');
-    const snapshot = buildPublication('summary', prepared, certain, owned, reports);
+    const snapshot = buildPublication('summary', prepared, certain, owned, reports, workerTerminal);
     try {
       const text = JSON.stringify(snapshot) + '\n'; need(Buffer.byteLength(text) <= CAPS.summaryBytes, 'report');
       need(reports.reduce((n, report) => n + Buffer.byteLength(JSON.stringify(report) + '\n'), Buffer.byteLength(text)) <= CAPS.totalReportBytes, 'report');
@@ -708,7 +890,7 @@ export async function mainRunner() {
   workerRecord('phase', 11);
   const prepared = preparePublication(diagnostic, primary, secondary);
   if (prepared.reportRequired) fault(secondary, 'report');
-  const receipt = buildPublication('receipt', prepared, certain, owned, reports);
+  const receipt = buildPublication('receipt', prepared, certain, owned, reports, workerTerminal);
   const text = JSON.stringify(receipt); need(Buffer.byteLength(text) < 4096, 'report');
   need(Buffer.byteLength(text + '\n') < 4096, 'report');
   const consoleEnd = deadline(end, 1000);
@@ -727,14 +909,16 @@ export async function mainRunner() {
 if (process.argv[1] && resolve(process.argv[1]) === self) {
   try {
     if (process.argv[2] === '--residual-worker') {
+      startTerminal();
       const base = process.argv[3], end = Number(process.argv[4]);
       need(dirname(base) === tmpdir() && /^studio-residual-evidence-[a-f0-9]{32}$/.test(basename(base)) && Number.isFinite(end) && end > now() && end - now() <= CAPS.workerMs, 'setup');
       const result = await worker(base, end);
+      emitTerminal();
       process.exit(result === null ? 2 : result ? 0 : 1);
     } else await mainRunner();
   } catch {
     // An unexpected worker exception cannot erase earlier retirement uncertainty.
-    if (process.argv[2] === '--residual-worker') process.exit(2);
+    if (process.argv[2] === '--residual-worker') { terminalNote(0, 'branch', 6); terminalNote(0, 'site', 11); emitTerminal(); process.exit(2); }
     process.exitCode = 1;
   }
 }
