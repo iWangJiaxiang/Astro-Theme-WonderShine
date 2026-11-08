@@ -27,43 +27,182 @@ async function until(thunk, end) {
   try { return await Promise.race([task, new Promise((_, no) => { timer = setTimeout(() => no(new Error('timeout')), ms); })]); }
   finally { clearTimeout(timer); }
 }
-function observe(child) {
+// Closed parent-only diagnostics. Never retain event objects or process handles.
+const invalidDiagnostic = Object.freeze({ invalid: true, value: null });
+const diagnosticKeys = ['v', 'phase', 'worker', 'io', 'reads', 'ownership', 'firstFault'];
+const processDomains = [1, 4, 8, 3, 8, 255, 5, 6, 3, 3, 4, 1, 1];
+function diagnosticObject(value, keys) {
+  need(value && Object.getPrototypeOf(value) === Object.prototype, 'report');
+  const own = Reflect.ownKeys(value);
+  need(own.length === keys.length && keys.every(key => own.includes(key)), 'report');
+  const copy = {};
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    need(descriptor && Object.hasOwn(descriptor, 'value'), 'report');
+    copy[key] = descriptor.value;
+  }
+  return copy;
+}
+function diagnosticArray(value, length, predicate) {
+  need(Array.isArray(value), 'report');
+  const size = Object.getOwnPropertyDescriptor(value, 'length');
+  need(size?.value === length && Reflect.ownKeys(value).length === length + 1, 'report');
+  const copy = [];
+  for (let i = 0; i < length; i++) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
+    need(descriptor && Object.hasOwn(descriptor, 'value') && predicate(descriptor.value, i), 'report');
+    copy.push(descriptor.value);
+  }
+  return copy;
+}
+const diagnosticInteger = (value, cap) => Number.isInteger(value) && value >= 0 && value <= cap;
+function copyDiagnostic(state) {
+  const envelope = diagnosticObject(state, ['invalid', 'value']);
+  need(envelope.invalid === false, 'report');
+  const value = diagnosticObject(envelope.value, diagnosticKeys);
+  need(value.v === 1 && diagnosticInteger(value.phase, 11), 'report');
+  const row = source => diagnosticArray(source, 13, (n, i) =>
+    (i === 5 || i === 6) && n === null || diagnosticInteger(n, processDomains[i]) && (i !== 4 || ![4, 5].includes(n)));
+  const worker = row(value.worker);
+  const io = diagnosticArray(value.io, 7, () => true).map(row);
+  const reads = diagnosticArray(value.reads, 3, n => diagnosticInteger(n, 6));
+  const ownership = diagnosticArray(value.ownership, 6, (n, i) => diagnosticInteger(n, i === 5 ? 511 : 1));
+  const firstFault = value.firstFault === null ? null : diagnosticArray(value.firstFault, 3, (n, i) => diagnosticInteger(n, [8, 11, 5][i]));
+  return { v: 1, phase: value.phase, worker, io, reads, ownership, firstFault };
+}
+function createDiagnostic() {
+  try {
+    const row = () => [0, 0, 0, 0, 0, null, null, 0, 0, 0, 0, 0, 0];
+    return { invalid: false, value: { v: 1, phase: 0, worker: row(), io: Array.from({ length: 7 }, row), reads: [0, 0, 0], ownership: [0, 0, 0, 0, 0, 0], firstFault: null } };
+  } catch { return invalidDiagnostic; }
+}
+function classifyWorkerExit(code, signal, exited) {
+  try {
+    if (exited === false && code === null && signal === null) return [0, null, null, 0, false];
+    if (exited !== true || !(code === null || diagnosticInteger(code, 255)) || !(signal === null || typeof signal === 'string' && signal.length > 0)) return [0, null, null, 0, true];
+    const signalClass = signal === null ? 0 : ['SIGTERM', 'SIGKILL', 'SIGABRT', 'SIGSEGV'].indexOf(signal) + 1 || 5;
+    return [signal !== null ? 7 : code === null ? 0 : code === 0 ? 1 : code === 1 ? 2 : code === 2 ? 3 : 6, code, signalClass, 1, false];
+  } catch { return [0, null, null, 0, true]; }
+}
+function classifySpawnFault(value) {
+  try {
+    if (!value || typeof value !== 'object' && typeof value !== 'function') return [1, true];
+    const descriptor = Object.getOwnPropertyDescriptor(value, 'code');
+    if (!descriptor) return [1, false];
+    if (!Object.hasOwn(descriptor, 'value')) return [1, true];
+    const code = descriptor.value;
+    if (typeof code !== 'string') return [1, true];
+    const index = ['ENOENT', 'EACCES', 'ENOEXEC', 'EMFILE', 'ENFILE', 'EAGAIN', 'ENOMEM'].indexOf(code);
+    return [index < 0 ? 1 : index + 2, false];
+  } catch { return [1, true]; }
+}
+function reduceDiagnostic(state, event) {
+  try {
+    const value = copyDiagnostic(state);
+    const { type, owner, a, b, c } = diagnosticObject(event, ['type', 'owner', 'a', 'b', 'c']);
+    need(typeof type === 'string' && diagnosticInteger(owner, 8), 'report');
+    const row = owner === 0 ? value.worker : owner < 8 ? value.io[owner - 1] : null;
+    const first = kind => { if (value.firstFault === null) value.firstFault = [owner, value.phase, kind]; };
+    const column = { attempt: 0, spawn: 1, spawnFault: 2, wait: 3, stopPhase: 7, term: 8, kill: 9, group: 10, release: 12 };
+    if (Object.hasOwn(column, type)) {
+      const index = column[type];
+      need(row && diagnosticInteger(a, processDomains[index]) && b === null && c === null, 'report');
+      if (index !== 3 || row[3] !== 3) row[index] = a;
+      if (type === 'spawn' && a === 3) row[4] = 8;
+    } else if (type === 'phase') {
+      need(diagnosticInteger(a, 11) && b === null && c === null, 'report'); value.phase = a;
+    } else if (type === 'exit') {
+      need(row, 'report');
+      const [kind, code, signal, leader, invalid] = classifyWorkerExit(a, b, c);
+      need(!invalid, 'report');
+      row[4] = kind; row[5] = code; row[6] = signal; row[11] = leader;
+      if (kind === 7) first(3); else if (code !== null && code !== 0) first(2);
+    } else if (type === 'read') {
+      need(diagnosticInteger(a, 2) && diagnosticInteger(b, 6) && c === null, 'report'); value.reads[a] = b;
+    } else if (type === 'ownership') {
+      need(diagnosticInteger(a, 4) && diagnosticInteger(b, 1) && c === null, 'report'); value.ownership[a] = b;
+    } else if (type === 'uncertainty') {
+      need(a === null && b === null && c === null, 'report'); value.ownership[5] |= 1 << owner; first(5);
+    } else if (type === 'fault') {
+      need(diagnosticInteger(a, 5) && b === null && c === null, 'report'); first(a);
+    } else throw new Error('report');
+    return { invalid: false, value };
+  } catch { return invalidDiagnostic; }
+}
+function projectDiagnostic(state) {
+  try {
+    const value = copyDiagnostic(state);
+    need(Buffer.byteLength(JSON.stringify(value)) <= 2048, 'report');
+    return value;
+  } catch { throw new Error('report'); }
+}
+function preparePublication(state, primary, secondary) {
+  let diagnostic = null, reportRequired = false;
+  try { diagnostic = projectDiagnostic(state); }
+  catch { reportRequired = true; }
+  const next = [...secondary];
+  if (reportRequired && !next.includes('report')) next.push('report');
+  return { diagnostic, primary, secondary: next, status: primary || next.length ? 'failed' : 'passed', reportRequired };
+}
+function buildPublication(kind, prepared, certain, owned, reports) {
+  const diagnostic = prepared.diagnostic === null ? null : copyDiagnostic({ invalid: false, value: prepared.diagnostic });
+  const common = { schema: 2, status: prepared.status, primary: prepared.primary, secondary: [...prepared.secondary] };
+  if (kind === 'summary') return {
+    ...common, synthetic: true, publication: 'pre-cleanup-snapshot', groupsGoneBeforePublication: certain, fixtureRetainedAtPublication: owned || !certain,
+    plannedCases: 3, caseStatus: reports.map(r => r.status), casePrimary: reports.map(r => r.primary), counts: reports.map(r => r.status === 'unavailable' ? null : [...r.counts]), requests: reports.map(r => r.status === 'unavailable' ? null : [...r.requests]), pngCount: reports.some(r => r.status === 'unavailable') ? null : reports.reduce((n, r) => n + r.pngs.filter(p => p.bytes > 0).length, 0), workerMs: 90000, parentMs: 143000, finalConsoleMs: 1000, unusedReserveMs: 5000, diagnostic,
+  };
+  need(kind === 'receipt', 'report');
+  return { ...common, groupGone: certain, fixtureRetention: !certain ? 'unconfirmed' : owned ? 'retained' : 'removed-or-not-created', plannedCases: 3, caseStatus: reports.map(r => r.status), delivery: 'attempt-only', diagnostic };
+}
+export const residualDiagnostic = Object.freeze({ createDiagnostic, reduceDiagnostic, projectDiagnostic, classifyWorkerExit, classifySpawnFault, preparePublication, buildPublication });
+
+function observe(child, record) {
   let exited = false;
   const promise = new Promise(done => {
-    child.on('error', () => { if (!child.pid) done({ failed: true, exited: false }); });
-    child.once('exit', (code, signal) => { exited = true; done({ failed: code !== 0 || signal !== null, exited: true, code }); });
+    child.on('error', error => { if (!child.pid) { record?.('spawn', 3); record?.('spawnError', error); done({ failed: true, exited: false }); } });
+    child.once('exit', (code, signal) => { exited = true; record?.('exit', code, signal, true); done({ failed: code !== 0 || signal !== null, exited: true, code }); });
   });
   void promise.catch(() => {});
   return { promise, exited: () => exited };
 }
-function release(child) {
+function release(child, record) {
   if (!child) return;
   for (const stream of child.stdio || []) if (stream) { stream.on('error', () => {}); stream.destroy(); stream.unref?.(); }
   child.unref(); // Keep late error sinks; unref is not exit evidence.
+  record?.('release', 1);
 }
-function gone(child) {
-  if (!child?.pid) return true;
-  try { process.kill(-child.pid, 0); return false; }
-  catch (error) { if (error.code === 'ESRCH') return true; throw new Error('cleanup'); }
+function gone(child, record) {
+  if (!child?.pid) { record?.('group', 1); return true; }
+  try { process.kill(-child.pid, 0); record?.('group', 2); return false; }
+  catch (error) { if (error.code === 'ESRCH') { record?.('group', 3); return true; } record?.('group', 4); throw new Error('cleanup'); }
 }
-function signalGroup(child, signal) {
-  if (!child?.pid) return;
-  try { process.kill(-child.pid, signal); }
-  catch (error) { if (error.code !== 'ESRCH') throw new Error('cleanup'); }
+function signalGroup(child, signal, record) {
+  if (!child?.pid) { record?.('group', 1); return; }
+  try { process.kill(-child.pid, signal); record?.(signal === 'SIGTERM' ? 'term' : 'kill', 1); }
+  catch (error) { if (error.code !== 'ESRCH') { record?.(signal === 'SIGTERM' ? 'term' : 'kill', 3); throw new Error('cleanup'); } record?.(signal === 'SIGTERM' ? 'term' : 'kill', 2); }
 }
-async function stopGroup(child, observed, end) {
+async function stopGroup(child, observed, end, record) {
+  let completed = false;
+  record?.('stopPhase', 1);
   try {
-    if (!child?.pid) return;
-    if (!gone(child)) {
-      remaining(end); signalGroup(child, 'SIGTERM');
+    if (!child?.pid) { record?.('group', 1); completed = true; return; }
+    record?.('spawn', 2);
+    if (!gone(child, record)) {
+      remaining(end); record?.('stopPhase', 2); signalGroup(child, 'SIGTERM', record);
       const term = deadline(end, 1000);
-      while (!gone(child) && now() < term) await delay(Math.max(1, Math.min(25, Math.ceil(term - now()))));
-      if (!gone(child)) { remaining(end); signalGroup(child, 'SIGKILL'); }
-      while (!gone(child)) await until(() => delay(25), end);
+      while (!gone(child, record) && now() < term) await delay(Math.max(1, Math.min(25, Math.ceil(term - now()))));
+      if (!gone(child, record)) { remaining(end); record?.('stopPhase', 3); signalGroup(child, 'SIGKILL', record); }
+      while (!gone(child, record)) await until(() => delay(25), end);
     }
+    record?.('stopPhase', 4);
     const result = await until(() => observed.promise, end);
     need(result.exited && observed.exited(), 'cleanup');
-  } finally { release(child); }
+    completed = true;
+  } finally {
+    record?.('stopPhase', 6);
+    release(child, record);
+    record?.('stopPhase', completed ? 5 : 6);
+  }
 }
 // Local metadata only: never read args/handles or retain raw text/location.
 // Tuple v1: severity 0..2, kind 0..8, observation window 0..6, source 0..8.
@@ -431,30 +570,34 @@ try {
   } else throw 0;
 } catch {process.exitCode=1;}
 `;
-async function parentIO(op, outer, base = '', index = 0, input = '') {
+async function parentIO(op, outer, base = '', index = 0, input = '', record) {
+  record?.('attempt', 1);
   const end = deadline(outer, 6000), normalEnd = end - 3000;
   const cap = op === 'read' && index < 2 ? CAPS.mediaBytes : CAPS.summaryBytes;
   need(Buffer.byteLength(input) <= cap, 'report'); remaining(normalEnd);
   let child, observed, failure, overflow = false, signalUncertain = false, length = 0;
   const chunks = [];
   try {
+    record?.('spawn', 1);
     child = spawn(process.execPath, ['--input-type=module', '-e', ioSource, op, output, base, String(index), String(cap)], { detached: true, stdio: ['pipe', 'pipe', 'ignore'] });
-    observed = observe(child);
+    observed = observe(child, record);
     child.stdin.on('error', () => {}); child.stdout.on('error', () => { overflow = true; });
     child.stdout.on('data', chunk => {
       length += chunk.length;
-      if (length > (op === 'read' ? cap : 0)) { overflow = true; try { signalGroup(child, 'SIGKILL'); } catch { signalUncertain = true; } }
+      if (length > (op === 'read' ? cap : 0)) { overflow = true; record?.('fault', 5); try { signalGroup(child, 'SIGKILL', record); } catch { signalUncertain = true; } }
       else chunks.push(chunk);
     });
     const closed = new Promise(done => child.once('close', done)); child.stdin.end(input);
+    record?.('wait', 1);
     const result = await until(async () => { const r = await observed.promise; await closed; return r; }, normalEnd);
+    record?.('wait', 2);
     need(result.exited && !result.failed && !overflow, 'report');
-  } catch (error) { failure = new Error(fixed(error, 'report')); }
+  } catch (error) { failure = new Error(fixed(error, 'report')); record?.('waitError', error); }
   finally {
-    try { await stopGroup(child, observed, end); }
-    catch { if (!failure) failure = new Error('cleanup'); failure.cleanupFailed = true; }
+    try { await stopGroup(child, observed, end, record); }
+    catch { if (!failure) failure = new Error('cleanup'); failure.cleanupFailed = true; record?.('uncertainty'); }
   }
-  if (signalUncertain) { if (!failure) failure = new Error('cleanup'); failure.cleanupFailed = true; }
+  if (signalUncertain) { if (!failure) failure = new Error('cleanup'); failure.cleanupFailed = true; record?.('uncertainty'); }
   if (failure) throw failure;
   return Buffer.concat(chunks);
 }
@@ -475,24 +618,55 @@ export async function mainRunner() {
   const workEnd = end - 1000; // Final bounded console receipt is inside 143s.
   let child, observed, primary = null, certain = true, owned = false, result;
   const secondary = [], reports = Array.from({ length: 3 }, (_, i) => inventory(i));
-  const uncertainty = error => { if (error?.cleanupFailed) { certain = false; fault(secondary, 'cleanup'); } };
+  let diagnostic = createDiagnostic(), parentOwner = 8;
+  const recorder = owner => (type, a = null, b = null, c = null) => {
+    try {
+      const note = (type, a = null, b = null, c = null) => { diagnostic = reduceDiagnostic(diagnostic, { type, owner, a, b, c }); };
+      if (type === 'spawnError') {
+        const [code, invalid] = classifySpawnFault(a);
+        if (invalid) diagnostic = invalidDiagnostic;
+        else { note('spawnFault', code); note('fault', 1); }
+      } else if (type === 'readResult') {
+        const descriptor = Object.getOwnPropertyDescriptor(b, 'status');
+        if (descriptor && Object.hasOwn(descriptor, 'value') && ['passed', 'failed'].includes(descriptor.value)) note('read', a, descriptor.value === 'passed' ? 6 : 5);
+        else diagnostic = invalidDiagnostic;
+      } else if (type === 'waitError') {
+        const descriptor = a && Object.getOwnPropertyDescriptor(a, 'message');
+        if (descriptor && Object.hasOwn(descriptor, 'value')) {
+          if (descriptor.value === 'timeout') { note('wait', 3); note('fault', 4); }
+          else note('fault', 5);
+        } else diagnostic = invalidDiagnostic;
+      } else note(type, a, b, c);
+    } catch { diagnostic = invalidDiagnostic; }
+  };
+  const workerRecord = recorder(0);
+  const uncertainty = (error, owner = 8) => { if (error?.cleanupFailed) { certain = false; fault(secondary, 'cleanup'); recorder(owner)('uncertainty'); } };
   const base = join(tmpdir(), `studio-residual-evidence-${randomBytes(16).toString('hex')}`);
   try {
     need(process.platform === 'linux', 'setup');
-    await parentIO('init', workEnd); owned = true; await parentIO('create', workEnd, base);
+    parentOwner = 1; recorder(1)('phase', 1);
+    await parentIO('init', workEnd, '', 0, '', recorder(1)); recorder(1)('ownership', 0, 1);
+    owned = true; recorder(1)('ownership', 2, 1); parentOwner = 2; recorder(2)('phase', 2);
+    await parentIO('create', workEnd, base, 0, '', recorder(2)); recorder(2)('ownership', 1, 1);
     const workerEnd = deadline(workEnd, CAPS.workerMs); remaining(workerEnd);
-    child = spawn(process.execPath, [...process.execArgv, self, '--residual-worker', base, String(workerEnd)], { cwd: studio, detached: true, stdio: 'ignore' }); observed = observe(child);
-    try { result = await until(() => observed.promise, workerEnd); }
-    catch (error) { primary = fixed(error, 'worker'); }
-    try { await stopGroup(child, observed, deadline(workEnd, 5000)); }
-    catch { certain = false; fault(secondary, 'cleanup'); }
-    if (result?.code === 2 || !result?.exited) { certain = false; fault(secondary, 'cleanup'); }
+    parentOwner = 0; workerRecord('phase', 3); workerRecord('attempt', 1); workerRecord('spawn', 1);
+    child = spawn(process.execPath, [...process.execArgv, self, '--residual-worker', base, String(workerEnd)], { cwd: studio, detached: true, stdio: 'ignore' }); observed = observe(child, workerRecord);
+    workerRecord('phase', 4); workerRecord('wait', 1);
+    try { result = await until(() => observed.promise, workerEnd); workerRecord('wait', 2); }
+    catch (error) { primary = fixed(error, 'worker'); workerRecord('waitError', error); }
+    workerRecord('phase', 5);
+    try { await stopGroup(child, observed, deadline(workEnd, 5000), workerRecord); }
+    catch { certain = false; fault(secondary, 'cleanup'); workerRecord('uncertainty'); }
+    if (result?.code === 2 || !result?.exited) { certain = false; fault(secondary, 'cleanup'); workerRecord('uncertainty'); }
     if (certain) {
       // Exactly THREE reads. The original 6s reserve includes the final 1s
       // console attempt, leaving 5s unallocated; it never authorizes a read.
       for (let index = 0; index < 3; index++) {
+        const record = recorder(index + 3); let readStage = 2;
+        record('phase', index + 6);
         try {
-          const value = JSON.parse((await parentIO('read', workEnd, '', index)).toString('utf8'));
+          const bytes = await parentIO('read', workEnd, '', index, '', record); readStage = 3;
+          const value = JSON.parse(bytes.toString('utf8')); readStage = 4;
           // Keep only fixed failure codes before projection. A malformed diagnosis
           // cannot erase a legitimate case primary; unavailable counts stay null.
           if (value && value.synthetic === true && value.index === index && value.width === SIZES[index][0] && value.height === SIZES[index][1] && value.status === 'failed') {
@@ -501,34 +675,42 @@ export async function mainRunner() {
           }
           try { reports[index] = projectReport(value, index); }
           catch { fault(reports[index].secondary, 'report'); throw new Error('report'); }
-        } catch (error) { uncertainty(error); fault(secondary, fixed(error, 'report')); }
+          record('readResult', index, reports[index]);
+        } catch (error) { uncertainty(error, index + 3); fault(secondary, fixed(error, 'report')); record('read', index, readStage); record('fault', 5); }
       }
+    } else {
+      workerRecord('read', 0, 1); workerRecord('read', 1, 1); workerRecord('read', 2, 1);
     }
     need(result && !result.failed && reports.every(r => r.status === 'passed'), 'worker');
-  } catch (error) { uncertainty(error); if (primary) fault(secondary, fixed(error, 'worker')); else primary = fixed(error, 'worker'); }
+  } catch (error) { uncertainty(error, parentOwner); if (primary) fault(secondary, fixed(error, 'worker')); else primary = fixed(error, 'worker'); recorder(parentOwner)('fault', 5); }
   finally {
     // Do not restart the worker stop budget. A previous uncertain stop is sticky.
-    if (child && !certain) release(child);
-    const snapshot = {
-      schema: 1, synthetic: true, status: primary || secondary.length ? 'failed' : 'passed', primary, secondary: [...secondary], publication: 'pre-cleanup-snapshot', groupsGoneBeforePublication: certain, fixtureRetainedAtPublication: owned || !certain,
-      plannedCases: 3, caseStatus: reports.map(r => r.status), casePrimary: reports.map(r => r.primary), counts: reports.map(r => r.status === 'unavailable' ? null : r.counts), requests: reports.map(r => r.status === 'unavailable' ? null : r.requests), pngCount: reports.some(r => r.status === 'unavailable') ? null : reports.reduce((n, r) => n + r.pngs.filter(p => p.bytes > 0).length, 0), workerMs: 90000, parentMs: 143000, finalConsoleMs: 1000, unusedReserveMs: 5000,
-    };
+    if (child && !certain) release(child, workerRecord);
+    recorder(6)('phase', 9);
+    const prepared = preparePublication(diagnostic, primary, secondary);
+    if (prepared.reportRequired) fault(secondary, 'report');
+    const snapshot = buildPublication('summary', prepared, certain, owned, reports);
     try {
       const text = JSON.stringify(snapshot) + '\n'; need(Buffer.byteLength(text) <= CAPS.summaryBytes, 'report');
       need(reports.reduce((n, report) => n + Buffer.byteLength(JSON.stringify(report) + '\n'), Buffer.byteLength(text)) <= CAPS.totalReportBytes, 'report');
-      await parentIO('summary', workEnd, '', 0, text);
+      await parentIO('summary', workEnd, '', 0, text, recorder(6));
     }
-    catch (error) { uncertainty(error); fault(secondary, 'report'); }
+    catch (error) { uncertainty(error, 6); fault(secondary, 'report'); recorder(6)('fault', 5); }
     // Never delete after ANY uncertain worker or IO exit, including publication.
     if (owned && certain) {
-      try { await parentIO('remove', workEnd, base); owned = false; }
-      catch (error) { uncertainty(error); fault(secondary, 'cleanup'); }
+      recorder(7)('phase', 10); recorder(7)('ownership', 3, 1);
+      try { await parentIO('remove', workEnd, base, 0, '', recorder(7)); owned = false; recorder(7)('ownership', 2, 0); recorder(7)('ownership', 4, 1); }
+      catch (error) { uncertainty(error, 7); fault(secondary, 'cleanup'); recorder(7)('fault', 5); }
     }
   }
   // Last publication attempt, AFTER all child/IO supervision and removal decisions.
   // This record cannot attest to its own delivery; success also requires exit 0.
-  const receipt = { schema: 1, status: primary || secondary.length ? 'failed' : 'passed', primary, secondary, groupGone: certain, fixtureRetention: !certain ? 'unconfirmed' : owned ? 'retained' : 'removed-or-not-created', plannedCases: 3, caseStatus: reports.map(r => r.status), delivery: 'attempt-only' };
+  workerRecord('phase', 11);
+  const prepared = preparePublication(diagnostic, primary, secondary);
+  if (prepared.reportRequired) fault(secondary, 'report');
+  const receipt = buildPublication('receipt', prepared, certain, owned, reports);
   const text = JSON.stringify(receipt); need(Buffer.byteLength(text) < 4096, 'report');
+  need(Buffer.byteLength(text + '\n') < 4096, 'report');
   const consoleEnd = deadline(end, 1000);
   process.stdout.on('error', () => {}); // Sink retained even after failed delivery.
   try { await until(() => new Promise((yes, no) => process.stdout.write(text + '\n', error => error ? no(new Error('report')) : yes())), consoleEnd); }
