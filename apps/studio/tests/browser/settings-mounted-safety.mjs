@@ -444,7 +444,7 @@ async function worker(base) {
     stage = 'browser';
     const executable = process.env.STUDIO_TEST_BROWSER || '/usr/bin/chromium';
     const profile = join(base, 'browser'); await mkdir(profile);
-    chrome = spawn(executable, puppeteer.defaultArgs({ headless: true, userDataDir: profile, args: ['--remote-debugging-port=0'] }), { stdio: 'ignore' });
+    chrome = spawn(executable, await puppeteer.defaultArgs({ headless: true, userDataDir: profile, args: ['--remote-debugging-port=0'] }), { stdio: 'ignore' });
     settled = observe(chrome); report.browsers++;
     let stopped = false, port; void settled.then(() => { stopped = true; });
     const until = Date.now() + caps.operationMs;

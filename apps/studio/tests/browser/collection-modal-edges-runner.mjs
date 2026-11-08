@@ -360,7 +360,7 @@ async function runSize(index, base) {
     requireThat(!!executable, 'browser');
     const profile = join(base, 'browser');
     await mkdir(profile, { recursive: true });
-    chrome = spawn(executable, puppeteer.defaultArgs({ headless: true, userDataDir: profile, args: ['--remote-debugging-port=0'] }), { stdio: 'ignore' });
+    chrome = spawn(executable, await puppeteer.defaultArgs({ headless: true, userDataDir: profile, args: ['--remote-debugging-port=0'] }), { stdio: 'ignore' });
     chromeSettled = observe(chrome);
     let chromeStopped = false;
     void chromeSettled.then(() => { chromeStopped = true; });

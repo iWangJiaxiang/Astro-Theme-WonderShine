@@ -456,7 +456,7 @@ async function worker(base) {
     need(!!executable, 'browser');
     const profile = join(base, 'browser'); await mkdir(profile);
     stage = 'browser';
-    const args = puppeteer.defaultArgs({ headless: true, userDataDir: profile, args: ['--remote-debugging-port=0'] });
+    const args = await puppeteer.defaultArgs({ headless: true, userDataDir: profile, args: ['--remote-debugging-port=0'] });
     chrome = spawn(executable, args, { stdio: 'ignore' }); settled = observe(chrome);
     let stopped = false; void settled.then(() => { stopped = true; });
     let port;

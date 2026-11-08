@@ -369,7 +369,7 @@ async function worker(base) {
     const profile = join(base, 'browser'); await mkdir(profile);
     stage = 'browser';
     // Explicit child ownership survives partial puppeteer connection/startup.
-    chrome = spawn(executable, puppeteer.defaultArgs({ headless: true, userDataDir: profile, args: ['--remote-debugging-port=0'] }), { stdio: 'ignore' });
+    chrome = spawn(executable, await puppeteer.defaultArgs({ headless: true, userDataDir: profile, args: ['--remote-debugging-port=0'] }), { stdio: 'ignore' });
     settled = observe(chrome); report.browsers++;
     let stopped = false; void settled.then(() => { stopped = true; });
     const deadline = Date.now() + 10000; let port;
