@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 
-const phases = new Set(['prepare-output', 'find-app', 'app-metadata', 'verify-icons', 'copy-icons', 'list-devices', 'select-device', 'boot', 'bootstatus', 'status-bar', 'install', 'launch', 'settle', 'screenshot', 'shutdown', 'write-result']);
+const phases = new Set(['prepare-output', 'find-app', 'app-metadata', 'verify-icons', 'copy-icons', 'list-devices', 'select-device', 'boot', 'bootstatus', 'status-bar', 'install', 'launch', 'settle', 'screenshot', 'post-launch-screenshot', 'shutdown', 'write-result']);
 const signals = new Set(['SIGTERM', 'SIGKILL', 'SIGABRT', 'SIGSEGV', 'SIGBUS', 'SIGINT', 'SIGHUP', 'SIGPIPE', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGALRM', 'SIGXCPU', 'SIGXFSZ']);
 const errorCodes = new Set(['ETIMEDOUT', 'ENOENT', 'EACCES', 'EPERM', 'ENOSPC', 'EIO', 'EMFILE', 'ENFILE', 'ENOTDIR', 'EISDIR', 'EEXIST', 'EROFS', 'ERR_ASSERTION', 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER']);
 
@@ -56,6 +56,7 @@ export async function runSimulatorSmoke({
   }
   let device;
   let primary;
+  let screenshotError;
   let shutdownError;
   try {
     await stage('prepare-output', () => io.mkdir(output, { recursive: true }));
@@ -96,6 +97,11 @@ export async function runSimulatorSmoke({
   } catch (error) {
     primary = error;
   }
+  // Capture failure evidence once without retrying launch or changing the primary failure.
+  if (device && primary?.phase === 'launch' && primary.errorCode === 'ETIMEDOUT') {
+    try { await run('post-launch-screenshot', ['simctl', 'io', device.udid, 'screenshot', join(output, 'studio-launch-timeout.png')], 15000); }
+    catch (error) { screenshotError = error; }
+  }
   // Cleanup is independent of both the primary operation and diagnostic persistence.
   if (device) {
     try { await run('shutdown', ['simctl', 'shutdown', device.udid]); }
@@ -106,7 +112,7 @@ export async function runSimulatorSmoke({
   const started = now();
   try { await io.writeFile(join(output, 'result.json'), JSON.stringify(result, null, 2)); }
   catch (error) { diagnosticError = failure(diagnostic('write-result', now() - started, error, false)); }
-  const errors = [primary, shutdownError, diagnosticError].filter(Boolean);
+  const errors = [primary, screenshotError, shutdownError, diagnosticError].filter(Boolean);
   if (errors.length > 1) throw new AggregateError(errors, 'Simulator smoke failed; secondary failures are included.', { cause: errors[0] });
   if (errors.length) throw errors[0];
   return result;

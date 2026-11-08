@@ -376,26 +376,132 @@ mod tests {
         assert_eq!(capability["permissions"], serde_json::json!(["allow-native-review-owner"]));
         assert!(include_str!("../permissions/native-review.toml").contains("commands.allow = [\"native_review_owner\"]"));
     }
+    const RECOVERY_CHILD_ENV: &str = "STUDIO_OWNER_RECOVERY_CHILD_ROOT";
+    const RECOVERY_TEST: &str = "native_review::tests::recovery_once_and_reload_requires_process_restart";
+    const RECOVERY_MARKER: &str = "recovery-complete-v1";
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum RecoveryChildReport {
+        Complete, ScenarioPanicked, SameProcessReacquireWouldBlock,
+        SameProcessReacquireFailed, InvalidMarker,
+    }
+    impl RecoveryChildReport {
+        fn bytes(self) -> &'static [u8] {
+            match self {
+                Self::Complete => b"Complete",
+                Self::ScenarioPanicked => b"ScenarioPanicked",
+                Self::SameProcessReacquireWouldBlock => b"SameProcessReacquireWouldBlock",
+                Self::SameProcessReacquireFailed => b"SameProcessReacquireFailed",
+                Self::InvalidMarker => b"InvalidMarker",
+            }
+        }
+        fn parse(bytes: &[u8]) -> Self {
+            [Self::Complete, Self::ScenarioPanicked, Self::SameProcessReacquireWouldBlock,
+                Self::SameProcessReacquireFailed].into_iter()
+                .find(|report| report.bytes() == bytes).unwrap_or(Self::InvalidMarker)
+        }
+    }
+    struct RecoveryChild {
+        root: std::path::PathBuf,
+        process: Option<std::process::Child>,
+    }
+    impl Drop for RecoveryChild {
+        fn drop(&mut self) {
+            // Delete only this fixture's private root after confirmed exit, including on panic.
+            let may_remove = if let Some(child) = &mut self.process {
+                let _ = child.kill();
+                child.wait().is_ok()
+            } else { true };
+            if may_remove { let _ = fs::remove_dir_all(&self.root); }
+        }
+    }
+    fn isolated_recovery_scenario(root: &Path) -> RecoveryChildReport {
+        use diagnostic::{Attempt, Check, Failure, LockKind, Snapshot, Stage};
+        let failure_snapshot = std::cell::Cell::new(None);
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // The child creates its own base; the parent can clean it after a timeout or panic.
+            let directory = || {
+                let base = root.join("scenario");
+                fs::create_dir(&base).unwrap();
+                base
+            };
+            let base = directory();
+            let mut owner = Owner::default();
+            assert_eq!(owner.authorize(&base, ID, EPOCH, true), Ok(true));
+            assert_eq!(owner.authorize(&base, ID, EPOCH, true), Ok(false));
+            assert_eq!(owner.authorize(&base, ID, EPOCH, false), Ok(false));
+            assert_eq!(owner.authorize(&base, ID, ID, true), Err(RESTART));
+            assert_eq!(owner.authorize(&base, EPOCH, ID, true), Err(RESTART));
+            assert_eq!(owner.authorize(&base, EPOCH, EPOCH, false), Err(INVALID));
+            assert_eq!(owner.authorize(&base, EPOCH, EPOCH, true), Ok(true));
+            assert!(acquire(&base).is_err());
+            drop(owner);
+            let mut restarted = Owner::default();
+            diagnostic::reset(diagnostic::Attempt::SameProcessReacquire);
+            let result = restarted.authorize(&base, ID, ID, true);
+            let snapshot = diagnostic::take();
+            failure_snapshot.set(snapshot);
+            // None is honest: authorize guards are outside the acquire adapters.
+            assert_eq!(result, Ok(true), "{snapshot:?}");
+            drop(restarted); fs::remove_dir_all(base).unwrap();
+        }));
+        if outcome.is_ok() { return RecoveryChildReport::Complete; }
+        // Never forward panic payloads, raw paths, descriptors, or arbitrary child output.
+        match failure_snapshot.get() {
+            Some(Snapshot { attempt: Attempt::SameProcessReacquire, stage: Stage::TryLock,
+                check: Check::Lock, failure: Failure::Lock(LockKind::WouldBlock) }) =>
+                RecoveryChildReport::SameProcessReacquireWouldBlock,
+            Some(_) => RecoveryChildReport::SameProcessReacquireFailed,
+            None => RecoveryChildReport::ScenarioPanicked,
+        }
+    }
     #[test]
     fn recovery_once_and_reload_requires_process_restart() {
-        let base = directory();
-        let mut owner = Owner::default();
-        assert_eq!(owner.authorize(&base, ID, EPOCH, true), Ok(true));
-        assert_eq!(owner.authorize(&base, ID, EPOCH, true), Ok(false));
-        assert_eq!(owner.authorize(&base, ID, EPOCH, false), Ok(false));
-        assert_eq!(owner.authorize(&base, ID, ID, true), Err(RESTART));
-        assert_eq!(owner.authorize(&base, EPOCH, ID, true), Err(RESTART));
-        assert_eq!(owner.authorize(&base, EPOCH, EPOCH, false), Err(INVALID));
-        assert_eq!(owner.authorize(&base, EPOCH, EPOCH, true), Ok(true));
-        assert!(acquire(&base).is_err());
-        drop(owner);
-        let mut restarted = Owner::default();
-        diagnostic::reset(diagnostic::Attempt::SameProcessReacquire);
-        let result = restarted.authorize(&base, ID, ID, true);
-        let snapshot = diagnostic::take();
-        // None is honest: authorize guards are outside the acquire adapters.
-        assert_eq!(result, Ok(true), "{snapshot:?}");
-        drop(restarted); fs::remove_dir_all(base).unwrap();
+        use std::{io::{Read, Write}, process::{Command, Stdio}, time::{Duration, Instant}};
+        if let Some(root) = std::env::var_os(RECOVERY_CHILD_ENV) {
+            // Same-name exact dispatch: the scenario child never enters the spawning branch.
+            let root = std::path::PathBuf::from(root);
+            let report = isolated_recovery_scenario(&root);
+            let mut marker = OpenOptions::new().write(true).create_new(true)
+                .open(root.join(RECOVERY_MARKER)).unwrap_or_else(|_| panic!("recovery marker creation failed"));
+            marker.write_all(report.bytes()).unwrap_or_else(|_| panic!("recovery marker write failed"));
+            drop(marker);
+            assert_eq!(report, RecoveryChildReport::Complete, "isolated recovery scenario failed");
+            return;
+        }
+
+        // The wrapper owns no review lock. This isolates unrelated tests' FD tables,
+        // not test scheduling or the immediate drop-to-reacquire assertion.
+        let mut fixture = RecoveryChild { root: directory(), process: None };
+        fixture.process = Some(Command::new(std::env::current_exe().unwrap_or_else(|_| panic!("recovery executable unavailable")))
+            .args(["--exact", RECOVERY_TEST, "--nocapture"])
+            .env(RECOVERY_CHILD_ENV, &fixture.root)
+            .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
+            .spawn().unwrap_or_else(|_| panic!("recovery child spawn failed")));
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let status = loop {
+            match fixture.process.as_mut().unwrap().try_wait() {
+                Ok(Some(status)) => { fixture.process = None; break status; }
+                Ok(None) => (),
+                Err(_) => panic!("recovery child wait failed"),
+            }
+            assert!(Instant::now() < deadline, "recovery child exit timed out");
+            // Bounded child-exit waiting only; never retry or delay a lock operation.
+            std::thread::park_timeout(Duration::from_millis(10));
+        };
+        // Bounded file protocol avoids both pipe deadlocks and unbounded captured output.
+        let mut bytes = Vec::new();
+        let report = match File::open(fixture.root.join(RECOVERY_MARKER)) {
+            Ok(file) => {
+                file.take(65).read_to_end(&mut bytes).unwrap_or_else(|_| panic!("recovery marker read failed"));
+                RecoveryChildReport::parse(&bytes)
+            }
+            Err(_) => RecoveryChildReport::InvalidMarker,
+        };
+        assert!(status.success(), "recovery child failed: {report:?}");
+        // A successful zero-test invocation cannot produce this exact completion marker.
+        assert_eq!(report, RecoveryChildReport::Complete, "recovery child did not complete scenario");
+        fs::remove_dir_all(&fixture.root).unwrap_or_else(|_| panic!("recovery fixture cleanup failed"));
     }
     #[test]
     fn child_owner_probe() {

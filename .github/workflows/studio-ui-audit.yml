@@ -64,6 +64,12 @@ jobs:
         run: npx --no-install tsx apps/studio/tests/browser/root-modals-runner.mjs
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Collection modal tail and keyboard edges (synthetic browser)
+        if: ${{ !cancelled() && matrix.shard == 1 && steps.service-build.outcome == 'success' && steps.chrome.outcome == 'success' }}
+        timeout-minutes: 3
+        run: npx --no-install tsx apps/studio/tests/browser/collection-modal-edges-runner.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - name: Build native-adapter browser fixture even if layout findings failed
         id: native-build
         if: ${{ !cancelled() && matrix.shard == 1 && steps.service-build.outcome == 'success' && steps.chrome.outcome == 'success' }}

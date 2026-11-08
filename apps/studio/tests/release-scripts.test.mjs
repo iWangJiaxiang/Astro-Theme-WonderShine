@@ -216,7 +216,7 @@ test('TestFlight requires explicit Apple success even with exit zero, and always
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
-function simulatorFixture({ failAt, shutdownFails = false, writeFails = false, booted = false, metadata = {}, malformedListing = false, unavailable = false, elapsed = 12, exitStatus = null } = {}) {
+function simulatorFixture({ failAt, launchErrorCode = 'ETIMEDOUT', postLaunchScreenshotError = null, shutdownFails = false, writeFails = false, booted = false, metadata = {}, malformedListing = false, unavailable = false, elapsed = 12, exitStatus = null } = {}) {
   const privateValue = 'private-device-path-identity-output-fixture';
   const calls = [];
   const copies = [];
@@ -233,9 +233,10 @@ function simulatorFixture({ failAt, shutdownFails = false, writeFails = false, b
       now: () => { clock += elapsed; return clock; },
       wait: async ms => { calls.push({ phase: 'settle', ms }); },
       exec: (command, args, options) => {
-        const phase = command === 'plutil' ? 'app-metadata' : args[1] === 'list' ? 'list-devices' : args[1] === 'status_bar' ? 'status-bar' : args[1] === 'io' ? 'screenshot' : args[1];
+        const phase = command === 'plutil' ? 'app-metadata' : args[1] === 'list' ? 'list-devices' : args[1] === 'status_bar' ? 'status-bar' : args[1] === 'io' ? (args.at(-1).endsWith('studio-launch-timeout.png') ? 'post-launch-screenshot' : 'screenshot') : args[1];
         calls.push({ phase, command, args, options });
-        if (phase === failAt || (phase === 'shutdown' && shutdownFails)) throw commandError(phase === 'launch' ? 'ETIMEDOUT' : privateValue);
+        if (phase === 'post-launch-screenshot' && postLaunchScreenshotError) throw commandError(postLaunchScreenshotError);
+        if (phase === failAt || (phase === 'shutdown' && shutdownFails)) throw commandError(phase === 'launch' ? launchErrorCode : privateValue);
         if (command === 'plutil') return JSON.stringify({
           CFBundleIdentifier: 'wang.jiaxiang.wondershine-studio',
           CFBundleIcons: { CFBundlePrimaryIcon: { CFBundleIconName: 'AppIcon', CFBundleIconFiles: ['AppIcon60x60'] } },
@@ -251,7 +252,7 @@ function simulatorFixture({ failAt, shutdownFails = false, writeFails = false, b
           : ['AppIcon60x60.png'],
         copyFile: async (...args) => { copies.push(args); },
         writeFile: async (path, text) => {
-          calls.push({ phase: 'write-result', path });
+          calls.push({ phase: 'write-result', path, text });
           if (writeFails) throw commandError('ENOSPC');
           result = JSON.parse(text);
         },
@@ -267,7 +268,7 @@ function assertBoundedSimulatorResult(fixture) {
   assert.equal(typeof result.success, 'boolean');
   assert.ok(result.phases.length <= 17);
   assert.equal(new Set(result.phases.map(item => item.phase)).size, result.phases.length);
-  const phases = new Set(['prepare-output', 'find-app', 'app-metadata', 'verify-icons', 'copy-icons', 'list-devices', 'select-device', 'boot', 'bootstatus', 'status-bar', 'install', 'launch', 'settle', 'screenshot', 'shutdown']);
+  const phases = new Set(['prepare-output', 'find-app', 'app-metadata', 'verify-icons', 'copy-icons', 'list-devices', 'select-device', 'boot', 'bootstatus', 'status-bar', 'install', 'launch', 'settle', 'screenshot', 'post-launch-screenshot', 'shutdown']);
   for (const item of result.phases) {
     assert.deepEqual(Object.keys(item).sort(), ['elapsedMs', 'errorCode', 'exitStatus', 'phase', 'signal', 'timedOut']);
     assert.ok(phases.has(item.phase));
@@ -282,7 +283,7 @@ function assertSimulatorCommands(fixture) {
   const launch = fixture.calls.filter(call => call.phase === 'launch');
   assert.equal(launch.length, 1);
   for (const call of fixture.calls.filter(call => call.command === 'xcrun')) {
-    assert.equal(call.options.timeout, call.phase === 'bootstatus' ? 240000 : 120000);
+    assert.equal(call.options.timeout, call.phase === 'bootstatus' ? 240000 : call.phase === 'post-launch-screenshot' ? 15000 : 120000);
     assert.deepEqual(call.options.stdio, ['ignore', 'pipe', 'pipe']);
   }
   assert.equal(fixture.calls.filter(call => call.phase === 'shutdown').length, 1);
@@ -302,7 +303,9 @@ test('simulator smoke retains success assertions, screenshots and a single bound
     assert.equal(fixture.copies.length, 2);
     assert.match(fixture.copies[0][1], /compiled-app-icon\.png$/);
     assert.match(fixture.copies[1][1], /app-icon-1024\.png$/);
+    assert.equal(fixture.calls.filter(call => call.phase === 'screenshot').length, 1);
     assert.match(fixture.calls.find(call => call.phase === 'screenshot').args.at(-1), /studio-launch\.png$/);
+    assert.equal(fixture.calls.some(call => call.phase === 'post-launch-screenshot'), false);
     assert.ok(fixture.result.phases.every(item => item.errorCode === null && !item.timedOut));
   }
 });
@@ -334,6 +337,50 @@ test('simulator launch timeout persists bounded diagnostics and shutdown cannot 
       phase: 'launch', elapsedMs: 3600000, timedOut: true, exitStatus: null, signal: 'SIGTERM', errorCode: 'ETIMEDOUT',
     });
     assert.equal(fixture.calls.some(call => ['settle', 'screenshot'].includes(call.phase)), false);
+    const screenshots = fixture.calls.filter(call => call.phase === 'post-launch-screenshot');
+    assert.equal(screenshots.length, 1);
+    assert.deepEqual(screenshots[0].args, ['simctl', 'io', fixture.privateValue, 'screenshot', join(process.cwd(), 'apps/studio/test-results/ios-simulator/studio-launch-timeout.png')]);
+    assert.deepEqual(fixture.calls.slice(-4).map(call => call.phase), ['launch', 'post-launch-screenshot', 'shutdown', 'write-result']);
+    assert.deepEqual(fixture.result.phases.find(item => item.phase === 'post-launch-screenshot'), {
+      phase: 'post-launch-screenshot', elapsedMs: 3600000, timedOut: false, exitStatus: 0, signal: null, errorCode: null,
+    });
+  }
+});
+
+test('simulator timeout screenshot failures remain secondary and cannot skip cleanup or persistence', async () => {
+  for (const postLaunchScreenshotError of ['ETIMEDOUT', 'private-device-path-identity-output-fixture']) {
+    for (const shutdownFails of [false, true]) {
+      for (const writeFails of [false, true]) {
+        const fixture = simulatorFixture({ failAt: 'launch', postLaunchScreenshotError, shutdownFails, writeFails });
+        await assert.rejects(runSimulatorSmoke(fixture.options), error => {
+          assert.ok(error instanceof AggregateError);
+          assert.deepEqual(error.errors.map(item => item.phase), [
+            'launch', 'post-launch-screenshot', ...(shutdownFails ? ['shutdown'] : []), ...(writeFails ? ['write-result'] : []),
+          ]);
+          assert.equal(error.cause, error.errors[0]);
+          assert.equal(error.errors[0].errorCode, 'ETIMEDOUT');
+          assert.equal(error.errors[0].signal, 'SIGTERM');
+          assert.equal(error.errors[1].errorCode, postLaunchScreenshotError === 'ETIMEDOUT' ? 'ETIMEDOUT' : 'UNKNOWN');
+          assert.equal(error.errors[1].timedOut, postLaunchScreenshotError === 'ETIMEDOUT');
+          assert.equal(error.errors[1].signal, postLaunchScreenshotError === 'ETIMEDOUT' ? 'SIGTERM' : 'UNKNOWN');
+          for (const item of error.errors) {
+            assert.equal(item.cause, undefined);
+            assert.doesNotMatch(item.message + JSON.stringify(item), new RegExp(fixture.privateValue));
+          }
+          return true;
+        });
+        assertSimulatorCommands(fixture);
+        assert.equal(fixture.calls.filter(call => call.phase === 'post-launch-screenshot').length, 1);
+        assert.equal(fixture.calls.some(call => ['settle', 'screenshot'].includes(call.phase)), false);
+        assert.deepEqual(fixture.calls.slice(-4).map(call => call.phase), ['launch', 'post-launch-screenshot', 'shutdown', 'write-result']);
+        const attemptedResult = JSON.parse(fixture.calls.at(-1).text);
+        assert.equal(attemptedResult.success, false);
+        assert.deepEqual(attemptedResult.phases.slice(-3).map(item => item.phase), ['launch', 'post-launch-screenshot', 'shutdown']);
+        assert.doesNotMatch(fixture.calls.at(-1).text, new RegExp(fixture.privateValue));
+        if (writeFails) assert.equal(fixture.result, undefined);
+        else assertBoundedSimulatorResult(fixture);
+      }
+    }
   }
 });
 
@@ -380,6 +427,7 @@ test('simulator prelaunch and screenshot failures still attempt result persisten
     [{ unavailable: true }, 'select-device'],
     [{ failAt: 'boot' }, 'boot'],
     [{ failAt: 'install' }, 'install'],
+    [{ failAt: 'launch', launchErrorCode: 'EACCES' }, 'launch'],
     [{ failAt: 'screenshot' }, 'screenshot'],
     [{ shutdownFails: true }, 'shutdown'],
   ]) {
@@ -388,6 +436,7 @@ test('simulator prelaunch and screenshot failures still attempt result persisten
     assertBoundedSimulatorResult(fixture);
     assert.equal(fixture.result.success, false);
     assert.equal(fixture.calls.at(-1).phase, 'write-result');
-    assert.equal(fixture.calls.filter(call => call.phase === 'shutdown').length, ['boot', 'install', 'screenshot', 'shutdown'].includes(phase) ? 1 : 0);
+    assert.equal(fixture.calls.filter(call => call.phase === 'shutdown').length, ['boot', 'install', 'launch', 'screenshot', 'shutdown'].includes(phase) ? 1 : 0);
+    assert.equal(fixture.calls.some(call => call.phase === 'post-launch-screenshot'), false);
   }
 });
