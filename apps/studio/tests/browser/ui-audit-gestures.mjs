@@ -73,10 +73,13 @@ export async function exerciseScroll(page, client, { touch, onDown, onUp }) {
   const viewport = page.viewport();
   if (viewport) await configureGestureEmulation(page, client, { ...viewport, mobile:touch, hasTouch:touch });
   const environment = await inspectGestureEnvironment(page);
-  const targets = await page.evaluate(() => {
+  const selection = await page.evaluate(() => {
     document.querySelectorAll('[data-ui-audit-scroll]').forEach(node => node.removeAttribute('data-ui-audit-scroll'));
     const modal = [...document.querySelectorAll('dialog[open]')].at(-1);
-    const root = modal || document.querySelector('.modal,[role=dialog]') || document.body;
+    const overlay = document.querySelector('.modal,[role=dialog]');
+    const drawer = document.querySelector('.sidebar.open');
+    const root = modal || overlay || drawer || document.body;
+    const drawerRequired = root === drawer;
     const pool = [...root.querySelectorAll('*'), root];
     if (!modal && root === document.body) pool.push(document.scrollingElement);
     // Keep the document root eligible even when overflow is hidden: a tall but
@@ -102,12 +105,23 @@ export async function exerciseScroll(page, client, { touch, onDown, onUp }) {
       });
       return point ? {node,point,area:(right-left)*(bottom-top)} : null;
     }).filter(Boolean).sort((a,b) => b.area-a.area).slice(0,1);
-    return candidates.map(({node,point}, i) => {
+    const targets = candidates.map(({node,point}, i) => {
       node.dataset.uiAuditScroll = String(i);
       return { id:String(i), name:node.className || node.tagName, point, initial:node.scrollTop, max:node.scrollHeight-node.clientHeight };
     });
+    // An open drawer is expected to scroll internally, never via the locked background.
+    const drawerTargetValid = !drawerRequired || candidates.length === 1 && candidates.every(({node,point}) => {
+      const hit = document.elementFromPoint(point.x,point.y);
+      return drawer.contains(node) && node.contains(hit) && node.scrollHeight > node.clientHeight + 3;
+    });
+    return { targets, drawerRequired, drawerTargetValid };
   });
+  const { targets } = selection;
   const results = [], failures = [];
+  if (selection.drawerRequired && !selection.drawerTargetValid) {
+    failures.push({type:'scroll-target-selection',target:'open-drawer'});
+    return { environment, results, failures };
+  }
   // Even a short non-scroll surface receives real wheel/touch input; movement is N/A.
   if (!targets.length) targets.push({ id:null, name:'non-scrollable-surface', point:await gestureCenter(page), initial:0,max:0 });
   for (const method of touch ? ['wheel','cdp-touch'] : ['wheel']) {
