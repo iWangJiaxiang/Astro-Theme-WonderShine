@@ -37,6 +37,7 @@ section.native-ai-settings { max-width: 960px; }
 .workspace-sync-card h2 { margin-bottom: 0; }
 .workspace-sync-card .workspace-status-grid { padding-bottom: 24px; border-bottom: 1px solid var(--studio-line); }
 .workspace-panel .workspace-sync-actions { justify-content: flex-end; margin-top: 24px; }
+.account-login-buttons > button, .workspace-panel .workspace-sync-actions > button { flex: 0 1 auto; inline-size: max-content; max-inline-size: 100%; min-inline-size: 0; white-space: normal; overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   .native-ai-settings .native-ai-form, .workspace-panel .workspace-sync-card { padding: 20px; }
   .native-ai-settings .field { grid-template-columns: 1fr; gap: 8px; }
@@ -45,7 +46,7 @@ section.native-ai-settings { max-width: 960px; }
   .native-ai-actions .primary { flex: 1; }
   .workspace-status-grid { gap: 12px; }
   .workspace-status-grid dt { font-size: 12px; }
-  .workspace-panel .workspace-sync-actions > button { flex: 1; }
+  .workspace-panel .workspace-sync-actions > button { flex-grow: 1; }
 }
 
 /* Folder and URL are the primary actions; credentials stay in a disclosure. */
@@ -90,7 +91,8 @@ section.native-ai-settings { max-width: 960px; }
 @media (prefers-reduced-motion: reduce) { .connection-progress progress:indeterminate { animation: none; } }
 
 .account-login { margin-top: 20px; }
-.account-login-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.account-login-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.account-login-buttons > button { flex-grow: 1; }
 .oauth-dialog { width: min(560px, calc(100vw - 24px)); padding: 0; color: var(--wjx-fontcolor); border: 1px solid var(--studio-line); border-radius: 16px; }
 .oauth-dialog .selection-panel { height: auto; min-height: 250px; display: flex; flex-direction: column; }
 .oauth-dialog .notice { margin: 16px; }
@@ -106,5 +108,3 @@ section.native-ai-settings { max-width: 960px; }
 .oauth-repository small { color: var(--studio-muted); flex-shrink: 0; }
 .oauth-dialog .selection-search input { width: 100%; min-width: 0; min-height: 42px; padding: 10px 12px; border: 1px solid var(--studio-line); border-radius: 8px; background: var(--form-surface); color: inherit; outline: none; }
 .oauth-dialog .selection-search input:focus { border-color: var(--wjx-theme); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wjx-theme) 9%, transparent); }
-
-.account-login-buttons > button:only-child { grid-column: 1 / -1; }
