@@ -1,9 +1,9 @@
-import { ref, watch } from './reactivity';
+import { batch, signal } from '@preact/signals-react';
+import { ref, watch, type Ref } from './reactivity';
 import { InflightQuery } from './inflight-query';
+import { createSessionBoundary } from './session-boundary';
 import { locale, type Message } from './i18n';
 import type { MessageParams } from '../shared/i18n';
-import type { Identity } from '../shared/types.js';
-export const session = ref<{ identity: Identity; csrf: string; expires: number } | null>(null);
 export const reauthentication = ref(false);
 export class ApiError extends Error { constructor(message: string, public status: number, public params?: MessageParams) { super(message); } }
 export type ApiTransport = (path: string, init: RequestInit) => Promise<Response>;
@@ -11,12 +11,38 @@ let transport: ApiTransport = (path, init) => fetch(`/api${path}`, init);
 const contentQueries = new InflightQuery();
 let transportGeneration = 0;
 let scopeGeneration = 0;
-watch(() => [session.value, session.value?.identity.id, session.value?.identity.method, session.value?.csrf, session.value?.expires, locale.value] as const,
-  () => { scopeGeneration++; contentQueries.invalidate(); });
-export function setApiTransport(next?: ApiTransport) {
-  transport = next || ((path, init) => fetch(`/api${path}`, init));
-  transportGeneration++;
+function invalidateSessionScope() {
+  scopeGeneration++;
   contentQueries.invalidate();
+}
+const sessionBoundary = createSessionBoundary({ invalidate: invalidateSessionScope });
+export const session = sessionBoundary.session;
+export const authenticationEpoch: Readonly<Ref<number>> = Object.freeze({
+  get value() { return sessionBoundary.authenticationEpoch; },
+});
+export const identityEpoch: Readonly<Ref<number>> = Object.freeze({
+  get value() { return sessionBoundary.identityEpoch; },
+});
+const transportRevision = signal(0);
+export const apiTransportGeneration: Readonly<Ref<number>> = Object.freeze({
+  get value() { void transportRevision.value; return transportGeneration; },
+});
+watch(locale, () => {
+  scopeGeneration++;
+  contentQueries.invalidate();
+});
+export function setApiTransport(next?: ApiTransport) {
+  if (transportGeneration === Number.MAX_SAFE_INTEGER) throw new Error('Transport generation exhausted');
+  batch(() => {
+    transport = next || ((path, init) => fetch(`/api${path}`, init));
+    transportGeneration++;
+    try {
+      contentQueries.invalidate();
+    } finally {
+      // Invalidation/notification may reenter; publish only the latest authority.
+      transportRevision.value = transportRevision.peek() + 1;
+    }
+  });
 }
 export const pendingMutations = ref(0);
 let loggingOut = false;
@@ -80,6 +106,7 @@ async function request<T>(path: string, method: string, body?: unknown, signal?:
   const activeTransport = transport;
   const activeTransportGeneration = transportGeneration;
   const activeScope = scopeGeneration;
+  const activeAuthenticationEpoch = authenticationEpoch.value;
   try { response = await activeTransport(path, { method, credentials: 'same-origin',
     ...(method === 'GET' ? { signal: signal || AbortSignal.timeout(60_000) } : {}),
     headers: { 'Accept-Language': locale.value, ...(body === undefined ? {} : { 'Content-Type': binary ? 'application/octet-stream' : 'application/json' }), ...(session.value ? { 'X-CSRF-Token': session.value.csrf } : {}) },
@@ -94,7 +121,7 @@ async function request<T>(path: string, method: string, body?: unknown, signal?:
   signal?.throwIfAborted();
   if ((activeTransportGeneration !== transportGeneration || (method === 'GET' && activeScope !== scopeGeneration)) && path !== '/auth/logout') throw new ApiError('连接已更换，请重试', 409);
   if (!response.ok) {
-    if (response.status === 401 && path !== '/auth/login' && session.value) reauthentication.value = true;
+    if (response.status === 401 && path !== '/auth/login' && session.value && activeAuthenticationEpoch === authenticationEpoch.value && activeTransportGeneration === transportGeneration) reauthentication.value = true;
     throw new ApiError(data.messageKey || data.error || '请求失败，请稍后再试', response.status, data.params);
   }
   return data as T;

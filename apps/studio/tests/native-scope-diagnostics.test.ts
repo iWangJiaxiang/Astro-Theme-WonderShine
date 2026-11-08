@@ -5,6 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createContext, runInContext, runInNewContext } from 'node:vm';
+import ts from 'typescript';
+import { batch, signal } from '@preact/signals-react';
+import { ref, watch } from '../src/reactivity';
+import { createSessionBoundary } from '../src/session-boundary';
+import { InflightQuery } from '../src/inflight-query';
 
 type Caps = {
   records: number; bytes: number; faults: number; runtimeFaults: number; nodeFaults: number; number: number;
@@ -369,6 +374,238 @@ test('native scope plugin: explicit CI build and exact-source fail-closed contra
       assert.equal(target.source.split(before).length - 1, 1);
       assert.throws(() => configuredPlugin().transform(target.source.replace(before, after), target.id), /sentinels changed/);
     }
+  });
+
+  await t.test('API exact boundary/401 anchors reject drift and preserve original business behavior', { timeout: 15000 }, async () => {
+    const target = targets.find(target => target.name === 'api.ts');
+    assert.ok(target);
+    const transformed = configuredPlugin().transform(target.source, target.id);
+    assert.ok(transformed);
+    const sessionAnchor = 'function invalidateSessionScope() {\n  scopeGeneration++;\n  contentQueries.invalidate();\n}';
+    const localeAnchor = 'watch(locale, () => {\n  scopeGeneration++;\n  contentQueries.invalidate();\n});';
+    const guard = "    if (response.status === 401 && path !== '/auth/login' && session.value && activeAuthenticationEpoch === authenticationEpoch.value && activeTransportGeneration === transportGeneration) reauthentication.value = true;";
+    for (const [before, after] of [
+      [sessionAnchor, sessionAnchor.replace('scopeGeneration++;', 'scopeGeneration += 1;')],
+      [localeAnchor, localeAnchor.replace('watch(locale', 'watch(session')],
+      ['      transportRevision.value = transportRevision.peek() + 1;', '      transportRevision.value = transportGeneration;'],
+      ["  if (transportGeneration === Number.MAX_SAFE_INTEGER) throw new Error('Transport generation exhausted');", '  if (false) throw new Error();'],
+      [guard, guard.replace(' && activeAuthenticationEpoch === authenticationEpoch.value', '')],
+      [guard, guard.replace(' && activeTransportGeneration === transportGeneration', '')],
+      [guard, guard.replace(' && activeAuthenticationEpoch', ' && activeScope === scopeGeneration && activeAuthenticationEpoch')],
+      ['  const activeAuthenticationEpoch = authenticationEpoch.value;', '  const activeAuthenticationEpoch = 0;'],
+    ]) {
+      assert.equal(target.source.split(before).length - 1, 1);
+      assert.throws(() => configuredPlugin().transform(target.source.replace(before, after), target.id), /sentinels changed/);
+    }
+    // Duplicate complete plugin sentinels, not incidental lines inside them.
+    const transportAnchor = "export function setApiTransport(next?: ApiTransport) {\n  if (transportGeneration === Number.MAX_SAFE_INTEGER) throw new Error('Transport generation exhausted');\n  batch(() => {\n    transport = next || ((path, init) => fetch(`/api${path}`, init));\n    transportGeneration++;\n    try {\n      contentQueries.invalidate();\n    } finally {\n      // Invalidation/notification may reenter; publish only the latest authority.\n      transportRevision.value = transportRevision.peek() + 1;\n    }\n  });\n}";
+    const unauthorizedAnchor = `${guard}\n    throw new ApiError(data.messageKey || data.error || '请求失败，请稍后再试', response.status, data.params);`;
+    const duplicateAnchors = [
+      sessionAnchor, localeAnchor, transportAnchor, unauthorizedAnchor,
+      '  const activeAuthenticationEpoch = authenticationEpoch.value;',
+    ];
+    for (const before of duplicateAnchors) {
+      assert.equal(target.source.split(before).length - 1, 1, 'complete duplicate sentinel must be unique in real API source');
+      assert.throws(() => configuredPlugin().transform(`${target.source}\n${before}`, target.id), /sentinels changed/);
+    }
+    assert.equal(transformed.code.split('assertCurrent()').length, target.source.split('assertCurrent()').length);
+    assert.equal(transformed.code.split('isCurrent()').length, target.source.split('isCurrent()').length);
+    assert.equal(transformed.code.split(guard).length, 2, '401 permission is evaluated exactly once');
+    assert.match(transformed.code, /reasonMask: null/);
+    assert.match(transformed.code, /reasonMask: 1 << 5/);
+
+    const state = (id = 'A') => ({ identity: { id, name: 'private-name', method: 'password' as const }, csrf: 'private-csrf', expires: 123 });
+    type RealmAPI = {
+      session: { value: ReturnType<typeof state> | null };
+      authenticationEpoch: { readonly value: number }; identityEpoch: { readonly value: number };
+      apiTransportGeneration: { readonly value: number }; pendingMutations: { value: number };
+      reauthentication: { value: boolean };
+      api(path: string, method?: string, body?: unknown): Promise<unknown>;
+      setApiTransport(next?: (path: string, init: RequestInit) => Promise<Response>): void;
+    };
+    function realm(source: string, trace: Runtime) {
+      const locale = ref('en');
+      const exports: Record<string, unknown> = {};
+      const dependencies: Record<string, unknown> = {
+        '@preact/signals-react': { batch, signal },
+        './reactivity': { ref, watch }, './session-boundary': { createSessionBoundary },
+        './inflight-query': { InflightQuery }, './i18n': { locale },
+        [virtualId]: { nativeScopeTrace: trace },
+      };
+      const context = createContext({
+        exports, Response, Blob, AbortSignal, DOMException, URLSearchParams,
+        fetch: async () => Response.json({}),
+        require(name: string) {
+          assert.ok(Object.hasOwn(dependencies, name), `Unexpected API dependency: ${name}`);
+          return dependencies[name];
+        },
+      });
+      // Compile the actual full API source, not a rewritten request/guard fixture.
+      const executable = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+      runInContext(executable, context);
+      return {
+        api: exports as unknown as RealmAPI, locale,
+        scope: () => runInContext('scopeGeneration', context) as number,
+        exhaustTransport: () => runInContext('transportGeneration = Number.MAX_SAFE_INTEGER;', context),
+      };
+    }
+    const failure = new Error('private-transport-failure');
+    const noticeFailure = new Error('private-notification-failure');
+    async function exercise(source: string, trace: Runtime) {
+      const { api: client, locale, scope, exhaustTransport } = realm(source, trace);
+      const calls: Array<{ method: string | undefined; language: string | null; csrf: string | null; body: BodyInit | null | undefined }> = [];
+      const outcomes: unknown[] = [];
+      const counts: number[] = [];
+      const record = (init: RequestInit) => {
+        const headers = new Headers(init.headers);
+        calls.push({ method: init.method, language: headers.get('Accept-Language'), csrf: headers.get('X-CSRF-Token'), body: init.body });
+      };
+      const initialScope = scope();
+      client.session.value = state();
+      assert.equal(scope(), initialScope + 1, 'one synchronous API scope advance per session commit');
+      const previous = client.session.value!;
+      client.session.value = previous;
+      previous.identity.name = 'private-renamed';
+      assert.equal(scope(), initialScope + 1, 'no duplicate watcher or name-only invalidation');
+      batch(() => {
+        client.session.value = state('B');
+        assert.equal(scope(), initialScope + 2);
+        client.session.value = previous;
+        assert.equal(scope(), initialScope + 3);
+      });
+      assert.equal(scope(), initialScope + 3, 'publication does not invalidate again');
+      locale.value = 'zh-CN';
+      assert.equal(scope(), initialScope + 4);
+      for (const stage of ['transport', 'json'] as const) {
+        for (const change of ['none', 'locale', 'auth', 'transport'] as const) {
+          const entered = deferred<void>(), release = deferred<void>();
+          const transport = async (_path: string, init: RequestInit) => {
+            record(init);
+            if (stage === 'transport') { entered.resolve(); await release.promise; }
+            const response = new Response(null, { status: 401 });
+            response.json = async () => {
+              if (stage === 'json') { entered.resolve(); await release.promise; }
+              return { error: 'private-response-error' };
+            };
+            return response;
+          };
+          client.setApiTransport(transport);
+          client.reauthentication.value = false;
+          const operation = client.api('/settings/site', 'PUT', { synthetic: true });
+          const outcome = operation.then(value => ({ value }), (error: { status?: number }) => ({ status: error.status }));
+          try {
+            await entered.promise;
+            counts.push(client.pendingMutations.value);
+            if (change === 'locale') locale.value = locale.value === 'en' ? 'zh-CN' : 'en';
+            if (change === 'auth') batch(() => { client.session.value = state('B'); client.session.value = state(); });
+            if (change === 'transport') client.setApiTransport(transport);
+          } finally { release.resolve(); await Promise.allSettled([operation]); }
+          outcomes.push(await outcome, client.reauthentication.value);
+          counts.push(client.pendingMutations.value);
+        }
+      }
+      for (const change of ['locale', 'auth'] as const) {
+        const entered = deferred<void>(), release = deferred<void>();
+        const result = { revision: 'private-revision' };
+        client.setApiTransport(async (_path, init) => { record(init); entered.resolve(); await release.promise; return Response.json(result); });
+        const operation = client.api('/settings/site', 'PUT', {});
+        try {
+          await entered.promise;
+          if (change === 'locale') locale.value = locale.value === 'en' ? 'zh-CN' : 'en';
+          else client.session.value = state('B');
+        } finally { release.resolve(); }
+        outcomes.push(await operation);
+      }
+      client.setApiTransport(async () => { throw failure; });
+      await assert.rejects(client.api('/settings/site', 'PUT', {}), error => error === failure);
+      counts.push(client.pendingMutations.value);
+
+      // Abort listener uses the actual InflightQuery signal and synchronously reenters both setters.
+      const entered = deferred<void>(), release = deferred<void>(), drained = deferred<void>();
+      let nested: Promise<unknown> | undefined, abortCalls = 0;
+      client.setApiTransport(async (_path, init) => {
+        init.signal!.addEventListener('abort', () => {
+          abortCalls++;
+          assert.equal(client.session.value!.identity.id, 'B');
+          client.setApiTransport(async () => Response.json(['latest']));
+          client.session.value = state('C');
+          nested = client.api('/settings/site');
+        }, { once: true });
+        entered.resolve();
+        try { await release.promise; return Response.json([]); }
+        finally { drained.resolve(); }
+      });
+      const old = client.api('/content');
+      const oldRejected = assert.rejects(old, { status: 409 });
+      try {
+        await entered.promise;
+        client.session.value = state('B');
+        await oldRejected;
+        outcomes.push(await nested, abortCalls, await client.api('/content'));
+      } finally { release.resolve(); await Promise.allSettled([old, oldRejected, nested]); await drained.promise; }
+
+      const transportEntered = deferred<void>(), transportRelease = deferred<void>(), transportDrained = deferred<void>();
+      const expectedGeneration = client.apiTransportGeneration.value + 2;
+      let transportNested: Promise<unknown> | undefined;
+      client.setApiTransport(async (_path, init) => {
+        init.signal!.addEventListener('abort', () => {
+          assert.equal(client.apiTransportGeneration.value, expectedGeneration);
+          client.setApiTransport(async () => Response.json(['transport-nested']));
+          transportNested = client.api('/settings/site');
+        }, { once: true });
+        transportEntered.resolve();
+        try { await transportRelease.promise; return Response.json([]); }
+        finally { transportDrained.resolve(); }
+      });
+      const beforeTransport = client.api('/content');
+      const transportRejected = assert.rejects(beforeTransport, { status: 409 });
+      try {
+        await transportEntered.promise;
+        client.setApiTransport(async () => Response.json(['transport-outer']));
+        assert.equal(client.apiTransportGeneration.value, expectedGeneration + 1);
+        outcomes.push(await transportNested, await client.api('/content'));
+        await transportRejected;
+      } finally {
+        transportRelease.resolve();
+        await Promise.allSettled([beforeTransport, transportRejected, transportNested]);
+        await transportDrained.promise;
+      }
+
+      let armed = true, afterNotice: Promise<unknown> | undefined;
+      const stop = watch(client.apiTransportGeneration, () => {
+        if (!armed) return;
+        armed = false;
+        client.setApiTransport(async () => Response.json(['notification-latest']));
+        afterNotice = client.api('/settings/site');
+        throw noticeFailure;
+      });
+      try {
+        assert.throws(() => client.setApiTransport(async () => Response.json(['outer'])), error => error === noticeFailure);
+        outcomes.push(await afterNotice, await client.api('/settings/site'));
+      } finally { stop(); await Promise.allSettled([afterNotice]); }
+      exhaustTransport();
+      assert.throws(() => client.setApiTransport(async () => Response.json(['must-not-commit'])), {
+        name: 'Error', message: 'Transport generation exhausted',
+      });
+      assert.equal(client.apiTransportGeneration.value, Number.MAX_SAFE_INTEGER);
+      outcomes.push(await client.api('/settings/site'));
+      return {
+        calls, outcomes, counts,
+        authority: [client.authenticationEpoch.value, client.identityEpoch.value, client.apiTransportGeneration.value],
+        owner: client.session.value!.identity.id,
+      };
+    }
+    const f = runtimeFixture();
+    assert.ok(f.hook?.start(19));
+    const actual = await exercise(transformed.code, f.trace);
+    const original = await exercise(target.source, runtimeFixture().trace);
+    assert.deepEqual(actual, original, 'full real API instrumentation must preserve business behavior and call counts');
+    const snapshot = f.hook!.finish(19);
+    assert.ok(snapshot);
+    const scopeRows = snapshot.records.filter(row => row[2] === 'scope-invalidate');
+    assert.ok(scopeRows.some(row => row[18] === null));
+    assert.ok(scopeRows.some(row => row[18] === 32));
+    assertPrivateFree(JSON.stringify(snapshot));
   });
 
   await t.test('missing, duplicate, changed, pre-instrumented and SSR source cannot pass', () => {
