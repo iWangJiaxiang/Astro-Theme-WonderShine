@@ -4,7 +4,7 @@ import { settingsSchemas } from '../../shared/settings.ts';
 import { childLayoutChoices, pageProfile, pageSettingsSchemas } from '../../shared/page-settings.ts';
 import { AUDIT_SIZES, SYNTHETIC_LIMITATIONS, configureViewport, exerciseScroll, exercisePinch } from './ui-audit-gestures.mjs';
 import { inspectLayout, settleLayout } from './ui-audit-inspection.mjs';
-import { topicsClickDiagnostics } from './topics-click-diagnostics.mjs';
+import { createTopicsDiagnosticRun } from './topics-click-diagnostics.mjs';
 import puppeteer from 'puppeteer-core';
 import { existsSync } from 'node:fs';
 import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
@@ -18,6 +18,7 @@ import { setTimeout as retryDelay } from 'node:timers/promises';
 
 const studio = fileURLToPath(new URL('../../', import.meta.url));
 const output = join(studio, 'test-results/form-audit');
+const topicsClickDiagnostics = createTopicsDiagnosticRun();
 const base = await mkdtemp(join(tmpdir(), 'studio-form-audit-'));
 const site = join(base, 'site');
 const password = 'studio-form-test-2026';
@@ -217,13 +218,22 @@ try {
   add('thread-publishing','editor',async () => { await threads(); await click('发布设置'); await ready('.thread-properties-heading'); });
   add('select-topics','dialog',async () => {
     await threads();
-    await topicsClickDiagnostics({ page, output, operation: async afterClick => {
-      await page.click('.thread-composer button[name="extra.topics"]');
-      await afterClick();
-      await ready('dialog[open]');
-    } });
+    await page.click('.thread-composer button[name="extra.topics"]');
+    await ready('dialog[open]');
   });
-  add('create-topic-inline','dialog',async () => { await threads(); await page.click('.thread-composer button[name="extra.topics"]'); await ready('dialog[open]'); await page.type('dialog[open] input[type=search]','审计新话题'); });
+  add('create-topic-inline','dialog',async () => {
+    await threads();
+    await topicsClickDiagnostics({ page, output, operation: async ({ mark, afterClick }) => {
+      mark('click-entry');
+      await page.click('.thread-composer button[name="extra.topics"]');
+      mark('click-return');
+      await afterClick();
+      mark('ready-entry');
+      await ready('dialog[open]');
+      mark('ready-return');
+    } });
+    await page.type('dialog[open] input[type=search]','审计新话题');
+  });
   for (const external of [false,true]) add('reference-'+(external?'external':'internal'),'dialog',async () => { await threads(); await click('引用文章'); await ready('dialog[open]'); if (external) await click('外部文章'); });
   add('publication-date','dialog',async () => {
     await threads(); await click('发布设置'); await ready('.thread-properties-heading');
