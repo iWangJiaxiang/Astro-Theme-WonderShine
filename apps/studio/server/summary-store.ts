@@ -1,9 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { constants } from 'node:fs';
+import { constants, type Stats } from 'node:fs';
 import { lstat, mkdir, open, realpath, rename, unlink, type FileHandle } from 'node:fs/promises';
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
 import type { SummaryIndexStore } from '../core/summary-index.js';
 
+interface FileSummaryStoreDependencies {
+  lstat?: (path: string) => Promise<Stats>;
+  open?: (path: string, flags: number, mode?: number) => Promise<FileHandle>;
+}
+
+const publishedLinkCount = (nlink: number): boolean => Number.isSafeInteger(nlink) && (nlink === 0 || nlink === 1);
 const MAX_BYTES = 8 * 1024 * 1024;
 const unsafe = () => new Error('Unsafe summary preview storage path or permissions');
 const missing = (error: unknown) => (error as NodeJS.ErrnoException)?.code === 'ENOENT';
@@ -26,7 +32,9 @@ const inside = (root: string, path: string) => {
  * has no portable openat/renameat: hostile concurrent ancestor swaps remain outside
  * the guarantee. Provision a trusted parent, not a directory writable by attackers.
  */
-export function createFileSummaryStore(privateDirectory: string, forbiddenRoots: readonly string[]): SummaryIndexStore {
+export function createFileSummaryStore(privateDirectory: string, forbiddenRoots: readonly string[], dependencies: FileSummaryStoreDependencies = {}): SummaryIndexStore {
+  const inspect = dependencies.lstat ?? lstat;
+  const openFile = dependencies.open ?? open;
   if (!isAbsolute(privateDirectory) || privateDirectory.includes('\0')
     || privateDirectory.split(/[\\/]/).some(part => part === '.' || part === '..')
     || forbiddenRoots.length === 0 || forbiddenRoots.some(root => !isAbsolute(root) || root.includes('\0'))) throw unsafe();
@@ -50,16 +58,16 @@ export function createFileSummaryStore(privateDirectory: string, forbiddenRoots:
   async function ordinary(path: string, directoryEntry: boolean, privateEntry = false) {
     const root = parse(path).root;
     let current = root;
-    const rootInfo = await lstat(root);
+    const rootInfo = await inspect(root);
     if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) throw unsafe();
     const parts = path.slice(root.length).split(sep).filter(Boolean);
     for (let index = 0; index < parts.length; index++) {
       current = join(current, parts[index]);
-      const info = await lstat(current);
+      const info = await inspect(current);
       const leaf = index === parts.length - 1;
       if (info.isSymbolicLink() || (leaf && !directoryEntry ? !info.isFile() : !info.isDirectory())) throw unsafe();
       if (current === directory || leaf && privateEntry) privateMode(info, leaf && !directoryEntry ? 0o600 : 0o700);
-      if (leaf && !directoryEntry && info.nlink !== 1) throw unsafe();
+      if (leaf && !directoryEntry && (current === target ? !publishedLinkCount(info.nlink) : info.nlink !== 1)) throw unsafe();
     }
   }
   async function optionalFile(path: string): Promise<boolean> {
@@ -75,7 +83,7 @@ export function createFileSummaryStore(privateDirectory: string, forbiddenRoots:
   }
   async function syncDirectory(): Promise<void> {
     await ordinary(directory, true, true);
-    const handle = await open(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    const handle = await openFile(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
     try { privateMode(await handle.stat(), 0o700); await handle.sync(); }
     finally { await handle.close(); }
   }
@@ -89,13 +97,13 @@ export function createFileSummaryStore(privateDirectory: string, forbiddenRoots:
       await checkBoundaries();
       if (!await optionalFile(target)) return null;
       let handle: FileHandle;
-      try { handle = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
+      try { handle = await openFile(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
       catch (error) { if (missing(error)) return null; throw error; }
       try {
         const info = await handle.stat();
         privateMode(info, 0o600);
         // A concurrent atomic replacement may unlink this already-open inode.
-        if (!info.isFile() || info.nlink > 1) throw unsafe();
+        if (!info.isFile() || !publishedLinkCount(info.nlink)) throw unsafe();
         if (!Number.isSafeInteger(info.size) || info.size < 0 || info.size > MAX_BYTES) throw new Error('Summary preview exceeds byte limit');
         // Never use readFile: fstat followed by readFile can allocate without bound
         // if another process grows the file. Allocation and every read are bounded.
@@ -119,7 +127,7 @@ export function createFileSummaryStore(privateDirectory: string, forbiddenRoots:
       await ensure();
       const temporary = join(directory, '.snapshot-' + randomUUID() + '.tmp');
       await ordinary(directory, true, true);
-      const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+      const handle = await openFile(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
       let owned = true;
       try {
         try {

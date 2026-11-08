@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { constants, type Stats } from 'node:fs';
+import type { FileHandle } from 'node:fs/promises';
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { basename, dirname } from 'node:path';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { SummaryIndex, SUMMARY_INDEX_CACHE_RECIPE, type SummaryIndexCacheRecord, type SummaryIndexOptions, type SummaryIndexStore } from '../core/summary-index.js';
@@ -436,3 +439,336 @@ test('storage failures are cache-only: index rebuilds and dirty failure does not
   assert.deepEqual(await saveFailure.list(), [], 'save failure cannot fail an authoritative scan');
   assert.equal(saves, 1);
 });
+
+// These overlays model metadata observations, not kernel pathname race traces.
+function overlayStats(info: Stats, fields: Partial<Pick<Stats, 'nlink' | 'uid'>>): Stats {
+  const copy = Object.create(Object.getPrototypeOf(info), Object.getOwnPropertyDescriptors(info)) as Stats;
+  return Object.assign(copy, fields);
+}
+type HandleTrace = { events: string[]; completed: string[]; links: number[]; handle?: FileHandle };
+function handleTrace(): HandleTrace { return { events: [], completed: [], links: [] }; }
+async function observedOpen(path: string, flags: number, mode: number | undefined, trace: HandleTrace,
+  prepare?: (handle: FileHandle) => Promise<void>, nlink?: number): Promise<FileHandle> {
+  const handle = await fs.open(path, flags, mode);
+  trace.handle = handle;
+  try {
+    await prepare?.(handle);
+    return new Proxy(handle, { get(real, property) {
+      const value = Reflect.get(real, property, real);
+      if (typeof value !== 'function') return value;
+      if (property === 'stat') return async (...args: unknown[]) => {
+        trace.events.push('stat');
+        const info = await Reflect.apply(value, real, args) as Stats;
+        trace.links.push(info.nlink);
+        trace.completed.push('stat');
+        return nlink === undefined ? info : overlayStats(info, { nlink });
+      };
+      if (property === 'read' || property === 'writeFile' || property === 'sync' || property === 'close') return async (...args: unknown[]) => {
+        trace.events.push(property);
+        const result = await Reflect.apply(value, real, args);
+        trace.completed.push(property);
+        return result;
+      };
+      return value.bind(real);
+    } });
+  } catch (error) { await handle.close(); throw error; }
+}
+function assertClosed(trace: HandleTrace) {
+  assert.ok(trace.handle, 'the real open boundary was reached');
+  assert.equal(trace.handle.fd, -1, 'the real handle is closed, not merely a proxy call');
+  assert.equal(trace.events.at(-1), 'close');
+  assert.deepEqual(trace.completed, trace.events, 'every observed real I/O call completed successfully');
+}
+function assertTempPath(path: string, directory: string) {
+  assert.equal(dirname(path), directory);
+  assert.match(basename(path), /^\.snapshot-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.tmp$/);
+}
+const targetReadFlags = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
+const tempWriteFlags = constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW;
+const invalidLinks = [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1];
+const operations = ['load', 'save', 'clear'] as const;
+type StoreOperation = typeof operations[number];
+async function operate(store: SummaryIndexStore, operation: StoreOperation, value: SummaryIndexCacheRecord) {
+  if (operation === 'save') return store.save(value);
+  return store[operation]();
+}
+async function linkFixture(run: (context: {
+  base: string; repository: string; state: string; directory: string; target: string;
+  good: SummaryIndexStore; a: SummaryIndexCacheRecord; b: SummaryIndexCacheRecord;
+  original: Buffer; sentinels: () => Promise<void>;
+}) => Promise<void>) {
+  await fixture(async (base, repository) => {
+    const state = join(base, 'state'); await fs.mkdir(state, { mode: 0o700 });
+    const directory = join(state, 'summary-preview-v1'), target = join(directory, 'snapshot.json');
+    const good = createFileSummaryStore(directory, [repository]);
+    const a = record('workspace:one', 'a'.repeat(4096)), b = record('workspace:one', 'b'.repeat(4096));
+    await good.save(a);
+    const original = await fs.readFile(target);
+    const files = [
+      [join(directory, '.snapshot-other.tmp'), 'other worker'],
+      [join(base, 'history-example.json'), 'history'],
+      [join(base, 'transaction.json'), 'journal'],
+      [join(repository, 'config.toml'), 'title="workspace"'],
+    ];
+    for (const [path, text] of files) await fs.writeFile(path, text, { mode: 0o600 });
+    const sentinels = async () => {
+      for (const [path, text] of files) assert.equal(await fs.readFile(path, 'utf8'), text);
+    };
+    await run({ base, repository, state, directory, target, good, a, b, original, sentinels });
+    await sentinels();
+  });
+}
+
+// A: each public operation must select the exact published pathname policy.
+for (const operation of operations) {
+  test(`file published pathname nlink 0 permits ${operation}`, posix, async () => linkFixture(async ({ directory, target, repository, good, a, b }) => {
+    let hits = 0;
+    const store = createFileSummaryStore(directory, [repository], { lstat: async path => {
+      const info = await fs.lstat(path);
+      if (path !== target) return info;
+      hits++; assert.equal(info.nlink, 1);
+      return overlayStats(info, { nlink: 0 });
+    } });
+    const result = await operate(store, operation, b);
+    assert.equal(hits, 1);
+    if (operation === 'load') assert.deepEqual(result, a);
+    assert.deepEqual(await createFileSummaryStore(directory, [repository]).load(), operation === 'clear' ? null : operation === 'save' ? b : a);
+    assert.deepEqual((await fs.readdir(directory)).sort(), operation === 'clear' ? ['.snapshot-other.tmp'] : ['.snapshot-other.tmp', 'snapshot.json']);
+    if (operation === 'clear') assert.equal(await good.load(), null);
+  }));
+  for (const nlink of [2, ...invalidLinks]) {
+    test(`file published pathname nlink ${nlink} refuses ${operation}`, posix, async () => linkFixture(async ({ directory, target, repository, good, a, b, original }) => {
+      let hits = 0;
+      const store = createFileSummaryStore(directory, [repository], { lstat: async path => {
+        const info = await fs.lstat(path);
+        if (path !== target) return info;
+        hits++; return overlayStats(info, { nlink });
+      } });
+      await assert.rejects(operate(store, operation, b), /Unsafe/);
+      assert.equal(hits, 1);
+      assert.deepEqual(await fs.readFile(target), original);
+      assert.deepEqual(await good.load(), a);
+      assert.deepEqual((await fs.readdir(directory)).sort(), ['.snapshot-other.tmp', 'snapshot.json'], 'failed save cleans only its normal temp');
+    }));
+  }
+}
+
+// B: real old/unlinked and hardlinked opened inodes, plus numeric-domain overlays.
+test('file opened published inode with real nlink 0 reads old A while new pathname contains B', posix, async () => linkFixture(async ({ directory, target, repository, good, a, b }) => {
+  const trace = handleTrace(); let opens = 0, hits = 0;
+  const store = createFileSummaryStore(directory, [repository], {
+    lstat: async path => { const info = await fs.lstat(path); if (path === target) { hits++; assert.equal(info.nlink, 1); } return info; },
+    open: async (path, flags, mode) => {
+      assert.equal(path, target); assert.equal(flags, targetReadFlags); assert.equal(mode, undefined); opens++;
+      return observedOpen(path, flags, mode, trace, async () => { await good.save(b); });
+    },
+  });
+  assert.deepEqual(await store.load(), a);
+  assert.equal(hits, 1); assert.equal(opens, 1);
+  assert.deepEqual(trace.links, [0, 0]);
+  assert.equal(trace.events[0], 'stat');
+  assert.deepEqual(trace.events.filter(event => event !== 'read'), ['stat', 'stat', 'close'], 'load never writes or syncs the old inode');
+  assert.ok(trace.events.filter(event => event === 'read').length >= 2, 'bounded content reads and extra-byte probe reached real I/O');
+  assert.deepEqual(trace.events.slice(-2), ['stat', 'close']); assertClosed(trace);
+  assert.deepEqual(await createFileSummaryStore(directory, [repository]).load(), b);
+}));
+for (const nlink of [2, ...invalidLinks]) {
+  test(`file opened published inode nlink ${nlink} rejects before read and closes`, posix, async () => linkFixture(async ({ base, directory, target, repository, good, a, original }) => {
+    const trace = handleTrace(); let hits = 0, opens = 0;
+    const alias = join(base, 'published-alias');
+    const store = createFileSummaryStore(directory, [repository], {
+      lstat: async path => { const info = await fs.lstat(path); if (path === target) { hits++; assert.equal(info.nlink, 1); } return info; },
+      open: async (path, flags, mode) => {
+        assert.equal(path, target); assert.equal(flags, targetReadFlags); assert.equal(mode, undefined); opens++;
+        return observedOpen(path, flags, mode, trace, nlink === 2 ? async () => { await fs.link(target, alias); } : undefined, nlink === 2 ? undefined : nlink);
+      },
+    });
+    await assert.rejects(store.load(), /Unsafe/);
+    assert.equal(hits, 1); assert.equal(opens, 1);
+    assert.deepEqual(trace.links, [nlink === 2 ? 2 : 1], '2 is real hardlink metadata; invalid numbers are overlays');
+    assert.deepEqual(trace.events, ['stat', 'close'], 'no read/write/sync on rejected handle'); assertClosed(trace);
+    assert.deepEqual(await fs.readFile(target), original);
+    if (nlink === 2) {
+      assert.equal((await fs.lstat(alias)).ino, (await fs.lstat(target)).ino);
+      assert.deepEqual(await fs.readFile(alias), original);
+      await assert.rejects(good.load(), /Unsafe/);
+    } else assert.deepEqual(await good.load(), a);
+  }));
+}
+
+// C1: reject temp handle metadata before any write; cleanup cannot mask a lost guard.
+for (const nlink of [0, 2]) {
+  test(`file temp handle real nlink ${nlink} rejects before write and closes`, posix, async () => linkFixture(async ({ base, directory, target, repository, good, a, b, original }) => {
+    const trace = handleTrace(), alias = join(base, 'temp-handle-alias');
+    let temporary = '', targetHits = 0, tempHits = 0, cleanupMissing = 0;
+    const store = createFileSummaryStore(directory, [repository], {
+      open: async (path, flags, mode) => {
+        assertTempPath(path, directory); assert.equal(flags, tempWriteFlags); assert.equal(mode, 0o600);
+        assert.equal(temporary, ''); temporary = path;
+        return observedOpen(path, flags, mode, trace, async () => {
+          if (nlink === 0) await fs.unlink(path); else await fs.link(path, alias);
+        });
+      },
+      lstat: async path => {
+        if (path === target) targetHits++;
+        if (path === temporary) {
+          tempHits++; assert.deepEqual(trace.events, ['stat', 'close'], 'cleanup follows the handle guard, never write or pathname preflight');
+        }
+        try { return await fs.lstat(path); }
+        catch (error) { if (path === temporary && (error as NodeJS.ErrnoException).code === 'ENOENT') cleanupMissing++; throw error; }
+      },
+    });
+    await assert.rejects(store.save(b), /Unsafe/);
+    assert.deepEqual(trace.links, [nlink]); assert.deepEqual(trace.events, ['stat', 'close']); assertClosed(trace);
+    assert.equal(targetHits, 0); assert.equal(tempHits, 1); assert.equal(cleanupMissing, nlink === 0 ? 1 : 0);
+    assert.deepEqual(await fs.readFile(target), original); assert.deepEqual(await good.load(), a);
+    if (nlink === 0) {
+      await assert.rejects(fs.lstat(temporary), { code: 'ENOENT' });
+      assert.deepEqual((await fs.readdir(directory)).sort(), ['.snapshot-other.tmp', 'snapshot.json']);
+    } else {
+      assert.equal((await fs.lstat(temporary)).nlink, 2);
+      assert.equal((await fs.lstat(alias)).ino, (await fs.lstat(temporary)).ino);
+      assert.equal((await fs.readFile(temporary)).length, 0);
+      assert.equal((await fs.readFile(alias)).length, 0);
+    }
+  }));
+}
+
+// C2: handle succeeds; the first temp pathname check is a separate rejection phase.
+for (const nlink of [0, 2]) {
+  test(`file temp pathname nlink ${nlink} remains strict after successful handle write`, posix, async () => linkFixture(async ({ base, directory, target, repository, good, a, b, original }) => {
+    const trace = handleTrace(), alias = join(base, 'temp-path-alias');
+    let temporary = '', tempHits = 0, targetHits = 0;
+    const phases: string[] = [];
+    const store = createFileSummaryStore(directory, [repository], {
+      open: async (path, flags, mode) => {
+        assertTempPath(path, directory); assert.equal(flags, tempWriteFlags); assert.equal(mode, 0o600);
+        assert.equal(temporary, ''); temporary = path;
+        return observedOpen(path, flags, mode, trace);
+      },
+      lstat: async path => {
+        if (path === target) targetHits++;
+        if (path === temporary) {
+          tempHits++; phases.push(tempHits === 1 ? 'pathname' : 'cleanup');
+          assert.deepEqual(trace.events, ['stat', 'writeFile', 'sync', 'close']); assertClosed(trace);
+          if (tempHits === 1 && nlink === 2) await fs.link(path, alias);
+        }
+        const info = await fs.lstat(path);
+        if (path === temporary && tempHits === 1 && nlink === 0) { assert.equal(info.nlink, 1); return overlayStats(info, { nlink: 0 }); }
+        if (path === temporary) assert.equal(info.nlink, nlink === 2 ? 2 : 1);
+        return info;
+      },
+    });
+    await assert.rejects(store.save(b), /Unsafe/);
+    assert.deepEqual(trace.links, [1]); assert.deepEqual(trace.events, ['stat', 'writeFile', 'sync', 'close']); assertClosed(trace);
+    assert.deepEqual(phases, ['pathname', 'cleanup']); assert.equal(tempHits, 2); assert.equal(targetHits, 0);
+    assert.deepEqual(await fs.readFile(target), original); assert.deepEqual(await good.load(), a);
+    if (nlink === 0) {
+      await assert.rejects(fs.lstat(temporary), { code: 'ENOENT' });
+      assert.deepEqual((await fs.readdir(directory)).sort(), ['.snapshot-other.tmp', 'snapshot.json']);
+    } else {
+      assert.equal((await fs.lstat(temporary)).nlink, 2);
+      assert.equal((await fs.lstat(alias)).ino, (await fs.lstat(temporary)).ino);
+      assert.deepEqual(JSON.parse(await fs.readFile(temporary, 'utf8')), b);
+      assert.deepEqual(JSON.parse(await fs.readFile(alias, 'utf8')), b);
+    }
+  }));
+}
+
+// C3: only cleanup sees the overlay; an unsafe rejection must replace the sentinel.
+for (const nlink of [0, 2]) {
+  test(`file own-temp cleanup nlink ${nlink} refuses deletion and does not propagate sentinel`, posix, async () => linkFixture(async ({ directory, target, repository, good, a, b, original }) => {
+    const failure = new Error('target preflight sentinel'), trace = handleTrace();
+    let temporary = '', targetHits = 0, tempHits = 0;
+    const phases: string[] = [];
+    const store = createFileSummaryStore(directory, [repository], {
+      open: async (path, flags, mode) => {
+        assertTempPath(path, directory); assert.equal(flags, tempWriteFlags); assert.equal(mode, 0o600);
+        assert.equal(temporary, ''); temporary = path;
+        return observedOpen(path, flags, mode, trace);
+      },
+      lstat: async path => {
+        const info = await fs.lstat(path);
+        if (path === target) {
+          targetHits++; phases.push('target-failure'); assert.equal(tempHits, 1); throw failure;
+        }
+        if (path === temporary) {
+          tempHits++; assert.equal(info.nlink, 1); assertClosed(trace);
+          assert.deepEqual(trace.events, ['stat', 'writeFile', 'sync', 'close']);
+          if (tempHits === 1) { phases.push('pathname'); return info; }
+          phases.push('cleanup'); assert.equal(targetHits, 1);
+          return overlayStats(info, { nlink });
+        }
+        return info;
+      },
+    });
+    await assert.rejects(store.save(b), error => {
+      assert.notEqual(error, failure); assert.match((error as Error).message, /Unsafe/); return true;
+    });
+    assert.equal(targetHits, 1); assert.equal(tempHits, 2);
+    assert.deepEqual(phases, ['pathname', 'target-failure', 'cleanup']);
+    assert.deepEqual(trace.links, [1]); assert.deepEqual(trace.events, ['stat', 'writeFile', 'sync', 'close']); assertClosed(trace);
+    assert.equal((await fs.lstat(temporary)).nlink, 1, 'cleanup 0/2 are observations over a real still-linked own temp');
+    assert.deepEqual(JSON.parse(await fs.readFile(temporary, 'utf8')), b);
+    assert.deepEqual((await fs.readdir(directory)).sort(), [basename(temporary), '.snapshot-other.tmp', 'snapshot.json'].sort());
+    assert.deepEqual(await fs.readFile(target), original); assert.deepEqual(await good.load(), a);
+  }));
+}
+
+// D: real unsafe types/modes/ancestry still reject with zero links observed.
+const unsafeZeroStates = ['target-symlink', 'target-mode', 'directory-mode', 'ancestor-symlink', 'owner-overlay', 'directory-leaf'] as const;
+for (const stateKind of unsafeZeroStates) {
+  for (const operation of operations) {
+    test(`file zero links cannot bypass ${stateKind} for ${operation}`, posix, async () => linkFixture(async ({ base, state, directory, target, repository, good, a, b, original }) => {
+      const secret = join(base, 'outside-sentinel'); await fs.writeFile(secret, 'untouched', { mode: 0o600 });
+      const moved = state + '-original';
+      let rejectedPath = target;
+      if (stateKind === 'target-symlink') { await fs.unlink(target); await fs.symlink(secret, target); }
+      if (stateKind === 'target-mode') await fs.chmod(target, 0o644);
+      if (stateKind === 'directory-mode') { await fs.chmod(directory, 0o755); rejectedPath = directory; }
+      if (stateKind === 'ancestor-symlink') { await fs.rename(state, moved); await fs.symlink(moved, state); rejectedPath = state; }
+      if (stateKind === 'directory-leaf') { await fs.unlink(target); await fs.mkdir(target, { mode: 0o700 }); }
+      let hits = 0;
+      const opened: HandleTrace[] = [];
+      const store = createFileSummaryStore(directory, [repository], {
+        lstat: async path => {
+          const info = await fs.lstat(path);
+          if (path !== rejectedPath) return info;
+          hits++;
+          // Only this owner case changes two fields; it does not model real chown.
+          return overlayStats(info, stateKind === 'owner-overlay' ? { nlink: 0, uid: process.getuid!() + 1 } : { nlink: 0 });
+        },
+        open: async (path, flags, mode) => {
+          assertTempPath(path, directory); assert.equal(flags, tempWriteFlags); assert.equal(mode, 0o600);
+          const trace = handleTrace(); opened.push(trace);
+          return observedOpen(path, flags, mode, trace);
+        },
+      });
+      await assert.rejects(operate(store, operation, b), /Unsafe/);
+      assert.equal(hits, 1, 'the specifically unsafe entry was observed with zero links');
+      const writesTemp = operation === 'save' && !['directory-mode', 'ancestor-symlink'].includes(stateKind);
+      assert.equal(opened.length, writesTemp ? 1 : 0, 'unsafe ancestry/directory is rejected before open');
+      for (const trace of opened) {
+        assert.deepEqual(trace.links, [1]); assert.deepEqual(trace.events, ['stat', 'writeFile', 'sync', 'close']); assertClosed(trace);
+      }
+      assert.equal(await fs.readFile(secret, 'utf8'), 'untouched');
+      assert.deepEqual((await fs.readdir(directory)).sort(), ['.snapshot-other.tmp', 'snapshot.json'], 'no retained safe own temp or replacement');
+      if (stateKind === 'target-symlink') {
+        assert.equal((await fs.lstat(target)).isSymbolicLink(), true); assert.equal(await fs.readlink(target), secret);
+        await fs.unlink(target); await good.save(a);
+      } else if (stateKind === 'directory-leaf') {
+        assert.equal((await fs.lstat(target)).isDirectory(), true); assert.deepEqual(await fs.readdir(target), []);
+        await fs.rmdir(target); await good.save(a);
+      } else {
+        assert.deepEqual(await fs.readFile(target), original);
+        if (stateKind === 'target-mode') { assert.equal((await fs.lstat(target)).mode & 0o777, 0o644); await fs.chmod(target, 0o600); }
+        if (stateKind === 'directory-mode') { assert.equal((await fs.lstat(directory)).mode & 0o777, 0o755); await fs.chmod(directory, 0o700); }
+        if (stateKind === 'ancestor-symlink') {
+          assert.equal((await fs.lstat(state)).isSymbolicLink(), true); assert.equal(await fs.readlink(state), moved);
+          await fs.unlink(state); await fs.rename(moved, state);
+        }
+      }
+      assert.deepEqual(await createFileSummaryStore(directory, [repository]).load(), a);
+    }));
+  }
+}
