@@ -138,8 +138,113 @@ function installGeometry() {
     }
     return true;
   }
+  // First-landing assertions are synchronous and read-only. No reveal, style
+  // repair or later sample can replace the state observed by this evaluation.
+  function landingBounds(node, clipSelf = false) {
+    const view = visualViewport;
+    const left = number(view?.offsetLeft ?? 0), top = number(view?.offsetTop ?? 0);
+    const width = number(view?.width ?? innerWidth), height = number(view?.height ?? innerHeight);
+    need(width > 0 && height > 0, 'visibility');
+    const bounds = [left, top, number(left + width), number(top + height)];
+    for (let p = node; p; p = p.parentElement) {
+      const s = getComputedStyle(p);
+      need(s.display !== 'none' && s.visibility === 'visible' && number(Number(s.opacity)) > 0 && !p.inert, 'visibility');
+      if (p === node && !clipSelf) continue;
+      const b = box(p);
+      if (/(hidden|clip|auto|scroll)/.test(s.overflowX)) {
+        const start = number(b[0] + number(p.clientLeft)), end = number(start + number(p.clientWidth));
+        bounds[0] = Math.max(bounds[0], start); bounds[2] = Math.min(bounds[2], end);
+      }
+      if (/(hidden|clip|auto|scroll)/.test(s.overflowY)) {
+        const start = number(b[1] + number(p.clientTop)), end = number(start + number(p.clientHeight));
+        bounds[1] = Math.max(bounds[1], start); bounds[3] = Math.min(bounds[3], end);
+      }
+    }
+    return bounds;
+  }
+  const overlaps = (a, b) => Math.min(a[2], b[2]) > Math.max(a[0], b[0]) && Math.min(a[3], b[3]) > Math.max(a[1], b[1]);
+  function landingVisible(node, margin, heading, insideHeading = false, rects = [box(node)]) {
+    const bounds = landingBounds(node, margin === 0), h = box(heading), clip = landingBounds(heading);
+    const header = [Math.max(h[0], clip[0]), Math.max(h[1], clip[1]), Math.min(h[2], clip[2]), Math.min(h[3], clip[3])];
+    for (const r of rects) {
+      const outer = [r[0] - margin, r[1] - margin, r[2] + margin, r[3] + margin].map(number);
+      need(r[2] > r[0] && r[3] > r[1] && outer[0] >= bounds[0] && outer[1] >= bounds[1] && outer[2] <= bounds[2] && outer[3] <= bounds[3], 'visibility');
+      need(insideHeading || !overlaps(outer, header), 'visibility');
+      need([[.5, .5], [.08, .08], [.92, .08], [.08, .92], [.92, .92]].every(([x, y]) => node.contains(document.elementFromPoint(number(r[0] + (r[2] - r[0]) * x), number(r[1] + (r[3] - r[1]) * y)))), 'visibility');
+    }
+  }
+  // Computed colors may use legacy rgba() or modern color()/slash alpha syntax.
+  // Parse only inside this realm; no CSS strings or label/value text leave it.
+  function painted(color) {
+    const match = color.trim().match(/^(rgb|rgba|hsl|hsla|color|lab|lch|oklab|oklch)\((.*)\)$/i);
+    if (!match) return false;
+    const parts = match[2].split('/');
+    const legacy = match[2].split(',');
+    const token = (parts.length === 2 ? parts[1] : legacy.length === 4 ? legacy[3] : '1').trim();
+    const alpha = token.endsWith('%') ? Number(token.slice(0, -1)) / 100 : Number(token);
+    return Number.isFinite(alpha) && alpha > 0 && alpha <= 1;
+  }
+  function inputFocus(node, heading) {
+    need(node === document.activeElement, 'focus-identity');
+    need(!node.disabled && !node.readOnly && node.type === 'text', 'focus-disabled');
+    need(node.matches(':focus-visible'), 'focus-visible');
+    const s = getComputedStyle(node);
+    need(['Top', 'Right', 'Bottom', 'Left'].every(side => Number.isFinite(parseFloat(s[`border${side}Width`])) && parseFloat(s[`border${side}Width`]) > 0 && !['none', 'hidden'].includes(s[`border${side}Style`]) && painted(s[`border${side}Color`])), 'focus-style');
+    // Split shadows only at top-level commas (color functions contain commas).
+    const shadows = []; let depth = 0, start = 0;
+    for (let i = 0; i < s.boxShadow.length; i++) {
+      if (s.boxShadow[i] === '(') depth++;
+      else if (s.boxShadow[i] === ')') depth--;
+      else if (s.boxShadow[i] === ',' && depth === 0) { shadows.push(s.boxShadow.slice(start, i)); start = i + 1; }
+    }
+    shadows.push(s.boxShadow.slice(start));
+    need(shadows.some(shadow => {
+      if (/\binset\b/i.test(shadow)) return false;
+      const color = shadow.match(/(?:rgba?|hsla?|color|lab|lch|oklab|oklch)\([^()]*\)/i)?.[0];
+      if (!color || !painted(color)) return false;
+      const lengths = shadow.replace(color, '').trim().split(/\s+/);
+      if (lengths.length !== 4 || lengths.some(value => !value.endsWith('px') || !Number.isFinite(Number(value.slice(0, -2))))) return false;
+      const [x, y, blur, spread] = lengths.map(value => Number(value.slice(0, -2)));
+      // forms.css ends at 3px; the existing settle can sample its transition.
+      return x === 0 && y === 0 && blur === 0 && spread > 0 && spread <= 3;
+    }), 'focus-style');
+    landingVisible(node, 3, heading);
+    const label = node.parentElement, span = label?.querySelector(':scope > span');
+    need(label?.matches('label.field') && label.control === node && [...node.labels].includes(label) && span?.parentElement === label && !!span.textContent.trim(), 'label');
+    need(painted(getComputedStyle(span).color), 'visibility');
+    landingVisible(span, 0, heading, false, fragments(span));
+  }
+  function landing(surface, index, allowBoundary = false) {
+    const panel = document.querySelector('.workspace-panel'), heading = panel?.querySelector(':scope > .page-heading');
+    const refresh = heading?.querySelector('button'), input = panel?.querySelector('.field > input');
+    const actions = [...(panel?.querySelector('.workspace-sync-actions')?.children || [])];
+    need(heading && refresh?.tagName === 'BUTTON' && input?.tagName === 'INPUT' && actions.length === 3 && actions.every(node => node.tagName === 'BUTTON'), 'focus-identity');
+    let route;
+    if (surface === 'workspace') {
+      need(!refresh.disabled && !input.disabled && !actions[0].disabled && actions[1].disabled && !actions[2].disabled, 'focus-disabled');
+      route = [refresh, input, actions[0], actions[2]];
+    } else {
+      need(surface === 'confirmation', 'focus-identity');
+      need(refresh.disabled && input.disabled && actions.every(node => node.disabled), 'pending');
+      route = [...(panel.querySelector('.workspace-sync-card > [role="group"]')?.querySelectorAll('button') || [])];
+      need(route.length === 2 && route.every(node => !node.disabled), 'pending');
+    }
+    const active = document.activeElement;
+    if (allowBoundary && index === 0 && (active === document.body || active === document.documentElement)) return -1;
+    need(route.includes(active), 'focus-identity');
+    need(active === route[index], 'focus-order');
+    need(!active.disabled, 'focus-disabled');
+    if (active === input) inputFocus(active, heading);
+    else { visible(active, true); landingVisible(active, 6, heading, active === refresh); }
+    return index;
+  }
   window.nativeActionGeometry = {
-    inspect, visible,
+    inspect, visible, landing,
+    workspaceReverseStart() {
+      const action = document.querySelector('.workspace-sync-actions > button:nth-child(3)');
+      need(action && document.activeElement === action, 'focus-identity');
+      need(!action.disabled, 'focus-disabled');
+    },
     target(surface) { return selector(surface); },
     focus(surface) {
       const group = document.querySelector(selector(surface)), buttons = [...group.children], active = document.activeElement;

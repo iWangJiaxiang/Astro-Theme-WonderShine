@@ -150,14 +150,21 @@ async function pointer(page, selector) {
 }
 async function tabGroup(page, surface) {
   const visited = [];
-  let enabled;
+  let enabled, workspaceForward = 0;
   for (let i = 0; i < caps.tabs; i++) {
     live(page); await page.keyboard.press('Tab');
     await settle(page);
+    if (surface === 'workspace') {
+      const landing = await page.evaluate(index => window.nativeActionGeometry.landing('workspace', index, true), workspaceForward);
+      if (landing < 0) continue; // Only the pre-acquisition document boundary.
+      workspaceForward++;
+      if (workspaceForward < 3) continue; // Refresh/input checked, not action ids.
+    }
     const id = await page.evaluate(surface => {
       const group = document.querySelector(window.nativeActionGeometry.target(surface));
       return [...group.children].indexOf(document.activeElement);
     }, surface);
+    if (surface === 'workspace') need(id === (workspaceForward === 3 ? 0 : 2), 'focus-identity');
     if (id < 0) continue;
     await reveal(page, `${surface === 'login' ? '.account-login-buttons' : '.workspace-sync-actions'} > button:nth-child(${id + 1})`);
     const state = await page.evaluate(surface => window.nativeActionGeometry.focus(surface), surface);
@@ -166,10 +173,25 @@ async function tabGroup(page, surface) {
     if (visited.length === enabled.length) {
       const start = enabled.indexOf(visited[0]);
       const expected = [...enabled.slice(start), ...enabled.slice(0, start)];
-      need(JSON.stringify(visited) === JSON.stringify(expected), 'focus-order'); return visited;
+      need(JSON.stringify(visited) === JSON.stringify(expected), 'focus-order');
+      if (surface === 'workspace') need(workspaceForward === 4 && JSON.stringify(visited) === '[0,2]', 'focus-order');
+      return visited;
     }
   }
   throw new Error('focus-tabs');
+}
+async function workspaceReverse(page) {
+  // Original action2-focused Workspace PNG is already captured. Never seed or
+  // seek a starting focus, and never reveal between these two source-route inputs.
+  await page.evaluate(() => window.nativeActionGeometry.workspaceReverseStart());
+  try {
+    live(page); await page.keyboard.down('Shift');
+    for (const index of [2, 1]) {
+      live(page); await page.keyboard.press('Tab');
+      await settle(page);
+      await page.evaluate(index => window.nativeActionGeometry.landing('workspace', index), index);
+    }
+  } finally { await page.keyboard.up('Shift'); }
 }
 async function capture(page, record, slot, selector) {
   need(record.pngCount < record.pngs && ['login', 'workspace', 'busy', 'pending'].includes(slot), 'counter');
@@ -228,7 +250,10 @@ async function reviewCase(page, row, record) {
   const seen = [];
   for (let i = 0; i < caps.tabs && seen.length < 2; i++) {
     live(page); await page.keyboard.press('Tab'); await settle(page);
+    const landing = await page.evaluate(index => window.nativeActionGeometry.landing('confirmation', index, true), seen.length);
+    if (landing < 0) continue;
     const id = await page.$eval(confirmation, group => [...group.querySelectorAll('button')].indexOf(document.activeElement));
+    need(id === seen.length, 'focus-identity');
     if (id < 0) continue;
     await reveal(page, `${confirmation} > button:nth-of-type(${id + 1})`);
     await page.evaluate(() => window.nativeActionGeometry.visible(document.activeElement, true));
@@ -313,6 +338,7 @@ async function runCase(browser, row, bundle, record) {
           need(JSON.stringify(workspace.buttons.map(b => b.disabled)) === '[false,true,false]', 'busy');
           if (keyboard) { stage = 'focus'; record.focus.push({ surface: 'workspace', ids: await step(() => tabGroup(page, 'workspace')) }); }
           stage = 'screenshot'; await step(() => capture(page, record, 'workspace', '.workspace-sync-actions'));
+          if (keyboard) { stage = 'focus'; await step(() => workspaceReverse(page)); }
         }
       }
     }
