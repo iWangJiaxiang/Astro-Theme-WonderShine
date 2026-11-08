@@ -361,6 +361,12 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   assert.ok(await page.$eval('.media-dialog-body', el => el.scrollWidth <= el.clientWidth), 'upload controls fit a mobile dialog');
   const picker = 'dialog.media-dialog[open]', body = `${picker} .media-dialog-body`;
   const layoutUploadRequests = [];
+  const uploadFitReport = {
+    schemaVersion: 1,
+    semantics: 'Operands retain the original short-circuit reads. Auxiliary geometry is post-predicate, not atomic or proof of future layout. Culprits are candidates, not causal attribution.',
+    caps: { samples: 2, bytes: 16384, scannedNodes: 512, culprits: 8 },
+    samples: [],
+  };
   const trackLayoutUpload = request => { if (new URL(request.url()).pathname === '/api/media/upload') layoutUploadRequests.push(request.url()); };
   page.on('request', trackLayoutUpload);
   try {
@@ -397,7 +403,8 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
             flatOptions: control.querySelectorAll('.choice-options').length,
           };
         };
-        return {
+        const fitOperands = {};
+        const layout = {
           toolbar: rect('.media-toolbar'), search: rect('.media-search input'), refresh: rect('.media-toolbar > button'),
           touchControls: [...dialog.querySelectorAll('.media-search input, .media-toolbar > button, .upload-actions > button, .upload-directory-control .choice-trigger, .media-filter-control .choice-trigger')]
             .map(node => ({ name: node.getAttribute('name') || node.type, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })),
@@ -409,29 +416,167 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
           filters: dialog.querySelectorAll('.media-filter-control').length,
           duplicateHeadings: dialog.querySelectorAll('.upload-actions strong').length,
           results: rendered(dialog.querySelector('.upload-results li button')), note: rendered(dialog.querySelector('.upload-note')),
-          fitsViewport: dialog.getBoundingClientRect().left >= 0 && dialog.getBoundingClientRect().right <= innerWidth && document.documentElement.scrollWidth <= innerWidth,
+          // Assign only operands reached by the original expression, in its original order.
+          fitsViewport: (fitOperands.left = dialog.getBoundingClientRect().left) >= 0 && (fitOperands.right = dialog.getBoundingClientRect().right) <= (fitOperands.rightInnerWidth = innerWidth) && (fitOperands.documentScrollWidth = document.documentElement.scrollWidth) <= (fitOperands.documentInnerWidth = innerWidth),
         };
+        // The original predicate is outside this diagnostic-only exception boundary.
+        try {
+        // No diagnostic DOM/style reads precede the predicate above.
+        const evidence = {
+          matched: layout.fitsViewport, status: 'available', numericInvalid: false,
+          operands: {}, faults: [], auxiliary: null,
+          scan: { attempted: false, completed: false, scanned: 0, truncated: null, candidates: 0, omittedCandidates: 0, culprits: [] },
+        };
+        const numeric = value => {
+          if (typeof value === 'number' && Number.isFinite(value)) return value;
+          evidence.numericInvalid = true;
+          return null;
+        };
+        const fault = code => { evidence.status = 'partial'; if (!evidence.faults.includes(code)) evidence.faults.push(code); };
+        const safe = (code, action) => { try { return action(); } catch { fault(code); return null; } };
+        for (const name of ['left', 'right', 'rightInnerWidth', 'documentScrollWidth', 'documentInnerWidth']) {
+          const read = Object.hasOwn(fitOperands, name);
+          evidence.operands[name] = { read, value: read ? numeric(fitOperands[name]) : null };
+        }
+        safe('auxiliary', () => {
+          const startedAt = numeric(performance.now());
+          const ids = new WeakMap();
+          let nextId = 0;
+          const id = node => {
+            if (!node) return null;
+            if (!ids.has(node)) ids.set(node, ++nextId);
+            return ids.get(node);
+          };
+          const rectangle = box => Object.fromEntries(['left', 'top', 'right', 'bottom', 'width', 'height'].map(key => [key, numeric(box[key])]));
+          const dimensions = node => node ? {
+            id: id(node), rect: rectangle(node.getBoundingClientRect()),
+            clientWidth: numeric(node.clientWidth), clientHeight: numeric(node.clientHeight),
+            scrollWidth: numeric(node.scrollWidth), scrollHeight: numeric(node.scrollHeight),
+            scrollLeft: numeric(node.scrollLeft), scrollTop: numeric(node.scrollTop),
+          } : null;
+          const root = document.documentElement, view = window.visualViewport;
+          const style = getComputedStyle(root);
+          const css = Object.fromEntries(['--native-visible-height', '--native-visible-top', '--studio-visible-width', '--studio-visible-left'].map(name => {
+            const raw = style.getPropertyValue(name).trim();
+            const match = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+))(px)?$/.exec(raw);
+            return [name, { present: raw.length > 0, parsed: !!match && Number.isFinite(Number(match[1])), value: match ? numeric(Number(match[1])) : null, unit: match ? (match[2] ? 'px' : 'number') : null }];
+          }));
+          evidence.auxiliary = {
+            startedAt, innerWidth: numeric(innerWidth), innerHeight: numeric(innerHeight),
+            scrollX: numeric(window.scrollX), scrollY: numeric(window.scrollY), devicePixelRatio: numeric(devicePixelRatio),
+            compact: root.hasAttribute('data-compact-viewport'), css,
+            visualViewport: view ? Object.fromEntries(['width', 'height', 'offsetLeft', 'offsetTop', 'pageLeft', 'pageTop', 'scale'].map(key => [key, numeric(view[key])])) : null,
+            dialog: dimensions(dialog), root: dimensions(root), body: dimensions(document.body),
+            dialogBody: dimensions(dialog.querySelector('.media-dialog-body')),
+            feedback: dimensions(dialog.querySelector('.media-upload-feedback')),
+            finishedAt: null,
+          };
+          if (!layout.fitsViewport) {
+            evidence.scan.attempted = true;
+            const roles = [
+              ['dialog', '.media-dialog'], ['dialog-body', '.media-dialog-body'], ['feedback', '.media-upload-feedback'],
+              ['upload', '.media-upload'], ['upload-disclosure', '.media-upload-disclosure'], ['toolbar', '.media-toolbar'],
+              ['filter', '.media-filter-disclosure'], ['grid', '.media-grid'], ['footer', '.selection-footer'],
+              ['settings', '.settings-page'], ['settings-heading', '.settings-page > .page-heading'],
+              ['save-actions', '.settings-save-actions'], ['save-button', '.save-button'],
+              ['main', '.main-shell'], ['sidebar', '.sidebar'], ['topbar', '.topbar'],
+            ];
+            const tags = ['HTML', 'BODY', 'DIV', 'SECTION', 'DIALOG', 'ASIDE', 'HEADER', 'MAIN', 'NAV', 'BUTTON', 'INPUT', 'TEXTAREA', 'SELECT', 'DETAILS', 'SUMMARY', 'P', 'SPAN', 'SMALL', 'STRONG', 'UL', 'LI', 'IMG', 'H1', 'H2'];
+            const enumValue = (value, allowed) => allowed.includes(value) ? value : 'other';
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+            let node = root;
+            const scanWidth = evidence.auxiliary.innerWidth;
+            while (node && evidence.scan.scanned < 512) {
+              evidence.scan.scanned++;
+              const box = node.getBoundingClientRect();
+              if (box.width > 0 && box.height > 0 && (box.left < 0 || box.right > scanWidth || node.scrollWidth > node.clientWidth)) {
+                evidence.scan.candidates++;
+                if (evidence.scan.culprits.length < 8) {
+                  safe('candidate', () => {
+                    const computed = getComputedStyle(node);
+                    evidence.scan.culprits.push({
+                      id: id(node), parentId: id(node.parentElement), tag: enumValue(node.tagName, tags),
+                      role: roles.find(([, selector]) => node.matches(selector))?.[0] ?? 'other',
+                      inDialog: dialog.contains(node), rect: rectangle(box),
+                      clientWidth: numeric(node.clientWidth), scrollWidth: numeric(node.scrollWidth),
+                      style: {
+                        display: enumValue(computed.display, ['none', 'block', 'inline', 'inline-block', 'flex', 'inline-flex', 'grid', 'inline-grid', 'contents', 'list-item']),
+                        position: enumValue(computed.position, ['static', 'relative', 'absolute', 'fixed', 'sticky']),
+                        overflowX: enumValue(computed.overflowX, ['visible', 'hidden', 'clip', 'auto', 'scroll']),
+                        visibility: enumValue(computed.visibility, ['visible', 'hidden', 'collapse']),
+                        whiteSpace: enumValue(computed.whiteSpace, ['normal', 'nowrap', 'pre', 'pre-wrap', 'pre-line', 'break-spaces']),
+                        transformed: computed.transform !== 'none',
+                      },
+                    });
+                  });
+                }
+              }
+              node = walker.nextNode();
+            }
+            evidence.scan.truncated = !!node;
+            evidence.scan.completed = true;
+          }
+          evidence.auxiliary.finishedAt = numeric(performance.now());
+        });
+        evidence.scan.omittedCandidates = evidence.scan.candidates - evidence.scan.culprits.length;
+        if (evidence.numericInvalid) evidence.status = 'partial';
+        return { ...layout, fitEvidence: evidence };
+        } catch {
+          // Literal fallback: no diagnostic helpers, DOM reads or predicate replay.
+          layout.fitEvidence = {
+            matched: layout.fitsViewport, status: 'unavailable', numericInvalid: null,
+            operands: null, faults: ['setup-failed'], auxiliary: null, scan: null,
+          };
+          return layout;
+        }
       });
-      assert.ok(layout.search.width >= layout.toolbar.width - 2, `${width}px search uses the full toolbar row`);
-      assert.ok(Math.abs(layout.search.left - layout.toolbar.left) <= 2 && Math.abs(layout.search.right - layout.toolbar.right) <= 2, `${width}px search aligns with toolbar edges`);
-      assert.ok(layout.refresh.top >= layout.search.bottom, `${width}px refresh moves below search`);
-      assert.ok(Math.abs(layout.refresh.right - layout.toolbar.right) <= 2, `${width}px refresh aligns right on its own row`);
-      for (const control of layout.touchControls) assert.ok(control.width >= 44 && control.height >= 44, `${width}px ${control.name} has a nonzero 44px touch target`);
-      assert.equal(layout.touchControls.length, 5, 'search, refresh, upload, directory and folder controls are measured');
-      for (const [control, label] of [[layout.directory, 'Save to'], [layout.folder, 'Folder']]) {
-        assert.equal(control.label, label);
-        assert.ok(control.visibleLabel && control.trigger && control.accessibleLabel && control.fullWidth && control.wraps, `${width}px ${label} stays a labelled full-width compact trigger with wrapping text`);
-        assert.equal(control.flatOptions, 0, `${label} does not render an inline option grid`);
-        assert.equal(control.singleCount, 0, `${width}px ${label} single selection has no multi-selection count`);
-        assert.ok(control.chevron && control.valueAtStart, `${width}px ${label} keeps its value at the start and a separate trailing expand affordance`);
+      let fitDiagnosticError;
+      try {
+        uploadFitReport.samples.push({ width, ...layout.fitEvidence });
+        let report = JSON.stringify(uploadFitReport) + '\n';
+        if (Buffer.byteLength(report, 'utf8') > uploadFitReport.caps.bytes) {
+          // Retain exact predicate operands; never silently truncate evidence bytes.
+          for (const sample of uploadFitReport.samples) {
+            sample.auxiliary = null;
+            sample.scan = null;
+            sample.status = 'partial';
+            if (!sample.faults.includes('byte-budget')) sample.faults.push('byte-budget');
+          }
+          report = JSON.stringify(uploadFitReport) + '\n';
+          fitDiagnosticError = new Error('Upload fit diagnostic byte budget exceeded');
+        }
+        if (Buffer.byteLength(report, 'utf8') > uploadFitReport.caps.bytes) throw new Error('Upload fit diagnostic budget unavailable');
+        await writeFile(screenshots + '/upload-fit-diagnostics.json', report);
+        if (layout.fitEvidence.status !== 'available') fitDiagnosticError ??= new Error('Upload fit diagnostic sampling incomplete');
+      } catch {
+        fitDiagnosticError ??= new Error('Upload fit diagnostic persistence failed');
       }
-      assert.match(layout.folderValue.text, /All folders/, `${width}px empty folder selection displays its matched option label`);
-      assert.equal(layout.folderValue.name, 'Folder All folders', `${width}px folder accessible name resolves both label and selected value IDs`);
-      assert.equal(layout.filters, 1, 'public-image picker has the folder filter');
-      assert.equal(layout.duplicateHeadings, 0, 'upload disclosure does not repeat its heading inside the actions');
-      assert.ok(layout.results && layout.note, `${width}px uploaded result and save reminder remain rendered, not CSS-hidden`);
-      assert.ok(layout.fitsViewport, `${width}px dialog and page fit the viewport`);
-      assert.ok(await page.$eval(body, el => el.scrollWidth <= el.clientWidth), `${width}px upload controls fit without horizontal overflow`);
+      try {
+        assert.ok(layout.search.width >= layout.toolbar.width - 2, `${width}px search uses the full toolbar row`);
+        assert.ok(Math.abs(layout.search.left - layout.toolbar.left) <= 2 && Math.abs(layout.search.right - layout.toolbar.right) <= 2, `${width}px search aligns with toolbar edges`);
+        assert.ok(layout.refresh.top >= layout.search.bottom, `${width}px refresh moves below search`);
+        assert.ok(Math.abs(layout.refresh.right - layout.toolbar.right) <= 2, `${width}px refresh aligns right on its own row`);
+        for (const control of layout.touchControls) assert.ok(control.width >= 44 && control.height >= 44, `${width}px ${control.name} has a nonzero 44px touch target`);
+        assert.equal(layout.touchControls.length, 5, 'search, refresh, upload, directory and folder controls are measured');
+        for (const [control, label] of [[layout.directory, 'Save to'], [layout.folder, 'Folder']]) {
+          assert.equal(control.label, label);
+          assert.ok(control.visibleLabel && control.trigger && control.accessibleLabel && control.fullWidth && control.wraps, `${width}px ${label} stays a labelled full-width compact trigger with wrapping text`);
+          assert.equal(control.flatOptions, 0, `${label} does not render an inline option grid`);
+          assert.equal(control.singleCount, 0, `${width}px ${label} single selection has no multi-selection count`);
+          assert.ok(control.chevron && control.valueAtStart, `${width}px ${label} keeps its value at the start and a separate trailing expand affordance`);
+        }
+        assert.match(layout.folderValue.text, /All folders/, `${width}px empty folder selection displays its matched option label`);
+        assert.equal(layout.folderValue.name, 'Folder All folders', `${width}px folder accessible name resolves both label and selected value IDs`);
+        assert.equal(layout.filters, 1, 'public-image picker has the folder filter');
+        assert.equal(layout.duplicateHeadings, 0, 'upload disclosure does not repeat its heading inside the actions');
+        assert.ok(layout.results && layout.note, `${width}px uploaded result and save reminder remain rendered, not CSS-hidden`);
+        assert.ok(layout.fitsViewport, `${width}px dialog and page fit the viewport`);
+        assert.ok(await page.$eval(body, el => el.scrollWidth <= el.clientWidth), `${width}px upload controls fit without horizontal overflow`);
+      } catch (error) {
+        if (fitDiagnosticError) throw new AggregateError([error, fitDiagnosticError], 'Upload layout assertion and fit diagnostics failed', { cause: error });
+        throw error;
+      }
+      if (fitDiagnosticError) throw fitDiagnosticError;
       await page.screenshot({ path: screenshots + (width === 390 ? '/upload-picker-mobile-en.png' : '/upload-picker-mobile-en-320.png') });
 
       // Existing fixture images plus the expanded upload panel must overflow.
