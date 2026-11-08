@@ -116,6 +116,18 @@ jobs:
         run: node apps/studio/tests/browser/react-lifecycle.mjs
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Upload collapsed-feedback regression (independent synthetic fixture)
+        timeout-minutes: 5
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.theme-build.outcome == 'success' && steps.studio-build.outcome == 'success' && steps.chrome.outcome == 'success' && steps.sandbox.outcome == 'success' && steps.fonts.outcome == 'success' }}
+        run: node apps/studio/tests/browser/upload-collapsed-feedback.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Native action layout regression (synthetic components, not devices)
+        timeout-minutes: 5
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.theme-build.outcome == 'success' && steps.studio-build.outcome == 'success' && steps.chrome.outcome == 'success' && steps.sandbox.outcome == 'success' && steps.fonts.outcome == 'success' }}
+        run: node apps/studio/tests/browser/native-actions-layout.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - name: Fetch fixed historical disclosure baseline
         timeout-minutes: 2
         id: disclosure-baseline
