@@ -809,6 +809,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                               typeof DocumentEditor,
                               "onDeleted"
                             >,
+                            onExit: (() => navigate("home")) satisfies EventHandler<typeof DocumentEditor, "onExit">,
                             onBack: editorBack satisfies EventHandler<
                               typeof DocumentEditor,
                               "onBack"
@@ -1149,6 +1150,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                       : element(SettingsView, {
                                           key: view.value,
                                           group: view.value,
+                                          onExit: (() => navigate("home")) satisfies EventHandler<typeof SettingsView, "onExit">,
                                           onDirty: (($event) => {
                                             dirty.value = $event;
                                           }) satisfies EventHandler<

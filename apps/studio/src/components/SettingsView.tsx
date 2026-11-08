@@ -9,7 +9,7 @@ import type {
   SaveResult,
   Settings,
 } from "../../shared/types";
-import { api, errorMessage, session } from "../api";
+import { api, apiTransportGeneration, authenticationEpoch, errorMessage, identityEpoch, session } from "../api";
 import { formContext } from "../form-context";
 import { locale, t, type Message } from "../i18n";
 import {
@@ -23,6 +23,7 @@ import {
   type StudioComponent,
 } from "../react-component";
 import {
+  batch,
   computed,
   onBeforeUnmount,
   provide,
@@ -35,15 +36,59 @@ import LoadingState from "./LoadingState";
 import ValueEditor from "./ValueEditor";
 
 type Props = { group: string; embedded?: boolean; language?: string };
-type Events = { dirty: [value: boolean]; saved: [] };
+type Events = { dirty: [value: boolean]; saved: []; exit: [] };
 const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
   "SettingsView",
   (props, emit, expose) => {
+    const initialIdentityEpoch = identityEpoch.value,
+      initialTransportGeneration = apiTransportGeneration.value,
+      initialIdentity = session.value ? { id: session.value.identity.id, method: session.value.identity.method } : null,
+      initialGroup = props.group,
+      initialLanguage = props.language;
+    const endpoint = `/settings/${initialGroup}${initialLanguage ? `?language=${encodeURIComponent(initialLanguage)}` : ""}`;
+    const storageKey = `studio-settings:${initialIdentity?.method}:${initialIdentity?.id}:${initialGroup}:${initialLanguage || "default"}`;
+    let alive = true, observedAuthenticationEpoch = authenticationEpoch.value;
+    const retired = ref(initialIdentity === null), mainNeedsReload = ref(false),
+      relationsNeedsRetry = ref(false), unknownSaveObligation = ref(false);
+    const ready = ref(false), busy = ref(false),
+      error = ref<Message>(""), message = ref<Message>("");
+    let requestId = 0, mainPending = false;
+    let relationsRequestId = 0, relationsRefreshPending = false,
+      relationsAuthenticationEpoch = observedAuthenticationEpoch;
+    let activeSave: { authentication: number; initiated: boolean } | null = null;
     const saveMode = ref<SaveMode>(saveContext.value.defaultMode), branchPending = ref(false), savedBranch = ref("");
-    const endpoint = computed(
-      () =>
-        `/settings/${props.group}${props.language ? `?language=${encodeURIComponent(props.language)}` : ""}`,
-    );
+    function ownsInstance() {
+      return alive && !retired.value && initialIdentity !== null && session.value !== null &&
+        identityEpoch.value === initialIdentityEpoch &&
+        apiTransportGeneration.value === initialTransportGeneration &&
+        props.group === initialGroup && props.language === initialLanguage;
+    }
+    function reconcileBoundary() {
+      if (!alive || retired.value) return;
+      const owns = ownsInstance(), authentication = authenticationEpoch.value;
+      if (owns && authentication === observedAuthenticationEpoch) return;
+      // Revoke tokens before publishing reactive state or notifying parents.
+      observedAuthenticationEpoch = authentication;
+      requestId++;
+      relationsRequestId++;
+      const abandonedMain = mainPending;
+      mainPending = false;
+      batch(() => {
+        if (!owns) retired.value = true;
+        if (abandonedMain) mainNeedsReload.value = true;
+        if (relationsLoading.value) relationsNeedsRetry.value = true;
+        relationsLoading.value = false;
+        if (activeSave?.initiated) unknownSaveObligation.value = true;
+      });
+    }
+    function canInteract() {
+      reconcileBoundary();
+      return ownsInstance();
+    }
+    function exit() {
+      reconcileBoundary();
+      if (alive) emit("exit");
+    }
     const settings = shallowRef<Settings | null>(null),
       values = ref<Record<string, Json>>({}),
       baseline = ref<Record<string, Json>>({});
@@ -75,24 +120,29 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       loading: relationsLoading,
       error: relationsError,
     });
-    let relationsRequestId = 0, relationsAlive = true, relationsRefreshPending = false;
     async function loadRelations(refresh = false) {
-      const id = ++relationsRequestId;
-      const current = () => relationsAlive && id === relationsRequestId;
+      if (!canInteract()) return;
+      const id = ++relationsRequestId, authentication = authenticationEpoch.value;
+      const current = () => ownsInstance() && authentication === authenticationEpoch.value && id === relationsRequestId;
+      relationsAuthenticationEpoch = authentication;
       relationsRefreshPending = relationsRefreshPending || refresh;
-      relationsLoading.value = true;
-      relationsError.value = "";
+      batch(() => {
+        relationsLoading.value = true;
+        relationsError.value = "";
+        relationsNeedsRetry.value = false;
+      });
       try {
+        if (!current()) return;
         const items = await api<ArticleSummary[]>("/content" + (relationsRefreshPending ? "?refresh=1" : ""));
         if (!current()) return;
-        unresolvedItems.value = items.filter((item) => item.linkWarning);
-        postItems.value = items.filter(
+        const nextUnresolved = items.filter((item) => item.linkWarning);
+        const nextPosts = items.filter(
           (item) =>
             !item.error &&
             item.kind !== "page" &&
             !/\/_index(?:\.[^.]+)?\.md$/.test(item.path),
         );
-        links.value = [
+        const nextLinks = [
           ...items
             .filter(
               (item) => !item.error && item.publicPath && item.render !== false,
@@ -102,8 +152,15 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           (item, index, all) =>
             all.findIndex((other) => other.value === item.value) === index,
         );
+        if (!current()) return;
+        batch(() => {
+          unresolvedItems.value = nextUnresolved;
+          postItems.value = nextPosts;
+          links.value = nextLinks;
+        });
       } catch (e) {
-        if (current()) relationsError.value = errorMessage(e);
+        const notice = errorMessage(e);
+        if (current()) relationsError.value = notice;
       } finally {
         if (current()) {
           relationsRefreshPending = false;
@@ -111,14 +168,16 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
         }
       }
     }
+    watch([
+      identityEpoch, apiTransportGeneration, authenticationEpoch,
+      () => props.group, () => props.language,
+    ], reconcileBoundary);
     watch(locale, () => {
       // Loaded options and settled errors survive presentation-only changes.
       // A pending replacement retains any unfinished forced-refresh obligation.
-      if (relationsLoading.value) void loadRelations();
-    });
-    onBeforeUnmount(() => {
-      relationsAlive = false;
-      relationsRequestId++;
+      if (!canInteract()) return;
+      if (relationsLoading.value && relationsAuthenticationEpoch === authenticationEpoch.value)
+        void loadRelations();
     });
     void loadRelations();
     // Presentation groups only: schema keys and saved values remain unchanged.
@@ -226,7 +285,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
     };
     const fieldGroups = computed(() => {
       const fields = settings.value?.fields || [],
-        definitions = groupDefinitions[props.group] || [];
+        definitions = groupDefinitions[initialGroup] || [];
       const used = new Set<string>(),
         groups: {
           title: string;
@@ -245,11 +304,6 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       if (remaining.length) groups.push({ title: "", fields: remaining });
       return groups;
     });
-    const ready = ref(false);
-    const storageKey = `studio-settings:${session.value?.identity.method}:${session.value?.identity.id}:${props.group}:${props.language || "default"}`;
-    const busy = ref(false),
-      error = ref<Message>(""),
-      message = ref<Message>("");
     const changes = computed(() =>
       Object.fromEntries(
         Object.entries(values.value).filter(
@@ -259,109 +313,161 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       ),
     );
     const dirty = computed(() => Object.keys(changes.value).length > 0);
-    watch([dirty, branchPending], ([value, pending]) => emit("dirty", value || pending), { flush: "sync" });
+    watch(() => dirty.value || branchPending.value || unknownSaveObligation.value, () => {
+      reconcileBoundary();
+      const obligation = dirty.value || branchPending.value || unknownSaveObligation.value;
+      if (alive && (ownsInstance() || obligation)) emit("dirty", obligation);
+    }, { flush: "sync" });
     watch(
       [values, baseline, () => settings.value?.revision],
       () => {
-        if (!ready.value || !settings.value) return;
+        if (!canInteract() || !ready.value || !settings.value) return;
         try {
-          if (dirty.value)
-            sessionStorage.setItem(
-              storageKey,
-              JSON.stringify({
-                values: values.value,
-                baseline: baseline.value,
-                revision: settings.value.revision,
-              }),
-            );
-          else sessionStorage.removeItem(storageKey);
+          const draft = dirty.value ? JSON.stringify({
+            values: values.value,
+            baseline: baseline.value,
+            revision: settings.value.revision,
+          }) : null;
+          if (!ownsInstance()) return;
+          if (draft !== null) sessionStorage.setItem(storageKey, draft);
+          else if (!unknownSaveObligation.value) sessionStorage.removeItem(storageKey);
         } catch {
           /* The mounted form remains available when tab storage is disabled. */
         }
       },
       { deep: true },
     );
-    let requestId = 0;
-    async function load() {
-      const id = ++requestId;
-      ready.value = false;
-      error.value = "";
-      settings.value = null;
-      message.value = "";
+    async function load(discard = false) {
+      if (!canInteract() || ready.value || busy.value || unknownSaveObligation.value || branchPending.value || (dirty.value && !discard)) return;
+      const id = ++requestId, authentication = authenticationEpoch.value;
+      const current = () => ownsInstance() && authentication === authenticationEpoch.value && id === requestId;
+      mainPending = true;
+      batch(() => {
+        ready.value = false;
+        error.value = "";
+        settings.value = null;
+        message.value = "";
+        mainNeedsReload.value = false;
+      });
       try {
-        const result = await api<Settings>(endpoint.value);
-        if (id !== requestId) return;
-        settings.value = result;
-        values.value = structuredClone(result.values);
-        baseline.value = structuredClone(result.values);
+        if (!current()) return;
+        const result = await api<Settings>(endpoint);
+        if (!current()) return;
+        let nextValues = structuredClone(result.values), nextBaseline = structuredClone(result.values),
+          nextRevision = result.revision, restored = false;
         try {
-          const draft = JSON.parse(
-            sessionStorage.getItem(storageKey) || "null",
-          );
-          if (
-            draft?.values &&
-            draft?.baseline &&
-            typeof draft.revision === "string"
-          ) {
-            values.value = draft.values;
-            baseline.value = draft.baseline;
-            settings.value.revision = draft.revision;
-            message.value =
-              "已恢复当前标签页中的配置草稿；保存时仍会检查仓库版本。";
+          const draft = JSON.parse(sessionStorage.getItem(storageKey) || "null");
+          if (draft?.values && draft?.baseline && typeof draft.revision === "string") {
+            nextValues = draft.values;
+            nextBaseline = draft.baseline;
+            nextRevision = draft.revision;
+            restored = true;
           }
         } catch {
           /* Invalid or unavailable tab storage does not block loading. */
         }
-        ready.value = true;
+        if (!current()) return;
+        mainPending = false;
+        batch(() => {
+          settings.value = { ...result, revision: nextRevision };
+          values.value = nextValues;
+          baseline.value = nextBaseline;
+          message.value = restored ? "已恢复当前标签页中的配置草稿；保存时仍会检查仓库版本。" : "";
+          ready.value = true;
+        });
       } catch (e) {
-        if (id === requestId) error.value = errorMessage(e);
+        const notice = errorMessage(e);
+        if (current()) {
+          mainPending = false;
+          error.value = notice;
+        }
+      } finally {
+        if (current()) mainPending = false;
       }
     }
-    watch(() => props.group, load, { immediate: true });
+    void load();
     onBeforeUnmount(() => {
+      alive = false;
       requestId++;
+      relationsRequestId++;
       emit("dirty", false);
     });
     function reload() {
-      if (
-        !dirty.value ||
-        window.confirm(t("重新加载会丢弃当前未保存修改，继续吗？"))
-      ) {
+      if (!canInteract() || busy.value) return;
+      const authentication = authenticationEpoch.value;
+      if ((dirty.value || branchPending.value || unknownSaveObligation.value) &&
+        !window.confirm(t("重新加载会丢弃当前未保存修改，继续吗？"))) return;
+      if (!canInteract() || busy.value || authentication !== authenticationEpoch.value) return;
+      try {
+        sessionStorage.removeItem(storageKey);
+      } catch {}
+      // Storage hooks and parent notifications can synchronously change authority.
+      if (!canInteract() || busy.value || authentication !== authenticationEpoch.value) return;
+      batch(() => {
         ready.value = false;
-        try {
-          sessionStorage.removeItem(storageKey);
-        } catch {}
-        void load();
-        void loadRelations(true);
-      }
+        branchPending.value = false;
+        unknownSaveObligation.value = false;
+      });
+      if (!ownsInstance() || authentication !== authenticationEpoch.value) return;
+      void load(true);
+      if (ownsInstance() && authentication === authenticationEpoch.value) void loadRelations(true);
     }
     async function save() {
-      if (!settings.value) return;
-      busy.value = true;
-      error.value = "";
-      message.value = "";
+      if (!canInteract() || !ready.value || !settings.value || busy.value || unknownSaveObligation.value) return;
+      const operation = { authentication: authenticationEpoch.value, initiated: false };
       const submitted = JSON.parse(JSON.stringify(values.value));
+      const input = {
+        revision: settings.value.revision,
+        changes: JSON.parse(JSON.stringify(changes.value)),
+        saveMode: saveMode.value,
+      };
+      const current = () => ownsInstance() && operation.authentication === authenticationEpoch.value && activeSave === operation;
+      activeSave = operation;
+      batch(() => {
+        busy.value = true;
+        error.value = "";
+        message.value = "";
+      });
       try {
-        const result = await api<SaveResult>(endpoint.value, "PUT", {
-          revision: settings.value.revision,
-          changes: changes.value,
-          saveMode: saveMode.value,
+        if (!current()) return;
+        operation.initiated = true;
+        const result = await api<SaveResult>(endpoint, "PUT", input);
+        if (!current()) return;
+        batch(() => {
+          settings.value = { ...settings.value!, revision: result.revision };
+          baseline.value = submitted;
+          branchPending.value = result.branchPending === true;
+          savedBranch.value = result.branch || "";
+          message.value = result.branchPending ? "" : result.message;
+          if (result.branchPending) error.value = result.message;
+          operation.initiated = false;
         });
-        settings.value.revision = result.revision;
-        baseline.value = submitted;
-        branchPending.value = result.branchPending === true;
-        savedBranch.value = result.branch || "";
-        message.value = result.branchPending ? "" : result.message;
-        if (result.branchPending) error.value = result.message;
-        else emit("saved");
+        if (current() && !result.branchPending) emit("saved");
       } catch (e) {
-        error.value = errorMessage(e);
+        const notice = errorMessage(e);
+        if (current()) {
+          operation.initiated = false;
+          error.value = notice;
+        }
       } finally {
-        busy.value = false;
+        // Settlement owns busy, even when this operation can no longer adopt data.
+        reconcileBoundary();
+        if (alive && activeSave === operation) {
+          activeSave = null;
+          busy.value = false;
+        }
       }
     }
+    const exitControl = () => element("button", {
+      className: classes("text-button settings-exit"),
+      onClick: domEvent(exit),
+    }, t("返回工作台"));
     return () =>
-      settings.value
+      !ownsInstance()
+        ? element("section", { className: classes("notice settings-retired"), role: "status" },
+            element("p", null, t("当前会话或连接已更换，此设置页已停用。")),
+            exitControl())
+        : settings.value
         ? element(
             "section",
             {
@@ -391,21 +497,29 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                   {
                     role: "status",
                     className: classes("settings-state", {
-                      pending: dirty.value,
+                      pending: dirty.value || branchPending.value || unknownSaveObligation.value,
                     }),
                   },
-                  dirty.value ? t("有未保存的更改") : t("已保存"),
+                  dirty.value || branchPending.value || unknownSaveObligation.value ? t("有未保存的更改") : t("已保存"),
                 ),
                 element(SaveButton, {
                   mode: saveMode.value,
                   label: props.embedded ? t(saveMode.value === "branch" ? "分支保存设置" : saveMode.value === "remote" ? "远端保存设置" : "本地保存设置") : undefined,
-                  onModeChange: (value: SaveMode) => { saveMode.value = value; },
+                  onModeChange: (value: SaveMode) => { if (canInteract()) saveMode.value = value; },
+                  canInteract,
                   busy: busy.value,
-                  disabled: !dirty.value && !branchPending.value && saveMode.value !== "branch",
+                  disabled: unknownSaveObligation.value || (!dirty.value && !branchPending.value && saveMode.value !== "branch"),
                   onSave: () => { void save(); },
                 }),
               ),
             ),
+            unknownSaveObligation.value
+              ? element("p", { role: "status", className: classes("notice") },
+                  t(busy.value
+                    ? "登录信息已更新，先前保存的结果暂时无法确认。请等待保存请求结束。"
+                    : "先前保存的结果无法确认，当前表单和版本信息未更新。"))
+              : null,
+            exitControl(),
             savedBranch.value ? element("code", { className: "saved-branch" }, savedBranch.value) : null,
             error.value
               ? element(
@@ -432,7 +546,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                   t(message.value),
                 )
               : null,
-            dirty.value
+            dirty.value || unknownSaveObligation.value || branchPending.value
               ? element(
                   "button",
                   {
@@ -448,12 +562,12 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
               "div",
               { className: classes("card settings-card") },
 
-              relationsError.value
+              relationsError.value || relationsNeedsRetry.value
                 ? element(
                     "p",
                     { className: classes("notice error") },
-                    t("无法加载可选内容："),
-                    t(relationsError.value),
+                    relationsError.value ? t("无法加载可选内容：") : null,
+                    t(relationsError.value || "登录信息已更新，请重试加载选项。"),
                     " ",
                     element(
                       "button",
@@ -506,7 +620,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                                     values.value["skill.svg_sprite"] || "",
                                   ),
                                   onUpdateModelValue: (($event) => {
-                                    values.value[field.path] = $event;
+                                    if (canInteract()) values.value[field.path] = $event;
                                   }) satisfies EventHandler<
                                     typeof ValueEditor,
                                     "onUpdateModelValue"
@@ -523,7 +637,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                                   "full-width": field.kind === "textarea",
                                 }),
                                 onUpdateModelValue: (($event) => {
-                                  values.value[field.path] = $event;
+                                  if (canInteract()) values.value[field.path] = $event;
                                 }) satisfies EventHandler<
                                   typeof FormField,
                                   "onUpdateModelValue"
@@ -545,7 +659,12 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                 )
               : null,
           )
-        : error.value
+        : mainNeedsReload.value
+          ? element("section", { className: classes("notice"), role: "status" },
+              element("p", null, t("登录信息已更新，请重新加载设置。")),
+              element("button", { className: classes("text-button"), onClick: domEvent(reload) }, t("重新加载")),
+              exitControl())
+          : error.value
           ? element(
               "p",
               { role: "alert", className: classes("notice error") },
@@ -555,7 +674,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                 "button",
                 {
                   onClick: domEvent(($event: Event) => {
-                    load();
+                    reload();
                   }),
                 },
                 t("重试"),

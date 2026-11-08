@@ -1,5 +1,11 @@
 // Application copy only. Site content and stored configuration values are never translated.
 export const english: Record<string, string> = {
+  "当前会话或连接已更换，此设置页已停用。": "The session or connection has changed. This settings page is no longer active.",
+  "返回工作台": "Back to dashboard",
+  "登录信息已更新，请重新加载设置。": "Your sign-in details changed. Reload settings to continue.",
+  "登录信息已更新，请重试加载选项。": "Your sign-in details changed. Retry loading options.",
+  "登录信息已更新，先前保存的结果暂时无法确认。请等待保存请求结束。": "Your sign-in details changed. The earlier save outcome is unknown. Wait for the request to finish.",
+  "先前保存的结果无法确认，当前表单和版本信息未更新。": "The earlier save outcome is unknown. This form and its revision have not been updated.",
   "切换工作区": "Switch workspace",
   "工作区": "Workspaces",
   "显示上次缓存的摘要，可能已过期；正在读取最新内容…": "Showing cached summaries that may be out of date. Loading the latest content…",
@@ -1319,6 +1325,12 @@ export const english: Record<string, string> = {
 };
 
 export const chinese: Record<string, string> = {
+  "当前会话或连接已更换，此设置页已停用。": "当前会话或连接已更换，此设置页已停用。",
+  "返回工作台": "返回工作台",
+  "登录信息已更新，请重新加载设置。": "登录信息已更新，请重新加载设置。",
+  "登录信息已更新，请重试加载选项。": "登录信息已更新，请重试加载选项。",
+  "登录信息已更新，先前保存的结果暂时无法确认。请等待保存请求结束。": "登录信息已更新，先前保存的结果暂时无法确认。请等待保存请求结束。",
+  "先前保存的结果无法确认，当前表单和版本信息未更新。": "先前保存的结果无法确认，当前表单和版本信息未更新。",
   "内容有自己的光。": "写下你的下一篇文章。",
   "专注写作，轻松打理你的数字花园。": "专注写作，轻松管理站点。",
   "默认颜色模式": "默认显示模式",
