@@ -26,6 +26,64 @@ function requireThat(condition, code) {
 function fixedCode(error, fallback) {
   return codes.has(error?.message) ? error.message : fallback;
 }
+// Local metadata only: never read args/handles or retain raw text/location.
+// Tuple v1: severity 0..2, kind 0..8, observation window 0..6, source 0..8.
+function captureConsoleFirst(first, message, severity, window, origin) {
+  if (first[1] !== 0) return;
+  first[1] = severity;
+  first[3] = window; // Lock the first event even when either metadata read fails.
+  try {
+    const text = message.text();
+    if (typeof text === 'string' && text.length <= 2048) {
+      const lower = text.toLowerCase();
+      const resource = /^failed to load resource: the server responded with a status of [45][0-9]{2}(?:[ (]|$)/.test(lower);
+      const missing = resource && /^failed to load resource: the server responded with a status of 404(?:[ (]|$)/.test(lower);
+      const matches = [
+        lower.includes('download the react devtools'),
+        ['each child in a list should have a unique', 'cannot update a component', 'invalid dom property', 'you provided a `value` prop', 'you provided a `checked` prop'].some(literal => lower.includes(literal)),
+        lower.includes('failed to decode downloaded font') || lower.includes('ots parsing error'),
+        lower.includes('content security policy'),
+        lower.includes('autofocus processing was blocked'),
+        missing,
+        resource && !missing,
+        lower.includes('[intervention]') || lower.includes('[deprecation]'),
+      ];
+      if (matches.filter(Boolean).length === 1) first[2] = matches.indexOf(true) + 1;
+    }
+  } catch { /* Unknown is evidence, not a reason to alter the sentinel. */ }
+  try {
+    const raw = message.location()?.url;
+    if (typeof raw !== 'string' || raw.length === 0 || raw.length > 2048) return;
+    const url = new URL(raw);
+    if (!['http:', 'https:'].includes(url.protocol)) return;
+    if (!origin) return;
+    if (url.origin !== origin) first[4] = 8;
+    else if (url.pathname === '/') first[4] = 1;
+    else if (url.pathname === '/favicon.ico') first[4] = 5;
+    else if (url.pathname.startsWith('/api/')) first[4] = 6;
+    else if (/^\/assets\/[a-z0-9_.-]+\.(?:js|mjs)$/i.test(url.pathname)) first[4] = 2;
+    else if (/^\/assets\/[a-z0-9_.-]+\.css$/i.test(url.pathname)) first[4] = 3;
+    else if (/^\/assets\/[a-z0-9_.-]+\.(?:woff|woff2)$/i.test(url.pathname)) first[4] = 4;
+    else first[4] = 7;
+  } catch { /* No URL or exception leaves this synchronous callback. */ }
+}
+function projectConsoleFirst(value, count) {
+  requireThat(Array.isArray(value) && value.length === 5 && value.every(Number.isInteger) && value[0] === 1 && value[1] >= 0 && value[1] <= 2 && value[2] >= 0 && value[2] <= 8 && value[3] >= 0 && value[3] <= 6 && value[4] >= 0 && value[4] <= 8, 'report');
+  requireThat(count === 0 ? value.slice(1).every(n => n === 0) : value[1] === 1 || value[1] === 2, 'report');
+  return [...value];
+}
+function projectConsoleDiagnosis(value, index) {
+  const keys = ['schema', 'surface', 'index', 'width', 'height', 'synthetic', 'status', 'primary', 'secondary', 'phases', 'caps', 'samples', 'screenshots', 'pageErrors', 'warnings', 'mutations', 'external', 'dialogs', 'consoleFirst'];
+  requireThat(value && Object.getPrototypeOf(value) === Object.prototype && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key)) && value.schema === 2, 'report');
+  requireThat(value.surface === surface && value.index === index && value.width === COLLECTION_EDGE_SIZES[index][0] && value.height === COLLECTION_EDGE_SIZES[index][1] && value.synthetic === true && ['passed', 'failed'].includes(value.status), 'report');
+  requireThat((value.primary === null || codes.has(value.primary)) && Array.isArray(value.secondary) && value.secondary.length <= codes.size && new Set(value.secondary).size === value.secondary.length && value.secondary.every(code => codes.has(code)), 'report');
+  requireThat(Number.isInteger(value.warnings) && value.warnings >= 0 && value.warnings <= 1000 && (value.status !== 'passed' || value.warnings === 0), 'report');
+  if (value.consoleFirst === null) {
+    requireThat(value.status === 'failed' && value.secondary.includes('report'), 'report');
+    return null; // Explicit diagnostic failure, never observed console absence.
+  }
+  return projectConsoleFirst(value.consoleFirst, value.warnings);
+}
 function observe(child) {
   return new Promise(resolveExit => {
     // Retain a bounded-lifetime error sink even after a timeout/unref: a late
@@ -284,9 +342,10 @@ async function installProbe(page) {
 async function runSize(index, base) {
   const [width, height] = COLLECTION_EDGE_SIZES[index];
   const directory = join(output, `size-${index}`);
-  const report = { schema: 1, surface, index, width, height, synthetic: true, status: 'running', primary: null, secondary: [],
+  const report = { schema: 2, surface, index, width, height, synthetic: true, status: 'running', primary: null, secondary: [],
     phases: { initial: false, tail: false, top: false, forward: false, reverse: false },
-    caps, samples: [], screenshots: [], pageErrors: 0, warnings: 0, mutations: 0, external: 0, dialogs: 0 };
+    caps, samples: [], screenshots: [], pageErrors: 0, warnings: 0, mutations: 0, external: 0, dialogs: 0, consoleFirst: [1, 0, 0, 0, 0] };
+  let consoleWindow = 0;
   let stage = 'setup', server, serverSettled, chrome, chromeSettled, browser, page, client, intercept;
   const pending = new Set();
   const controller = new AbortController();
@@ -379,7 +438,12 @@ async function runSize(index, base) {
     page.setDefaultTimeout(5000);
     page.setDefaultNavigationTimeout(10000);
     page.on('pageerror', () => { report.pageErrors = Math.min(1000, report.pageErrors + 1); });
-    page.on('console', message => { if (['error', 'warn'].includes(message.type())) report.warnings = Math.min(1000, report.warnings + 1); });
+    page.on('console', message => {
+      const type = message.type();
+      if (!['error', 'warn'].includes(type)) return;
+      report.warnings = Math.min(1000, report.warnings + 1);
+      captureConsoleFirst(report.consoleFirst, message, type === 'warn' ? 1 : 2, consoleWindow, origin);
+    });
     page.on('dialog', dialog => { report.dialogs = Math.min(1000, report.dialogs + 1); track(dialog.dismiss()); });
     await page.evaluateOnNewDocument(() => Object.defineProperty(navigator, 'languages', { get: () => ['zh-CN'] }));
     stage = 'auth';
@@ -405,8 +469,11 @@ async function runSize(index, base) {
     page.on('request', intercept);
     stage = 'open';
     await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+    consoleWindow = 1;
     await page.goto(origin, { waitUntil: 'networkidle0' });
+    consoleWindow = 2;
     await page.waitForSelector('.studio-shell');
+    consoleWindow = 3;
     await page.select('.language-switcher select', 'zh-CN');
     await clickText(page, '.sidebar nav button', '合集管理');
     await page.waitForSelector('.content-library .content-row');
@@ -423,6 +490,7 @@ async function runSize(index, base) {
     await client.send('Emulation.setPageScaleFactor', { pageScaleFactor: 1 });
     await page.evaluate(async () => { await document.fonts.ready; await new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))); });
     stage = 'probe';
+    consoleWindow = 4;
     await installProbe(page);
     expectedDialog = await page.evaluate(() => window.collectionEdgeProbe.snapshot().dialog);
     stage = 'initial';
@@ -512,6 +580,7 @@ async function runSize(index, base) {
     report.primary = fixedCode(error, stage);
     report.status = 'failed';
   } finally {
+    consoleWindow = 5;
     controller.abort();
     // Stop page observers only after final evidence. Cleanup cannot replace the
     // primary exception; parent kills this entire owned group on any deadline.
@@ -533,7 +602,13 @@ async function runSize(index, base) {
     catch { secondary('cleanup'); }
     if (report.pageErrors || report.warnings || report.mutations || report.external || report.dialogs) secondary('sentinel');
     if (report.secondary.length) report.status = 'failed';
+    // Catch ONLY tuple malformation before the single terminal publication.
+    // Replace that field with a scalar, never serialize malformed/raw fallback.
+    try { report.consoleFirst = projectConsoleFirst(report.consoleFirst, report.warnings); }
+    catch { report.consoleFirst = null; secondary('report'); report.status = 'failed'; }
     try {
+      // All other contract/serialization/IO failures retain their existing path.
+      report.consoleFirst = projectConsoleDiagnosis(report, index);
       const text = JSON.stringify(report, null, 2) + '\n';
       requireThat(Buffer.byteLength(text) <= caps.bytes, 'report');
       await writeFile(join(directory, 'report.json'), text);
@@ -691,13 +766,18 @@ async function isolatedSize(index) {
     }
     requireThat(bytes.length <= caps.bytes, 'report');
     const report = JSON.parse(bytes.toString('utf8'));
+    // Diagnosis is checked before BOTH outcome branches. Never let malformed
+    // metadata displace a legitimate fixed worker primary or cleanup evidence.
+    let diagnosisValid = true;
+    try { projectConsoleDiagnosis(report, index); }
+    catch { diagnosisValid = false; record.secondary.push('report'); }
     // Preserve the worker's fixed primary code; cleanup and report failures are
     // separate, never a replacement exception containing browser/server detail.
-    if (result.failed) {
-      if (Array.isArray(report.secondary)) record.secondary.push(...report.secondary.filter(code => codes.has(code)).slice(0, codes.size));
-      throw new Error(codes.has(report.primary) ? report.primary : 'worker');
+    if (result.failed || report?.status === 'failed' || !diagnosisValid) {
+      if (Array.isArray(report?.secondary)) record.secondary.push(...report.secondary.filter(code => codes.has(code)).slice(0, codes.size));
+      throw new Error(codes.has(report?.primary) ? report.primary : result.failed ? 'worker' : 'report');
     }
-    requireThat(report.schema === 1 && report.surface === surface && report.index === index && report.width === record.width && report.height === record.height && report.synthetic === true && report.status === 'passed' && report.primary === null && report.secondary.length === 0, 'matrix');
+    requireThat(report.schema === 2 && report.surface === surface && report.index === index && report.width === record.width && report.height === record.height && report.synthetic === true && report.status === 'passed' && report.primary === null && report.secondary.length === 0, 'matrix');
     requireThat(Object.keys(report.phases).sort().join(',') === 'forward,initial,reverse,tail,top' && Object.values(report.phases).every(value => value === true), 'matrix');
     requireThat(report.samples.length > 0 && report.samples.length <= caps.samples && report.screenshots.length === 5 && report.pageErrors === 0 && report.warnings === 0 && report.mutations === 0 && report.external === 0 && report.dialogs === 0, 'matrix');
     record.status = 'passed';
