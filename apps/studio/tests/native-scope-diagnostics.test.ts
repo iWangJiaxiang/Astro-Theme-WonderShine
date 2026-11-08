@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runInNewContext } from 'node:vm';
+import { createContext, runInContext, runInNewContext } from 'node:vm';
 
 type Caps = {
   records: number; bytes: number; faults: number; runtimeFaults: number; nodeFaults: number; number: number;
@@ -45,11 +45,15 @@ type Terminal = {
   lastObservedAppErrorWriter: string | null; writerKnown: boolean;
   appNotice: boolean | null; relationsNotice: boolean | null; records: Row[];
 };
-type Page = { evaluate(callback: unknown, args: { hook: string; owner: number }): Promise<unknown> };
+type Args = { hook: string; owner: number };
+type Handle = { evaluate(callback: unknown, args: Args): unknown; dispose(): unknown };
+type Page = { evaluateHandle(callback: unknown, args: Args): unknown };
+type Clock = { setTimeout(callback: () => void, delay: number): number; clearTimeout(timer: number): void };
 type Collector = { begin(page: Page): Promise<void>; finish(page: Page, path: string, outcome: string): Promise<void> };
 type Report = {
   version: number; scope: string; expected: boolean; owner: number; outcome: string; status: string; capture: string;
-  beginAttempted: boolean; started: boolean; terminalAttempted: boolean;
+  beginAttempted: boolean; started: boolean; terminalAttempted: boolean; terminalRpcAttempted: boolean;
+  rpc: { deadlineMs: number; begin: string; terminal: string; binding: string };
   timingPerturbed: boolean; terminalAfterCatchDiagnostics: boolean;
   sharedWorkObserved: boolean; beforeStartObserved: boolean; currentAppWriterProven: boolean;
   caps: Caps; columns: string[];
@@ -65,7 +69,7 @@ const { nativeScopeBuildPlugin, nativeScopeContract: contract } = await import(p
 };
 const { projectNativeScopeTerminal, createNativeScopeDiagnostics } = await import(diagnosticsURL) as {
   projectNativeScopeTerminal(value: unknown, owner: number): Terminal;
-  createNativeScopeDiagnostics(expected: boolean): Collector | null;
+  createNativeScopeDiagnostics(expected: boolean, options?: { clock: Clock }): Collector | null;
 };
 const virtualId = 'virtual:studio-test-native-scope-trace';
 const resolvedVirtualId = `\0${virtualId}`;
@@ -275,6 +279,95 @@ test('native scope plugin: explicit CI build and exact-source fail-closed contra
     ]) {
       assert.notEqual(changed, target.source);
       assert.throws(() => configuredPlugin().transform(changed, target.id), /sentinels changed/);
+    }
+  });
+
+  await t.test('Settings relations instrumentation preserves refresh ownership and current=true guard semantics', async () => {
+    const target = targets.find(target => target.name === 'components/SettingsView.tsx');
+    assert.ok(target);
+    const result = configuredPlugin().transform(target.source, target.id);
+    assert.ok(result);
+    const start = '    let relationsRequestId = 0, relationsAlive = true, relationsRefreshPending = false;';
+    const end = '    watch(locale, () => {';
+    function fragment(source: string) {
+      const first = source.indexOf(start), last = source.indexOf(end, first);
+      assert.ok(first >= 0 && last > first);
+      // Erase only the two TS-only constructs in this bounded function fixture.
+      return source.slice(first, last).replaceAll('api<ArticleSummary[]>', 'api').replace('item.publicPath!', 'item.publicPath');
+    }
+    const original = fragment(target.source), transformed = fragment(result.code);
+    assert.match(transformed, /relationsRefreshPending = relationsRefreshPending \|\| refresh;\n\s+const __nsCaller = __studioNativeScope\.caller\("settings-relations", \(\) => \(\{ counter: id, refresh: relationsRefreshPending \}\)\);/);
+    assert.equal(transformed.split('current()').length, original.split('current()').length,
+      'Instrumentation must not evaluate current() an extra time');
+    assert.ok(transformed.includes('"/content" + (relationsRefreshPending ? "?refresh=1" : "")'));
+    for (const state of ['current', 'replaced', 'unmounted'] as const) {
+      for (const rejection of [false, true]) {
+        for (const [refresh, inheritedRefresh] of [[false, false], [true, false], [false, true], [true, true]]) {
+          const effectiveRefresh = refresh || inheritedRefresh;
+          async function execute(source: string, trace: Runtime) {
+            const pending = deferred<unknown>();
+            const paths: string[] = [];
+            const globals = {
+              __studioNativeScope: trace,
+              relationsLoading: { value: false }, relationsError: { value: 'old-error' },
+              unresolvedItems: { value: ['old-unresolved'] as unknown[] },
+              postItems: { value: ['old-posts'] as unknown[] }, links: { value: ['old-links'] as unknown[] },
+              errorMessage: () => 'fixed-error',
+              api: (path: string) => { paths.push(path); return pending.promise; },
+            };
+            const context = createContext(globals);
+            runInContext(source, context);
+            // Simulate an inherited unfinished refresh obligation independently of
+            // this invocation's refresh argument, as locale replacement does.
+            runInContext(`relationsRefreshPending = ${inheritedRefresh};`, context);
+            const operation = runInContext(`loadRelations(${refresh})`, context) as Promise<void>;
+            assert.deepEqual(paths, [effectiveRefresh ? '/content?refresh=1' : '/content']);
+            if (state === 'replaced') runInContext('relationsRequestId++;', context);
+            if (state === 'unmounted') runInContext('relationsAlive = false; relationsRequestId++;', context);
+            if (rejection) pending.reject(new Error('private-relations-error'));
+            else pending.resolve([{ title: 'fixed-title', publicPath: '/post', kind: 'post', path: 'post.md', linkWarning: true }]);
+            await operation;
+            return JSON.parse(JSON.stringify({
+              loading: globals.relationsLoading.value, error: globals.relationsError.value,
+              unresolved: globals.unresolvedItems.value, posts: globals.postItems.value, links: globals.links.value,
+              refreshPending: runInContext('relationsRefreshPending', context),
+            })) as { loading: boolean; error: string; refreshPending: boolean };
+          }
+          const f = runtimeFixture();
+          assert.ok(f.hook);
+          assert.ok(f.hook.start(17));
+          const observed = await execute(transformed, f.trace);
+          const baseline = await execute(original, runtimeFixture().trace);
+          assert.deepEqual(observed, baseline, `${state}, rejection=${rejection}, refresh=${refresh}: business state must be unchanged`);
+          const snapshot = f.hook.finish(17);
+          assert.ok(snapshot);
+          const records = projectNativeScopeTerminal(snapshot, 17).records;
+          const current = state === 'current', counter = current ? 1 : 2;
+          assert.deepEqual(Array.from(records, record => [record[2], record[3], record[10], record[14], record[19]]), [
+            ['caller-start', 'settings-relations', 1, null, effectiveRefresh],
+            [rejection ? 'caller-catch' : 'caller-return', 'settings-relations', null, null, null],
+            ['guard', 'settings-relations', counter, current, null],
+            ...(rejection && current ? [['notice-write', 'settings-relations', null, null, null]] : []),
+            ['caller-finally', 'settings-relations', counter, current, null],
+            ...(current ? [['loading-clear', 'settings-relations', null, null, null]] : []),
+          ]);
+          assert.equal(observed.loading, !current);
+          assert.equal(observed.refreshPending, !current && effectiveRefresh);
+          assert.equal(observed.error, rejection && current ? 'fixed-error' : '');
+        }
+      }
+    }
+
+    // Every replaced guard sentinel is fail-closed, including the obsolete
+    // unguarded catch/finally shape that caused the remote regression.
+    for (const [before, after] of [
+      ['        if (!current()) return;', '        if (false) return;'],
+      ['        if (current()) relationsError.value = errorMessage(e);', '        relationsError.value = errorMessage(e);'],
+      ['        if (current()) {\n          relationsRefreshPending = false;', '        {\n          relationsRefreshPending = false;'],
+      ['      relationsRefreshPending = relationsRefreshPending || refresh;', '      relationsRefreshPending = refresh;'],
+    ]) {
+      assert.equal(target.source.split(before).length - 1, 1);
+      assert.throws(() => configuredPlugin().transform(target.source.replace(before, after), target.id), /sentinels changed/);
     }
   });
 
@@ -672,22 +765,79 @@ test('native scope validator: closed schema, counts, bounds and causal links', {
   });
 });
 
+function deferred<T>() {
+  let resolve!: (value: T) => void, reject!: (error: unknown) => void;
+  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+async function flushMicrotasks() {
+  for (let index = 0; index < 12; index++) await Promise.resolve();
+}
+
+function fakeClock() {
+  let now = 0, id = 0;
+  const timers = new Map<number, { at: number; callback: () => void }>();
+  const clock: Clock = {
+    setTimeout(callback, delay) { const key = ++id; timers.set(key, { at: now + delay, callback }); return key; },
+    clearTimeout(key) { timers.delete(key); },
+  };
+  return {
+    clock, pending: () => timers.size,
+    async advance(ms: number) {
+      now += ms;
+      for (const [key, timer] of timers) {
+        if (timer.at <= now) { timers.delete(key); timer.callback(); }
+      }
+      await flushMicrotasks();
+    },
+  };
+}
+
 async function collectorFixture(t: TestContext, options: {
   start?: (owner: number) => unknown; stop?: (owner: number) => unknown; directoryPath?: boolean;
+  beginRpc?: (handle: Handle) => unknown; terminalRpc?: (run: () => unknown) => unknown;
+  envelope?: (value: Record<string, unknown>) => unknown; dispose?: () => unknown;
+  hookDescriptors?: Record<string, PropertyDescriptor>;
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'studio-native-scope-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const reportPath = join(root, 'report.json');
   if (options.directoryPath) await mkdir(reportPath);
-  const collector = createNativeScopeDiagnostics(true);
+  const time = fakeClock();
+  const collector = createNativeScopeDiagnostics(true, { clock: time.clock });
   assert.ok(collector);
-  const calls: { hook: string; owner: number }[] = [];
-  const page: Page = {
-    // Never execute the supplied callback: RPC results are explicit unit-test data.
-    async evaluate(_callback, args) {
+  const calls: Args[] = [];
+  let starts = 0, stops = 0, disposals = 0, capsule: unknown;
+  const sandbox: Record<string, unknown> = {
+    document: {}, location: { href: 'https://same.example.test/' }, performance: { timeOrigin: 10 },
+  };
+  const hook = {
+    version: 1,
+    start(owner: number) { starts++; return options.start ? options.start(owner) : { version: 1, owner, sessionId: 1 }; },
+    finish(owner: number) { stops++; return options.stop ? options.stop(owner) : terminal(owner); },
+  };
+  Object.defineProperties(hook, options.hookDescriptors ?? {});
+  Object.defineProperty(sandbox, contract.hook, { value: Object.freeze(hook), configurable: false, writable: false });
+  const context = createContext(sandbox);
+  const handle: Handle = {
+    evaluate(callback, args) {
       calls.push({ ...args });
-      if (calls.length === 1) return options.start ? options.start(args.owner) : { version: 1, owner: args.owner, sessionId: 1 };
-      return options.stop ? options.stop(args.owner) : terminal(args.owner);
+      const run = () => {
+        sandbox.capsule = capsule; sandbox.args = args;
+        const value = runInContext(`(${String(callback)})(capsule, args)`, context) as Record<string, unknown>;
+        return options.envelope ? options.envelope(value) : value;
+      };
+      return options.terminalRpc ? options.terminalRpc(run) : run();
+    },
+    dispose() { disposals++; return options.dispose?.(); },
+  };
+  const page: Page = {
+    evaluateHandle(callback, args) {
+      calls.push({ ...args });
+      sandbox.args = args;
+      capsule = runInContext(`(${String(callback)})(args)`, context);
+      return options.beginRpc ? options.beginRpc(handle) : handle;
     },
   };
   async function report() {
@@ -700,7 +850,8 @@ async function collectorFixture(t: TestContext, options: {
     assert.ok(value.node.faults.length + (value.terminal?.faults.length ?? 0) <= contract.caps.faults);
     return value;
   }
-  return { collector, page, calls, reportPath, report };
+  return { collector, page, handle, sandbox, calls, time, reportPath, report,
+    counts: () => ({ starts, stops, disposals }), capsule: () => capsule };
 }
 
 async function withFailureSignals(action: (messages: unknown[][]) => Promise<void>) {
@@ -732,7 +883,13 @@ test('native scope collector: one begin/terminal RPC, strict completeness and bo
       assert.equal(f.calls[0].hook, contract.hook);
       assert.equal(f.calls[0].owner, f.calls[1].owner);
       const report = await f.report();
+      assert.equal(report.version, 2);
       assert.equal(report.owner, f.calls[0].owner);
+      assert.equal(report.terminalRpcAttempted, true);
+      assert.deepEqual(report.rpc, { deadlineMs: 3000, begin: 'handle-received', terminal: 'returned', binding: 'matched' });
+      assert.deepEqual(f.counts(), { starts: 1, stops: 1, disposals: 1 });
+      assert.equal(f.time.pending(), 0);
+      assert.ok(Object.isFrozen(f.capsule()));
       assert.equal(report.status, 'complete');
       assert.equal(report.capture, 'stopped');
       assert.equal(report.outcome, 'passed');
@@ -745,6 +902,7 @@ test('native scope collector: one begin/terminal RPC, strict completeness and bo
       assert.equal(report.beforeStartObserved, false);
       assert.equal(report.currentAppWriterProven, false);
       assert.deepEqual(report.caps, contract.caps);
+      assert.deepEqual(report.caps, { records: 64, bytes: 16384, faults: 8, runtimeFaults: 4, nodeFaults: 4, number: 2147483647 });
       assert.deepEqual(report.columns, contract.columns);
       assert.equal(report.terminal?.active, false);
     });
@@ -763,8 +921,9 @@ test('native scope collector: one begin/terminal RPC, strict completeness and bo
           assert.equal(report.capture, 'start-unknown');
           assert.equal(report.started, false);
           assert.equal(report.terminalAttempted, true);
-          assert.ok(report.terminal, 'A valid terminal cannot erase the unknown start');
-          assert.deepEqual(report.node.faults, [unknown === 'throw' ? 'start-rpc' : 'start-schema', 'incomplete']);
+          assert.equal(report.terminalRpcAttempted, true);
+          assert.ok(report.terminal, 'A valid terminal cannot erase an unknown start ack');
+          assert.deepEqual(report.node.faults, ['start-schema', 'incomplete']);
           const text = await readFile(f.reportPath, 'utf8');
           await f.collector.finish(f.page, f.reportPath, 'failed');
           assert.equal(await readFile(f.reportPath, 'utf8'), text, 'Repeated finish must not rewrite or touch the hook');
@@ -783,6 +942,9 @@ test('native scope collector: one begin/terminal RPC, strict completeness and bo
         assert.deepEqual(f.calls, []);
         const report = await f.report();
         assert.equal(report.capture, 'not-started');
+        assert.equal(report.terminalRpcAttempted, false);
+        await f.collector.begin(f.page);
+        assert.equal(f.calls.length, 0, 'Begin cannot start after finalization');
         assert.equal(report.status, 'incomplete');
         assert.equal(report.terminal, null);
         assert.deepEqual(report.node.faults, ['incomplete']);
@@ -872,7 +1034,7 @@ test('native scope collector: one begin/terminal RPC, strict completeness and bo
             const value = args[0];
             // Inject only the collector's first complete-report measurement.
             // Subsequent fallback measurements use the real UTF-8 byte length.
-            if (typeof value === 'string' && value.startsWith('{"version":1,"scope":"final-clone-to-outer-finally"')) {
+            if (typeof value === 'string' && value.startsWith('{"version":2,"scope":"final-clone-to-outer-finally"')) {
               measured.push(value);
               if (measured.length === 1) return contract.caps.bytes + 1;
             }
@@ -908,12 +1070,341 @@ test('native scope collector: one begin/terminal RPC, strict completeness and bo
       await withFailureSignals(async messages => {
         await f.collector.begin(f.page);
         await assert.doesNotReject(() => f.collector.finish(f.page, f.reportPath, 'passed'));
-        assert.deepEqual((await f.report()).node.faults, ['terminal-rpc', 'terminal-schema', 'incomplete']);
+        assert.deepEqual((await f.report()).node.faults, ['terminal-rpc', 'incomplete']);
         assert.equal(process.exitCode, 1);
         assert.equal(messages.length, 1);
         assertPrivateFree(JSON.stringify(messages));
       });
     });
+
+    for (const throwing of ['version-getter', 'start-getter', 'ack-getter', 'start-side-effect'] as const) {
+      await t.test(`${throwing} retains the original document capsule without retaining raw errors`, async t => {
+        let effects = 0;
+        const fail = () => { throw new Error('private-browser-getter'); };
+        const f = await collectorFixture(t, {
+          hookDescriptors: throwing === 'version-getter' ? { version: { get: fail } }
+            : throwing === 'start-getter' ? { start: { get: fail } } : undefined,
+          start: owner => {
+            effects++;
+            if (throwing === 'start-side-effect') throw new Error('private-start-after-activation');
+            return Object.defineProperty({ owner, sessionId: 1 }, 'version', { enumerable: true, get: fail });
+          },
+        });
+        await withFailureSignals(async () => {
+          await f.collector.begin(f.page);
+          assert.ok(f.capsule());
+          await f.collector.finish(f.page, f.reportPath, 'passed');
+          const report = await f.report();
+          assert.equal(report.rpc.begin, 'handle-received');
+          assert.equal(report.terminalRpcAttempted, true);
+          assert.equal(report.started, false);
+          assert.equal(report.status, 'incomplete');
+          assert.equal(f.calls.length, 2);
+          assert.equal(f.counts().disposals, 1);
+          assert.equal(effects, throwing.endsWith('getter') && throwing !== 'ack-getter' ? 0 : 1);
+          assert.equal(f.counts().stops, throwing === 'version-getter' ? 0 : 1);
+          if (throwing !== 'version-getter') assert.deepEqual(report.node.faults, ['start-schema', 'incomplete']);
+        });
+      });
+    }
+
+    await t.test('duplicate finalization during persistence and after completion shares immutable evidence', async t => {
+      const f = await collectorFixture(t);
+      await withFailureSignals(async messages => {
+        await f.collector.begin(f.page);
+        const originalStringify = JSON.stringify;
+        let finish!: Promise<void>, duringWrite!: Promise<void>, serializations = 0;
+        try {
+          // Schedule the duplicate after serialization, while mkdir/write are
+          // pending. No filesystem patching or global fake timers are needed.
+          JSON.stringify = ((value: unknown, ...args: unknown[]) => {
+            if (value && typeof value === 'object' && 'scope' in value && value.scope === 'final-clone-to-outer-finally') {
+              serializations++;
+              queueMicrotask(() => { duringWrite = f.collector.finish(f.page, f.reportPath, 'failed'); });
+            }
+            return Reflect.apply(originalStringify, JSON, [value, ...args]);
+          }) as typeof JSON.stringify;
+          finish = f.collector.finish(f.page, f.reportPath, 'passed');
+          await finish;
+        } finally { JSON.stringify = originalStringify; }
+        assert.strictEqual(duringWrite, finish);
+        assert.strictEqual(f.collector.finish(f.page, f.reportPath, 'failed'), finish);
+        const original = await readFile(f.reportPath, 'utf8');
+        const report = await f.report();
+        assert.equal(report.outcome, 'passed');
+        assert.equal(report.status, 'complete');
+        assert.deepEqual(report.node.faults, []);
+        assert.equal(serializations, 1);
+        assert.equal(process.exitCode, undefined);
+        assert.deepEqual(messages, []);
+        assert.equal(await readFile(f.reportPath, 'utf8'), original);
+        assert.deepEqual(f.counts(), { starts: 1, stops: 1, disposals: 1 });
+      });
+    });
+
+    for (const delivery of ['sync-throw', 'reject', 'deadline-handle', 'deadline-reject'] as const) {
+      await t.test(`begin ${delivery}: bounded wait, no fallback and no late evidence adoption`, async t => {
+        const pending = deferred<Handle>();
+        const f = await collectorFixture(t, { beginRpc: () => {
+          if (delivery === 'sync-throw') throw new Error('private-sync');
+          if (delivery === 'reject') return Promise.reject(new Error('private-reject'));
+          return pending.promise;
+        } });
+        await withFailureSignals(async () => {
+          const begin = f.collector.begin(f.page);
+          if (delivery.startsWith('deadline')) {
+            await f.time.advance(2999);
+            assert.equal(f.time.pending(), 1);
+            await f.time.advance(1);
+          }
+          await begin;
+          // Late arrival even BEFORE finalization is quarantined, not adopted.
+          if (delivery === 'deadline-handle') pending.resolve(f.handle);
+          if (delivery === 'deadline-reject') pending.reject(new Error('private-late'));
+          await flushMicrotasks();
+          await f.collector.finish(f.page, f.reportPath, 'passed');
+          const report = await f.report();
+          assert.equal(report.started, false);
+          assert.equal(report.status, 'incomplete');
+          assert.equal(report.terminalRpcAttempted, false);
+          assert.equal(report.rpc.begin, delivery.startsWith('deadline') ? 'deadline' : 'rejected');
+          assert.equal(report.rpc.terminal, 'not-dispatched');
+          assert.equal(report.rpc.binding, 'unavailable');
+          assert.deepEqual(report.node.faults, [delivery.startsWith('deadline') ? 'start-deadline' : 'start-rpc', 'incomplete']);
+          assert.equal(f.calls.length, 1);
+          assert.equal(f.counts().stops, 0);
+          assert.equal(f.counts().disposals, delivery === 'deadline-handle' ? 1 : 0);
+          assert.equal(f.time.pending(), 0);
+        });
+      });
+    }
+
+    await t.test('timely settlement just before each deadline clears timers without an extra ack RPC', async t => {
+      const beginReply = deferred<Handle>(), terminalReply = deferred<unknown>();
+      let remote!: () => unknown;
+      const f = await collectorFixture(t, {
+        beginRpc: () => beginReply.promise,
+        terminalRpc: run => { remote = run; return terminalReply.promise; },
+      });
+      await withFailureSignals(async messages => {
+        const begin = f.collector.begin(f.page);
+        await f.time.advance(2999);
+        beginReply.resolve(f.handle);
+        await begin;
+        assert.equal(f.time.pending(), 0);
+        assert.equal(f.calls.length, 1, 'No getProperty/jsonValue/ack RPC may be issued');
+        const finish = f.collector.finish(f.page, f.reportPath, 'passed');
+        await flushMicrotasks();
+        await f.time.advance(2999);
+        terminalReply.resolve(remote());
+        await finish;
+        await f.time.advance(3000);
+        assert.equal((await f.report()).status, 'complete');
+        assert.equal(f.time.pending(), 0);
+        assert.deepEqual(f.counts(), { starts: 1, stops: 1, disposals: 1 });
+        assert.deepEqual(messages, []);
+      });
+    });
+
+    await t.test('never-settled terminal requires only its fixed deadline', async t => {
+      const f = await collectorFixture(t, { terminalRpc: () => new Promise(() => {}) });
+      await withFailureSignals(async () => {
+        await f.collector.begin(f.page);
+        const finish = f.collector.finish(f.page, f.reportPath, 'passed');
+        await flushMicrotasks();
+        await f.time.advance(3000);
+        await finish;
+        assert.deepEqual((await f.report()).node.faults, ['terminal-deadline', 'incomplete']);
+        assert.equal(f.time.pending(), 0);
+        assert.equal(f.counts().disposals, 1);
+      });
+    });
+
+    await t.test('never-settled begin can finalize; handle arriving after export only disposes once', async t => {
+      const pending = deferred<Handle>();
+      const disposal = deferred<void>();
+      const f = await collectorFixture(t, { beginRpc: () => pending.promise, dispose: () => disposal.promise });
+      await withFailureSignals(async messages => {
+        const begin = f.collector.begin(f.page);
+        const finish = f.collector.finish(f.page, f.reportPath, 'failed');
+        await f.time.advance(3000);
+        await begin; await finish;
+        const original = await readFile(f.reportPath, 'utf8');
+        pending.resolve(f.handle);
+        await flushMicrotasks();
+        assert.equal(f.counts().disposals, 1);
+        assert.equal(f.counts().stops, 0);
+        await f.time.advance(3000); // Disposal never settles; its deadline is independent.
+        disposal.reject(new Error('private-late-dispose'));
+        await flushMicrotasks();
+        assert.equal(await readFile(f.reportPath, 'utf8'), original);
+        assert.equal(f.time.pending(), 0);
+        assert.equal(messages.length, 1);
+      });
+    });
+
+    for (const late of ['snapshot', 'reject'] as const) {
+      await t.test(`terminal deadline with late ${late} never cancels, upgrades or rewrites evidence`, async t => {
+        const pending = deferred<unknown>();
+        let remote!: () => unknown;
+        const f = await collectorFixture(t, { terminalRpc: run => { remote = run; return pending.promise; } });
+        await withFailureSignals(async messages => {
+          await f.collector.begin(f.page);
+          const finish = f.collector.finish(f.page, f.reportPath, 'passed');
+          await flushMicrotasks();
+          await f.time.advance(2999);
+          assert.equal(f.counts().disposals, 0);
+          await f.time.advance(1);
+          await finish;
+          const report = await f.report();
+          const original = await readFile(f.reportPath, 'utf8');
+          assert.equal(report.started, false, 'A handle alone is not ack evidence');
+          assert.equal(report.capture, 'start-unknown');
+          assert.equal(report.status, 'incomplete');
+          assert.equal(report.terminal, null);
+          assert.equal(report.terminalRpcAttempted, true);
+          assert.deepEqual(report.rpc, { deadlineMs: 3000, begin: 'handle-received', terminal: 'deadline', binding: 'unverified' });
+          assert.deepEqual(report.node.faults, ['terminal-deadline', 'incomplete']);
+          assert.equal(f.counts().stops, 0);
+          if (late === 'snapshot') pending.resolve(remote());
+          else pending.reject(new Error('private-late-terminal'));
+          await flushMicrotasks();
+          assert.equal(f.counts().stops, late === 'snapshot' ? 1 : 0, 'Timeout does not cancel remote execution');
+          assert.equal(await readFile(f.reportPath, 'utf8'), original);
+          assert.equal(f.counts().disposals, 1);
+          assert.equal(f.calls.length, 2);
+          assert.equal(f.time.pending(), 0);
+          assert.equal(messages.length, 1);
+        });
+      });
+    }
+
+    await t.test('document mismatch is rejected before even inspecting the new realm hook', async t => {
+      const f = await collectorFixture(t);
+      await withFailureSignals(async () => {
+        await f.collector.begin(f.page);
+        // Identical URL/timeOrigin and owner/session metadata cannot prove identity.
+        f.sandbox.document = {};
+        let hookTouches = 0;
+        const guardedObject = Object.create(Object) as typeof Object;
+        guardedObject.getOwnPropertyDescriptor = () => { hookTouches++; throw new Error('private-new-realm-hook'); };
+        f.sandbox.Object = guardedObject;
+        await f.collector.finish(f.page, f.reportPath, 'failed');
+        const report = await f.report();
+        assert.equal(report.rpc.binding, 'mismatch');
+        assert.equal(report.started, false);
+        assert.equal(report.terminal, null);
+        assert.equal(report.status, 'incomplete');
+        assert.deepEqual(report.node.faults, ['document', 'incomplete']);
+        assert.equal(hookTouches, 0);
+        assert.equal(f.counts().stops, 0);
+      });
+    });
+
+    await t.test('destroyed original context rejects without using the replacement page', async t => {
+      const f = await collectorFixture(t, { terminalRpc: () => Promise.reject(new Error('private-context-destroyed')) });
+      let replacementTouches = 0;
+      const replacement: Page = { evaluateHandle() { replacementTouches++; throw new Error('private-replacement'); } };
+      await withFailureSignals(async () => {
+        await f.collector.begin(f.page);
+        await f.collector.finish(replacement, f.reportPath, 'failed');
+        assert.equal((await f.report()).rpc.binding, 'unverified');
+        assert.equal(replacementTouches, 0);
+        assert.equal(f.counts().stops, 0);
+        assert.equal(f.calls.length, 2);
+      });
+    });
+
+    for (const disposal of ['throw', 'reject', 'never'] as const) {
+      await t.test(`best-effort disposal ${disposal} cannot delay finish or alter evidence`, async t => {
+        const f = await collectorFixture(t, { dispose: () => {
+          if (disposal === 'throw') throw new Error('private-dispose');
+          if (disposal === 'reject') return Promise.reject(new Error('private-dispose'));
+          return new Promise(() => {});
+        } });
+        await withFailureSignals(async messages => {
+          await f.collector.begin(f.page);
+          await f.collector.finish(f.page, f.reportPath, 'passed');
+          assert.equal((await f.report()).status, 'complete');
+          assert.equal(f.counts().disposals, 1);
+          await f.time.advance(3000);
+          assert.equal(f.time.pending(), 0);
+          assert.equal(process.exitCode, undefined);
+          assert.deepEqual(messages, []);
+        });
+      });
+    }
+
+    for (const corrupt of [
+      (value: Record<string, unknown>) => ({ ...value, privatePayload: 'private-envelope' }),
+      (value: Record<string, unknown>) => ({ ...value, ackValid: 1 }),
+      (value: Record<string, unknown>) => ({ ...value, binding: 'private-binding' }),
+      (value: Record<string, unknown>) => ({ ...value, binding: 'mismatch' }),
+      (value: Record<string, unknown>) => ({ ...value, version: 2 }),
+    ]) {
+      await t.test('closed envelope rejects unknown fields, types and contradictory binding', async t => {
+        const f = await collectorFixture(t, { envelope: corrupt });
+        await withFailureSignals(async () => {
+          await f.collector.begin(f.page);
+          await f.collector.finish(f.page, f.reportPath, 'passed');
+          const report = await f.report();
+          assert.equal(report.started, false);
+          assert.equal(report.terminal, null);
+          assert.equal(report.rpc.binding, 'unverified');
+          assert.deepEqual(report.node.faults, ['terminal-schema', 'incomplete']);
+        });
+      });
+    }
+
+    await t.test('concurrent duplicate methods dispatch once and never write a second artifact', async t => {
+      const pending = deferred<Handle>();
+      const f = await collectorFixture(t, { beginRpc: () => pending.promise });
+      await withFailureSignals(async () => {
+        const begin = f.collector.begin(f.page);
+        await f.collector.begin(f.page);
+        const finish = f.collector.finish(f.page, f.reportPath, 'passed');
+        const duplicate = f.collector.finish(f.page, f.reportPath, 'passed');
+        assert.strictEqual(duplicate, finish);
+        pending.resolve(f.handle);
+        await begin; await finish;
+        const original = await readFile(f.reportPath, 'utf8');
+        assert.equal((await f.report()).status, 'incomplete');
+        assert.deepEqual(f.counts(), { starts: 1, stops: 1, disposals: 1 });
+        await f.collector.begin(f.page);
+        await f.collector.finish(f.page, f.reportPath, 'passed');
+        assert.equal(await readFile(f.reportPath, 'utf8'), original);
+        assert.equal(f.calls.length, 2);
+        assert.equal(f.time.pending(), 0);
+      });
+    });
+
+    for (const failure of ['begin-deadline', 'terminal-deadline', 'identity'] as const) {
+      await t.test(`${failure} preserves the original propagated primary exception`, async t => {
+        const f = await collectorFixture(t, {
+          beginRpc: failure === 'begin-deadline' ? () => new Promise(() => {}) : undefined,
+          terminalRpc: failure === 'terminal-deadline' ? () => new Promise(() => {}) : undefined,
+        });
+        const primary = new Error('private-primary');
+        await withFailureSignals(async () => {
+          const begin = f.collector.begin(f.page);
+          if (failure === 'begin-deadline') await f.time.advance(3000);
+          await begin;
+          if (failure === 'identity') f.sandbox.document = {};
+          const operation = (async () => {
+            try { throw primary; }
+            finally {
+              const finish = f.collector.finish(f.page, f.reportPath, 'failed');
+              await flushMicrotasks();
+              if (failure === 'terminal-deadline') await f.time.advance(3000);
+              await finish;
+            }
+          })();
+          await assert.rejects(operation, error => error === primary);
+          assert.equal((await f.report()).status, 'incomplete');
+          assert.equal(process.exitCode, 1);
+        });
+      });
+    }
 
     await t.test('late EISDIR write failure is nonthrowing, signals failure and cannot replace a primary error', async t => {
       const f = await collectorFixture(t, { directoryPath: true });

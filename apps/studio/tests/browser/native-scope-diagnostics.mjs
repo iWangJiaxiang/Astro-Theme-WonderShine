@@ -10,7 +10,45 @@ const exact = (value, keys) => value && typeof value === 'object' && !Array.isAr
   && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
 const terminalKeys = ['version', 'owner', 'sessionId', 'active', 'stoppedAt', 'attempts', 'retainedRecords', 'droppedRecords',
   'faultAttempts', 'faults', 'droppedFaults', 'saturated', 'failed', 'lastObservedAppErrorWriter', 'writerKnown', 'appNotice', 'relationsNotice', 'records'];
-const nodeCodes = ['start-rpc', 'start-schema', 'terminal-rpc', 'terminal-schema', 'incomplete', 'size', 'serialize', 'write'];
+const nodeCodes = ['start-rpc', 'start-schema', 'start-deadline', 'terminal-rpc', 'terminal-schema', 'terminal-deadline', 'document', 'incomplete', 'size', 'serialize', 'write'];
+const deadlineMs = 3000;
+const nodeClock = { setTimeout: (callback, delay) => setTimeout(callback, delay), clearTimeout: timer => clearTimeout(timer) };
+
+// A deadline ends Node's wait, not remote execution. Both late branches remain
+// handled; only late begin handles need cleanup, never a late stop or retry.
+function settle(operation, clock, onLateValue = () => {}, detached = false) {
+  return new Promise(resolve => {
+    let settled = false;
+    const timer = clock.setTimeout(() => {
+      settled = true;
+      resolve({ status: 'deadline' });
+    }, deadlineMs);
+    if (detached) timer?.unref?.();
+    const complete = result => {
+      if (settled) {
+        if (result.status === 'returned') {
+          try { onLateValue(result.value); } catch { /* Cleanup cannot affect evidence. */ }
+        }
+        return;
+      }
+      settled = true;
+      clock.clearTimeout(timer);
+      resolve(result);
+    };
+    try {
+      Promise.resolve(operation()).then(
+        value => complete({ status: 'returned', value }),
+        () => complete({ status: 'rejected' }),
+      );
+    } catch { complete({ status: 'rejected' }); }
+  });
+}
+
+function disposeHandle(handle, clock) {
+  // Detached, bounded and rejection-handled, including a handle delivered after
+  // begin timed out. Disposal is resource cleanup, not another capture attempt.
+  void settle(() => handle?.dispose(), clock, undefined, true);
+}
 let nextOwner = 0;
 
 // Validate first, project second: no unknown browser property reaches the artifact.
@@ -66,12 +104,16 @@ export function projectNativeScopeTerminal(value, owner) {
 }
 
 // Allocate the owner before the first RPC. Each collector has exactly one begin
-// attempt and one terminal attempt; an unknown begin result is never retried.
-export function createNativeScopeDiagnostics(expected) {
+// attempt and one terminal finalization; an unknown begin result is never retried.
+// Clock injection is collector-scoped for deterministic unit fixtures only; the
+// deadline and capture caps are fixed, not caller-configurable.
+export function createNativeScopeDiagnostics(expected, { clock = nodeClock } = {}) {
   if (!expected) return null;
   const owner = ++nextOwner;
   if (!numeric(owner) || owner === 0) throw new Error('Native scope owner exhausted');
   let beginAttempted = false, terminalAttempted = false, started = false, terminal = null;
+  let handle = null, beginTask = null, finalizationTask = null, terminalRpcAttempted = false;
+  const rpc = { deadlineMs, begin: 'not-attempted', terminal: 'not-dispatched', binding: 'unavailable' };
   let faultAttempts = 0, droppedFaults = 0, saturated = false, failed = false;
   const faults = [];
   const fault = code => {
@@ -83,10 +125,10 @@ export function createNativeScopeDiagnostics(expected) {
     else droppedFaults++;
   };
   const report = outcome => ({
-    version: 1, scope: 'final-clone-to-outer-finally', expected: true, owner,
-    outcome, status: failed || saturated || !started || !terminal ? 'incomplete' : 'complete',
+    version: 2, scope: 'final-clone-to-outer-finally', expected: true, owner,
+    outcome, status: failed || saturated || !started || !terminal || rpc.binding !== 'matched' ? 'incomplete' : 'complete',
     capture: !beginAttempted ? 'not-started' : !started ? 'start-unknown' : terminal ? 'stopped' : 'terminal-unknown',
-    beginAttempted, started, terminalAttempted,
+    beginAttempted, started, terminalAttempted, terminalRpcAttempted, rpc: { ...rpc },
     timingPerturbed: true, terminalAfterCatchDiagnostics: true,
     sharedWorkObserved: false, beforeStartObserved: false, currentAppWriterProven: false,
     caps: { ...caps }, columns: [...contract.columns],
@@ -94,71 +136,114 @@ export function createNativeScopeDiagnostics(expected) {
   });
   return {
     async begin(page) {
+      if (terminalAttempted) return; // Finalization seals evidence even if begin never ran.
       if (beginAttempted) { fault('start-schema'); return; }
       beginAttempted = true;
-      let result;
-      try {
-        result = await page.evaluate(({ hook, owner }) => {
-          if (!Object.isExtensible(globalThis) || Object.hasOwn(globalThis, `${hook}Unavailable`)) return null;
-          const descriptor = Object.getOwnPropertyDescriptor(globalThis, hook);
-          const api = descriptor?.value;
-          if (!descriptor || descriptor.configurable !== false || descriptor.writable !== false || !Object.isFrozen(api) ||
-              !api || api.version !== 1 || typeof api.start !== 'function' || typeof api.finish !== 'function') return null;
-          return api.start(owner);
-        }, { hook: contract.hook, owner });
-      } catch { fault('start-rpc'); return; }
-      if (!exact(result, ['version', 'owner', 'sessionId']) || result.version !== 1 || result.owner !== owner || result.sessionId !== 1) {
-        fault('start-schema'); return;
-      }
-      started = true;
-    },
-    async finish(page, path, outcome) {
-      if (terminalAttempted) { fault('terminal-schema'); process.exitCode = 1; return; }
-      terminalAttempted = true;
-      if (!['passed', 'failed'].includes(outcome)) { fault('terminal-schema'); outcome = 'failed'; }
-      let raw = null;
-      // No hook touch on a pre-start failure. An attempted but unknown start still
-      // owns exactly one stop+snapshot RPC in the original page's realm.
-      if (beginAttempted) {
+      beginTask = settle(() => page.evaluateHandle(({ hook, owner }) => {
+        const capturedDocument = document;
+        let ackValid = false;
         try {
-          raw = await page.evaluate(({ hook, owner }) => {
-            if (!Object.isExtensible(globalThis) || Object.hasOwn(globalThis, `${hook}Unavailable`)) return null;
+          if (Object.isExtensible(globalThis) && !Object.hasOwn(globalThis, `${hook}Unavailable`)) {
+            const descriptor = Object.getOwnPropertyDescriptor(globalThis, hook);
+            const api = descriptor?.value;
+            if (descriptor && descriptor.configurable === false && descriptor.writable === false && Object.isFrozen(api) &&
+                api && api.version === 1 && typeof api.start === 'function' && typeof api.finish === 'function') {
+              const ack = api.start(owner);
+              ackValid = !!ack && typeof ack === 'object' && !Array.isArray(ack) &&
+                Object.keys(ack).length === 3 && ['version', 'owner', 'sessionId'].every(key => Object.hasOwn(ack, key)) &&
+                ack.version === 1 && ack.owner === owner && ack.sessionId === 1;
+            }
+          }
+        } catch { /* Keep the original document even if start activated before throwing. */ }
+        // Null prototype prevents inherited thenables; retain no raw ack or error.
+        return Object.freeze(Object.assign(Object.create(null), { document: capturedDocument, ackValid }));
+      }, { hook: contract.hook, owner }), clock, value => disposeHandle(value, clock)).then(result => {
+        if (result.status !== 'returned') {
+          rpc.begin = result.status;
+          fault(result.status === 'deadline' ? 'start-deadline' : 'start-rpc');
+          return;
+        }
+        rpc.begin = 'handle-received';
+        rpc.binding = 'unverified';
+        handle = result.value;
+      });
+      await beginTask;
+    },
+    finish(page, path, outcome) {
+      if (finalizationTask) return finalizationTask;
+      terminalAttempted = true;
+      finalizationTask = (async () => {
+        if (!['passed', 'failed'].includes(outcome)) { fault('terminal-schema'); outcome = 'failed'; }
+        // A concurrent begin has its own fixed deadline. Finish waits for that
+        // settlement, never for the original unbounded transport promise.
+        await beginTask;
+        // No current-page fallback, even after an unknown begin. A handle binds
+        // execution to the original context; document identity is checked before
+        // any hook access in case the context survives a document replacement.
+        if (handle) {
+          terminalRpcAttempted = true;
+          const originalHandle = handle;
+          handle = null;
+          const result = await settle(() => originalHandle.evaluate((capsule, { hook, owner }) => {
+            if (capsule.document !== document) return { version: 1, binding: 'mismatch', ackValid: false, terminal: null };
+            const envelope = { version: 1, binding: 'matched', ackValid: capsule.ackValid, terminal: null };
+            if (!Object.isExtensible(globalThis) || Object.hasOwn(globalThis, `${hook}Unavailable`)) return envelope;
             const descriptor = Object.getOwnPropertyDescriptor(globalThis, hook);
             const api = descriptor?.value;
             if (!descriptor || descriptor.configurable !== false || descriptor.writable !== false || !Object.isFrozen(api) ||
-                !api || api.version !== 1 || typeof api.finish !== 'function') return null;
-            return api.finish(owner);
-          }, { hook: contract.hook, owner });
-        } catch { fault('terminal-rpc'); }
-        // Schema validation and persistence are attempted independently of export.
-        try { terminal = projectNativeScopeTerminal(raw, owner); }
-        catch { fault('terminal-schema'); }
-      }
-      if (!started || !terminal || terminal.failed || terminal.saturated || terminal.droppedRecords ||
-          terminal.faultAttempts || terminal.droppedFaults || terminal.stoppedAt === null ||
-          terminal.appNotice === null || terminal.relationsNotice === null || terminal.records.length === 0 ||
-          terminal.records.some(row => row[1] === null)) fault('incomplete');
-      let text;
-      try {
-        text = JSON.stringify(report(outcome));
-        if (Buffer.byteLength(text, 'utf8') > caps.bytes) {
-          fault('size');
-          terminal = null; // An oversized report is rejected, never silently truncated.
-          text = JSON.stringify(report(outcome));
+                !api || api.version !== 1 || typeof api.finish !== 'function') return envelope;
+            envelope.terminal = api.finish(owner);
+            return envelope;
+          }, { hook: contract.hook, owner }), clock);
+          disposeHandle(originalHandle, clock);
+          rpc.terminal = result.status;
+          if (result.status !== 'returned') {
+            fault(result.status === 'deadline' ? 'terminal-deadline' : 'terminal-rpc');
+          } else {
+            const envelope = result.value;
+            if (!exact(envelope, ['version', 'binding', 'ackValid', 'terminal']) || envelope.version !== 1 ||
+                !['matched', 'mismatch'].includes(envelope.binding) || typeof envelope.ackValid !== 'boolean' ||
+                (envelope.binding === 'mismatch' && (envelope.ackValid !== false || envelope.terminal !== null))) {
+              fault('terminal-schema');
+            } else {
+              rpc.binding = envelope.binding;
+              if (envelope.binding === 'mismatch') fault('document');
+              else {
+                started = envelope.ackValid;
+                if (!started) fault('start-schema');
+                try { terminal = projectNativeScopeTerminal(envelope.terminal, owner); }
+                catch { fault('terminal-schema'); }
+              }
+            }
+          }
         }
-        if (Buffer.byteLength(text, 'utf8') > caps.bytes) throw new Error('Native scope report exceeds cap');
-      } catch { text = undefined; fault('serialize'); }
-      try {
-        if (text === undefined) throw new Error('Native scope serialization unavailable');
-        await fs.mkdir(dirname(path), { recursive: true });
-        await fs.writeFile(path, text);
-      } catch { fault('write'); }
-      // Late serialization/write faults must fail even if the business operation
-      // succeeded. Existing primary exceptions remain untouched by this collector.
-      if (failed || saturated) {
-        process.exitCode = 1;
-        console.error('Native scope diagnostics incomplete (bounded fixed-code report; export/write failures may prevent an updated artifact).');
-      }
+        if (!started || !terminal || terminal.failed || terminal.saturated || terminal.droppedRecords ||
+            terminal.faultAttempts || terminal.droppedFaults || terminal.stoppedAt === null ||
+            terminal.appNotice === null || terminal.relationsNotice === null || terminal.records.length === 0 ||
+            terminal.records.some(row => row[1] === null)) fault('incomplete');
+        let text;
+        try {
+          text = JSON.stringify(report(outcome));
+          if (Buffer.byteLength(text, 'utf8') > caps.bytes) {
+            fault('size');
+            terminal = null; // An oversized report is rejected, never silently truncated.
+            text = JSON.stringify(report(outcome));
+          }
+          if (Buffer.byteLength(text, 'utf8') > caps.bytes) throw new Error('Native scope report exceeds cap');
+        } catch { text = undefined; fault('serialize'); }
+        try {
+          if (text === undefined) throw new Error('Native scope serialization unavailable');
+          await fs.mkdir(dirname(path), { recursive: true });
+          await fs.writeFile(path, text);
+        } catch { fault('write'); }
+        // Late serialization/write faults must fail even if the business operation
+        // succeeded. Existing primary exceptions remain untouched by this collector.
+        if (failed || saturated) {
+          process.exitCode = 1;
+          console.error('Native scope diagnostics incomplete (bounded fixed-code report; export/write failures may prevent an updated artifact).');
+        }
+      })();
+      return finalizationTask;
     },
   };
 }
