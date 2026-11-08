@@ -287,66 +287,167 @@ test('native scope plugin: explicit CI build and exact-source fail-closed contra
     }
   });
 
-  await t.test('Settings relations instrumentation preserves refresh ownership and current=true guard semantics', async () => {
+  await t.test('Settings instrumentation preserves real ownership, refresh and current=true acceptance', { timeout: 15000 }, async () => {
     const target = targets.find(target => target.name === 'components/SettingsView.tsx');
     assert.ok(target);
     const result = configuredPlugin().transform(target.source, target.id);
     assert.ok(result);
-    const start = '    let relationsRequestId = 0, relationsAlive = true, relationsRefreshPending = false;';
-    const end = '    watch(locale, () => {';
+    // Complete before-sentinels: drift may change an internal line, duplication may not.
+    const anchors = [
+      '    onBeforeUnmount(() => {\n      alive = false;\n      requestId++;\n      relationsRequestId++;\n      emit("dirty", false);\n    });',
+      '    async function loadRelations(refresh = false) {\n      if (!canInteract()) return;\n      const id = ++relationsRequestId, authentication = authenticationEpoch.value;\n      const current = () => ownsInstance() && authentication === authenticationEpoch.value && id === relationsRequestId;\n      relationsAuthenticationEpoch = authentication;\n      relationsRefreshPending = relationsRefreshPending || refresh;',
+      '        const items = await api<ArticleSummary[]>("/content" + (relationsRefreshPending ? "?refresh=1" : ""));\n        if (!current()) return;',
+      '      } catch (e) {\n        const notice = errorMessage(e);\n        if (current()) relationsError.value = notice;\n      } finally {\n        if (current()) {\n          relationsRefreshPending = false;\n          relationsLoading.value = false;\n        }\n      }',
+      '    async function load(discard = false) {\n      if (!canInteract() || ready.value || busy.value || unknownSaveObligation.value || branchPending.value || (dirty.value && !discard)) return;\n      const id = ++requestId, authentication = authenticationEpoch.value;\n      const current = () => ownsInstance() && authentication === authenticationEpoch.value && id === requestId;',
+      '        const result = await api<Settings>(endpoint);\n        if (!current()) return;',
+      '      } catch (e) {\n        const notice = errorMessage(e);\n        if (current()) {\n          mainPending = false;\n          error.value = notice;\n        }\n      } finally {\n        if (current()) mainPending = false;\n      }\n    }',
+    ];
+    const drift = [
+      ['alive = false;', 'alive = true;'],
+      ['authentication === authenticationEpoch.value', 'true'],
+      ['if (!current()) return;', 'if (false) return;'],
+      ['if (current()) relationsError.value = notice;', 'relationsError.value = notice;'],
+      ['!canInteract()', 'false'],
+      ['api<Settings>(endpoint)', 'api<Settings>(endpoint.value)'],
+      ['if (current()) mainPending = false;', 'mainPending = false;'],
+    ];
+    for (const [index, before] of anchors.entries()) {
+      assert.equal(target.source.split(before).length - 1, 1, `Settings S${index + 1} must be unique`);
+      const [from, to] = drift[index];
+      assert.equal(before.split(from).length - 1, 1);
+      const after = before.replace(from, to);
+      assert.notEqual(after, before);
+      assert.throws(() => configuredPlugin().transform(target.source.replace(before, after), target.id), /sentinels changed/);
+      assert.throws(() => configuredPlugin().transform(target.source.replace(before, ''), target.id), /sentinels changed/);
+      assert.throws(() => configuredPlugin().transform(`${target.source}\n${before}`, target.id), /sentinels changed/);
+    }
+    // Retain explicit refresh/finally drift coverage beyond the seven primary mutations.
+    for (const [before, after] of [
+      ['        if (current()) {\n          relationsRefreshPending = false;', '        {\n          relationsRefreshPending = false;'],
+      ['      relationsRefreshPending = relationsRefreshPending || refresh;', '      relationsRefreshPending = refresh;'],
+    ]) {
+      assert.equal(target.source.split(before).length - 1, 1);
+      assert.throws(() => configuredPlugin().transform(target.source.replace(before, after), target.id), /sentinels changed/);
+    }
+
+    function between(source: string, start: string, end: string) {
+      assert.equal(source.split(start).length - 1, 1, `Unique extraction start: ${start}`);
+      assert.equal(source.split(end).length - 1, 1, `Unique extraction end: ${end}`);
+      const first = source.indexOf(start), last = source.indexOf(end);
+      assert.ok(last > first);
+      return source.slice(first, last);
+    }
     function fragment(source: string) {
-      const first = source.indexOf(start), last = source.indexOf(end, first);
-      assert.ok(first >= 0 && last > first);
-      // Erase only the two TS-only constructs in this bounded function fixture.
-      return source.slice(first, last).replaceAll('api<ArticleSummary[]>', 'api').replace('item.publicPath!', 'item.publicPath');
+      // Actual declarations and helper closures; no ownership predicate is substituted.
+      return [
+        between(source, '    const initialIdentityEpoch = identityEpoch.value,', '    const saveMode = ref<SaveMode>'),
+        between(source, '    function ownsInstance() {', '    function exit() {'),
+        between(source, '    async function loadRelations(refresh = false) {', '    watch([\n      identityEpoch, apiTransportGeneration, authenticationEpoch,'),
+        between(source, '    async function load(discard = false) {', '    void load();'),
+        between(source, '    onBeforeUnmount(() => {\n      alive = false;', '    function reload() {'),
+      ].join('\n');
     }
     const original = fragment(target.source), transformed = fragment(result.code);
     assert.match(transformed, /relationsRefreshPending = relationsRefreshPending \|\| refresh;\n\s+const __nsCaller = __studioNativeScope\.caller\("settings-relations", \(\) => \(\{ counter: id, refresh: relationsRefreshPending \}\)\);/);
     assert.equal(transformed.split('current()').length, original.split('current()').length,
       'Instrumentation must not evaluate current() an extra time');
+    assert.equal(transformed.split('await ').length, original.split('await ').length);
+    assert.equal(transformed.split('catch (').length, original.split('catch (').length);
     assert.ok(transformed.includes('"/content" + (relationsRefreshPending ? "?refresh=1" : "")'));
+    assert.ok(transformed.includes('() => api<Settings>(endpoint)'));
+    assert.ok(transformed.includes('if (!__nsGuard) return;'), 'main and relations now record accepted=true, not old main stale=true');
+
+    type State = 'current' | 'replaced' | 'unmounted' | 'auth-direct' | 'auth-reconciled' | 'identity' | 'transport' | 'initial-null';
+    const requestFailure = new Error('private-settings-error');
+    const mappingFailure = new Error('private-mapping-error');
+    async function execute(source: string, trace: Runtime, channel: 'relations' | 'main', state: State,
+      rejection: boolean, refresh = false, inheritedRefresh = false, throwsMapping = false) {
+      const pending = deferred<unknown>();
+      const paths: string[] = [], dirtyEvents: unknown[][] = [];
+      let unmount: (() => void) | undefined, predicateEvaluations = 0, ownerEvaluations = 0, mapped = 0;
+      const authority = {
+        session: { value: state === 'initial-null' ? null : { identity: { id: 'settings-unit', method: 'password', name: 'Synthetic' }, csrf: 'synthetic', expires: 9999999999 } },
+        identityEpoch: { value: 7 }, apiTransportGeneration: { value: 11 }, authenticationEpoch: { value: 13 },
+      };
+      const globals = {
+        ...authority, __studioNativeScope: trace, ref, batch,
+        props: { group: 'site', language: undefined },
+        relationsLoading: ref(false), relationsError: ref('old-error'),
+        unresolvedItems: ref<unknown[]>(['old-unresolved']), postItems: ref<unknown[]>(['old-posts']), links: ref<unknown[]>(['old-links']),
+        settings: ref<unknown>(null), values: ref<unknown>({}), baseline: ref<unknown>({}), dirty: ref(false), branchPending: ref(false),
+        structuredClone, sessionStorage: { getItem: () => null },
+        onBeforeUnmount: (callback: () => void) => { assert.equal(unmount, undefined); unmount = callback; },
+        emit: (...args: unknown[]) => { dirtyEvents.push(args); },
+        countPredicate: () => { predicateEvaluations++; }, countOwner: () => { ownerEvaluations++; },
+        errorMessage: (error: unknown) => {
+          assert.equal(error, requestFailure, 'catch observes the original rejection object');
+          mapped++;
+          if (throwsMapping) throw mappingFailure;
+          return 'fixed-error';
+        },
+        api: (path: string) => { paths.push(path); return pending.promise; },
+      };
+      // Count entry into each real predicate, without replacing its expression or result.
+      let counted = source.replace('    function ownsInstance() {', '    function ownsInstance() { countOwner();');
+      for (const counter of ['relationsRequestId', 'requestId']) {
+        const predicate = `const current = () => ownsInstance() && authentication === authenticationEpoch.value && id === ${counter};`;
+        assert.equal(counted.split(predicate).length - 1, 1);
+        counted = counted.replace(predicate, `const current = () => { countPredicate(); return ownsInstance() && authentication === authenticationEpoch.value && id === ${counter}; };`);
+      }
+      // Compile only these explicit real-source closures, including their actual TS annotations.
+      const executable = ts.transpileModule(counted, { compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 } }).outputText;
+      const context = createContext(globals);
+      runInContext(executable, context);
+      assert.ok(unmount);
+      runInContext(`relationsRefreshPending = ${inheritedRefresh};`, context);
+      const operation = runInContext(channel === 'relations' ? `loadRelations(${refresh})` : 'load()', context) as Promise<void>;
+      const outcome = operation.then(() => null, error => error);
+      try {
+        assert.deepEqual(paths, state === 'initial-null' ? [] : [channel === 'main' ? '/settings/site' : refresh || inheritedRefresh ? '/content?refresh=1' : '/content']);
+        if (state === 'replaced') runInContext(channel === 'relations' ? 'relationsRequestId++;' : 'requestId++;', context);
+        if (state === 'unmounted') unmount();
+        if (state === 'auth-direct' || state === 'auth-reconciled') authority.authenticationEpoch.value++;
+        if (state === 'identity') authority.identityEpoch.value++;
+        if (state === 'transport') authority.apiTransportGeneration.value++;
+        if (state === 'auth-reconciled' || state === 'identity' || state === 'transport') runInContext('reconcileBoundary();', context);
+      } finally {
+        // Initial-null has no consumer: do not create an unhandled synthetic rejection.
+        if (rejection && state !== 'initial-null') pending.reject(requestFailure);
+        else pending.resolve(channel === 'relations'
+          ? [{ title: 'fixed-title', publicPath: '/post', kind: 'post', path: 'post.md', linkWarning: true }]
+          : { values: { title: 'fixed-title' }, revision: 'fixed-revision' });
+        await outcome;
+      }
+      const thrown = await outcome;
+      assert.equal(thrown, throwsMapping && state !== 'initial-null' ? mappingFailure : null, 'outcome and exception identity are unchanged');
+      const view = JSON.parse(JSON.stringify(runInContext(`({
+        loading: relationsLoading.value, error: relationsError.value, unresolved: unresolvedItems.value,
+        posts: postItems.value, links: links.value, refreshPending: relationsRefreshPending,
+        retry: relationsNeedsRetry.value, retired: retired.value, ready: ready.value,
+        mainError: error.value, mainPending, mainNeedsReload: mainNeedsReload.value,
+        settings: settings.value, values: values.value, baseline: baseline.value,
+        requestId, relationsRequestId, relationsAuthenticationEpoch, observedAuthenticationEpoch,
+      })`, context))) as {
+        loading: boolean; error: string; refreshPending: boolean; retry: boolean; retired: boolean;
+        ready: boolean; mainError: string; mainPending: boolean; mainNeedsReload: boolean;
+      };
+      return { view, paths, dirtyEvents, predicateEvaluations, ownerEvaluations, mapped };
+    }
+
+    // Preserve all 24 original refresh/inherited-refresh and replacement/unmount cases.
     for (const state of ['current', 'replaced', 'unmounted'] as const) {
       for (const rejection of [false, true]) {
         for (const [refresh, inheritedRefresh] of [[false, false], [true, false], [false, true], [true, true]]) {
           const effectiveRefresh = refresh || inheritedRefresh;
-          async function execute(source: string, trace: Runtime) {
-            const pending = deferred<unknown>();
-            const paths: string[] = [];
-            const globals = {
-              __studioNativeScope: trace,
-              relationsLoading: { value: false }, relationsError: { value: 'old-error' },
-              unresolvedItems: { value: ['old-unresolved'] as unknown[] },
-              postItems: { value: ['old-posts'] as unknown[] }, links: { value: ['old-links'] as unknown[] },
-              errorMessage: () => 'fixed-error',
-              api: (path: string) => { paths.push(path); return pending.promise; },
-            };
-            const context = createContext(globals);
-            runInContext(source, context);
-            // Simulate an inherited unfinished refresh obligation independently of
-            // this invocation's refresh argument, as locale replacement does.
-            runInContext(`relationsRefreshPending = ${inheritedRefresh};`, context);
-            const operation = runInContext(`loadRelations(${refresh})`, context) as Promise<void>;
-            assert.deepEqual(paths, [effectiveRefresh ? '/content?refresh=1' : '/content']);
-            if (state === 'replaced') runInContext('relationsRequestId++;', context);
-            if (state === 'unmounted') runInContext('relationsAlive = false; relationsRequestId++;', context);
-            if (rejection) pending.reject(new Error('private-relations-error'));
-            else pending.resolve([{ title: 'fixed-title', publicPath: '/post', kind: 'post', path: 'post.md', linkWarning: true }]);
-            await operation;
-            return JSON.parse(JSON.stringify({
-              loading: globals.relationsLoading.value, error: globals.relationsError.value,
-              unresolved: globals.unresolvedItems.value, posts: globals.postItems.value, links: globals.links.value,
-              refreshPending: runInContext('relationsRefreshPending', context),
-            })) as { loading: boolean; error: string; refreshPending: boolean };
-          }
           const f = runtimeFixture();
-          assert.ok(f.hook);
-          assert.ok(f.hook.start(17));
-          const observed = await execute(transformed, f.trace);
-          const baseline = await execute(original, runtimeFixture().trace);
-          assert.deepEqual(observed, baseline, `${state}, rejection=${rejection}, refresh=${refresh}: business state must be unchanged`);
-          const snapshot = f.hook.finish(17);
+          assert.ok(f.hook?.start(17));
+          const observed = await execute(transformed, f.trace, 'relations', state, rejection, refresh, inheritedRefresh);
+          const baseline = await execute(original, runtimeFixture().trace, 'relations', state, rejection, refresh, inheritedRefresh);
+          assert.deepEqual(observed, baseline, `${state}, rejection=${rejection}, refresh=${refresh}, inherited=${inheritedRefresh}`);
+          const snapshot = f.hook!.finish(17);
           assert.ok(snapshot);
-          const records = projectNativeScopeTerminal(snapshot, 17).records;
+          const allRecords = projectNativeScopeTerminal(snapshot, 17).records;
+          const records = allRecords.filter(record => record[3] === 'settings-relations');
           const current = state === 'current', counter = current ? 1 : 2;
           assert.deepEqual(Array.from(records, record => [record[2], record[3], record[10], record[14], record[19]]), [
             ['caller-start', 'settings-relations', 1, null, effectiveRefresh],
@@ -356,23 +457,67 @@ test('native scope plugin: explicit CI build and exact-source fail-closed contra
             ['caller-finally', 'settings-relations', counter, current, null],
             ...(current ? [['loading-clear', 'settings-relations', null, null, null]] : []),
           ]);
-          assert.equal(observed.loading, !current);
-          assert.equal(observed.refreshPending, !current && effectiveRefresh);
-          assert.equal(observed.error, rejection && current ? 'fixed-error' : '');
+          assert.equal(allRecords.filter(record => record[2] === 'settings-unmount').length, state === 'unmounted' ? 1 : 0);
+          assert.deepEqual(observed.dirtyEvents, state === 'unmounted' ? [['dirty', false]] : []);
+          assert.equal(observed.predicateEvaluations, !rejection && current ? 4 : 3);
+          assert.equal(observed.ownerEvaluations, observed.predicateEvaluations + 2);
+          assert.equal(observed.view.loading, !current);
+          assert.equal(observed.view.refreshPending, !current && effectiveRefresh);
+          assert.equal(observed.view.error, rejection && current ? 'fixed-error' : '');
         }
       }
     }
 
-    // Every replaced guard sentinel is fail-closed, including the obsolete
-    // unguarded catch/finally shape that caused the remote regression.
-    for (const [before, after] of [
-      ['        if (!current()) return;', '        if (false) return;'],
-      ['        if (current()) relationsError.value = errorMessage(e);', '        relationsError.value = errorMessage(e);'],
-      ['        if (current()) {\n          relationsRefreshPending = false;', '        {\n          relationsRefreshPending = false;'],
-      ['      relationsRefreshPending = relationsRefreshPending || refresh;', '      relationsRefreshPending = refresh;'],
-    ]) {
-      assert.equal(target.source.split(before).length - 1, 1);
-      assert.throws(() => configuredPlugin().transform(target.source.replace(before, after), target.id), /sentinels changed/);
+    // Auth retirement revokes loading ownership only through real reconciliation,
+    // never through the old request's finally; unmount remains a separate event.
+    for (const channel of ['relations', 'main'] as const) {
+      for (const state of ['current', 'replaced', 'unmounted', 'auth-direct', 'auth-reconciled', 'identity', 'transport', 'initial-null'] as const) {
+        for (const rejection of [false, true]) {
+          const f = runtimeFixture();
+          assert.ok(f.hook?.start(17));
+          const observed = await execute(transformed, f.trace, channel, state, rejection, true, true);
+          assert.deepEqual(observed, await execute(original, runtimeFixture().trace, channel, state, rejection, true, true));
+          const snapshot = f.hook!.finish(17);
+          assert.ok(snapshot);
+          const records = projectNativeScopeTerminal(snapshot, 17).records;
+          const owner = channel === 'relations' ? 'settings-relations' : 'settings-main';
+          const current = state === 'current', initialNull = state === 'initial-null';
+          const reconciled = ['auth-reconciled', 'identity', 'transport'].includes(state);
+          const counter = current || state === 'auth-direct' ? 1 : 2;
+          const rows = records.filter(record => record[3] === owner);
+          assert.deepEqual(Array.from(rows, record => [record[2], record[10], record[14]]), initialNull ? [] : [
+            ['caller-start', 1, null], [rejection ? 'caller-catch' : 'caller-return', null, null],
+            ['guard', counter, current], ...(rejection && current ? [['notice-write', null, null]] : []),
+            ['caller-finally', counter, current], ...(channel === 'relations' && current ? [['loading-clear', null, null]] : []),
+          ]);
+          assert.equal(records.filter(record => record[2] === 'settings-unmount').length, state === 'unmounted' ? 1 : 0);
+          assert.deepEqual(observed.dirtyEvents, state === 'unmounted' ? [['dirty', false]] : []);
+          assert.equal(observed.predicateEvaluations, initialNull ? 0 : !rejection && current ? 4 : 3);
+          assert.equal(observed.view.retired, initialNull || state === 'identity' || state === 'transport');
+          if (channel === 'relations') {
+            assert.equal(observed.view.loading, !initialNull && !current && !reconciled);
+            assert.equal(observed.view.retry, reconciled);
+            assert.equal(observed.view.refreshPending, !current);
+            assert.equal(observed.view.error, initialNull ? 'old-error' : rejection && current ? 'fixed-error' : '');
+          } else {
+            assert.equal(observed.view.ready, current && !rejection);
+            assert.equal(observed.view.mainError, current && rejection ? 'fixed-error' : '');
+            assert.equal(observed.view.mainPending, !initialNull && !current && !reconciled);
+            assert.equal(observed.view.mainNeedsReload, reconciled);
+          }
+        }
+      }
+      // A throwing mapper must escape with its exact object; existing finally still runs once.
+      const mappingOutcomes = [];
+      for (const source of [original, transformed]) {
+        const observed = await execute(source, runtimeFixture().trace, channel, 'current', true, false, false, true);
+        mappingOutcomes.push(observed);
+        assert.equal(observed.mapped, 1);
+        assert.equal(observed.predicateEvaluations, 2, 'pre-await and finally only when errorMessage throws');
+        if (channel === 'relations') assert.equal(observed.view.loading, false);
+        else assert.equal(observed.view.mainPending, false);
+      }
+      assert.deepEqual(mappingOutcomes[1], mappingOutcomes[0]);
     }
   });
 
