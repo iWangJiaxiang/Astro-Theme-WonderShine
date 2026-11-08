@@ -15,8 +15,8 @@ const currentHEAD = git(['rev-parse', '--verify', 'HEAD']).trim();
 const componentSource = git(['show', `${baselineSHA}:${componentPath}`]);
 const currentSource = readFileSync(new URL('../../src/components/MediaBrowser.tsx', import.meta.url), 'utf8');
 
-// Fail closed across the complete component: allow only the exact DOM-sync fix
-// and the separately specified bounded-thumbnail policy changes below.
+// Fail closed across the complete component: allow only the exact DOM-sync fix,
+// bounded-thumbnail policy and individually specified upload-feedback changes.
 const baselineContext = `    const narrowLayout = window.matchMedia("(max-width: 760px)");
     const browseExpanded = ref(!narrowLayout.matches);
     const browseDisclosure = ref<HTMLDetailsElement>();
@@ -63,14 +63,118 @@ const thumbnailChanges = [
   ['                              loading: "lazy",', '                              loading: eagerPaths.value.has(item.path) ? "eager" : "lazy",'],
   ['                                failed.value.add(item.path);', '                                failed.value = new Set([...failed.value, item.path]);'],
 ];
+const feedbackChanges = [
+  [
+    'import { t } from "../i18n";',
+    'import { session } from "../api";\nimport { t } from "../i18n";',
+  ],
+  [
+    'import MediaUpload from "./MediaUpload";',
+    'import MediaUpload, { type MediaUploadFeedback } from "./MediaUpload";',
+  ],
+  [
+    '    const uploadExpanded = ref(false);',
+    '    const uploadExpanded = ref(false);\n    const uploadFeedback = ref<MediaUploadFeedback>();',
+  ],
+  [
+    `    const uploadFeedback = ref<MediaUploadFeedback>();
+    // This browser is client-only. Reset the default only when crossing the`,
+    `    const uploadFeedback = ref<MediaUploadFeedback>();
+    watch(
+      () =>
+        [session.value, session.value?.identity.id, session.value?.identity.method] as const,
+      () => {
+        uploadFeedback.value = undefined;
+      },
+    );
+    // This browser is client-only. Reset the default only when crossing the`,
+  ],
+  [
+    '    function choose(item: MediaItem) {',
+    `    function uploadStatus() {
+      const feedback = uploadFeedback.value;
+      return element(
+        "div",
+        {
+          role: "status",
+          "aria-atomic": true,
+          className: classes("media-upload-feedback"),
+        },
+        feedback?.validation
+          ? element("p", null, t(feedback.validation))
+          : null,
+        feedback && feedback.total > 0
+          ? element(
+              "p",
+              null,
+              feedback.validation ? t("上次上传") + " · " : "",
+              element(
+                "strong",
+                null,
+                feedback.active
+                  ? t("正在处理上传")
+                  : feedback.paused
+                    ? t("上传已暂停")
+                    : t("上传处理结束"),
+              ),
+              " · ",
+              t("已处理 {completed}/{total}，已上传 {uploaded}，失败 {failed}，未尝试 {skipped}", {
+                completed: feedback.completed,
+                total: feedback.total,
+                uploaded: feedback.uploaded,
+                failed: feedback.failed,
+                skipped: feedback.skipped,
+              }),
+            )
+          : null,
+        feedback && feedback.uploaded > 0
+          ? element(
+              "p",
+              { className: classes("muted") },
+              t("已上传的图片已保存到仓库，选用后仍需保存表单。"),
+            )
+          : null,
+      );
+    }
+    function choose(item: MediaItem) {`,
+  ],
+  [
+    `                preferredDirectory: folder.value,
+                onUploaded: uploaded satisfies EventHandler<`,
+    `                preferredDirectory: folder.value,
+                feedbackMode: "external",
+                onFeedback: (($event) => {
+                  uploadFeedback.value = $event;
+                }) satisfies EventHandler<typeof MediaUpload, "onFeedback">,
+                onUploaded: uploaded satisfies EventHandler<`,
+  ],
+  [
+    `              }),
+            ),
+            element(
+              "div",
+              { className: classes("media-toolbar") },`,
+    `              }),
+            ),
+            uploadStatus(),
+            element(
+              "div",
+              { className: classes("media-toolbar") },`,
+  ],
+];
 let expectedSource = componentSource.replace(baselineContext, currentContext);
 for (const [before, after] of thumbnailChanges) {
   assert.equal(occurrences(expectedSource, before), 1, 'Known thumbnail change must have exactly one historical anchor');
   assert.equal(occurrences(currentSource, after), 1, 'Known thumbnail change must match current source exactly once');
   expectedSource = expectedSource.replace(before, after);
 }
+for (const [before, after] of feedbackChanges) {
+  assert.equal(occurrences(expectedSource, before), 1, 'Known feedback change must have exactly one prior anchor');
+  assert.equal(occurrences(currentSource, after), 1, 'Known feedback change must match current source exactly once');
+  expectedSource = expectedSource.replace(before, after);
+}
 assert.equal(currentSource, expectedSource,
-  'Complete MediaBrowser must equal the fixed historical source plus only the exact DOM-sync and enumerated thumbnail changes');
+  'Complete MediaBrowser must equal the fixed historical source plus only the exact DOM-sync, enumerated thumbnail and upload-feedback changes');
 
 console.log(`Media disclosure counterfactual current git HEAD: ${currentHEAD}`);
 console.log(`Media disclosure counterfactual baseline SHA: ${baselineSHA}`);

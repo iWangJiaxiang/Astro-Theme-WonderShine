@@ -7,6 +7,7 @@ import {
   type MediaItem,
   type MediaMode,
 } from "../../shared/media";
+import { session } from "../api";
 import { t } from "../i18n";
 import {
   loadMedia,
@@ -31,7 +32,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "../reactivity"
 import Icon from "./Icon";
 import LoadingState from "./LoadingState";
 import MediaDirectoryNode from "./MediaDirectoryNode";
-import MediaUpload from "./MediaUpload";
+import MediaUpload, { type MediaUploadFeedback } from "./MediaUpload";
 import SelectionField from "./SelectionField";
 
 type Props = {
@@ -61,6 +62,14 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
     );
     const tree = computed(() => mediaDirectoryTree(eligible.value));
     const uploadExpanded = ref(false);
+    const uploadFeedback = ref<MediaUploadFeedback>();
+    watch(
+      () =>
+        [session.value, session.value?.identity.id, session.value?.identity.method] as const,
+      () => {
+        uploadFeedback.value = undefined;
+      },
+    );
     // This browser is client-only. Reset the default only when crossing the
     // layout breakpoint, so manual disclosure choices survive ordinary renders.
     const narrowLayout = window.matchMedia("(max-width: 760px)");
@@ -142,6 +151,51 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
       page.value = 1;
       const value = mediaValue(item, props.mode, props.documentPath);
       if (value !== null) emit("select", item, value);
+    }
+    function uploadStatus() {
+      const feedback = uploadFeedback.value;
+      return element(
+        "div",
+        {
+          role: "status",
+          "aria-atomic": true,
+          className: classes("media-upload-feedback"),
+        },
+        feedback?.validation
+          ? element("p", null, t(feedback.validation))
+          : null,
+        feedback && feedback.total > 0
+          ? element(
+              "p",
+              null,
+              feedback.validation ? t("上次上传") + " · " : "",
+              element(
+                "strong",
+                null,
+                feedback.active
+                  ? t("正在处理上传")
+                  : feedback.paused
+                    ? t("上传已暂停")
+                    : t("上传处理结束"),
+              ),
+              " · ",
+              t("已处理 {completed}/{total}，已上传 {uploaded}，失败 {failed}，未尝试 {skipped}", {
+                completed: feedback.completed,
+                total: feedback.total,
+                uploaded: feedback.uploaded,
+                failed: feedback.failed,
+                skipped: feedback.skipped,
+              }),
+            )
+          : null,
+        feedback && feedback.uploaded > 0
+          ? element(
+              "p",
+              { className: classes("muted") },
+              t("已上传的图片已保存到仓库，选用后仍需保存表单。"),
+            )
+          : null,
+      );
     }
     function choose(item: MediaItem) {
       const value = mediaValue(item, props.mode, props.documentPath);
@@ -246,12 +300,17 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                 documentPath: props.documentPath,
                 svgOnly: props.svgOnly,
                 preferredDirectory: folder.value,
+                feedbackMode: "external",
+                onFeedback: (($event) => {
+                  uploadFeedback.value = $event;
+                }) satisfies EventHandler<typeof MediaUpload, "onFeedback">,
                 onUploaded: uploaded satisfies EventHandler<
                   typeof MediaUpload,
                   "onUploaded"
                 >,
               }),
             ),
+            uploadStatus(),
             element(
               "div",
               { className: classes("media-toolbar") },

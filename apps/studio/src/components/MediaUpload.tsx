@@ -31,13 +31,28 @@ import {
 import { computed, onBeforeUnmount, ref, watch } from "../reactivity";
 import SelectionField from "./SelectionField";
 
+export type MediaUploadFeedback = Readonly<{
+  active: boolean;
+  total: number;
+  completed: number;
+  uploaded: number;
+  failed: number;
+  skipped: number;
+  paused: boolean;
+  validation?: Message;
+}>;
+
 type Props = {
+  feedbackMode?: "internal" | "external";
   mode: MediaMode;
   documentPath: string;
   svgOnly: boolean;
   preferredDirectory?: string;
 };
-type Events = { uploaded: [item: MediaItem] };
+type Events = {
+  uploaded: [item: MediaItem];
+  feedback: [feedback: MediaUploadFeedback];
+};
 const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
   "MediaUpload",
   (props, emit, expose) => {
@@ -50,14 +65,38 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
           name: string;
           item?: MediaItem;
           error?: Message;
+          skipped?: boolean;
         }[]
       >([]),
       total = ref(0),
       completed = ref(0);
-    let disposed = false;
+    const emptyFeedback = (): MediaUploadFeedback => ({
+      active: false,
+      total: 0,
+      completed: 0,
+      uploaded: 0,
+      failed: 0,
+      skipped: 0,
+      paused: false,
+    });
+    const feedback = ref<MediaUploadFeedback>(emptyFeedback());
+    let disposed = false,
+      feedbackGeneration = 0;
     onBeforeUnmount(() => {
       disposed = true;
     });
+    watch(
+      () =>
+        [session.value, session.value?.identity.id, session.value?.identity.method] as const,
+      () => {
+        feedbackGeneration++;
+        feedback.value = emptyFeedback();
+      },
+    );
+    function publishFeedback(snapshot: MediaUploadFeedback) {
+      feedback.value = snapshot;
+      emit("feedback", { ...snapshot });
+    }
     const bundle = computed(() =>
       supportsColocatedMedia(props.documentPath)
         ? documentDirectory(props.documentPath).replace(/\/$/, "")
@@ -141,17 +180,48 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
       error.value = "";
       if (files.length > 20) {
         error.value = "每次最多选择 20 张图片";
+        if (!disposed)
+          publishFeedback({
+            ...feedback.value,
+            validation: "每次最多选择 20 张图片",
+          });
         return;
       }
       const target = directory.value,
-        identity = session.value?.identity.id;
+        identity = session.value?.identity.id,
+        method = session.value?.identity.method,
+        generation = ++feedbackGeneration;
+      let uploaded = 0,
+        failed = 0,
+        skippedCount = 0,
+        paused = false;
+      const feedbackIsLive = () =>
+        !disposed &&
+        generation === feedbackGeneration &&
+        identity === session.value?.identity.id &&
+        method === session.value?.identity.method;
+      const reportBatch = (active: boolean) => {
+        if (!feedbackIsLive()) return;
+        // Legacy completed can advance after an identity break; it is not feedback.
+        publishFeedback({
+          active,
+          total: files.length,
+          completed: uploaded + failed,
+          uploaded,
+          failed,
+          skipped: skippedCount,
+          paused,
+        });
+      };
       results.value = [];
       total.value = files.length;
       completed.value = 0;
       mediaUploading.value = true;
+      reportBatch(true);
       try {
         for (const file of files) {
           if (disposed || identity !== session.value?.identity.id) break;
+          let outcome: "uploaded" | "failed" | undefined;
           try {
             if (
               !imageMime(file.name) ||
@@ -174,8 +244,10 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
             if (identity !== session.value?.identity.id) break;
             addUploadedMedia(saved.item);
             results.value.push({ name: file.name, item: saved.item });
+            outcome = "uploaded";
             if (!disposed) emit("uploaded", saved.item);
           } catch (reason) {
+            outcome = "failed";
             results.value.push({
               name: file.name,
               error: errorMessage(reason),
@@ -184,19 +256,29 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
               reason instanceof ApiError &&
               [401, 403, 409].includes(reason.status)
             ) {
-              for (const skipped of files.slice(completed.value + 1))
+              paused = true;
+              for (const skipped of files.slice(completed.value + 1)) {
                 results.value.push({
                   name: skipped.name,
                   error: "上传已暂停，请检查提示后重新选择未上传的图片",
+                  skipped: true,
                 });
+                if (feedbackIsLive()) skippedCount++;
+              }
               break;
             }
           } finally {
             completed.value++;
+            if (feedbackIsLive()) {
+              if (outcome === "uploaded") uploaded++;
+              if (outcome === "failed") failed++;
+            }
+            reportBatch(true);
           }
         }
       } finally {
         mediaUploading.value = false;
+        reportBatch(false);
       }
     }
     function select(event: Event) {
@@ -301,8 +383,12 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
               mediaUploading.value
                 ? element(
                     "div",
-                    { role: "status", className: classes("upload-progress") },
+                    {
+                      role: props.feedbackMode === "external" ? undefined : "status",
+                      className: classes("upload-progress"),
+                    },
                     element("progress", {
+                      "aria-label": t("图片上传进度"),
                       max: total.value,
                       value: completed.value,
                     }),
@@ -312,7 +398,7 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
                     }),
                   )
                 : null,
-              error.value
+              error.value && props.feedbackMode !== "external"
                 ? element(
                     "p",
                     { role: "alert", className: classes("notice error") },
@@ -323,7 +409,8 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
                 ? element(
                     "ul",
                     {
-                      "aria-live": "polite",
+                      "aria-live":
+                        props.feedbackMode === "external" ? undefined : "polite",
                       className: classes("upload-results"),
                     },
                     renderList(results.value).map((result, index) =>
@@ -367,6 +454,6 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
             ),
       );
   },
-  {},
+  { feedbackMode: "internal" },
 );
 export default MediaUpload;
