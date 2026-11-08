@@ -271,6 +271,10 @@ let caseID = 0, root, unmounted = false, cleanup = false, unhandled = 0, unexpec
 let stickyGuardCalls = 0, saveButtonGuardCalls = 0, saveActions = 0, saveRead;
 const saveHandlers = new Map();
 let retainedSaveHandlers;
+// Commands are authorized one original click at a time, never by event kind alone.
+const exitCommands = [];
+let exitExpectation = null, exitFault = false;
+const expectedExits = () => mode === 'app' && [16, 17].includes(caseID) ? 3 : mode === 'app' && caseID === 18 ? 2 : 0;
 let group = 'site', language, dirty = false, remembered, saved, boundarySnapshot, retirementSnapshot, documentSnapshot, compatUnmounts = 0;
 const caps = { requests: 16, tokens: 192, owners: 4, portals: 4, storage: 256, notifications: 64 };
 let invoking = [], measurement = false;
@@ -303,9 +307,21 @@ globalThis.__mountedTrace = {
   context(value) { if (value && !contexts.includes(value)) push(contexts, value, 4); },
   child(kind, name) { const child = push(children, { id: children.length + 1, kind, name, gone: false }, 64); return child; },
   childGone(child) { need(!child.gone, 'observer'); child.gone = true; },
-  notification(owner, disposing, kind, value) {
-    need(owners.includes(owner), 'observer');
-    push(notifications, { owner, disposing, kind, value }, caps.notifications);
+  notification(owner, disposing, kind, ...payload) {
+    const value = payload[0];
+    const event = push(notifications, { owner, disposing, kind, value }, caps.notifications);
+    if (kind === 'exit') {
+      const expected = exitExpectation;
+      if (!expected || expected.event || expected.caseID !== caseID || mode !== 'app' || !expectedExits() ||
+        owners.length !== 1 || owners[0] !== owner || expected.owner !== owner || owner.gone || disposing !== false || payload.length !== 0 ||
+        !retirementSnapshot || document.querySelector('[data-settings-group]') || !document.querySelector(contract.selectors.retired)) {
+        // Keep observing and call the original emit; a sticky fault fails the probe.
+        exitFault = true;
+      } else {
+        expected.event = event;
+        push(exitCommands, event, expectedExits());
+      }
+    } else need(owners.includes(owner), 'observer');
   },
 };
 const onUnhandled = () => { need(unhandled < 64, 'counter'); unhandled++; };
@@ -396,6 +412,19 @@ function unchanged(before, allowReconciliation = false) {
   }
   need(same(a, b) && draft() === before.draft && storage.length === before.storage && notifications.length === before.notifications, 'retirement');
   need(tokens.filter(t => t.kind === 'api').length === before.api && jobs.length === before.requests, 'transport');
+}
+function checkExitCommands() {
+  need(!exitFault && !exitExpectation && exitCommands.length <= expectedExits(), 'exit-command');
+}
+function checkRetirementNotifications(exited = false) {
+  checkExitCommands();
+  const after = notifications.slice(retirementSnapshot.notifications);
+  need(after.length === exitCommands.length + (exited ? 1 : 0) &&
+    exitCommands.every((event, index) => after[index] === event), 'retired-notifications');
+  if (exited) {
+    const event = after[exitCommands.length];
+    need(event.owner === latest() && event.disposing && event.kind === 'dirty' && event.value === false, 'retired-notifications');
+  }
 }
 function saveButtonGuards() {
   need(caseID === 12 && retainedSaveHandlers && portals.length === 1 && portals[0].node.isConnected && !latest().gone, 'observer');
@@ -494,8 +523,25 @@ window.mountedSafety = {
       retainedSaveHandlers = new Map(saveHandlers);
     }
   },
+  armExit() {
+    checkExitCommands();
+    need(expectedExits() > 0 && exitCommands.length < expectedExits() && retirementSnapshot &&
+      owners.length === 1 && !latest().gone && document.querySelector(contract.selectors.retired) &&
+      document.querySelector(contract.selectors.exit), 'exit-command');
+    this.checkRetired();
+    exitExpectation = { caseID, owner: latest(), event: null };
+  },
+  checkExitConsumed() {
+    const expected = exitExpectation;
+    need(!exitFault && expected && expected.caseID === caseID && owners.length === 1 && expected.owner === latest() &&
+      expected.event && exitCommands.at(-1) === expected.event, 'exit-command');
+    exitExpectation = null;
+  },
   checkRetired() {
-    need(owners.length === 1 && !document.querySelector('[data-settings-group]') && !document.querySelector('dialog.selection-dialog, .save-mode-menu'), 'retirement');
+    checkExitCommands();
+    need(owners.length === 1, 'retired-owner');
+    need(!document.querySelector('[data-settings-group]'), 'retired-settings-dom');
+    need(!document.querySelector('dialog.selection-dialog, .save-mode-menu'), 'retired-overlay-dom');
     need(portals.every(p => !p.node.isConnected && p.children.every(c => c.gone)), 'portal');
     need(boundarySnapshot && draft() === boundarySnapshot.draft && same(model().values, boundarySnapshot.model.values) && same(model().baseline, boundarySnapshot.model.baseline) && model().revision === boundarySnapshot.model.revision, 'draft');
     const original = copy(boundarySnapshot.model), current = model();
@@ -503,14 +549,15 @@ window.mountedSafety = {
     delete original.busy; delete current.busy;
     need(same(original, current), 'adoption');
     if (boundarySnapshot.model.busy) need(model().busy === (latest().gone || pendingMutations.value > 0), 'busy');
-    if (!latest().gone) need(document.querySelector(contract.selectors.retired) && document.querySelector(contract.selectors.exit), 'retirement');
+    if (!latest().gone) need(document.querySelector(contract.selectors.retired) && document.querySelector(contract.selectors.exit), 'retired-controls');
     if (!retirementSnapshot) retirementSnapshot = holdSnapshot();
     else {
       const before = copy(retirementSnapshot.model), after = model();
       if (before.busy && !latest().gone && pendingMutations.value === 0) {
         need(!after.busy, 'busy'); delete before.busy; delete after.busy;
       }
-      need(same(before, after) && notifications.length === retirementSnapshot.notifications, 'retirement');
+      need(same(before, after), 'retired-model');
+      checkRetirementNotifications();
       need(!storage.slice(retirementSnapshot.storage).some(item => item.target !== 'document'), 'draft');
     }
   },
@@ -518,8 +565,8 @@ window.mountedSafety = {
     need(latest().gone && saved && draft() === saved.draft && same(model().values, saved.model.values) && same(model().baseline, saved.model.baseline) && model().revision === saved.model.revision, 'draft');
     need(!document.querySelector('.settings-retired, .settings-exit, .page-template-settings'), 'retirement');
     need(!storage.slice(boundarySnapshot.storage).some(item => item.kind === 'clear' || item.kind === 'removeItem'), 'draft');
-    const after = notifications.slice(retirementSnapshot.notifications);
-    need(after.length === 1 && after[0].owner === latest() && after[0].disposing && after[0].kind === 'dirty' && after[0].value === false, 'retirement');
+    need(exitCommands.length === expectedExits(), 'exit-command');
+    checkRetirementNotifications(true);
   },
   boundary(kind, pack = false) {
     boundarySnapshot = holdSnapshot();
@@ -573,6 +620,9 @@ window.mountedSafety = {
   },
   checkForcedCurrent() { const r = jobs.filter(j => j.kind === 'content').at(-1); need(r.refresh && r.csrf === session.value.csrf && r.generation === apiTransportGeneration.value, 'transport'); },
   checkCounts(expected) {
+    checkExitCommands();
+    need(exitCommands.length === expectedExits(), 'exit-command');
+    if (expectedExits()) checkRetirementNotifications(true);
     need(storage.every(item => item.kind !== 'clear'), 'draft');
     need(jobs.length === expected.requests && jobs.filter(j => j.kind === 'put').length === expected.puts && capabilityCalls === expected.capabilities, 'counter');
     need(stickyGuardCalls === ([5, 6, 7].includes(caseID) ? 1 : 0) && saveButtonGuardCalls === (caseID === 12 ? 4 : 0), 'counter');
@@ -623,6 +673,8 @@ window.mountedSafety = {
     cleanup = true;
     if (root && !unmounted) { unmounted = true; try { flushSync(() => root.unmount()); } finally { this.releaseAll(); } }
     else this.releaseAll();
+    // Teardown must not hide an unarmed exit after the final scenario check.
+    need(!exitFault, 'exit-command');
   },
   releaseAll() { for (const job of jobs) { if (!job.released) release(job.id, { status: 502 }); if (job.decode && !job.jsonReleased) job.decode(); } },
   forget() { for (const [name, fn] of Object.entries(originals)) Storage.prototype[name] = fn; window.removeEventListener('unhandledrejection', onUnhandled); compatStop?.(); },

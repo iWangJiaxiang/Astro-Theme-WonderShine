@@ -16,7 +16,7 @@ const output = join(studio, 'test-results/settings-mounted-safety');
 const temporary = '/tmp/opencode';
 const origin = 'https://mounted-safety.example/';
 const caps = Object.freeze({ workerMs: 180000, operationMs: 10000, bytes: 65536, faults: 4, actions: 24, boundaries: 8, resources: 16 });
-const codes = new Set(['setup', 'dependency', 'bundle', 'observer', 'browser', 'navigation', 'fixture', 'ready', 'input', 'counter', 'transport', 'completion', 'epoch', 'draft', 'identity', 'retirement', 'portal', 'busy', 'adoption', 'relations', 'guard', 'compatibility', 'drain', 'cleanup', 'deadline', 'report', 'matrix', 'worker', 'page', 'console', 'resource', 'dialog', 'unhandled']);
+const codes = new Set(['setup', 'dependency', 'bundle', 'observer', 'browser', 'navigation', 'fixture', 'ready', 'input', 'counter', 'transport', 'completion', 'epoch', 'draft', 'identity', 'retirement', 'exit-command', 'retired-owner', 'retired-settings-dom', 'retired-overlay-dom', 'retired-controls', 'retired-model', 'retired-notifications', 'portal', 'busy', 'adoption', 'relations', 'guard', 'compatibility', 'drain', 'cleanup', 'deadline', 'report', 'matrix', 'worker', 'page', 'console', 'resource', 'dialog', 'unhandled']);
 const need = (value, code) => { if (!value) throw new Error(code); };
 const fixed = (error, fallback) => codes.has(error?.message) ? error.message : fallback;
 const fault = (list, code) => { if (list.length < caps.faults) list.push(code); else list[caps.faults - 1] = 'counter'; };
@@ -267,16 +267,22 @@ async function appCase(ctx, row, contract) {
   await ctx.boundary('reset'); await retired(page);
   await page.evaluate(() => window.mountedSafety.checkGuard());
   if (put) {
+    await page.evaluate(() => window.mountedSafety.armExit());
     await ctx.dialog('alert', false, () => ctx.click(contract.selectors.exit));
+    await page.evaluate(() => window.mountedSafety.checkExitConsumed());
     await retired(page); need((await observePage(page)).mutations === 1, 'guard');
     await finish(page, put, row.id === 16 ? 'transport' : 'json', row.id === 17 ? { status: 409 } : {});
     await completed(page, 'settings-save', 1); await idle(page);
   }
   const count = (await observePage(page)).requests;
+  await page.evaluate(() => window.mountedSafety.armExit());
   await ctx.dialog('confirm', false, () => ctx.click(contract.selectors.exit));
+  await page.evaluate(() => window.mountedSafety.checkExitConsumed());
   need((await observePage(page)).requests === count, 'guard');
   await retired(page); await page.evaluate(() => window.mountedSafety.checkGuard());
+  await page.evaluate(() => window.mountedSafety.armExit());
   await ctx.dialog('confirm', true, () => ctx.click(contract.selectors.exit));
+  await page.evaluate(() => window.mountedSafety.checkExitConsumed());
   await wait(page, () => !!document.querySelector('.home-grid .content-row') && !document.querySelector('.page-template-settings'));
   await idle(page);
   await page.evaluate(() => window.mountedSafety.checkExited());
