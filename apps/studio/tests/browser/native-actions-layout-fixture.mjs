@@ -129,7 +129,12 @@ function installGeometry() {
     need([[.5, .5], [.08, .08], [.92, .08], [.08, .92], [.92, .92]].every(([x, y]) => node.contains(document.elementFromPoint(r[0] + (r[2] - r[0]) * x, r[1] + (r[3] - r[1]) * y))), 'visibility');
     if (focus) {
       const s = getComputedStyle(node);
-      need(node === document.activeElement && node.matches(':focus-visible') && s.outlineStyle === 'solid' && near(parseFloat(s.outlineWidth), 3) && near(parseFloat(s.outlineOffset), 3) && s.outlineColor !== 'rgba(0, 0, 0, 0)', 'focus');
+      need(node === document.activeElement, 'focus-identity');
+      need(node.matches(':focus-visible'), 'focus-visible');
+      need(s.outlineStyle === 'solid', 'focus-style');
+      need(near(parseFloat(s.outlineWidth), 3), 'focus-width');
+      need(near(parseFloat(s.outlineOffset), 3), 'focus-offset');
+      need(s.outlineColor !== 'rgba(0, 0, 0, 0)', 'focus-color');
     }
     return true;
   }
@@ -139,7 +144,7 @@ function installGeometry() {
     focus(surface) {
       const group = document.querySelector(selector(surface)), buttons = [...group.children], active = document.activeElement;
       const id = buttons.indexOf(active);
-      if (id >= 0) { need(!active.disabled, 'focus'); visible(active, true); }
+      if (id >= 0) { need(!active.disabled, 'focus-disabled'); visible(active, true); }
       return { id, enabled: buttons.map((b, i) => b.disabled ? -1 : i).filter(i => i >= 0) };
     },
   };

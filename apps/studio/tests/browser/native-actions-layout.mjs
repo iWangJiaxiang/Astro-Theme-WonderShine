@@ -16,7 +16,7 @@ const self = fileURLToPath(import.meta.url);
 const fixtureModule = new URL('./native-actions-layout-fixture.mjs', import.meta.url).href;
 const output = join(studio, 'test-results/native-actions-layout');
 const caps = Object.freeze({ workerMs: 150000, operationMs: 5000, bytes: 196608, faults: 8, tabs: 16, wheels: 16, pngs: 36 });
-const codes = new Set(['setup', 'bundle', 'css', 'browser', 'fixture', 'ready', 'counter', 'transport', 'oauth', 'label', 'intrinsic', 'geometry', 'wrap', 'gap', 'alignment', 'grow', 'padding', 'target', 'overflow', 'visibility', 'focus', 'input', 'busy', 'pending', 'draft', 'cancel', 'drain', 'cleanup', 'deadline', 'report', 'matrix', 'worker', 'page', 'console', 'resource', 'unhandled', 'screenshot']);
+const codes = new Set(['setup', 'bundle', 'css', 'browser', 'fixture', 'theme', 'ready', 'counter', 'transport', 'oauth', 'label', 'intrinsic', 'geometry', 'wrap', 'gap', 'alignment', 'grow', 'padding', 'target', 'overflow', 'visibility', 'focus', 'focus-identity', 'focus-visible', 'focus-style', 'focus-width', 'focus-offset', 'focus-color', 'focus-disabled', 'focus-repeat', 'focus-order', 'focus-tabs', 'input', 'busy', 'pending', 'draft', 'cancel', 'drain', 'cleanup', 'deadline', 'report', 'matrix', 'worker', 'page', 'console', 'resource', 'unhandled', 'screenshot']);
 const need = (value, code) => { if (!value) throw new Error(code); };
 const fixed = (error, fallback) => codes.has(error?.message) ? error.message : fallback;
 const fault = (list, code) => { if (list.length < caps.faults) list.push(code); else list[caps.faults - 1] = 'counter'; };
@@ -162,14 +162,14 @@ async function tabGroup(page, surface) {
     await reveal(page, `${surface === 'login' ? '.account-login-buttons' : '.workspace-sync-actions'} > button:nth-child(${id + 1})`);
     const state = await page.evaluate(surface => window.nativeActionGeometry.focus(surface), surface);
     enabled = state.enabled;
-    need(!visited.includes(state.id), 'focus'); visited.push(state.id);
+    need(!visited.includes(state.id), 'focus-repeat'); visited.push(state.id);
     if (visited.length === enabled.length) {
       const start = enabled.indexOf(visited[0]);
       const expected = [...enabled.slice(start), ...enabled.slice(0, start)];
-      need(JSON.stringify(visited) === JSON.stringify(expected), 'focus'); return visited;
+      need(JSON.stringify(visited) === JSON.stringify(expected), 'focus-order'); return visited;
     }
   }
-  throw new Error('focus');
+  throw new Error('focus-tabs');
 }
 async function capture(page, record, slot, selector) {
   need(record.pngCount < record.pngs && ['login', 'workspace', 'busy', 'pending'].includes(slot), 'counter');
@@ -232,11 +232,11 @@ async function reviewCase(page, row, record) {
     if (id < 0) continue;
     await reveal(page, `${confirmation} > button:nth-of-type(${id + 1})`);
     await page.evaluate(() => window.nativeActionGeometry.visible(document.activeElement, true));
-    need(!seen.includes(id), 'focus'); seen.push(id);
+    need(!seen.includes(id), 'focus-repeat'); seen.push(id);
   }
-  need(JSON.stringify(seen) === '[0,1]', 'focus'); record.focus.push({ surface: 'confirmation', ids: seen });
+  need(JSON.stringify(seen) === '[0,1]', 'focus-order'); record.focus.push({ surface: 'confirmation', ids: seen });
   await capture(page, record, 'pending', confirmation);
-  need(await page.$eval(confirmation, group => document.activeElement === group.querySelectorAll('button')[1]), 'focus');
+  need(await page.$eval(confirmation, group => document.activeElement === group.querySelectorAll('button')[1]), 'focus-identity');
   live(page); await page.keyboard.press('Enter'); // Real focused Cancel only; never confirm.
   await wait(page, () => !document.querySelector('.workspace-sync-card > [role="group"]') && !document.querySelector('.workspace-panel .field input').disabled);
   need(await page.evaluate(() => window.nativeActions.messagePreserved()), 'draft');
@@ -275,9 +275,13 @@ async function runCase(browser, row, bundle, record) {
     await step(() => page.setRequestInterception(true)); page.on('request', intercept);
     await step(() => page.setUserAgent(ua[row.platform]));
     await step(() => page.setViewport({ width: row.width, height: row.height, deviceScaleFactor: 1, isMobile: row.platform !== 'desktop', hasTouch: row.platform !== 'desktop' }));
-    await step(() => page.setContent('<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><div id="root"></div>'));
-    await step(() => page.evaluate(config => { window.nativeActionConfig = config; }, { locale: row.locale, state: row.state }));
+    await step(() => page.setContent('<!doctype html><html lang="en" data-theme="light"><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div></body></html>'));
     await step(async () => { const handle = await page.addStyleTag({ content: bundle.css }); await handle.dispose(); });
+    await step(() => page.evaluate(config => {
+      const root = document.documentElement, style = getComputedStyle(root);
+      if (root.dataset.theme !== 'light' || !style.getPropertyValue('--wjx-theme').trim() || !style.getPropertyValue('--wjx-background').trim()) throw new Error('theme');
+      window.nativeActionConfig = config;
+    }, { locale: row.locale, state: row.state }));
     await step(async () => { const handle = await page.addScriptTag({ content: bundle.js }); await handle.dispose(); });
     stage = 'ready'; await step(() => settle(page));
     need(await step(() => page.evaluate((platform, width, height) => {
@@ -295,7 +299,7 @@ async function runCase(browser, row, bundle, record) {
         const disabled = await step(() => measurement(page, row, 'login')); sameGeometry(login, disabled); need(disabled.buttons.every(b => b.disabled), 'busy');
         await step(() => pointer(page, '[data-edge="before"]'));
         await page.keyboard.press('Tab'); await step(() => settle(page));
-        need(await page.evaluate(() => document.activeElement === document.querySelector('[data-edge="after"]')), 'focus');
+        need(await page.evaluate(() => document.activeElement === document.querySelector('[data-edge="after"]')), 'focus-identity');
         await step(() => page.evaluate(() => window.nativeActions.disable(false)));
         const restored = await step(() => measurement(page, row, 'login')); sameGeometry(login, restored); need(restored.buttons.every(b => !b.disabled), 'busy');
       } else {
