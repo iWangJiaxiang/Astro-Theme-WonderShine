@@ -8,6 +8,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { stableVersion, releaseContext } from '../scripts/release/context.mjs';
 import { validateIOSSdk, validateIOSExportCompliance } from '../scripts/release/verify-ios-sdk.mjs';
 import { validateSigningConfiguration } from '../scripts/release/signing-preflight.mjs';
+import { runSimulatorSmoke } from '../scripts/release/simulator-smoke.mjs';
 
 const script = name => fileURLToPath(new URL(`../scripts/release/${name}.mjs`, import.meta.url));
 test('only stable Studio release tags publish; pushes and PRs never publish', () => {
@@ -213,4 +214,180 @@ test('TestFlight requires explicit Apple success even with exit zero, and always
       await assert.rejects(readFile(join(root, 'studio-appstore/private_keys/AuthKey_FIXTUREKEY.p8')), { code: 'ENOENT' });
     }
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+function simulatorFixture({ failAt, shutdownFails = false, writeFails = false, booted = false, metadata = {}, malformedListing = false, unavailable = false, elapsed = 12, exitStatus = null } = {}) {
+  const privateValue = 'private-device-path-identity-output-fixture';
+  const calls = [];
+  const copies = [];
+  let result;
+  let clock = 0;
+  const commandError = code => Object.assign(new Error(privateValue), {
+    code, status: exitStatus, signal: code === 'ETIMEDOUT' ? 'SIGTERM' : privateValue,
+    stdout: privateValue, stderr: privateValue, path: privateValue,
+  });
+  return {
+    calls, copies, privateValue,
+    get result() { return result; },
+    options: {
+      now: () => { clock += elapsed; return clock; },
+      wait: async ms => { calls.push({ phase: 'settle', ms }); },
+      exec: (command, args, options) => {
+        const phase = command === 'plutil' ? 'app-metadata' : args[1] === 'list' ? 'list-devices' : args[1] === 'status_bar' ? 'status-bar' : args[1] === 'io' ? 'screenshot' : args[1];
+        calls.push({ phase, command, args, options });
+        if (phase === failAt || (phase === 'shutdown' && shutdownFails)) throw commandError(phase === 'launch' ? 'ETIMEDOUT' : privateValue);
+        if (command === 'plutil') return JSON.stringify({
+          CFBundleIdentifier: 'wang.jiaxiang.wondershine-studio',
+          CFBundleIcons: { CFBundlePrimaryIcon: { CFBundleIconName: 'AppIcon', CFBundleIconFiles: ['AppIcon60x60'] } },
+          ...metadata,
+        });
+        if (phase === 'list-devices') return malformedListing ? privateValue : JSON.stringify({ devices: { iOS: unavailable ? [] : [{ name: `iPhone ${privateValue}`, udid: privateValue, isAvailable: true, state: booted ? 'Booted' : 'Shutdown' }] } });
+        return privateValue;
+      },
+      io: {
+        mkdir: async () => { if (failAt === 'prepare-output') throw commandError('EACCES'); },
+        readdir: async (_path, options) => options?.withFileTypes
+          ? (failAt === 'find-app' ? [] : [{ name: `${privateValue}.app`, isDirectory: () => true, isSymbolicLink: () => false }])
+          : ['AppIcon60x60.png'],
+        copyFile: async (...args) => { copies.push(args); },
+        writeFile: async (path, text) => {
+          calls.push({ phase: 'write-result', path });
+          if (writeFails) throw commandError('ENOSPC');
+          result = JSON.parse(text);
+        },
+      },
+    },
+  };
+}
+
+function assertBoundedSimulatorResult(fixture) {
+  const result = fixture.result;
+  assert.deepEqual(Object.keys(result).sort(), ['phases', 'schemaVersion', 'success']);
+  assert.equal(result.schemaVersion, 1);
+  assert.equal(typeof result.success, 'boolean');
+  assert.ok(result.phases.length <= 17);
+  assert.equal(new Set(result.phases.map(item => item.phase)).size, result.phases.length);
+  const phases = new Set(['prepare-output', 'find-app', 'app-metadata', 'verify-icons', 'copy-icons', 'list-devices', 'select-device', 'boot', 'bootstatus', 'status-bar', 'install', 'launch', 'settle', 'screenshot', 'shutdown']);
+  for (const item of result.phases) {
+    assert.deepEqual(Object.keys(item).sort(), ['elapsedMs', 'errorCode', 'exitStatus', 'phase', 'signal', 'timedOut']);
+    assert.ok(phases.has(item.phase));
+    assert.ok(Number.isInteger(item.elapsedMs) && item.elapsedMs >= 0 && item.elapsedMs <= 3600000);
+    assert.equal(typeof item.timedOut, 'boolean');
+    assert.ok(item.exitStatus === null || (Number.isInteger(item.exitStatus) && item.exitStatus >= 0 && item.exitStatus <= 255));
+  }
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(fixture.privateValue));
+}
+
+function assertSimulatorCommands(fixture) {
+  const launch = fixture.calls.filter(call => call.phase === 'launch');
+  assert.equal(launch.length, 1);
+  for (const call of fixture.calls.filter(call => call.command === 'xcrun')) {
+    assert.equal(call.options.timeout, call.phase === 'bootstatus' ? 240000 : 120000);
+    assert.deepEqual(call.options.stdio, ['ignore', 'pipe', 'pipe']);
+  }
+  assert.equal(fixture.calls.filter(call => call.phase === 'shutdown').length, 1);
+  assert.ok(fixture.calls.findIndex(call => call.phase === 'shutdown') < fixture.calls.findIndex(call => call.phase === 'write-result'));
+}
+
+test('simulator smoke retains success assertions, screenshots and a single bounded launch', async () => {
+  for (const booted of [false, true]) {
+    const fixture = simulatorFixture({ booted });
+    const result = await runSimulatorSmoke(fixture.options);
+    assert.deepEqual(result, fixture.result);
+    assert.equal(fixture.result.success, true);
+    assertBoundedSimulatorResult(fixture);
+    assertSimulatorCommands(fixture);
+    assert.equal(fixture.calls.some(call => call.phase === 'boot'), !booted);
+    assert.equal(fixture.calls.find(call => call.phase === 'settle').ms, 6000);
+    assert.equal(fixture.copies.length, 2);
+    assert.match(fixture.copies[0][1], /compiled-app-icon\.png$/);
+    assert.match(fixture.copies[1][1], /app-icon-1024\.png$/);
+    assert.match(fixture.calls.find(call => call.phase === 'screenshot').args.at(-1), /studio-launch\.png$/);
+    assert.ok(fixture.result.phases.every(item => item.errorCode === null && !item.timedOut));
+  }
+});
+
+test('simulator launch timeout persists bounded diagnostics and shutdown cannot mask it', async () => {
+  for (const shutdownFails of [false, true]) {
+    const fixture = simulatorFixture({ failAt: 'launch', shutdownFails, elapsed: 4000000 });
+    await assert.rejects(runSimulatorSmoke(fixture.options), error => {
+      const primary = shutdownFails ? error.errors[0] : error;
+      if (shutdownFails) {
+        assert.ok(error instanceof AggregateError);
+        assert.equal(error.cause, primary);
+        assert.equal(error.errors[1].phase, 'shutdown');
+        assert.equal(error.errors[1].errorCode, 'UNKNOWN');
+        assert.equal(error.errors[1].signal, 'UNKNOWN');
+      }
+      assert.equal(primary.phase, 'launch');
+      assert.equal(primary.errorCode, 'ETIMEDOUT');
+      assert.equal(primary.timedOut, true);
+      assert.equal(primary.signal, 'SIGTERM');
+      assert.equal(primary.cause, undefined);
+      assert.doesNotMatch(primary.message + JSON.stringify(error), new RegExp(fixture.privateValue));
+      return true;
+    });
+    assertBoundedSimulatorResult(fixture);
+    assertSimulatorCommands(fixture);
+    assert.equal(fixture.result.success, false);
+    assert.deepEqual(fixture.result.phases.find(item => item.phase === 'launch'), {
+      phase: 'launch', elapsedMs: 3600000, timedOut: true, exitStatus: null, signal: 'SIGTERM', errorCode: 'ETIMEDOUT',
+    });
+    assert.equal(fixture.calls.some(call => ['settle', 'screenshot'].includes(call.phase)), false);
+  }
+});
+
+test('simulator persistence failures are secondary to launch and cleanup failures', async () => {
+  const fixture = simulatorFixture({ failAt: 'launch', shutdownFails: true, writeFails: true });
+  await assert.rejects(runSimulatorSmoke(fixture.options), error => {
+    assert.ok(error instanceof AggregateError);
+    assert.deepEqual(error.errors.map(item => item.phase), ['launch', 'shutdown', 'write-result']);
+    assert.equal(error.cause, error.errors[0]);
+    assert.equal(error.errors[2].errorCode, 'ENOSPC');
+    assert.doesNotMatch(JSON.stringify(error.errors), new RegExp(fixture.privateValue));
+    return true;
+  });
+  assertSimulatorCommands(fixture);
+  const writeOnly = simulatorFixture({ writeFails: true });
+  await assert.rejects(runSimulatorSmoke(writeOnly.options), { phase: 'write-result', errorCode: 'ENOSPC' });
+  assertSimulatorCommands(writeOnly);
+});
+
+test('simulator diagnostics bound elapsed time and reject invalid exit status values', async () => {
+  for (const [exitStatus, elapsed, expectedStatus, expectedElapsed] of [
+    [7, 12, 7, 12], [256, -12, null, 0], [-1, NaN, null, 0], [1.5, Infinity, null, 0], ['7', 0, null, 0],
+  ]) {
+    const fixture = simulatorFixture({ failAt: 'install', exitStatus, elapsed });
+    await assert.rejects(runSimulatorSmoke(fixture.options), { phase: 'install' });
+    assertBoundedSimulatorResult(fixture);
+    const record = fixture.result.phases.find(item => item.phase === 'install');
+    assert.equal(record.exitStatus, expectedStatus);
+    assert.equal(record.elapsedMs, expectedElapsed);
+    assert.equal(record.errorCode, 'UNKNOWN');
+    assert.equal(record.signal, 'UNKNOWN');
+    assert.equal(record.timedOut, false);
+  }
+});
+
+test('simulator prelaunch and screenshot failures still attempt result persistence', async () => {
+  for (const [options, phase] of [
+    [{ failAt: 'prepare-output' }, 'prepare-output'],
+    [{ failAt: 'find-app' }, 'find-app'],
+    [{ failAt: 'app-metadata' }, 'app-metadata'],
+    [{ metadata: { CFBundleIdentifier: 'unexpected-identity-fixture' } }, 'verify-icons'],
+    [{ metadata: { CFBundleIcons: {} } }, 'verify-icons'],
+    [{ malformedListing: true }, 'select-device'],
+    [{ unavailable: true }, 'select-device'],
+    [{ failAt: 'boot' }, 'boot'],
+    [{ failAt: 'install' }, 'install'],
+    [{ failAt: 'screenshot' }, 'screenshot'],
+    [{ shutdownFails: true }, 'shutdown'],
+  ]) {
+    const fixture = simulatorFixture(options);
+    await assert.rejects(runSimulatorSmoke(fixture.options), { phase });
+    assertBoundedSimulatorResult(fixture);
+    assert.equal(fixture.result.success, false);
+    assert.equal(fixture.calls.at(-1).phase, 'write-result');
+    assert.equal(fixture.calls.filter(call => call.phase === 'shutdown').length, ['boot', 'install', 'screenshot', 'shutdown'].includes(phase) ? 1 : 0);
+  }
 });

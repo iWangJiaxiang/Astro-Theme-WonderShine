@@ -15,8 +15,8 @@ const currentHEAD = git(['rev-parse', '--verify', 'HEAD']).trim();
 const componentSource = git(['show', `${baselineSHA}:${componentPath}`]);
 const currentSource = readFileSync(new URL('../../src/components/MediaBrowser.tsx', import.meta.url), 'utf8');
 
-// Fail closed: the complete current component must differ from the historical
-// component only by the single DOM-sync line in this exact media-query context.
+// Fail closed across the complete component: allow only the exact DOM-sync fix
+// and the separately specified bounded-thumbnail policy changes below.
 const baselineContext = `    const narrowLayout = window.matchMedia("(max-width: 760px)");
     const browseExpanded = ref(!narrowLayout.matches);
     const browseDisclosure = ref<HTMLDetailsElement>();
@@ -37,10 +37,40 @@ assert.equal(occurrences(componentSource, baselineContext), 1, 'Historical media
 assert.equal(occurrences(currentSource, currentContext), 1, 'Current media-query context must match exactly once');
 assert.equal(occurrences(componentSource, domSyncLine), 0, 'Historical source must not contain the DOM-sync line');
 assert.equal(occurrences(currentSource, domSyncLine), 1, 'Current source must contain exactly one DOM-sync line');
-assert.ok(
-  currentSource === componentSource.replace(baselineContext, currentContext),
-  'Current MediaBrowser must equal the historical source with only the exact DOM-sync line added',
-);
+const thumbnailChanges = [
+  [
+    'type Events = { select: [item: MediaItem, value: string] };\n',
+    'type Events = { select: [item: MediaItem, value: string] };\nconst INITIAL_EAGER_THUMBNAILS = 4;\n',
+  ],
+  [
+    `    watch([search, source, folder], () => {
+      page.value = 1;
+    });`,
+    `    // A bounded initial batch avoids lazy deferral, not asynchronous image work.
+    const eagerPaths = computed(
+      () =>
+        new Set(
+          items.value
+            .filter((item) => !item.unavailable && !failed.value.has(item.path))
+            .slice(0, INITIAL_EAGER_THUMBNAILS)
+            .map((item) => item.path),
+        ),
+    );
+    watch([search, source, folder], () => {
+      page.value = 1;
+    });`,
+  ],
+  ['                              loading: "lazy",', '                              loading: eagerPaths.value.has(item.path) ? "eager" : "lazy",'],
+  ['                                failed.value.add(item.path);', '                                failed.value = new Set([...failed.value, item.path]);'],
+];
+let expectedSource = componentSource.replace(baselineContext, currentContext);
+for (const [before, after] of thumbnailChanges) {
+  assert.equal(occurrences(expectedSource, before), 1, 'Known thumbnail change must have exactly one historical anchor');
+  assert.equal(occurrences(currentSource, after), 1, 'Known thumbnail change must match current source exactly once');
+  expectedSource = expectedSource.replace(before, after);
+}
+assert.equal(currentSource, expectedSource,
+  'Complete MediaBrowser must equal the fixed historical source plus only the exact DOM-sync and enumerated thumbnail changes');
 
 console.log(`Media disclosure counterfactual current git HEAD: ${currentHEAD}`);
 console.log(`Media disclosure counterfactual baseline SHA: ${baselineSHA}`);

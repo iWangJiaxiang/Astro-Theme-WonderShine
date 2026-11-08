@@ -11,7 +11,7 @@ import type {
 } from "../../shared/types";
 import { api, errorMessage, session } from "../api";
 import { formContext } from "../form-context";
-import { t, type Message } from "../i18n";
+import { locale, t, type Message } from "../i18n";
 import {
   classes,
   component,
@@ -75,11 +75,16 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       loading: relationsLoading,
       error: relationsError,
     });
+    let relationsRequestId = 0, relationsAlive = true, relationsRefreshPending = false;
     async function loadRelations(refresh = false) {
+      const id = ++relationsRequestId;
+      const current = () => relationsAlive && id === relationsRequestId;
+      relationsRefreshPending = relationsRefreshPending || refresh;
       relationsLoading.value = true;
       relationsError.value = "";
       try {
-        const items = await api<ArticleSummary[]>("/content" + (refresh ? "?refresh=1" : ""));
+        const items = await api<ArticleSummary[]>("/content" + (relationsRefreshPending ? "?refresh=1" : ""));
+        if (!current()) return;
         unresolvedItems.value = items.filter((item) => item.linkWarning);
         postItems.value = items.filter(
           (item) =>
@@ -98,11 +103,23 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
             all.findIndex((other) => other.value === item.value) === index,
         );
       } catch (e) {
-        relationsError.value = errorMessage(e);
+        if (current()) relationsError.value = errorMessage(e);
       } finally {
-        relationsLoading.value = false;
+        if (current()) {
+          relationsRefreshPending = false;
+          relationsLoading.value = false;
+        }
       }
     }
+    watch(locale, () => {
+      // Loaded options and settled errors survive presentation-only changes.
+      // A pending replacement retains any unfinished forced-refresh obligation.
+      if (relationsLoading.value) void loadRelations();
+    });
+    onBeforeUnmount(() => {
+      relationsAlive = false;
+      relationsRequestId++;
+    });
     void loadRelations();
     // Presentation groups only: schema keys and saved values remain unchanged.
     const groupDefinitions: Record<

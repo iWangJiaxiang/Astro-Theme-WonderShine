@@ -42,6 +42,7 @@ type Props = {
   svgOnly: boolean;
 };
 type Events = { select: [item: MediaItem, value: string] };
+const INITIAL_EAGER_THUMBNAILS = 4;
 const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
   "MediaBrowser",
   (props, emit, expose) => {
@@ -108,6 +109,16 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
     );
     const items = computed(() =>
       filtered.value.slice((page.value - 1) * 24, page.value * 24),
+    );
+    // A bounded initial batch avoids lazy deferral, not asynchronous image work.
+    const eagerPaths = computed(
+      () =>
+        new Set(
+          items.value
+            .filter((item) => !item.unavailable && !failed.value.has(item.path))
+            .slice(0, INITIAL_EAGER_THUMBNAILS)
+            .map((item) => item.path),
+        ),
     );
     watch([search, source, folder], () => {
       page.value = 1;
@@ -463,10 +474,10 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                           ? element("img", {
                               src: mediaURL(item.path, mediaVersion.value),
                               alt: "",
-                              loading: "lazy",
+                              loading: eagerPaths.value.has(item.path) ? "eager" : "lazy",
                               decoding: "async",
                               onError: domEvent(($event: Event) => {
-                                failed.value.add(item.path);
+                                failed.value = new Set([...failed.value, item.path]);
                               }),
                             })
                           : element(
