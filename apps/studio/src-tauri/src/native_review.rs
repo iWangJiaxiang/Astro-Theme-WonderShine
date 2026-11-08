@@ -416,7 +416,7 @@ mod tests {
         }
     }
     fn isolated_recovery_scenario(root: &Path) -> RecoveryChildReport {
-        use diagnostic::{Attempt, Check, Failure, LockKind, Snapshot, Stage};
+        use super::diagnostic::{Attempt, Check, Failure, LockKind, Snapshot, Stage};
         let failure_snapshot = std::cell::Cell::new(None);
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             // The child creates its own base; the parent can clean it after a timeout or panic.
