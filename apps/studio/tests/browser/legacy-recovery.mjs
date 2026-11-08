@@ -12,7 +12,7 @@ import { createRemoteTransport } from './platform/remote-transport';
 import { session } from './src/api';
 import { locale } from './src/i18n';
 locale.value = 'zh-CN';
-const transport = createRemoteTransport('https://studio.example', async () => new Response(JSON.stringify({ identity: { id: 'admin', method: 'password' } })), undefined, 'record-id');
+const transport = createRemoteTransport('https://studio.example', async () => new Response(JSON.stringify({ identity: { id: 'admin', name: 'Fixture editor', method: 'password' }, csrf: 'fixture-csrf', expires: 9999999999 })), undefined, 'record-id');
 window.ready = (async () => {
   session.value = await (await transport('/auth/login', { method: 'POST' })).json();
   createRoot(document.getElementById('root')).render(<LegacyRecovery />);
