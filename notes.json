@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "cursors": {
+    "labelling_after": null,
+    "investigation_after": null
+  },
+  "issues": [],
+  "fixes": [],
+  "checks": [
+    {
+      "area": "build",
+      "checked_at": "2026-11-16",
+      "result": "Static review: build-theme.mjs ignores spawnSync status null (startup failure or signal). Reported actionable bug; no local build/tests or fault injection.",
+      "follow_up": "Handle error and require status === 0; validate failure paths and package build in remote CI."
+    },
+    {
+      "area": "repo_assist_prs",
+      "checked_at": "2026-11-16",
+      "result": "Live GitHub reads found no open issues or PRs before this run; Tasks 1 and 2 not applicable. Selected Task 4 found build failure handling gap.",
+      "follow_up": null
+    }
+  ],
+  "completed_actions": [],
+  "priorities": [
+    {
+      "task": 4,
+      "item": "CSS subprocess failure handling",
+      "note": "Check newly filed build-theme failure-handling issue; implement focused fix with remote CI coverage when available."
+    }
+  ]
+}
