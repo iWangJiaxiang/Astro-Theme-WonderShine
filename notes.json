@@ -9,14 +9,20 @@
   "checks": [
     {
       "area": "build",
-      "checked_at": "2026-11-16",
-      "result": "Static review: build-theme.mjs ignores spawnSync status null (startup failure or signal). Reported actionable bug; no local build/tests or fault injection.",
-      "follow_up": "Handle error and require status === 0; validate failure paths and package build in remote CI."
+      "checked_at": "2026-11-17",
+      "result": "Issue #13 remains open with no human comments; build-theme.mjs still ignores null subprocess status. No duplicate comment or fault injection.",
+      "follow_up": "Implement focused fix and failure-path coverage with remote CI when available."
     },
     {
-      "area": "repo_assist_prs",
-      "checked_at": "2026-11-16",
-      "result": "Live GitHub reads found no open issues or PRs before this run; Tasks 1 and 2 not applicable. Selected Task 4 found build failure handling gap.",
+      "area": "docs",
+      "checked_at": "2026-11-17",
+      "result": "Corrected stale workspace/tgz-only Starter guidance in docs/releasing.md against starter package.json and getting-started/upgrading guides. Commit 1041960; draft PR branch repo-assist/basics-starter-install-docs. Diff check passed; no build/tests run per repository policy.",
+      "follow_up": "Review documentation draft PR."
+    },
+    {
+      "area": "code",
+      "checked_at": "2026-11-17",
+      "result": "Reviewed CI build/package validation, test-package.mjs and release artifact helpers; no dependency changes proposed. Selected Tasks 4,7,5 assessed; documentation correction is the focused output.",
       "follow_up": null
     }
   ],
