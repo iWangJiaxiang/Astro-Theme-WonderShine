@@ -16,7 +16,7 @@
 
 正式发布前确认 npm scope 和包权限、版本号、变更日志及 Trusted Publisher 配置。主题包公开源代码受 AGPL-3.0-or-later 约束，保持 LICENSE 和第三方来源声明。
 
-升级主题：在个人站点修改依赖版本并更新 lockfile。文章和图片不属于主题包，不随升级被覆盖。Starter 当前依赖本地 workspace 版本；尚未发布时，复制使用需改为本地 `.tgz`。
+升级主题：在个人站点修改依赖版本并更新 lockfile。文章和图片不属于主题包，不随升级被覆盖。Starter 已固定 npm 主题版本，复制建站可按[入门指南](getting-started.md)直接安装；验证尚未发布的源码改动时，可使用下文的本地 `.tgz` 流程。已有站点的依赖更新与回退见[升级指南](upgrading.md)。
 
 ## 主题与个人站点的回归
 
