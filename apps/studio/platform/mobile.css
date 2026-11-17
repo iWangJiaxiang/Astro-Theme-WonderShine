@@ -1,9 +1,6 @@
 /* Scoped to the installed mobile app; browser accessibility remains unchanged. */
-html[data-native-mobile] { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; }
+html[data-native-mobile] { touch-action: pan-x pan-y pinch-zoom; -webkit-text-size-adjust: 100%; }
 html[data-native-mobile] body { overscroll-behavior-y: none; }
-html[data-native-mobile] :is(input, textarea, select, [contenteditable=true]) { font-size: 16px !important; }
-html[data-native-mobile] :is(button, select, summary, input:not([type=checkbox]):not([type=radio]), .sidebar nav a) { min-height: 44px !important; }
-html[data-native-mobile] :is(.icon-button, .text-button) { min-width: 44px !important; }
 /* Keep first-run content and updates in one viewport, not one viewport each. */
 html[data-native-mobile]:has(.native-shell-connecting) { overscroll-behavior-y: none; }
 html[data-native-mobile] .native-shell-connecting {
@@ -27,16 +24,6 @@ html[data-native-mobile] .studio-shell { min-height: 100dvh; padding-top: env(sa
 html[data-native-mobile] .main-content { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
 html[data-native-mobile] .sidebar { padding-top: max(20px, env(safe-area-inset-top)); padding-bottom: max(18px, env(safe-area-inset-bottom)); }
 html[data-native-mobile] .main-shell { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
-html[data-native-mobile]:has(dialog[open]) { overflow: hidden; }
-html[data-native-mobile] dialog[open] {
-  position: fixed; top: calc(var(--native-visible-top, 0px) + max(12px, env(safe-area-inset-top))); bottom: auto;
-  max-width: calc(100vw - max(12px, env(safe-area-inset-left)) - max(12px, env(safe-area-inset-right)));
-  overflow-y: auto; margin-block: 0; max-height: calc(var(--native-visible-height, 100dvh) - max(12px, env(safe-area-inset-top)) - max(12px, env(safe-area-inset-bottom)));
-  overscroll-behavior: contain;
-}
-html[data-native-mobile] :is(.selection-panel, .media-dialog-panel) {
-  min-height: 0; max-height: calc(var(--native-visible-height, 100dvh) - max(16px, env(safe-area-inset-top)) - max(16px, env(safe-area-inset-bottom)));
-}
-html[data-native-mobile] :is(.selection-results, .media-dialog-body, .oauth-repositories) { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+/* Shared dialogs and portaled controls use accessibility.css in both editions. */
 
 html[data-native-mobile] .oauth-device { min-height: 0; overflow-y: auto; }

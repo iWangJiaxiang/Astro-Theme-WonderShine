@@ -1,5 +1,6 @@
 import type { ArticleSummary, Json } from "../../shared/types";
 import { t } from "../i18n";
+import { createBusinessModal } from "../modal-layer";
 import {
   classes,
   component,
@@ -11,7 +12,7 @@ import {
   renderList,
   type StudioComponent,
 } from "../react-component";
-import { computed, nextTick, onBeforeUnmount, ref, useId } from "../reactivity";
+import { computed, onBeforeUnmount, ref, useId } from "../reactivity";
 import Icon from "./Icon";
 
 type Props = {
@@ -78,7 +79,8 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
         : articles.value.find((item) => key(item) === reference.path)?.title ||
             reference.path;
     }
-    async function open() {
+    const modal = createBusinessModal(() => dialog.value, () => opened.value && !props.disabled);
+    function open() {
       if (props.disabled || references.value.length >= 12) return;
       search.value = "";
       selected.value = "";
@@ -86,11 +88,10 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
       title.value = "";
       error.value = "";
       opened.value = true;
-      await nextTick();
-      dialog.value?.showModal();
+      modal.open();
     }
     function close() {
-      dialog.value?.close();
+      modal.close();
       opened.value = false;
       trigger.value?.focus();
     }
@@ -133,7 +134,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
         emit("update:modelValue", [...references.value, reference]);
       close();
     }
-    onBeforeUnmount(() => dialog.value?.close());
+    onBeforeUnmount(() => modal.dispose());
     return () =>
       element(
         "div",
@@ -303,64 +304,70 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                             }),
                           ),
                           element(
-                            "fieldset",
+                            "div",
                             {
-                              "aria-label": t("本站文章"),
                               className: classes(
                                 "selection-results reference-results",
                               ),
                             },
-                            renderList(filtered.value).map((item) =>
-                              element(
-                                "label",
-                                {
-                                  key: key(item),
-                                  className: classes("choice-tile", {
-                                    selected: selected.value === key(item),
-                                  }),
-                                },
-                                element("input", {
-                                  checked: selected.value === key(item),
-                                  type: "radio",
-                                  name: "reference-article",
-                                  value: key(item),
-                                  onChange: domEvent(($event: Event) => {
-                                    selected.value = (
-                                      $event.target as HTMLInputElement
-                                    ).value;
-                                  }),
-                                }),
+                            element(
+                              "fieldset",
+                              {
+                                "aria-label": t("本站文章"),
+                                className: classes("selection-result-options"),
+                              },
+                              renderList(filtered.value).map((item) =>
                                 element(
-                                  "span",
-                                  null,
-                                  element("strong", null, item.title),
+                                  "label",
+                                  {
+                                    key: key(item),
+                                    className: classes("choice-tile", {
+                                      selected: selected.value === key(item),
+                                    }),
+                                  },
+                                  element("input", {
+                                    checked: selected.value === key(item),
+                                    type: "radio",
+                                    name: "reference-article",
+                                    value: key(item),
+                                    onChange: domEvent(($event: Event) => {
+                                      selected.value = (
+                                        $event.target as HTMLInputElement
+                                      ).value;
+                                    }),
+                                  }),
                                   element(
-                                    "small",
+                                    "span",
                                     null,
-                                    item.lang,
-                                    " · ",
-                                    t(item.draft ? "草稿" : "已发布"),
-                                    item.lang !== props.language
-                                      ? element(
-                                          Fragment,
-                                          null,
-                                          " · ",
-                                          t("缺少 {language} 译文", {
-                                            language: props.language,
-                                          }),
-                                        )
-                                      : null,
+                                    element("strong", null, item.title),
+                                    element(
+                                      "small",
+                                      null,
+                                      item.lang,
+                                      " · ",
+                                      t(item.draft ? "草稿" : "已发布"),
+                                      item.lang !== props.language
+                                        ? element(
+                                            Fragment,
+                                            null,
+                                            " · ",
+                                            t("缺少 {language} 译文", {
+                                              language: props.language,
+                                            }),
+                                          )
+                                        : null,
+                                    ),
                                   ),
                                 ),
                               ),
+                              !filtered.value.length
+                                ? element(
+                                    "p",
+                                    { className: classes("muted") },
+                                    t("没有找到匹配内容"),
+                                  )
+                                : null,
                             ),
-                            !filtered.value.length
-                              ? element(
-                                  "p",
-                                  { className: classes("muted") },
-                                  t("没有找到匹配内容"),
-                                )
-                              : null,
                           ),
                         )
                       : element(

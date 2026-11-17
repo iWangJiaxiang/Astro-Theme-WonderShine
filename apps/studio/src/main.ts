@@ -11,10 +11,8 @@ import './creation-tools.css';
 import './accessibility.css';
 const NativeShell = lazy(() => import('../platform/NativeShell'));
 const native = '__TAURI_INTERNALS__' in window;
-if (native) {
-  const disposeMobileShell = installMobileShell();
-  import.meta.hot?.dispose(disposeMobileShell);
-}
+const disposeMobileShell = installMobileShell(native);
+import.meta.hot?.dispose(disposeMobileShell);
 createRoot(document.getElementById('app')!).render(native
   ? createElement(Suspense, { fallback: createElement('p', { role: 'status' }, 'Opening Studio…') }, createElement(NativeShell))
   : createElement(App));

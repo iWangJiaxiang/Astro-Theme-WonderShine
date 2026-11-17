@@ -84,20 +84,51 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+        id: install
       - run: npm run typecheck -w @wondershine/studio
       - run: npm test -w @wondershine/studio
       - name: Measure content response operation budgets
         run: npx --no-install tsx --test tests/responsiveness-budgets.test.ts
       - run: node --test apps/studio/tests/release-scripts.test.mjs
       - run: npm run build
+        id: theme-build
       - run: npm run studio:build
+        id: studio-build
       - uses: browser-actions/setup-chrome@v2.2.0
         id: chrome
       - name: Enable Chromium sandbox namespaces on the ephemeral runner
+        id: sandbox
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Install fonts for multilingual browser screenshots
+        id: fonts
         run: sudo apt-get update && sudo apt-get install -y fonts-noto-cjk fonts-noto-color-emoji
-      - run: npm run test:browser -w @wondershine/studio
+      - name: Studio production browser smoke
+        timeout-minutes: 10
+        run: npx --no-install tsx apps/studio/tests/browser/smoke.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Studio React lifecycle (independent of smoke outcome)
+        timeout-minutes: 5
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.theme-build.outcome == 'success' && steps.studio-build.outcome == 'success' && steps.chrome.outcome == 'success' && steps.sandbox.outcome == 'success' && steps.fonts.outcome == 'success' }}
+        run: node apps/studio/tests/browser/react-lifecycle.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Upload collapsed-feedback regression (independent synthetic fixture)
+        timeout-minutes: 5
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.theme-build.outcome == 'success' && steps.studio-build.outcome == 'success' && steps.chrome.outcome == 'success' && steps.sandbox.outcome == 'success' && steps.fonts.outcome == 'success' }}
+        run: node apps/studio/tests/browser/upload-collapsed-feedback.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Native action layout regression (synthetic components, not devices)
+        timeout-minutes: 5
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.theme-build.outcome == 'success' && steps.studio-build.outcome == 'success' && steps.chrome.outcome == 'success' && steps.sandbox.outcome == 'success' && steps.fonts.outcome == 'success' }}
+        run: node apps/studio/tests/browser/native-actions-layout.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Root modal and navigation regression (existing isolated runner)
+        timeout-minutes: 6
+        if: ${{ !cancelled() && steps.install.outcome == 'success' && steps.theme-build.outcome == 'success' && steps.studio-build.outcome == 'success' && steps.chrome.outcome == 'success' && steps.sandbox.outcome == 'success' && steps.fonts.outcome == 'success' }}
+        run: npx --no-install tsx apps/studio/tests/browser/root-modals-runner.mjs
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - run: node apps/studio/tests/browser/app-updates.mjs

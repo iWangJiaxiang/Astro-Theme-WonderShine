@@ -37,12 +37,60 @@ const server = spawn(process.execPath, process.env.STUDIO_TEST_DEV ? ['--import'
   STUDIO_ADMIN_USER: 'owner', STUDIO_ADMIN_PASSWORD_HASH: await hashPassword('studio-browser-test-2026'), STUDIO_SESSION_SECRET: randomBytes(32).toString('hex') }, stdio: ['ignore', 'pipe', 'pipe'] });
 let logs = ''; server.stderr.on('data', data => { logs += data; });
 const executablePath = process.env.STUDIO_TEST_BROWSER || ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/chromium', '/usr/bin/google-chrome'].find(existsSync);
-let browser;
+let browser, emulationOwner, smokeFailure;
+const emulationOwnerReport = { schemaVersion:1, created:false, scope:'smoke-page',
+  disposalMode:'browser-close', result:'not-created', serverCleanupGuaranteed:false };
+const recordFailure = error => {
+  smokeFailure = smokeFailure ? new AggregateError([smokeFailure,error], 'Smoke test/cleanup failed', { cause:smokeFailure }) : error;
+};
+const teardownTimeoutMs = 10_000, killTimeoutMs = 5_000;
+const withTimeout = async (task, label, timeoutMs = teardownTimeoutMs) => {
+  let timer;
+  try {
+    // Promise.race also handles a late rejection after the timeout has won.
+    return await Promise.race([
+      Promise.resolve().then(task),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out`)), timeoutMs); }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+};
+const processEnded = child => child.exitCode !== null || child.signalCode !== null;
+const waitForProcessExit = async (child, label, stop, timeoutMs = teardownTimeoutMs) => {
+  let onExit, onError;
+  try {
+    await withTimeout(() => new Promise((resolve, reject) => {
+      onExit = () => processEnded(child) ? resolve() : reject(new Error(`${label} has no exit status`));
+      onError = reject;
+      // Observe before signalling; public status also covers an already-exited child.
+      child.once('exit', onExit); child.once('close', onExit); child.once('error', onError);
+      if (processEnded(child)) resolve();
+      else stop?.();
+    }), label, timeoutMs);
+  } finally {
+    if (onExit) { child.off('exit', onExit); child.off('close', onExit); }
+    if (onError) child.off('error', onError);
+  }
+};
+const signalProcess = (child, signal) => {
+  if (!child.kill(signal) && !processEnded(child)) throw new Error(`Process did not accept ${signal}`);
+};
+const releaseProcessHandles = child => {
+  // Leftover stdio (including inherited pipes) must not keep the harness alive.
+  child.unref();
+  for (const stream of child.stdio) stream?.destroy();
+};
 try {
   if (!executablePath) throw new Error('Set STUDIO_TEST_BROWSER to an installed Chrome/Chromium executable.');
   for (let i = 0; i < 100; i++) { try { if ((await fetch(origin + '/api/auth/config')).ok) break; } catch {} if (i === 99) throw new Error('Server did not start: ' + logs); await new Promise(r => setTimeout(r, 100)); }
   browser = await puppeteer.launch({ headless: true, executablePath });
   const page = await browser.newPage(), errors = [], failures = [], reactWarnings = [];
+  // One supplemental raw-emulation owner for this page; browser.close disposes it.
+  // Never detach it between drawer sizes, keyboard checks or ordinary viewports.
+  emulationOwner = await page.createCDPSession();
+  emulationOwnerReport.created = true;
+  emulationOwnerReport.result = 'attached';
   page.on('console', message => { const text = message.text(); if (/Cannot update a component|Invalid DOM property|Each child in a list|You provided a .*prop/i.test(text)) reactWarnings.push(text); });
   page.on('pageerror', error => errors.push(error.message)); page.on('dialog', dialog => dialog.accept());
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
@@ -69,7 +117,7 @@ try {
  await checkOnboarding({ page, click, heading, screenshots });
  await page.waitForFunction(()=>Number(document.querySelector('.stat-card strong')?.textContent)>0);
  await page.screenshot({path:screenshots+'/dashboard-desktop.png'});
-  await checkNavigationAccessibility({ page, screenshots });
+  await checkNavigationAccessibility({ page, screenshots, emulationOwner });
  const dashboardTitle = await page.$eval('.home-grid .content-row strong', node => node.textContent);
  await page.waitForSelector('.thread-composer .markdown-source');
  await fill('.thread-composer .markdown-source', 'Keep this unsaved dashboard draft.');
@@ -226,11 +274,101 @@ try {
   }
   console.log('PASS: configuration recovery after full reload; screenshots in studio/test-results.');
 } catch (error) {
-  if (browser) { const pages = await browser.pages(); const last = pages.at(-1); if (last) { await last.screenshot({ path: screenshots + '/failure.png', fullPage: true }); console.error((await last.evaluate(() => document.body.innerText)).slice(-2500)); } }
-  throw error;
+  recordFailure(error);
+  try {
+    await withTimeout(async () => {
+      if (browser) { const pages = await browser.pages(); const last = pages.at(-1); if (last) { await last.screenshot({ path: screenshots + '/failure.png', fullPage: true }); console.error((await last.evaluate(() => document.body.innerText)).slice(-2500)); } }
+    }, 'Failure diagnostics');
+  } catch (diagnosticError) {
+    recordFailure(diagnosticError);
+  }
 } finally {
-  await browser?.close();
-  server.kill('SIGTERM');
-  await new Promise(resolve => server.exitCode !== null ? resolve() : server.once('exit', resolve));
-  await rm(base, { recursive: true, force: true });
+  let browserProcess;
+  try {
+    if (browser) {
+      browserProcess = browser.process();
+      if (!browserProcess) throw new Error('Launched browser has no public process handle');
+      emulationOwnerReport.browserProcessEnded = false;
+      // Puppeteer may resolve close() after swallowing its close callback error.
+      // Observe the actual child independently, before requesting browser.close().
+      const stages = ['browser-process-exit', 'browser-close'];
+      const outcomes = await Promise.allSettled([
+        waitForProcessExit(browserProcess, 'Browser process exit'),
+        withTimeout(() => browser.close(), 'Browser close'),
+      ]);
+      for (const [index, outcome] of outcomes.entries()) {
+        if (outcome.status === 'rejected') {
+          (emulationOwnerReport.browserCleanupFailures ??= []).push(stages[index]);
+          recordFailure(outcome.reason);
+        }
+      }
+      if (!processEnded(browserProcess)) {
+        emulationOwnerReport.disposalMode = 'browser-process-kill';
+        try {
+          await waitForProcessExit(browserProcess, 'Browser SIGKILL exit', () => signalProcess(browserProcess, 'SIGKILL'), killTimeoutMs);
+        } catch (error) {
+          (emulationOwnerReport.browserCleanupFailures ??= []).push('browser-process-kill');
+          recordFailure(error);
+        }
+      }
+      if (outcomes.some(outcome => outcome.status === 'rejected') || !processEnded(browserProcess)) {
+        try { await withTimeout(() => browser.disconnect(), 'Browser disconnect', killTimeoutMs); }
+        catch (error) {
+          (emulationOwnerReport.browserCleanupFailures ??= []).push('browser-disconnect');
+          recordFailure(error);
+        }
+      }
+      emulationOwnerReport.browserProcessEnded = processEnded(browserProcess);
+      emulationOwnerReport.result = !emulationOwner ? 'not-created' : !processEnded(browserProcess) ? 'browser-close-failed'
+        : emulationOwnerReport.disposalMode === 'browser-process-kill' ? 'disposed-by-process-kill' : 'disposed-by-browser-close';
+    }
+  } catch (error) {
+    emulationOwnerReport.result = emulationOwner ? 'browser-close-failed' : 'not-created';
+    emulationOwnerReport.failure = {kind:'browser-teardown'};
+    recordFailure(error);
+    if (browser) {
+      try { await withTimeout(() => browser.disconnect(), 'Browser disconnect', killTimeoutMs); }
+      catch (disconnectError) {
+        (emulationOwnerReport.browserCleanupFailures ??= []).push('browser-disconnect');
+        recordFailure(disconnectError);
+      }
+    }
+  } finally {
+    if (browserProcess) {
+      try { releaseProcessHandles(browserProcess); }
+      catch (error) { recordFailure(error); }
+    }
+    // Independent cleanup still runs after either graceful or forced browser failure.
+    try {
+      try {
+        await waitForProcessExit(server, 'Server SIGTERM exit', () => signalProcess(server, 'SIGTERM'));
+      } catch (error) {
+        emulationOwnerReport.serverCleanupFailure = {kind:'server-graceful-teardown'};
+        recordFailure(error);
+        if (!processEnded(server)) {
+          try {
+            await waitForProcessExit(server, 'Server SIGKILL exit', () => signalProcess(server, 'SIGKILL'), killTimeoutMs);
+          } catch (killError) {
+            emulationOwnerReport.serverKillFailure = {kind:'server-forced-teardown'};
+            recordFailure(killError);
+          }
+        }
+      }
+      emulationOwnerReport.serverCleanupGuaranteed = processEnded(server);
+    } catch (error) {
+      emulationOwnerReport.serverCleanupFailure = {kind:'server-teardown'};
+      recordFailure(error);
+    } finally {
+      try { releaseProcessHandles(server); }
+      catch (error) { recordFailure(error); }
+      try { await withTimeout(() => rm(base, { recursive: true, force: true }), 'Fixture removal'); }
+      catch (error) { recordFailure(error); }
+    }
+  }
+  try {
+    await withTimeout(() => writeFile(`${screenshots}/navigation-emulation-owner.json`,JSON.stringify(emulationOwnerReport,null,2)+'\n'), 'Lifecycle report write');
+  } catch (error) {
+    recordFailure(error);
+  }
 }
+if (smokeFailure) throw smokeFailure;

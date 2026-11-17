@@ -122,6 +122,10 @@
 .choice-trigger { border-color: transparent; background: var(--form-surface); box-shadow: inset 0 -1px 0 var(--form-rule); border-radius: 6px; font-size: 13px; min-height: 35px; }
 .choice-trigger:hover { background: color-mix(in srgb, var(--wjx-theme) 4%, var(--studio-card)); }
 .choice-trigger:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: 2px; }
+.choice-trigger > .choice-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.choice-trailing { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; margin-inline-start: auto; }
+.choice-trailing > svg { flex-shrink: 0; }
+.choice-count { font-size: 10px; min-width: 17px; min-height: 17px; padding: 0 4px; display: grid; place-items: center; background: color-mix(in srgb,var(--wjx-theme) 10%,var(--studio-card)); color: var(--wjx-theme); border-radius: 5px; }
 .selected-choices { gap: 5px; }
 .selected-choices button { background: color-mix(in srgb, var(--wjx-theme) 6%, var(--studio-card)); padding: 4px 7px; font-size: 10px; border-radius: 4px; line-height: 1.45; }
 .selected-choices button > span:last-child { opacity: .6; }
@@ -130,14 +134,15 @@
 .selection-panel > .card-heading h2 { font-size: 15px; }
 .selection-search { padding: 13px 22px; margin: 0; }
 .selection-search > span { font-size: 11px; color: var(--studio-muted); }
-.selection-results { padding: 3px 22px 18px; gap: 5px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.selection-results { padding: 3px 22px 18px; }
+.selection-result-options { gap: 5px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .selection-results .choice-tile { border-color: transparent; border-radius: 6px; padding: 9px 10px; background: var(--form-surface); min-height: 40px; font-size: 12px; }
 .selection-results .choice-tile.selected { border-color: color-mix(in srgb, var(--wjx-theme) 26%, transparent); background: color-mix(in srgb, var(--wjx-theme) 7%, var(--studio-card)); }
 .selection-footer { padding: 12px 22px; background: var(--studio-card); border-top-color: var(--studio-line); z-index: 2; }
 .selection-footer .primary { min-height: 35px; padding: 7px 15px; font-size: 12px; }
 .selection-footer > small { font-size: 11px; }
 .selection-visual .choice-tile { gap: 12px; }
-.reference-dialog .selection-results { grid-template-columns: minmax(0, 1fr); }
+.reference-dialog .selection-result-options, .selection-creatable .selection-result-options { grid-template-columns: minmax(0, 1fr); }
 
 @media (min-width: 1680px) {
   .settings-form-group.has-heading { grid-template-columns: 138px minmax(0, 1fr); gap: 34px; }
@@ -165,7 +170,7 @@
   .image-field.has-preview > small, .settings-card .image-field.has-preview > small { grid-row: 4; }
   .structured .compact-item > .item-actions { grid-row: 2; padding: 0; }
   .item-actions .icon-button, .item-actions .text-button.danger { min-height: 40px; }
-  .selection-results { grid-template-columns: minmax(0, 1fr); }
+  .selection-result-options { grid-template-columns: minmax(0, 1fr); }
   .selection-results .choice-tile { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {

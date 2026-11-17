@@ -2,6 +2,7 @@ import type { Choice } from "../../shared/choices";
 import type { Json } from "../../shared/types";
 import { errorMessage } from "../api";
 import { t, type Message } from "../i18n";
+import { createBusinessModal } from "../modal-layer";
 import {
   classes,
   component,
@@ -15,7 +16,6 @@ import {
 } from "../react-component";
 import {
   computed,
-  nextTick,
   onBeforeUnmount,
   ref,
   useId,
@@ -115,6 +115,11 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       () =>
         new Map(options.value.map((option) => [option.value, option.label])),
     );
+    const compactValues = computed(() =>
+      selected.value.filter(
+        (value) => !!value || (!props.multiple && labels.value.has(value)),
+      ),
+    );
     function toggle(values: string[], value: string): string[] {
       return props.multiple
         ? values.includes(value)
@@ -126,21 +131,34 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       if (!props.disabled)
         emit("update:modelValue", props.multiple ? values : (values[0] ?? ""));
     }
-    async function open() {
+    const modal = createBusinessModal(() => dialog.value, () => opened.value && !props.disabled);
+    function open() {
       if (props.disabled) return;
       pending.value = [...selected.value];
       search.value = "";
       createError.value = "";
       created.value = false;
       opened.value = true;
-      await nextTick();
-      dialog.value?.showModal();
+      modal.open();
     }
     function close() {
       if (creating.value) return;
-      dialog.value?.close();
+      modal.close();
       opened.value = false;
-      trigger.value?.focus();
+      let target: HTMLElement | null | undefined = trigger.value;
+      // A portaled chooser can outlive a responsive disclosure's open state.
+      // Use the outermost folded ancestor's summary, never reopen its contents.
+      for (let parent = target?.parentElement; parent; parent = parent.parentElement) {
+        if (!parent.matches("details:not([open])")) continue;
+        const summary = parent.querySelector<HTMLElement>(":scope > summary");
+        if (!summary?.contains(target ?? null)) target = summary;
+      }
+      if (!target?.isConnected || target.closest("[hidden], [inert]") || target.matches(":disabled") || !target.getClientRects().length) return;
+      const style = getComputedStyle(target);
+      if (style.visibility === "hidden" || style.visibility === "collapse") return;
+      const activeModal = document.activeElement?.closest("dialog:modal");
+      if (activeModal && !activeModal.contains(target)) return;
+      target.focus({ preventScroll: true });
     }
     function confirm() {
       if (creating.value) return;
@@ -183,7 +201,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
     );
     onBeforeUnmount(() => {
       alive = false;
-      dialog.value?.close();
+      modal.dispose();
     });
     return () =>
       element(
@@ -255,13 +273,12 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                 "aria-haspopup": "dialog",
                 "aria-expanded": opened.value,
                 "aria-labelledby":
-                  props.compact && !selected.value.filter(Boolean).length
+                  props.compact && !compactValues.value.length
                     ? `${id}-label`
                     : `${id}-label ${id}-value`,
                 title:
-                  props.compact && selected.value.filter(Boolean).length
-                    ? selected.value
-                        .filter(Boolean)
+                  props.compact && compactValues.value.length
+                    ? compactValues.value
                         .map((value) => labels.value.get(value) || value)
                         .join(" · ")
                     : undefined,
@@ -285,28 +302,20 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                       : null,
                     element(
                       "span",
-                      { id: `${id}-value` },
-                      selected.value.filter(Boolean).length
-                        ? selected.value
-                            .filter(Boolean)
+                      { id: `${id}-value`, className: classes("choice-value") },
+                      compactValues.value.length
+                        ? compactValues.value
                             .map((value) => labels.value.get(value) || value)
                             .join(" · ")
                         : props.label,
                     ),
-                    selected.value.filter(Boolean).length
-                      ? element(
-                          "span",
-                          { className: classes("choice-count") },
-                          selected.value.filter(Boolean).length,
-                        )
-                      : null,
                   )
                 : element(
                     Fragment,
                     null,
                     element(
                       "span",
-                      { id: `${id}-value` },
+                      { id: `${id}-value`, className: classes("choice-value") },
                       props.multiple
                         ? t("选择{p0}{p1}", {
                             p0: props.label,
@@ -318,8 +327,19 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                           })
                         : labels.value.get(selected.value[0]) || t("请选择…"),
                     ),
-                    element("span", { "aria-hidden": "true" }, "⌄"),
                   ),
+              element(
+                "span",
+                { className: classes("choice-trailing"), "aria-hidden": "true" },
+                props.compact && props.multiple && selected.value.filter(Boolean).length
+                  ? element(
+                      "span",
+                      { className: classes("choice-count") },
+                      selected.value.filter(Boolean).length,
+                    )
+                  : null,
+                element(Icon, { name: "chevron-down", size: 16 }),
+              ),
             ),
         !props.compact && props.multiple && selected.value.length
           ? element(
@@ -378,7 +398,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                   },
                   element(
                     "div",
-                    { className: classes("selection-panel") },
+                    { className: classes("selection-panel selection-field-panel") },
                     element(
                       "div",
                       { className: classes("card-heading") },
@@ -474,55 +494,59 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                         )
                       : null,
                     element(
-                      "fieldset",
-                      {
-                        disabled: creating.value,
-                        "aria-label": props.label,
-                        className: classes("selection-results"),
-                      },
-                      renderList(filtered.value).map((option) =>
-                        element(
-                          "label",
-                          {
-                            key: option.value,
-                            className: classes("choice-tile", {
-                              selected: pending.value.includes(option.value),
+                      "div",
+                      { className: classes("selection-results") },
+                      element(
+                        "fieldset",
+                        {
+                          disabled: creating.value,
+                          "aria-label": props.label,
+                          className: classes("selection-result-options"),
+                        },
+                        renderList(filtered.value).map((option) =>
+                          element(
+                            "label",
+                            {
+                              key: option.value,
+                              className: classes("choice-tile", {
+                                selected: pending.value.includes(option.value),
+                              }),
+                            },
+                            element("input", {
+                              type: props.multiple ? "checkbox" : "radio",
+                              name: `${props.name}-dialog`,
+                              value: option.value,
+                              checked: pending.value.includes(option.value),
+                              onChange: domEvent(($event: Event) => {
+                                pending.value = toggle(
+                                  pending.value,
+                                  option.value,
+                                );
+                              }),
                             }),
-                          },
-                          element("input", {
-                            type: props.multiple ? "checkbox" : "radio",
-                            name: `${props.name}-dialog`,
-                            value: option.value,
-                            checked: pending.value.includes(option.value),
-                            onChange: domEvent(($event: Event) => {
-                              pending.value = toggle(
-                                pending.value,
-                                option.value,
-                              );
+                            element(ChoicePreview, {
+                              value: option.value,
+                              kind: props.preview,
                             }),
-                          }),
-                          element(ChoicePreview, {
-                            value: option.value,
-                            kind: props.preview,
-                          }),
-                          element("span", null, option.label),
+                            element("span", null, option.label),
+                          ),
                         ),
+                        !filtered.value.length
+                          ? element(
+                              "p",
+                              { className: classes("muted") },
+                              t(
+                                props.createOption
+                                  ? query.value
+                                    ? "没有匹配的话题，可以直接创建。"
+                                    : "暂无话题，输入名称即可创建。"
+                                  : options.value.length
+                                    ? "没有匹配的选项"
+                                    : "暂无可选项，请先添加关联内容。",
+                              ),
+                            )
+                          : null,
                       ),
-                      !filtered.value.length
-                        ? element(
-                            "p",
-                            { className: classes("muted") },
-                            t(
-                              props.createOption
-                                ? query.value
-                                  ? "没有匹配的话题，可以直接创建。"
-                                  : "暂无话题，输入名称即可创建。"
-                                : options.value.length
-                                  ? "没有匹配的选项"
-                                  : "暂无可选项，请先添加关联内容。",
-                            ),
-                          )
-                        : null,
                     ),
                     element(
                       "div",

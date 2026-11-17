@@ -33,6 +33,12 @@ API 的 401 仅在非登录请求、仍有当前会话且请求捕获的认证�
 
 以上是当前进程内的固定 schema 与会话边界，不是恶意 JavaScript sandbox，也不保证任意插件兼容或持久草稿归属。该边界与 API 接入已完成源码审查，运行时验证仍待远程 CI；不据此宣称 Settings 集成验收或跨实例同 key 草稿恢复问题已解决，也不扩展下文历史验收结果。
 
+## 核心移动交互与直接回归
+
+本轮收敛使用共享原生 `dialog` 管理业务弹层与重新认证层，保留取消后的未保存输入、焦点回归和单次操作语义；viewport 跟踪不再禁止用户缩放。内容库使用进程内、账号/工作区分隔的列表记忆，导航恢复滚动与焦点；这不是持久草稿恢复机制。媒体库与图片选择器在短屏折叠筛选和上传区域，同时保留上传进度、结果与失败反馈。原生操作区按内容宽度换行，Workspace 标题沿用直接回归约束。
+
+`studio.yml` 接入已有 lifecycle、mounted Settings、upload collapsed-feedback、native action layout、root modal/navigation 直接回归，保留原有平台构建与发行条件；未引入 expanded/targeted audit 工作流、独立 collectors 或 tracing 插件，初始 eager-thumbnail 优化延期。浏览器 viewport/touch/pinch、合成调度/传输及 mocked Tauri IPC 只能证明各自测试条件下的行为，不代表 iOS/Android 真机、系统键盘、原生缩放或商店验收。此次候选提交仍须通过自身的远程 CI 并复看相关截图，不能沿用旧分支的通过记录。
+
 ## 分轮修复
 
 第一轮的三个优先问题：

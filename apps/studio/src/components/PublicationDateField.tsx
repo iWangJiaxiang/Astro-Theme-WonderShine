@@ -1,6 +1,7 @@
 import { dateParts } from "../../shared/form-fields";
 import type { Json } from "../../shared/types";
 import { t } from "../i18n";
+import { createBusinessModal } from "../modal-layer";
 import {
   publicationDateDraft,
   publicationDateValue,
@@ -15,7 +16,7 @@ import {
   portal,
   type StudioComponent,
 } from "../react-component";
-import { computed, nextTick, onBeforeUnmount, ref, useId } from "../reactivity";
+import { computed, onBeforeUnmount, ref, useId } from "../reactivity";
 import Icon from "./Icon";
 
 type Props = { modelValue: Json | undefined; disabled?: boolean };
@@ -35,15 +36,15 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
     const pendingValue = computed(() => publicationDateValue(pending.value));
     const zone = (value?: string) =>
       value && /^[zZ]$/.test(value) ? "UTC" : value || "";
-    async function open() {
+    const modal = createBusinessModal(() => dialog.value, () => opened.value && !props.disabled);
+    function open() {
       if (props.disabled) return;
       pending.value = publicationDateDraft(String(props.modelValue || ""));
       opened.value = true;
-      await nextTick();
-      dialog.value?.showModal();
+      modal.open();
     }
     function close() {
-      dialog.value?.close();
+      modal.close();
       opened.value = false;
       trigger.value?.focus();
     }
@@ -52,7 +53,7 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
       emit("update:modelValue", pendingValue.value);
       close();
     }
-    onBeforeUnmount(() => dialog.value?.close());
+    onBeforeUnmount(() => modal.dispose());
     return () =>
       element(
         "div",
