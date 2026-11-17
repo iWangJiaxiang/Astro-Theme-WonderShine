@@ -10,20 +10,20 @@
     {
       "area": "build",
       "checked_at": "2026-11-17",
-      "result": "Issue #13 remains open with no human comments; build-theme.mjs still ignores null subprocess status. No duplicate comment or fault injection.",
-      "follow_up": "Implement focused fix and failure-path coverage with remote CI when available."
+      "result": "Reconfirmed #13 in build-theme.mjs by static review; no comments or active PR. Null subprocess status still proceeds. No fault injection or local execution.",
+      "follow_up": "Focused fix and four exit-path cases require remote CI; no dispatch capability available in this run."
     },
     {
       "area": "docs",
       "checked_at": "2026-11-17",
-      "result": "Corrected stale workspace/tgz-only Starter guidance in docs/releasing.md against starter package.json and getting-started/upgrading guides. Commit 1041960; draft PR branch repo-assist/basics-starter-install-docs. Diff check passed; no build/tests run per repository policy.",
-      "follow_up": "Review documentation draft PR."
+      "result": "Previous docs change is NOT an open PR: issue #15 records PR-creation permission failure and review branch repo-assist/basics-starter-install-docs-ab9a09b6f905fc71. Monthly issue #14 contains duplicated bodies and invalid references; replacement prepared.",
+      "follow_up": "Maintainer review of #15 and its prepared branch."
     },
     {
       "area": "code",
       "checked_at": "2026-11-17",
-      "result": "Reviewed CI build/package validation, test-package.mjs and release artifact helpers; no dependency changes proposed. Selected Tasks 4,7,5 assessed; documentation correction is the focused output.",
-      "follow_up": null
+      "result": "Tasks 5,2,9: reviewed build-theme.mjs, package.json, npm-release tests and ci.yml. Failure-path coverage for #13 is missing; no duplicate issue/comment. Source unchanged; no local installs/builds/tests.",
+      "follow_up": "Remote validation required before code PR; PR creation is also blocked as recorded in #15."
     }
   ],
   "completed_actions": [],
@@ -31,7 +31,7 @@
     {
       "task": 4,
       "item": "CSS subprocess failure handling",
-      "note": "Check newly filed build-theme failure-handling issue; implement focused fix with remote CI coverage when available."
+      "note": "Issue #13 remains actionable; implement error/null-status handling and remote failure-path tests when CI execution is available. Do not repeat existing issue guidance."
     }
   ]
 }
