@@ -13,7 +13,7 @@ import { computed, ref, watch } from "../reactivity";
 import SettingsView from "./SettingsView";
 
 type Props = { layout: string; body: string; language: string };
-type Events = { dirty: [value: boolean] };
+type Events = { dirty: [value: boolean]; exit: [] };
 const PageSettings: StudioComponent<Props, Events> = component<Props, Events>(
   "PageSettings",
   (props, emit, expose) => {
@@ -98,6 +98,7 @@ const PageSettings: StudioComponent<Props, Events> = component<Props, Events>(
                     group: active.value,
                     language: props.language,
                     embedded: true,
+                    onExit: (() => emit("exit")) satisfies EventHandler<typeof SettingsView, "onExit">,
                     onDirty: updateDirty satisfies EventHandler<
                       typeof SettingsView,
                       "onDirty"

@@ -4,9 +4,9 @@ import {
   type TranslationResult,
 } from "../../shared/translation";
 import type { ArticleSummary, Json } from "../../shared/types";
-import { api, errorMessage } from "../api";
+import { api, errorMessage, session } from "../api";
 import { type ContentLanguages } from "../content-model";
-import { t, type Message } from "../i18n";
+import { locale, t, type Message } from "../i18n";
 import {
   classes,
   component,
@@ -45,15 +45,83 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
     const items = ref<ArticleSummary[]>([]),
       languages = ref<ContentLanguages>(),
       loading = ref(true),
-      error = ref<Message>(""),
+      loadError = ref<Message>(""),
+      translationError = ref<Message>(""),
       preparing = ref(false);
+    const error = computed(() => translationError.value || loadError.value);
     const adding = ref(false),
       targetLanguage = ref("");
     const capabilities = ref<TranslationCapabilities>({ enabled: false });
-    let alive = true;
-    onBeforeUnmount(() => {
-      alive = false;
-    });
+    const contextActive = ref(true);
+    const initialSession = session.value;
+    const initialIdentity = initialSession?.identity.id;
+    const initialMethod = initialSession?.identity.method;
+    const initialCsrf = initialSession?.csrf;
+    const initialExpires = initialSession?.expires;
+    let alive = true,
+      documentGeneration = 0,
+      loadGeneration = 0,
+      loadStarted = false,
+      loadPending = false,
+      pendingRefresh = false,
+      mutationGeneration = 0,
+      workingReported = false;
+    type DocumentOwner = {
+      generation: number;
+      path: string;
+      kind: Props["kind"];
+    };
+    type MutationOwner = DocumentOwner & { mutation: number };
+    let mutationOwner: MutationOwner | undefined;
+    let documentPath = props.path,
+      documentKind = props.kind;
+    function sessionCurrent() {
+      return (
+        contextActive.value &&
+        session.value === initialSession &&
+        session.value?.identity.id === initialIdentity &&
+        session.value?.identity.method === initialMethod &&
+        session.value?.csrf === initialCsrf &&
+        session.value?.expires === initialExpires
+      );
+    }
+    function documentOwner(): DocumentOwner {
+      return {
+        generation: documentGeneration,
+        path: props.path,
+        kind: props.kind,
+      };
+    }
+    function documentCurrent(owner: DocumentOwner) {
+      return (
+        alive &&
+        sessionCurrent() &&
+        owner.generation === documentGeneration &&
+        owner.path === props.path &&
+        owner.kind === props.kind
+      );
+    }
+    function mutationCurrent(owner: MutationOwner) {
+      return mutationOwner === owner && documentCurrent(owner);
+    }
+    function releaseMutation(owner: MutationOwner) {
+      if (!mutationCurrent(owner)) return;
+      mutationOwner = undefined;
+      const notify = workingReported;
+      workingReported = false;
+      preparing.value = false;
+      // Clear ownership before notifying a synchronously updating parent.
+      if (notify) emit("working", false);
+    }
+    function resetDocument() {
+      items.value = [];
+      languages.value = undefined;
+      capabilities.value = { enabled: false };
+      adding.value = false;
+      targetLanguage.value = "";
+      loadError.value = "";
+      translationError.value = "";
+    }
     const language = computed(() =>
       languages.value
         ? translationLocation(
@@ -84,6 +152,7 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
     );
     const blocked = computed(
       () =>
+        !contextActive.value ||
         props.dirty ||
         props.busy ||
         !props.revision ||
@@ -92,55 +161,160 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
         !!error.value,
     );
     async function load(refresh = false) {
+      if (!alive || !sessionCurrent()) return;
+      const owner = documentOwner();
+      const request = ++loadGeneration;
+      const requestLocale = locale.value;
+      const requestRevision = props.revision;
+      const isCurrent = () =>
+        request === loadGeneration &&
+        documentCurrent(owner) &&
+        requestLocale === locale.value &&
+        requestRevision === props.revision;
+      loadStarted = true;
+      loadPending = true;
+      // A replacement inherits the forced read until its entire group settles.
+      pendingRefresh = pendingRefresh || refresh;
       loading.value = true;
-      error.value = "";
+      loadError.value = "";
       try {
         const [content, config, ai] = await Promise.all([
-          api<ArticleSummary[]>("/content" + (refresh ? "?refresh=1" : "")),
+          api<ArticleSummary[]>("/content" + (pendingRefresh ? "?refresh=1" : "")),
           api<ContentLanguages>("/content-languages"),
           api<TranslationCapabilities>("/translation/config"),
         ]);
-        items.value = content.filter((item) => item.kind === props.kind);
+        if (!isCurrent()) return;
+        items.value = content.filter((item) => item.kind === owner.kind);
         languages.value = config;
         capabilities.value = ai;
       } catch (e) {
-        error.value = errorMessage(e);
+        if (isCurrent()) loadError.value = errorMessage(e);
       } finally {
-        loading.value = false;
+        if (isCurrent()) {
+          loadPending = false;
+          pendingRefresh = false;
+          loading.value = false;
+        }
       }
     }
+    function retryLoad() {
+      if (!alive || !sessionCurrent()) return;
+      // Retry acknowledges a settled POST error, but never retries the POST.
+      if (!mutationOwner) translationError.value = "";
+      void load(true);
+    }
     async function translate(language: string, ai = false) {
-      if (blocked.value || !languages.value) return;
+      if (!alive || !sessionCurrent() || blocked.value || !languages.value) return;
       const path = targetPath(language);
       if (items.value.some((item) => item.path === path)) {
         emit("open", path);
         return;
       }
+      const owner: MutationOwner = {
+        ...documentOwner(),
+        mutation: ++mutationGeneration,
+      };
+      const revision = props.revision;
+      mutationOwner = owner;
       preparing.value = true;
-      error.value = "";
+      translationError.value = "";
+      workingReported = true;
       try {
+        emit("working", true);
+        // Parent notifications can synchronously replace the editing context.
+        if (!mutationCurrent(owner)) return;
         const result = await api<TranslationResult>(
           ai ? "/translation" : "/translation/manual",
           "POST",
-          { path: props.path, revision: props.revision, language },
+          { path: owner.path, revision, language },
         );
-        if (alive) {
-          preparing.value = false;
+        if (!mutationCurrent(owner)) return;
+        releaseMutation(owner);
+        if (
+          documentCurrent(owner) &&
+          owner.mutation === mutationGeneration &&
+          !mutationOwner
+        )
           emit("open", result.path);
-        }
       } catch (e) {
-        error.value = errorMessage(e);
+        if (mutationCurrent(owner)) translationError.value = errorMessage(e);
       } finally {
-        preparing.value = false;
+        releaseMutation(owner);
       }
+    }
+    function invalidateDocument() {
+      documentGeneration++;
+      loadGeneration++;
+      mutationGeneration++;
+      loadPending = false;
+      pendingRefresh = false;
+      mutationOwner = undefined;
+      const notify = workingReported;
+      workingReported = false;
+      preparing.value = false;
+      resetDocument();
+      loading.value = false;
+      // Retire the old owner before the parent can install a new one.
+      if (notify) emit("working", false);
     }
     watch(missingLanguages, (values) => {
       if (!values.includes(targetLanguage.value))
         targetLanguage.value = values[0] || "";
     });
-    watch(preparing, (value) => emit("working", value), { flush: "sync" });
-    onMounted(load);
-    watch(() => props.revision, () => load());
+    watch(
+      [
+        session,
+        () => session.value?.identity.id,
+        () => session.value?.identity.method,
+        () => session.value?.csrf,
+        () => session.value?.expires,
+      ] as const,
+      () => {
+        if (!alive || !contextActive.value) return;
+        // Never migrate an old editor to another session, even on A -> B -> A.
+        // App normally unmounts it; otherwise it stays inert until remounted.
+        contextActive.value = false;
+        invalidateDocument();
+      },
+      { flush: "sync" },
+    );
+    watch(
+      [
+        () => props.path,
+        () => props.kind,
+        () => props.revision,
+        locale,
+      ] as const,
+      (next, previous) => {
+        if (!alive || !sessionCurrent()) return;
+        if (next[0] !== documentPath || next[1] !== documentKind) {
+          documentPath = next[0];
+          documentKind = next[1];
+          invalidateDocument();
+          if (alive && sessionCurrent()) void load();
+          return;
+        }
+        // Revision supersedes reads only; locale replaces only a pending group.
+        if (next[2] !== previous[2] || (next[3] !== previous[3] && loadPending))
+          void load();
+      },
+      { flush: "sync" },
+    );
+    onMounted(() => {
+      if (!loadStarted) void load();
+    });
+    // Cleanup runs in reverse registration order. Notify directly, once, while
+    // emit is still open; no watcher or late POST finally owns this release.
+    onBeforeUnmount(() => {
+      alive = false;
+      documentGeneration++;
+      loadGeneration++;
+      mutationGeneration++;
+      mutationOwner = undefined;
+      const notify = workingReported;
+      workingReported = false;
+      if (notify) emit("working", false);
+    });
     return () =>
       element(
         "section",
@@ -218,7 +392,7 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
                 {
                   className: classes("text-button"),
                   onClick: domEvent(($event: Event) => {
-                    load(true);
+                    retryLoad();
                   }),
                 },
                 t("重试"),
