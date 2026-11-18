@@ -6,8 +6,9 @@ import ts from 'typescript';
 
 const studio = fileURLToPath(new URL('../../', import.meta.url));
 
-// Runs inside the fixture realm. Only fixed enums, numbers, booleans and local
-// ordinals leave it. Labels and the entered draft are compared here, not exported.
+// Runs inside the fixture realm. Reports contain fixed enums, numbers, booleans
+// and local ordinals. One bounded alignment value is failure-only stderr evidence;
+// labels and the entered draft are compared here, not exported.
 function installGeometry() {
   const need = (value, code, diagnostic) => { if (!value) throw new Error(diagnostic?.[code] ?? code); };
   // Per-call contexts select source constants only; no cross-call observation state.
@@ -83,8 +84,8 @@ function installGeometry() {
     need(cs.display === 'flex' && cs.flexWrap === 'wrap' && near(parseFloat(cs.columnGap), gap) && near(parseFloat(cs.rowGap), gap), 'gap');
     const grow = surface === 'login' || width <= 600;
     if (surface === 'workspace') {
-      // Keep the exact style contract; expose only a closed source-defined token,
-      // never arbitrary computed CSS or DOM text in the existing failure field.
+      // Keep the exact style contract and closed report token. The single bounded
+      // computed value is diagnostic-only; never export labels or DOM text.
       const alignmentFailure = {
         normal: 'alignment-style-normal', start: 'alignment-style-start',
         end: 'alignment-style-end', center: 'alignment-style-center',
@@ -105,7 +106,7 @@ function installGeometry() {
         : alignment === undefined ? 'alignment-style-undefined'
         : cs.getPropertyValue('justify-content') === 'flex-end' ? 'alignment-style-cssom-mismatch'
         : 'alignment-style-other';
-      need(alignment === 'flex-end', alignmentFailure[alignment] ?? alignmentCode);
+      need(alignment === 'flex-end', 'Native alignment: ' + JSON.stringify(typeof alignment === 'string' ? alignment.slice(0, 80) : null) + '\nError: ' + (alignmentFailure[alignment] ?? alignmentCode));
     }
     const samples = buttons.map((button, id) => {
       need(button.tagName === 'BUTTON' && button.textContent.trim() === labels[id], 'label');

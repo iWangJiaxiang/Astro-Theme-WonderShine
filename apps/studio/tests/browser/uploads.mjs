@@ -54,14 +54,21 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
       const body = browser.closest('.media-dialog-body');
       const footer = browser.closest('dialog')?.querySelector('.selection-footer');
       const clip = body?.getBoundingClientRect();
+      const footerTop = footer?.getBoundingClientRect().top ?? innerHeight;
       const top = Math.max(0, clip?.top ?? 0);
-      const bottom = Math.min(innerHeight, clip?.bottom ?? innerHeight, footer?.getBoundingClientRect().top ?? innerHeight);
+      const bottom = Math.min(innerHeight, clip?.bottom ?? innerHeight, footerTop);
+      const images = [];
+      // Failure-only geometry from this single sample; no text, paths or resampling.
+      const result = status => ({ status, viewport: [innerWidth, innerHeight],
+        body: clip ? [clip.left, clip.top, clip.right, clip.bottom] : null,
+        footerTop, images });
       const candidates = [...browser.querySelectorAll('.media-thumbnail img')].filter(image => image.complete && image.naturalWidth > 0);
       let meaningfulPreview = false;
       let loadedInViewport = false;
       let nonzeroThumbnail = false;
       const unobscuredPreview = candidates.some(image => {
         const box = image.getBoundingClientRect();
+        if (images.length < 8) images.push([box.left, box.top, box.right, box.bottom]);
         const left = Math.max(0, box.left), right = Math.min(innerWidth, box.right);
         const visibleTop = Math.max(top, box.top), visibleBottom = Math.min(bottom, box.bottom);
         // Show at least a square half-thumbnail region, not a one-pixel sliver.
@@ -74,15 +81,16 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
         return image.closest('.media-card').contains(hit);
       });
       if (!meaningfulPreview) {
-        if (!nonzeroThumbnail) return 'preview-geometry-zero-size';
-        if (!loadedInViewport) return 'preview-geometry-outside';
-        return 'preview-geometry-insufficient';
+        if (!nonzeroThumbnail) return result('preview-geometry-zero-size');
+        if (!loadedInViewport) return result('preview-geometry-outside');
+        return result('preview-geometry-insufficient');
       }
-      if (!unobscuredPreview) return 'preview-obscured';
-      if (body && body.scrollTop !== 0) return 'preview-initial-scroll';
-      return 'visible';
+      if (!unobscuredPreview) return result('preview-obscured');
+      if (body && body.scrollTop !== 0) return result('preview-initial-scroll');
+      return result('visible');
     });
-    assert.equal(preview, 'visible', 'initial 320x568 view shows a meaningful loaded image preview, unobscured by the footer, without scrolling');
+    if (preview.status !== 'visible') console.error('Initial preview geometry: ' + JSON.stringify(preview));
+    assert.equal(preview.status, 'visible', 'initial 320x568 view shows a meaningful loaded image preview, unobscured by the footer, without scrolling');
   };
   const retainUploadAcrossBrowseToggle = async disclosure => {
     const handles = await Promise.all(['.media-upload', '.upload-file-input', '.upload-results'].map(selector => page.$(selector)));

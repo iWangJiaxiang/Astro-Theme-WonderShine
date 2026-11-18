@@ -448,6 +448,15 @@ async function runCase(browser, row, bundle, record) {
     // assertion suffixes may supply a more specific fixed failure enum.
     const suffix = typeof error?.message === 'string' ? error.message.match(/(?:^|Error:\s*)([a-z-]+)\s*$/)?.[1] : null;
     record.primary = reverseTokens.get(assertionSuffix(error)) ?? (codes.has(suffix) ? suffix : fixed(error, stage));
+    // Only this synthetic fixture's bounded alignment value reaches stderr.
+    // The original allowlisted failure code and report projection stay unchanged.
+    const alignment = error?.message?.match(/^Native alignment: ([^\r\n]{1,512})\nError: alignment-style-[a-z-]+\s*$/);
+    if (alignment && codes.has(suffix)) {
+      try {
+        const value = JSON.parse(alignment[1]);
+        if (value === null || (typeof value === 'string' && value.length <= 80)) console.error(`Native alignment case ${row.id}: ${JSON.stringify(value)}`);
+      } catch { /* Malformed diagnostics never replace the original assertion. */ }
+    }
     if (record.primary === 'deadline' || error?.name === 'TimeoutError') stalled = true;
   }
   finally {
@@ -675,7 +684,7 @@ export async function mainRunner() {
   try {
     need(process.platform === 'linux', 'setup');
     await parentIO('init'); owned = true; await parentIO('create', base);
-    child = spawn(process.execPath, [self, '--native-actions-worker', base], { cwd: studio, detached: true, stdio: 'ignore' }); settled = observe(child);
+    child = spawn(process.execPath, [self, '--native-actions-worker', base], { cwd: studio, detached: true, stdio: ['ignore', 'ignore', 'inherit'] }); settled = observe(child);
     let result;
     try { result = await bounded(() => settled, caps.workerMs); }
     catch (error) { primary = fixed(error, 'worker'); }

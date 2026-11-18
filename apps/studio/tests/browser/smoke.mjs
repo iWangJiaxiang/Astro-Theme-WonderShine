@@ -277,7 +277,7 @@ try {
   recordFailure(error);
   try {
     await withTimeout(async () => {
-      if (browser) { const pages = await browser.pages(); const last = pages.at(-1); if (last) { await last.screenshot({ path: screenshots + '/failure.png', fullPage: true }); console.error((await last.evaluate(() => document.body.innerText)).slice(-2500)); } }
+      if (browser) { const pages = await browser.pages(); const last = pages.at(-1); if (last) await last.screenshot({ path: screenshots + '/failure.png' }); }
     }, 'Failure diagnostics');
   } catch (diagnosticError) {
     recordFailure(diagnosticError);
