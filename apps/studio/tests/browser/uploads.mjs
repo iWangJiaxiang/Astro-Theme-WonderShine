@@ -58,18 +58,26 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
       const bottom = Math.min(innerHeight, clip?.bottom ?? innerHeight, footer?.getBoundingClientRect().top ?? innerHeight);
       const candidates = [...browser.querySelectorAll('.media-thumbnail img')].filter(image => image.complete && image.naturalWidth > 0);
       let meaningfulPreview = false;
+      let loadedInViewport = false;
+      let nonzeroThumbnail = false;
       const unobscuredPreview = candidates.some(image => {
         const box = image.getBoundingClientRect();
         const left = Math.max(0, box.left), right = Math.min(innerWidth, box.right);
         const visibleTop = Math.max(top, box.top), visibleBottom = Math.min(bottom, box.bottom);
         // Show at least a square half-thumbnail region, not a one-pixel sliver.
         const meaningful = Math.min(box.width, box.height) / 2;
+        if (meaningful > 0) nonzeroThumbnail = true;
+        if (right > left && visibleBottom > visibleTop) loadedInViewport = true;
         if (meaningful <= 0 || right - left < meaningful || visibleBottom - visibleTop < meaningful) return false;
         meaningfulPreview = true;
         const hit = document.elementFromPoint((left + right) / 2, (visibleTop + visibleBottom) / 2);
         return image.closest('.media-card').contains(hit);
       });
-      if (!meaningfulPreview) return 'preview-geometry';
+      if (!meaningfulPreview) {
+        if (!nonzeroThumbnail) return 'preview-geometry-zero-size';
+        if (!loadedInViewport) return 'preview-geometry-outside';
+        return 'preview-geometry-insufficient';
+      }
       if (!unobscuredPreview) return 'preview-obscured';
       if (body && body.scrollTop !== 0) return 'preview-initial-scroll';
       return 'visible';

@@ -100,7 +100,12 @@ function installGeometry() {
         'safe left': 'alignment-style-safe-left', 'unsafe left': 'alignment-style-unsafe-left',
         'safe right': 'alignment-style-safe-right', 'unsafe right': 'alignment-style-unsafe-right',
       };
-      need(cs.justifyContent === 'flex-end', alignmentFailure[cs.justifyContent] ?? 'alignment-style-other');
+      const alignment = cs.justifyContent;
+      const alignmentCode = alignment === '' ? 'alignment-style-empty'
+        : alignment === undefined ? 'alignment-style-undefined'
+        : cs.getPropertyValue('justify-content') === 'flex-end' ? 'alignment-style-cssom-mismatch'
+        : 'alignment-style-other';
+      need(alignment === 'flex-end', alignmentFailure[alignment] ?? alignmentCode);
     }
     const samples = buttons.map((button, id) => {
       need(button.tagName === 'BUTTON' && button.textContent.trim() === labels[id], 'label');
