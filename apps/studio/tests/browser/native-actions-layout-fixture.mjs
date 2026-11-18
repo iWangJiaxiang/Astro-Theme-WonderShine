@@ -82,7 +82,16 @@ function installGeometry() {
     const gap = surface === 'login' ? 10 : 12;
     need(cs.display === 'flex' && cs.flexWrap === 'wrap' && near(parseFloat(cs.columnGap), gap) && near(parseFloat(cs.rowGap), gap), 'gap');
     const grow = surface === 'login' || width <= 600;
-    if (surface === 'workspace') need(cs.justifyContent === 'flex-end', 'alignment-style');
+    if (surface === 'workspace') {
+      // Keep the exact style contract; expose only a closed source-defined token,
+      // never arbitrary computed CSS or DOM text in the existing failure field.
+      const alignmentFailure = {
+        normal: 'alignment-style-normal', start: 'alignment-style-start',
+        end: 'alignment-style-end', center: 'alignment-style-center',
+        'flex-start': 'alignment-style-flex-start',
+      };
+      need(cs.justifyContent === 'flex-end', alignmentFailure[cs.justifyContent] ?? 'alignment-style-other');
+    }
     const samples = buttons.map((button, id) => {
       need(button.tagName === 'BUTTON' && button.textContent.trim() === labels[id], 'label');
       const s = getComputedStyle(button), r = box(button), inner = content(button), text = fragments(button);

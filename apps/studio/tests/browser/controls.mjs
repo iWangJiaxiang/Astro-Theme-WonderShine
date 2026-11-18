@@ -111,7 +111,20 @@ export async function checkControls({ page, click, heading, fill, base, screensh
     return results.clientHeight > 0 && results.scrollHeight > results.clientHeight && footer.getBoundingClientRect().bottom <= bottom;
   }), 'long option lists scroll within the visible viewport and keep confirmation reachable');
   for (const width of [1440, 390]) {
-    await page.setViewport({ width, height: width === 390 ? 844 : 1000 });
+    const height = width === 390 ? 844 : 1000;
+    await page.setViewport({ width, height });
+    // CDP acknowledges the resize before the page's resize listeners necessarily
+    // publish the matching overlay constraints. Establish readiness before the
+    // one-shot target snapshot; never poll geometry/hit validity or replay input.
+    await page.waitForFunction(({ width, height }) => {
+      const view = window.visualViewport, root = document.documentElement.style;
+      return innerWidth === width && innerHeight === height &&
+        (!view || (view.width === width && view.height === height && view.scale === 1 && view.offsetLeft === 0 && view.offsetTop === 0)) &&
+        parseFloat(root.getPropertyValue('--studio-visible-width')) === (view?.width ?? innerWidth) &&
+        parseFloat(root.getPropertyValue('--native-visible-height')) === (view?.height ?? innerHeight) &&
+        parseFloat(root.getPropertyValue('--studio-visible-left')) === (view?.offsetLeft ?? 0) &&
+        parseFloat(root.getPropertyValue('--native-visible-top')) === (view?.offsetTop ?? 0);
+    }, { timeout: 5000 }, { width, height });
     const selector = '.selection-dialog[open] .selection-results';
     const target = await page.$eval(selector, (node, expected) => {
       const rect = node.getBoundingClientRect();
