@@ -38,7 +38,10 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   const initialPreview = async root => {
     await page.waitForFunction(root => {
       const browser = document.querySelector(root);
-      const loaded = browser?.getAttribute('aria-busy') === 'false' && [...browser.querySelectorAll('.media-thumbnail img')].some(image => image.complete && image.naturalWidth > 0);
+      // A cached offscreen image can finish before the initial row. Wait for the
+      // first preview's resource, never for geometry/hit success or a test scroll.
+      const first = browser?.querySelector('.media-thumbnail img');
+      const loaded = browser?.getAttribute('aria-busy') === 'false' && first?.complete && first.naturalWidth > 0;
       const sidebar = document.querySelector('.sidebar');
       const sidebarReady = !!sidebar && sidebar.getBoundingClientRect().right <= 0 && sidebar.inert && !sidebar.classList.contains('open') && !document.querySelector('.sidebar-backdrop');
       return loaded && sidebarReady;

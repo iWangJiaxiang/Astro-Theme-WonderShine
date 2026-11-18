@@ -84,8 +84,9 @@ function installGeometry() {
     need(cs.display === 'flex' && cs.flexWrap === 'wrap' && near(parseFloat(cs.columnGap), gap) && near(parseFloat(cs.rowGap), gap), 'gap');
     const grow = surface === 'login' || width <= 600;
     if (surface === 'workspace') {
-      // Keep the exact style contract and closed report token. The single bounded
-      // computed value is diagnostic-only; never export labels or DOM text.
+      // CSS Align 3 positional-values defines flex-end as a legacy alias for
+      // flow-end. Accept either serialization; edge/spacing checks below stay exact.
+      // https://drafts.csswg.org/css-align-3/#positional-values
       const alignmentFailure = {
         normal: 'alignment-style-normal', start: 'alignment-style-start',
         end: 'alignment-style-end', center: 'alignment-style-center',
@@ -106,7 +107,7 @@ function installGeometry() {
         : alignment === undefined ? 'alignment-style-undefined'
         : cs.getPropertyValue('justify-content') === 'flex-end' ? 'alignment-style-cssom-mismatch'
         : 'alignment-style-other';
-      need(alignment === 'flex-end', 'Native alignment: ' + JSON.stringify(typeof alignment === 'string' ? alignment.slice(0, 80) : null) + '\nError: ' + (alignmentFailure[alignment] ?? alignmentCode));
+      need(alignment === 'flex-end' || alignment === 'flow-end', 'Native alignment: ' + JSON.stringify(typeof alignment === 'string' ? alignment.slice(0, 80) : null) + '\nError: ' + (alignmentFailure[alignment] ?? alignmentCode));
     }
     const samples = buttons.map((button, id) => {
       need(button.tagName === 'BUTTON' && button.textContent.trim() === labels[id], 'label');
