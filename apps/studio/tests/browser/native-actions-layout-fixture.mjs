@@ -82,7 +82,7 @@ function installGeometry() {
     const gap = surface === 'login' ? 10 : 12;
     need(cs.display === 'flex' && cs.flexWrap === 'wrap' && near(parseFloat(cs.columnGap), gap) && near(parseFloat(cs.rowGap), gap), 'gap');
     const grow = surface === 'login' || width <= 600;
-    if (surface === 'workspace') need(cs.justifyContent === 'flex-end', 'alignment');
+    if (surface === 'workspace') need(cs.justifyContent === 'flex-end', 'alignment-style');
     const samples = buttons.map((button, id) => {
       need(button.tagName === 'BUTTON' && button.textContent.trim() === labels[id], 'label');
       const s = getComputedStyle(button), r = box(button), inner = content(button), text = fragments(button);
@@ -120,7 +120,7 @@ function installGeometry() {
     need(JSON.stringify(rows) === JSON.stringify(predicted), 'wrap');
     rows.forEach((row, index) => {
       const members = row.map(id => samples[id]), first = members[0], last = members.at(-1);
-      need(near(last.box[2], c[2]), 'alignment');
+      need(near(last.box[2], c[2]), 'alignment-right-edge');
       for (let i = 1; i < members.length; i++) need(near(members[i].box[0] - members[i - 1].box[2], gap), 'gap');
       const total = members.reduce((sum, b) => sum + Math.min(b.natural, capacity), 0) + gap * (members.length - 1);
       if (grow) {
@@ -128,7 +128,7 @@ function installGeometry() {
         const extra = (capacity - total) / members.length;
         for (const b of members) need(near(b.box[2] - b.box[0], Math.min(b.natural, capacity) + extra), 'grow');
       } else {
-        need(near(first.box[0] - c[0], capacity - total), 'alignment');
+        need(near(first.box[0] - c[0], capacity - total), 'alignment-left-space');
         for (const b of members) need(near(b.box[2] - b.box[0], Math.min(b.natural, capacity)), 'intrinsic');
       }
       if (index) {
@@ -136,7 +136,7 @@ function installGeometry() {
         need(near(first.box[1] - previousBottom, gap), 'gap');
       }
     });
-    if (width === 1440 && surface === 'workspace') need(rows.length === 1 && samples[0].box[0] - c[0] > 12, 'alignment');
+    if (width === 1440 && surface === 'workspace') need(rows.length === 1 && samples[0].box[0] - c[0] > 12, 'alignment-desktop');
     // Check the real clipping ancestors, not just document scrollWidth.
     for (let parent = group; parent; parent = parent.parentElement) {
       const p = box(parent), s = getComputedStyle(parent);

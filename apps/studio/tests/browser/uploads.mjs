@@ -57,18 +57,24 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
       const top = Math.max(0, clip?.top ?? 0);
       const bottom = Math.min(innerHeight, clip?.bottom ?? innerHeight, footer?.getBoundingClientRect().top ?? innerHeight);
       const candidates = [...browser.querySelectorAll('.media-thumbnail img')].filter(image => image.complete && image.naturalWidth > 0);
-      return candidates.some(image => {
+      let meaningfulPreview = false;
+      const unobscuredPreview = candidates.some(image => {
         const box = image.getBoundingClientRect();
         const left = Math.max(0, box.left), right = Math.min(innerWidth, box.right);
         const visibleTop = Math.max(top, box.top), visibleBottom = Math.min(bottom, box.bottom);
         // Show at least a square half-thumbnail region, not a one-pixel sliver.
         const meaningful = Math.min(box.width, box.height) / 2;
         if (meaningful <= 0 || right - left < meaningful || visibleBottom - visibleTop < meaningful) return false;
+        meaningfulPreview = true;
         const hit = document.elementFromPoint((left + right) / 2, (visibleTop + visibleBottom) / 2);
         return image.closest('.media-card').contains(hit);
-      }) && (!body || body.scrollTop === 0);
+      });
+      if (!meaningfulPreview) return 'preview-geometry';
+      if (!unobscuredPreview) return 'preview-obscured';
+      if (body && body.scrollTop !== 0) return 'preview-initial-scroll';
+      return 'visible';
     });
-    assert.ok(preview, 'initial 320x568 view shows a meaningful loaded image preview, unobscured by the footer, without scrolling');
+    assert.equal(preview, 'visible', 'initial 320x568 view shows a meaningful loaded image preview, unobscured by the footer, without scrolling');
   };
   const retainUploadAcrossBrowseToggle = async disclosure => {
     const handles = await Promise.all(['.media-upload', '.upload-file-input', '.upload-results'].map(selector => page.$(selector)));
