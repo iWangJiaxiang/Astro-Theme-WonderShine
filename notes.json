@@ -4,15 +4,16 @@
     "labelling_after": null,
     "investigation_after": null
   },
-  "issues": [],
+  "issues": [
+    {
+      "number": 16,
+      "state": "commented",
+      "updated_at": "2026-11-18",
+      "note": "Explained explicit report_incomplete signal versus actual build failure; no logs establish execution failure. Await maintainer acknowledgement; do not repeat comment."
+    }
+  ],
   "fixes": [],
   "checks": [
-    {
-      "area": "build",
-      "checked_at": "2026-11-17",
-      "result": "Reconfirmed #13 in build-theme.mjs by static review; no comments or active PR. Null subprocess status still proceeds. No fault injection or local execution.",
-      "follow_up": "Focused fix and four exit-path cases require remote CI; no dispatch capability available in this run."
-    },
     {
       "area": "docs",
       "checked_at": "2026-11-17",
@@ -24,6 +25,18 @@
       "checked_at": "2026-11-17",
       "result": "Tasks 5,2,9: reviewed build-theme.mjs, package.json, npm-release tests and ci.yml. Failure-path coverage for #13 is missing; no duplicate issue/comment. Source unchanged; no local installs/builds/tests.",
       "follow_up": "Remote validation required before code PR; PR creation is also blocked as recorded in #15."
+    },
+    {
+      "area": "build",
+      "checked_at": "2026-11-18",
+      "result": "Static review reconfirms #13 null-status gap; package consumer script checks spawn error/status but does not cover theme CSS subprocess failures.",
+      "follow_up": "#13 implementation and remote CI remain blocked by unavailable dispatch tool; no local execution."
+    },
+    {
+      "area": "ci",
+      "checked_at": "2026-11-18",
+      "result": "Investigated #16 explicit incomplete report; reviewed source workflow safe outputs and CI validation entry points. Comment submitted; no infrastructure probing.",
+      "follow_up": "Await response to #16; keep #13 validation and #15 PR permission issue separate."
     }
   ],
   "completed_actions": [],
