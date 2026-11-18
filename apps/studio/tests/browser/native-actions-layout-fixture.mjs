@@ -88,7 +88,17 @@ function installGeometry() {
       const alignmentFailure = {
         normal: 'alignment-style-normal', start: 'alignment-style-start',
         end: 'alignment-style-end', center: 'alignment-style-center',
-        'flex-start': 'alignment-style-flex-start',
+        'flex-start': 'alignment-style-flex-start', stretch: 'alignment-style-stretch',
+        left: 'alignment-style-left', right: 'alignment-style-right',
+        'space-between': 'alignment-style-space-between', 'space-around': 'alignment-style-space-around',
+        'space-evenly': 'alignment-style-space-evenly',
+        'safe center': 'alignment-style-safe-center', 'unsafe center': 'alignment-style-unsafe-center',
+        'safe start': 'alignment-style-safe-start', 'unsafe start': 'alignment-style-unsafe-start',
+        'safe end': 'alignment-style-safe-end', 'unsafe end': 'alignment-style-unsafe-end',
+        'safe flex-start': 'alignment-style-safe-flex-start', 'unsafe flex-start': 'alignment-style-unsafe-flex-start',
+        'safe flex-end': 'alignment-style-safe-flex-end', 'unsafe flex-end': 'alignment-style-unsafe-flex-end',
+        'safe left': 'alignment-style-safe-left', 'unsafe left': 'alignment-style-unsafe-left',
+        'safe right': 'alignment-style-safe-right', 'unsafe right': 'alignment-style-unsafe-right',
       };
       need(cs.justifyContent === 'flex-end', alignmentFailure[cs.justifyContent] ?? 'alignment-style-other');
     }
