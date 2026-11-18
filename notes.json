@@ -15,12 +15,6 @@
   "fixes": [],
   "checks": [
     {
-      "area": "docs",
-      "checked_at": "2026-11-17",
-      "result": "Previous docs change is NOT an open PR: issue #15 records PR-creation permission failure and review branch repo-assist/basics-starter-install-docs-ab9a09b6f905fc71. Monthly issue #14 contains duplicated bodies and invalid references; replacement prepared.",
-      "follow_up": "Maintainer review of #15 and its prepared branch."
-    },
-    {
       "area": "code",
       "checked_at": "2026-11-17",
       "result": "Tasks 5,2,9: reviewed build-theme.mjs, package.json, npm-release tests and ci.yml. Failure-path coverage for #13 is missing; no duplicate issue/comment. Source unchanged; no local installs/builds/tests.",
@@ -37,6 +31,12 @@
       "checked_at": "2026-11-18",
       "result": "Investigated #16 explicit incomplete report; reviewed source workflow safe outputs and CI validation entry points. Comment submitted; no infrastructure probing.",
       "follow_up": "Await response to #16; keep #13 validation and #15 PR permission issue separate."
+    },
+    {
+      "area": "docs",
+      "checked_at": "2026-11-18",
+      "result": "Tasks 4,7,5: reviewed CSS build, package consumer validation, CI, Starter docs and route generation. Existing #13 and #15 cover verified candidates; no duplicate changes. #14 still has duplicated bodies; prepare replacement, preserving all four run entries and pending #16 comment.",
+      "follow_up": "#13 remote validation unavailable; #15 prepared branch awaits maintainer review. No new code fix attempted."
     }
   ],
   "completed_actions": [],
