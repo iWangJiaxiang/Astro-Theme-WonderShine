@@ -275,6 +275,17 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   try {
     for (const width of [320, 390]) {
       await page.setViewport({ width, height: 844 });
+      // Match the overlay's resize-listener inputs before the single measurement,
+      // not its geometry outcome. Never poll fitsViewport or repair scroll/styles.
+      await page.waitForFunction(width => {
+        const view = window.visualViewport, root = document.documentElement.style;
+        return innerWidth === width && innerHeight === 844 &&
+          (!view || (view.width === width && view.height === 844 && view.scale === 1 && view.offsetLeft === 0 && view.offsetTop === 0)) &&
+          parseFloat(root.getPropertyValue('--studio-visible-width')) === (view?.width ?? innerWidth) &&
+          parseFloat(root.getPropertyValue('--native-visible-height')) === (view?.height ?? innerHeight) &&
+          parseFloat(root.getPropertyValue('--studio-visible-left')) === (view?.offsetLeft ?? 0) &&
+          parseFloat(root.getPropertyValue('--native-visible-top')) === (view?.offsetTop ?? 0);
+      }, { timeout: 5000 }, width);
       await disclosureState(filterDisclosure, true);
       const layout = await page.$eval(picker, dialog => {
         const rect = selector => dialog.querySelector(selector).getBoundingClientRect().toJSON();
