@@ -41,8 +41,8 @@
     {
       "area": "ci",
       "checked_at": "2026-11-19",
-      "result": "Fallback 4: inspected ci.yml and workspace scripts; theme, Starter, typechecks, release tests, integration, package and browser checks configured. Read-only Actions tools cannot dispatch validation. Fallback 5 inspected build and image helpers; no separate low-risk candidate verified.",
-      "follow_up": "No installs/builds/tests run; existing blockers retained."
+      "result": "Tasks 4,2,9 reviewed issues/comments, CSS build, CI, release/image tests and tgz consumer. Fallback 8: no measured image opportunity; 10: #13 unchanged; 7: found bootstrap contradicts dry-run-only docs; filed #18. No local execution.",
+      "follow_up": "Await maintainer decision on bootstrap policy; #13 remote validation and #15 existing branch remain pending. No local execution or release attempted."
     }
   ],
   "completed_actions": [],
