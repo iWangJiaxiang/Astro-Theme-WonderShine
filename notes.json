@@ -16,27 +16,33 @@
   "checks": [
     {
       "area": "code",
-      "checked_at": "2026-11-17",
-      "result": "Tasks 5,2,9: reviewed build-theme.mjs, package.json, npm-release tests and ci.yml. Failure-path coverage for #13 is missing; no duplicate issue/comment. Source unchanged; no local installs/builds/tests.",
-      "follow_up": "Remote validation required before code PR; PR creation is also blocked as recorded in #15."
+      "checked_at": "2026-11-19",
+      "result": "Tasks 10,3 and fallbacks 2,1: verified four open issues and comments; no human replies, no unlabelled issues or Repo Assist PRs. CSS null-status bug remains #13; no duplicate fix attempted.",
+      "follow_up": "#13 needs remote validation capability; #15 existing documentation branch awaits review."
+    },
+    {
+      "area": "performance",
+      "checked_at": "2026-11-19",
+      "result": "Task 8: inspected responsive-images.ts and image-assets.ts: digest promise deduplication, four workers, encoding recipe cache, copied variant set and manifest version cache already present. No measured new opportunity; no benchmark executed.",
+      "follow_up": "Require comparable remote measurements before performance changes."
     },
     {
       "area": "build",
-      "checked_at": "2026-11-18",
-      "result": "Static review reconfirms #13 null-status gap; package consumer script checks spawn error/status but does not cover theme CSS subprocess failures.",
-      "follow_up": "#13 implementation and remote CI remain blocked by unavailable dispatch tool; no local execution."
-    },
-    {
-      "area": "ci",
-      "checked_at": "2026-11-18",
-      "result": "Investigated #16 explicit incomplete report; reviewed source workflow safe outputs and CI validation entry points. Comment submitted; no infrastructure probing.",
-      "follow_up": "Await response to #16; keep #13 validation and #15 PR permission issue separate."
+      "checked_at": "2026-11-19",
+      "result": "Fallback 9: inspected images.test.ts, npm-release.test.mjs and test-package.mjs. Image reuse/no-enlargement and actual tgz consumer covered; CSS failure-path gap already tracked in #13.",
+      "follow_up": "Do not duplicate #13; tests not executed locally."
     },
     {
       "area": "docs",
-      "checked_at": "2026-11-18",
-      "result": "Tasks 4,7,5: reviewed CSS build, package consumer validation, CI, Starter docs and route generation. Existing #13 and #15 cover verified candidates; no duplicate changes. #14 still has duplicated bodies; prepare replacement, preserving all four run entries and pending #16 comment.",
-      "follow_up": "#13 remote validation unavailable; #15 prepared branch awaits maintainer review. No new code fix attempted."
+      "checked_at": "2026-11-19",
+      "result": "Fallback 7: compared releasing.md and getting-started.md; Starter source mismatch is unchanged and already covered by #15. No duplicate proposal.",
+      "follow_up": "Review existing #15 documentation branch."
+    },
+    {
+      "area": "ci",
+      "checked_at": "2026-11-19",
+      "result": "Fallback 4: inspected ci.yml and workspace scripts; theme, Starter, typechecks, release tests, integration, package and browser checks configured. Read-only Actions tools cannot dispatch validation. Fallback 5 inspected build and image helpers; no separate low-risk candidate verified.",
+      "follow_up": "No installs/builds/tests run; existing blockers retained."
     }
   ],
   "completed_actions": [],
