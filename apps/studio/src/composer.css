@@ -138,3 +138,13 @@
 @media(max-width:1000px) {
   .thread-properties-fields, .thread-properties-switches { grid-template-columns: minmax(0, 1fr); gap: 12px; }
 }
+
+.thread-editor .editor-tabs[hidden], .composer-publish .autosave-control[hidden] { display: none; }
+.composer-tools:not(.expanded) > :not(button) { display: none; }
+.thread-composer .composer-tools { flex-basis: auto; }
+.thread-composer .composer-heading { padding-bottom: 0; }
+.thread-composer .composer-footer { padding-block: 8px; }
+@media (max-width: 480px) {
+  .thread-composer .composer-footer { gap: 2px 10px; }
+  .composer-publish:not(:has(.autosave-control:not([hidden]))) { justify-content: flex-end; }
+}

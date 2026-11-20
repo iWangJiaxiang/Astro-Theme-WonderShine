@@ -173,3 +173,17 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 }
 
 .writing-card > .title-field { grid-template-columns: auto minmax(0, 1fr); }
+
+/* The four dashboard totals form a single navigation list. */
+.stats-grid { gap: 0; border-block: 1px solid var(--studio-line); }
+.stats-grid .stat-card { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.stats-grid .stat-card:focus-visible { outline-offset: -3px; }
+@media (max-width: 760px) {
+  .stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .stats-grid .stat-card { padding: 10px 3px; justify-content: center; text-align: center; }
+  .stats-grid .stat-icon { display: none; }
+  .stat-card > div { display: flex; flex-direction: column-reverse; }
+  .stat-card strong { font-size: 20px; margin: 0 0 2px; }
+  .stat-card .muted { font-size: 11px; }
+  .getting-started:not(.guide-page) .guide-heading { flex-direction: row; text-align: start; }
+}

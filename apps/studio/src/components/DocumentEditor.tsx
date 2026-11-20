@@ -1,3 +1,4 @@
+import { WorkspacePanel } from "../../platform/WorkspacePanel";
 import SaveButton from "./SaveButton";
 import { createDraftBackup } from "../draft-backup";
 import { createRichEditorSync } from "../rich-editor-sync";
@@ -120,14 +121,27 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
     const owner = session.value?.identity.id;
     const saveMode = ref<SaveMode>(saveContext.value.defaultMode);
     const branchPending = ref(false), savedBranch = ref("");
-    const saveAction = (publish = false) => element(SaveButton, {
-      mode: saveMode.value,
-      onModeChange: (value: SaveMode) => { saveMode.value = value; },
-      busy: busy.value,
-      disabled: !dirty.value && !branchPending.value && saveMode.value !== "branch" && (!publish || values.value.draft === false),
-      label: publish ? t(saveMode.value === "branch" ? "分支保存 · 可发布" : saveMode.value === "remote" ? "远端保存 · 可发布" : "本地保存 · 可发布") : undefined,
-      onSave: () => { if (publish) void saveLocalized(false); else void save(); },
-    });
+    const publishing = ref(false);
+    const saveAction = (publish = false) => {
+      const direct = publish && isThread && saveMode.value === "local" && saveContext.value.workspace;
+      const label = direct || (publish && isThread && saveMode.value === "remote") ? "发布动态"
+        : saveMode.value === "branch" ? "分支保存 · 可发布"
+        : saveMode.value === "remote" ? "远端保存 · 可发布" : isThread ? "保存动态" : "本地保存 · 可发布";
+      return element(SaveButton, {
+        mode: saveMode.value,
+        onModeChange: (value: SaveMode) => { saveMode.value = value; },
+        busy: busy.value,
+        disabled: !direct && !dirty.value && !branchPending.value && saveMode.value !== "branch" && (!publish || values.value.draft === false),
+        label: publish ? t(label) : undefined,
+        onSave: async () => {
+          if (!publish) { await save(); return; }
+          flush();
+          const alreadySaved = direct && revision.value && !dirty.value && values.value.draft === false;
+          if (!alreadySaved && !await saveLocalized(false)) return;
+          if (direct && alive && !branchPending.value && !dirty.value && session.value?.identity.id === owner) publishing.value = true;
+        },
+      });
+    };
     function openAi(kind: "summary" | "cover") {
       flush();
       aiSource.value =
@@ -779,7 +793,9 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       if (busy.value || creatingTopic.value) return;
       const previous = values.value.draft;
       values.value.draft = draft;
-      if (!(await save())) values.value.draft = previous;
+      const saved = await save();
+      if (!saved) values.value.draft = previous;
+      return saved;
     }
     async function save(): Promise<boolean> {
       if (
@@ -1373,6 +1389,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                   element(
                     "div",
                     {
+                      hidden: isThread && !threadAdvanced.value && mode.value === "source",
                       className: classes("editor-tabs", {
                         "composer-mode-tabs": props.embedded,
                       }),
@@ -1443,7 +1460,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     ? element("textarea", {
                         ref: domRef(sourceElement),
                         value: body.value ?? "",
-                        "aria-label": t("Markdown 正文"),
+                        "aria-label": t(isThread ? "动态正文" : "Markdown 正文"),
                         placeholder: t(
                           props.embedded
                             ? "此刻，有什么想分享？"
@@ -2036,7 +2053,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       "div",
                       {
                         "aria-label": t("动态设置"),
-                        className: classes("composer-tools"),
+                        className: classes("composer-tools", { expanded: threadAdvanced.value }),
                       },
                       element(
                         "button",
@@ -2112,7 +2129,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                           }),
                         },
                         element(Icon, { name: "sliders", size: 16 }),
-                        t(threadAdvanced.value ? "收起设置" : "发布设置"),
+                        t(threadAdvanced.value ? "收起设置" : "更多选项"),
                       ),
                     ),
                     element(
@@ -2120,7 +2137,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       { className: classes("composer-publish") },
                       element(
                         "label",
-                        { className: classes("autosave-control") },
+                        { className: classes("autosave-control"), hidden: !threadAdvanced.value },
                         element("span", null, t("自动保存")),
                         element(
                           "select",
@@ -2230,6 +2247,15 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       aiDialog.value = undefined;
                       aiWorking.value = false;
                     }) satisfies EventHandler<typeof AiAssistant, "onClose">,
+                  })
+                : null,
+              publishing.value
+                ? element(WorkspacePanel, {
+                    publishPath: props.path,
+                    onClose: (pushed: boolean) => {
+                      publishing.value = false;
+                      message.value = pushed ? "已与 Git 远端同步；网站上线状态请以部署平台为准。" : "动态已保存在工作区。";
+                    },
                   })
                 : null,
               deleteDialog.value

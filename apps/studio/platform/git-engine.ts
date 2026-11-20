@@ -56,7 +56,7 @@ export class NativeGitEngine implements WorkspaceControl {
     }
   }
 
-  open(onProgress?: ProgressCallback): Promise<void> { return withWorkspaceLock(this.root, () => this.openUnlocked(true, onProgress)); }
+  open(onProgress?: ProgressCallback, allowClone = true): Promise<void> { return withWorkspaceLock(this.root, () => this.openUnlocked(allowClone, onProgress)); }
   private async openUnlocked(allowClone = false, onProgress?: ProgressCallback): Promise<void> {
     if (this.profile.source !== 'local') await ensureDirectory(this.files, parentPath(this.root));
     const exists = await this.exists(this.root);

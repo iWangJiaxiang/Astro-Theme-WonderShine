@@ -114,7 +114,7 @@ async function checkWorkspaceLayout(page, screenshots) {
         const rect = selector => document.querySelector(selector).getBoundingClientRect();
         const topbar = rect('.topbar');
         const card = rect('.stat-card');
-        const tabs = [...document.querySelectorAll('.composer-mode-tabs button')];
+        const modesVisible = !!document.querySelector('.composer-mode-tabs')?.getClientRects().length;
         const bar = rect('.mobile-tabbar');
         const overflow = [...document.querySelectorAll('.topbar :is(button, select, a), .composer-publish :is(button, select)')]
           .filter(node => node.getClientRects().length)
@@ -124,16 +124,16 @@ async function checkWorkspaceLayout(page, screenshots) {
           docked: Math.abs(bar.bottom - innerHeight) < 1 && bar.width === innerWidth,
           barHeight: bar.height,
           headerHeight: topbar.height,
-          tabRows: new Set(tabs.map(tab => tab.offsetTop)).size,
+          modesVisible,
           cardWidth: card.width,
         };
       });
       assert.equal(layout.overflow, false, `Workspace controls overflow at ${width}x${height}`);
-      assert.ok(layout.cardWidth >= 120, `Dashboard cards squeezed at ${width}x${height}`);
+      assert.ok(layout.cardWidth >= (width <= 760 ? 60 : 120), `Dashboard cards squeezed at ${width}x${height}`);
       assert.ok(layout.headerHeight <= 76, `Header wraps at ${width}x${height}`);
       if (width <= 760) assert.ok(layout.docked && layout.barHeight >= 48, 'Phone navigation is anchored and touch sized');
       else assert.equal(layout.barHeight, 0, 'Desktop uses the sidebar');
-      if (width <= 480) assert.equal(layout.tabRows, 1, 'All writing modes share a row');
+      assert.equal(layout.modesVisible, false, 'Writing starts without technical mode controls');
       await page.screenshot({ path: `${screenshots}/workspace-${width}x${height}-en.png` });
     }
   } finally {

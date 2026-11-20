@@ -135,3 +135,5 @@ The first command uses a temporary demo site and captures form pages and dialogs
 ### Save destinations
 
 The save split button supports local files and an independent local Git branch for native workspaces. Its menu can remember a per-workspace default; autosave uses the current selection. Branch saves keep the active branch and index unchanged and do not push or merge. See [保存方式与默认值](studio-workspaces.md#保存方式与默认值) for deployment capabilities, partial-save recovery and the manual PR handoff.
+
+On mobile, a cold launch reopens the last successfully connected workspace. A downloaded checkout can reopen offline. First launch, an unavailable checkout, or choosing **Switch workspace** opens the chooser. A saved service address still uses its own login. When a downloaded repository has no configured author name or email, Studio uses the application signature `WonderShine Studio <studio@localhost>`; connection settings accept a personal signature.

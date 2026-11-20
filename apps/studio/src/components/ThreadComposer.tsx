@@ -283,7 +283,7 @@ const ThreadComposer: StudioComponent<Props, Events> = component<Props, Events>(
                       element(
                         "option",
                         { key: language, value: language },
-                        language,
+                        language === "zh-CN" ? "简体中文" : language === "en" ? "English" : language,
                       ),
                     ),
                   ),

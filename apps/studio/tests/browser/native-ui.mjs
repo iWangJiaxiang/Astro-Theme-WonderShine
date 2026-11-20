@@ -47,6 +47,7 @@ try {
   git(['config', 'user.name', 'Folder writer']); git(['config', 'user.email', 'folder@example.test']);
   await fs.cp(root, localRoot, { recursive: true });
   execFileSync('git', ['clone', '--bare', root, join(base, 'remote.git')], {stdio:'pipe'});
+  execFileSync('git', ['--git-dir=' + join(base, 'remote.git'), 'config', 'http.receivepack', 'true']);
   execFileSync('git', ['--git-dir=' + join(base, 'remote.git'), 'branch', 'release/blog', 'main']);
   execFileSync('git', ['--git-dir=' + join(base, 'remote.git'), 'symbolic-ref', 'HEAD', 'refs/heads/release/blog']);
   git(['remote', 'add', 'origin', profile.url]); git(['update-ref', 'refs/remotes/origin/main', git(['rev-parse', 'HEAD'])]);
@@ -192,7 +193,7 @@ try {
         if (operation === 'fetch') {
           const config = args.clientConfig, url = new URL(config.url);
           assert.equal(url.origin, 'https://git.example.test');
-          assert.ok(['/remote.git/info/refs', '/remote.git/git-upload-pack'].includes(url.pathname));
+          assert.ok(['/remote.git/info/refs', '/remote.git/git-upload-pack', '/remote.git/git-receive-pack'].includes(url.pathname));
           value = nextResource++; requests.set(value, config);
         } else if (operation === 'fetch_send') {
           await downloadGate;
@@ -565,6 +566,31 @@ try {
   assert.equal(saved[0].branch,'release/blog');
   assert.equal(execFileSync('git',['branch','--show-current'],{cwd:join(appData,'workspaces',saved[0].id,'repo')}).toString().trim(),'release/blog');
   await page.select('.language-switcher select', 'zh-CN');
+  allowCloneHttp = false;
+  await restartNativeFixture();
+  await heading('今天，写点什么？');
+  await page.waitForSelector('.thread-composer textarea');
+  assert.equal(await page.$('.native-connect'), null, 'A cold phone launch reopens the last checkout offline');
+  await page.type('.thread-composer textarea', 'Phone publication fixture');
+  await click('发布动态');
+  await page.waitForSelector('dialog.publish-dialog[open] ul li');
+  await screenshot('phone-publish-review');
+  await click('稍后');
+  assert.equal(await page.$('dialog.publish-dialog[open]'), null);
+  await click('发布动态');
+  await click('确认提交');
+  await page.waitForFunction(() => document.querySelector('.publish-actions .primary')?.textContent === '确认推送');
+  const remoteArgs = ['--git-dir=' + join(base, 'remote.git')];
+  assert.equal(execFileSync('git', [...remoteArgs, 'log', '-1', '--format=%s', 'release/blog']).toString().trim(), 'initial');
+  allowCloneHttp = true;
+  await click('确认推送');
+  await page.waitForSelector('dialog.publish-dialog[open] [role=status]');
+  await page.waitForFunction(() => document.querySelector('.publish-dialog h2')?.textContent === '已推送到远端');
+  assert.match(execFileSync('git', [...remoteArgs, 'grep', '-l', 'Phone publication fixture', 'release/blog', '--', 'content/threads']).toString(), /index.*\.md/);
+  await click('完成');
+  await click('切换工作区'); await heading('连接创作工作区');
+  assert.equal(await page.$('.studio-shell'), null, 'Explicit switching leaves the chooser open');
+  await click('打开工作区'); await heading('今天，写点什么？');
   await click('站点信息'); await page.waitForSelector('.settings-card input');
   assert.deepEqual(await page.$$eval('.settings-card input:not([type=checkbox]):not([type=radio]):not([type=color]), .settings-card select, .settings-card textarea', fields => fields.filter(node => node.getClientRects().length && (parseFloat(getComputedStyle(node).fontSize) < 16 || node.getBoundingClientRect().height < 44)).map(node => node.outerHTML.slice(0,80))), [], 'Native iOS settings retain readable editing size and touch targets');
   await screenshot('settings-iphone'); await noOverflow('iPhone settings');

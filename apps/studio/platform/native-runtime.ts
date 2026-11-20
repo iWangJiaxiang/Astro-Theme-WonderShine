@@ -14,6 +14,7 @@ import { setApiTransport } from '../src/api';
 import { tauriFiles } from './tauri-filesystem';
 import { FileRepository } from './file-repository';
 import { NativeGitEngine } from './git-engine';
+import { nativeGitCredential } from './git-credential';
 import { createGitHttp } from './git-http';
 import { validateProfile, validateRemote, type WorkspaceProfile } from './hosting';
 import { inspectLocalRepository } from './local-workspace';
@@ -21,7 +22,7 @@ import { createLoadDiagnostics } from './load-diagnostics';
 import { nativeReviewSource, openNativeWorkspaceReviews } from './review-store';
 import { ensureDirectory } from './filesystem';
 
-export async function connectNativeWorkspace(profile: WorkspaceProfile, token: string, onDisconnect: () => void, onProgress?: ProgressCallback, summaryStore?: SummaryIndexStore): Promise<() => void> {
+export async function connectNativeWorkspace(profile: WorkspaceProfile, token: string, onDisconnect: () => void, onProgress?: ProgressCallback, summaryStore?: SummaryIndexStore, allowClone = true): Promise<() => void> {
   validateProfile(profile, { allowAutomaticBranch: true });
   const base = (await appDataDir()).replace(/\\/g, '/').replace(/\/$/, '');
   const files = tauriFiles(base, profile.source === 'local' ? [profile.localPath!] : []);
@@ -50,7 +51,7 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
   });
   const diagnostics = createLoadDiagnostics(localStorage);
   const progress = diagnostics.progress(onProgress);
-  try { await diagnostics.measure('git-open', () => git.open(progress.onProgress)); }
+  try { await diagnostics.measure('git-open', () => git.open(progress.onProgress, allowClone)); }
   finally { progress.finish(); }
   const local = new FileRepository(files, root, state, () => git.assertWritable());
   await diagnostics.measure('recovery', () => local.recover());
@@ -63,8 +64,10 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
   }
   const runtime = createSummaryRuntime(repository, { scope: summaryScope, store: summaryStore });
   const ai = new NativeAiController(runtime.repository, (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }), localStorage, profile.id);
+  const credential = { id: profile.id, set: (value: string) => { token = value; } };
+  if (httpsRemote) nativeGitCredential.current = credential;
   let disposed = false;
-  const dispose = () => { if (disposed) return; disposed = true; diagnostics.dispose(); ai.dispose(); runtime.dispose(); token = ''; setMediaResolver(); setApiTransport(); };
+  const dispose = () => { if (disposed) return; disposed = true; diagnostics.dispose(); ai.dispose(); runtime.dispose(); token = ''; if (nativeGitCredential.current === credential) delete nativeGitCredential.current; setMediaResolver(); setApiTransport(); };
   const transport = createContentTransport(repository, { runtime, ai, aiUsesObservedRepository: true, identity: { id: profile.id, name: profile.authorName || profile.label }, onLogout: () => {
     dispose(); onDisconnect();
   } });

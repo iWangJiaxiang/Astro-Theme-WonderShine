@@ -1,38 +1,49 @@
 import { useEffect, useRef, useState } from 'react';
 import { workspaceCommitNotice } from './workspace-notice';
 import type { WorkspaceStatus } from '../shared/workspace';
-import { api, errorMessage } from '../src/api';
+import { nativeGitCredential } from './git-credential';
+import { api, errorMessage, session } from '../src/api';
 import { t, type Message } from '../src/i18n';
 import { useSignals } from '../src/reactivity';
 import { notifyWorkspaceChanged } from '../src/workspace-events';
 
-export function WorkspacePanel() {
+export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string; onClose?: (pushed: boolean) => void } = {}) {
   useSignals();
   const [status, setStatus] = useState<WorkspaceStatus | null>(null);
   const [message, setMessage] = useState('docs(content): update content');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Message>('');
   const [notice, setNotice] = useState('');
+  const dialog = useRef<HTMLDialogElement>(null);
+  const tokenInput = useRef<HTMLInputElement>(null);
+  const [pushed, setPushed] = useState(false);
   const requestSequence = useRef(0);
   useEffect(() => {
+    if (publishPath) {
+      const node = dialog.current!;
+      node.showModal();
+      void review('publish');
+      return () => { requestSequence.current++; node.close(); };
+    }
     let active = true;
     const sequence = ++requestSequence.current;
     api<WorkspaceStatus>('/workspace').then(value => {
       if (active && sequence === requestSequence.current) setStatus(value);
     }).catch(reason => { if (active && sequence === requestSequence.current) setError(errorMessage(reason)); });
     return () => { active = false; };
-  }, []);
+  }, [publishPath]);
   const [pending, setPending] = useState<'commit' | 'sync' | 'commit-sync' | null>(null);
-  async function review(kind: 'commit' | 'sync' | 'commit-sync') {
-    requestSequence.current++;
+  async function review(kind: 'commit' | 'sync' | 'commit-sync' | 'publish') {
+    const sequence = ++requestSequence.current;
     setBusy(true); setError(''); setNotice('');
     try {
       const reviewed = await api<WorkspaceStatus>('/workspace/review', 'POST');
+      if (sequence !== requestSequence.current) return;
       if (!reviewed.confirmation) throw new Error('工作区已变化，请刷新并重新确认提交范围');
       setStatus(reviewed);
-      setPending(kind);
-    } catch (reason) { setError(errorMessage(reason)); }
-    finally { setBusy(false); }
+      setPending(kind === 'publish' ? (reviewed.dirty ? 'commit-sync' : 'sync') : kind);
+    } catch (reason) { if (sequence === requestSequence.current) { setError(errorMessage(reason)); setPending(null); } }
+    finally { if (sequence === requestSequence.current) setBusy(false); }
   }
   async function action(kind: 'refresh' | 'commit' | 'sync' | 'commit-sync') {
     requestSequence.current++;
@@ -58,9 +69,14 @@ export function WorkspacePanel() {
           setNotice('已提交到设备，尚未推送。请核对提交后的状态，再确认同步 Git。');
         }
         if (kind === 'sync') {
+          const credential = nativeGitCredential.current;
+          if (credential && credential.id === session.value?.identity.id && tokenInput.current?.value) {
+            credential.set(tokenInput.current.value);
+            tokenInput.current.value = '';
+          }
           syncing = true;
           current = await api<WorkspaceStatus>('/workspace/sync', 'POST', { confirmation: current.confirmation });
-          setNotice('已与 Git 远端同步；网站上线状态请以部署平台为准。');
+          setPushed(true);
         }
       }
       setStatus(current);
@@ -76,6 +92,34 @@ export function WorkspacePanel() {
       if (syncing) notifyWorkspaceChanged();
       setBusy(false); setPending(reviewSync ? 'sync' : null);
     }
+  }
+  if (publishPath) {
+    const blocked = status?.canSync === false ? 'App 同步需要 HTTPS 远端；本地保存和提交仍可使用'
+      : status?.diverged ? '双方都有新提交。请先在 Git 工具中合并，本地内容会保留。'
+      : status && (status.changes !== status.managedChanges?.length || (pending === 'sync' && status.dirty)) ? '存在托管范围以外的修改，请先在 Git 工具中处理再同步。' : '';
+    return <dialog ref={dialog} className="publish-dialog" aria-labelledby="publish-heading"
+      onCancel={event => { event.preventDefault(); if (!busy) onClose?.(pushed); }}>
+      <h2 id="publish-heading">{t(pushed ? '已推送到远端' : '发布动态')}</h2>
+      {status && !pushed && <>
+        <p>{t(pending === 'sync' ? '将 {count} 个提交推送到 {branch}。' : '将 {count} 个文件提交到 {branch}。', {
+          count: pending === 'sync' ? status.ahead : status.managedChanges?.length || 0, branch: status.branch,
+        })}</p>
+        {!!status.managedChanges?.length && <ul aria-label={t('本次托管文件范围')}>{status.managedChanges.map(path => <li key={path}>{path}</li>)}</ul>}
+      </>}
+      {notice && <p role="status">{t(notice)}</p>}
+      {error && <p className="notice error" role="alert">{t(error)}</p>}
+      {blocked && !pushed && <p className="notice error">{t(blocked)}</p>}
+      {pending === 'sync' && nativeGitCredential.current && nativeGitCredential.current.id === session.value?.identity.id &&
+        <details className="publish-credential"><summary>{t('仓库登录')}</summary>
+          <label className="field">{t('访问令牌')}<input ref={tokenInput} type="password" autoComplete="off" placeholder={t('仅当前会话')} /></label>
+        </details>}
+      <div className="publish-actions">
+        {!pushed && <button className="secondary" disabled={busy} onClick={() => onClose?.(false)}>{t('稍后')}</button>}
+        {pushed ? <button className="primary" onClick={() => onClose?.(true)}>{t('完成')}</button>
+          : <button className="primary" disabled={busy} onClick={() => pending && !blocked ? void action(pending) : void review('publish')}>
+            {t(busy ? '处理中…' : blocked ? '刷新状态' : !pending ? '重试' : pending === 'sync' ? '确认推送' : '确认提交')}</button>}
+      </div>
+    </dialog>;
   }
   return <section className="settings-page workspace-panel">
     <div className="page-heading"><div><h1>{t('工作区同步')}</h1></div><button disabled={busy || !!pending} onClick={() => void action('refresh')}>{t('刷新状态')}</button></div>
@@ -93,8 +137,8 @@ export function WorkspacePanel() {
         {pending && <div role="group" aria-label={t('确认 Git 操作')} className="notice">
           <p>{t('确认 Git 操作')}：<strong>{status.branch}</strong> — {t(pending === 'commit' ? '提交到设备' : pending === 'sync' ? '同步 Git' : '提交并同步')}</p>
           <p>{t('请核对以上文件范围与待推送提交。未保存的编辑不会包含在内；失败时本地文件和提交会保留。')}</p>
-          <button disabled={busy} onClick={() => void action(pending)}>{busy ? t('处理中…') : t('确认执行')}</button>
-          <button disabled={busy} onClick={() => setPending(null)}>{t('取消')}</button>
+          <div className="publish-actions"><button className="primary" disabled={busy} onClick={() => void action(pending)}>{busy ? t('处理中…') : t('确认执行')}</button>
+          <button className="secondary" disabled={busy} onClick={() => setPending(null)}>{t('取消')}</button></div>
         </div>}
         </>}
     </div>

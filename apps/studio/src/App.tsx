@@ -215,7 +215,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       try {
         const result = await api<Bootstrap>("/bootstrap" + (refresh ? "?refresh=1" : ""));
         if (!isCurrent()) return;
-        configureSaving(`${session.value?.identity.id}:${result.saveScope}`, result.saveCapabilities);
+        configureSaving(`${session.value?.identity.id}:${result.saveScope}`, result.saveCapabilities, result.workspace);
         data.value = result;
         const scheme = result.appearance["extra.style.color_scheme"];
         dark.value =
