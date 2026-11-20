@@ -199,6 +199,33 @@ async function checkTouchNavigation(page, screenshots) {
     await phone.tap(tab('article'));
     await active('article');
     await phone.screenshot({ path: `${screenshots}/phone-navigation-landscape.png` });
+    await phone.tap('.topbar .icon-button');
+    await phone.tap('.mobile-menu');
+    await waitForDrawer(phone, true);
+    await phone.$eval('.sidebar nav[aria-label="站点设置"]', nav => [...nav.querySelectorAll('button')].find(button => button.textContent.trim() === '站点信息').click());
+    await phone.waitForSelector('.settings-card input');
+    for (const [width, height] of [[390, 844], [768, 900], [1180, 768]]) {
+      await phone.setViewport({ width, height, isMobile: true, hasTouch: true, isLandscape: width > height });
+      if (width <= 1024) await waitForDrawer(phone, false);
+      else await waitForDesktopNavigation(phone);
+      await phone.evaluate(() => scrollTo(0, 240));
+      await phone.waitForFunction(() => scrollY > 24);
+      const pinned = await phone.evaluate(() => {
+        const header = document.querySelector('.topbar').getBoundingClientRect();
+        const theme = document.querySelector('.topbar .icon-button').getBoundingClientRect();
+        const bar = document.querySelector('.mobile-tabbar').getBoundingClientRect();
+        return {
+          top: header.top, height: header.height,
+          canTap: !!document.elementFromPoint(theme.x + theme.width / 2, theme.y + theme.height / 2)?.closest('.topbar .icon-button'),
+          actionsTop: document.querySelector('.settings-page > .page-heading').getBoundingClientRect().top,
+          bottom: bar.height ? bar.bottom : null,
+        };
+      });
+      assert.ok(Math.abs(pinned.top) <= 1 && pinned.canTap, `Scrolled header at ${width} stays visible and touchable`);
+      assert.ok(pinned.actionsTop >= pinned.height - 1, `Settings actions clear the header at ${width}`);
+      assert.equal(pinned.bottom, width <= 1024 ? height : null);
+      await phone.screenshot({ path: `${screenshots}/scrolled-settings-${width}.png` });
+    }
   } finally {
     await context.close();
   }

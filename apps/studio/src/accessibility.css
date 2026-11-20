@@ -4,7 +4,7 @@
 .sidebar .navigation-close { display: inline-flex; align-self: flex-end; min-width: 44px; min-height: 44px; }
 .sidebar .navigation-close[hidden], .mobile-menu[hidden] { display: none; }
 .save-mode-menu { max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-width: 1024px) and (pointer: coarse) {
   body:has(.sidebar.open) { overflow: hidden; }
   .studio-shell :is(button, select, summary),
   .native-connect :is(button, select, summary) { min-height: 44px; }
@@ -47,12 +47,15 @@ body:has(.mobile-tabbar:not([hidden])) { padding-bottom: var(--tabbar-height); }
 .mobile-tabbar button:active svg { background: var(--form-surface); }
 .mobile-tabbar button:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: -3px; border-radius: 6px; }
 
-@media (max-width: 960px) and (max-height: 500px) and (pointer: coarse) {
+@media (max-width: 1024px) and (pointer: coarse) {
   .sidebar { width: min(288px, 85vw); transform: translateX(-100%); }
   .sidebar.open { transform: translateX(0); }
   .sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 39; background: #10162a66; }
   body:has(.sidebar.open) { overflow: hidden; }
   .main-shell { margin-left: 0; }
+  .mobile-tabbar:not([hidden]) { padding-inline: max(4px, calc((100% - 720px) / 2), env(safe-area-inset-left)) max(4px, calc((100% - 720px) / 2), env(safe-area-inset-right)); }
+}
+@media (max-width: 1024px) and (max-height: 500px) and (pointer: coarse) {
   .mobile-tabbar > button { flex-direction: row; gap: 2px; font-size: .75rem; }
   .mobile-tabbar svg { width: 32px; padding-inline: 6px; }
   html:has(.mobile-tabbar:not([hidden])) { --tabbar-height: calc(3.125rem + env(safe-area-inset-bottom, 0px)); }
@@ -61,4 +64,32 @@ body:has(.mobile-tabbar:not([hidden])) { padding-bottom: var(--tabbar-height); }
    keyboards already cover the fixed bar at the bottom of the layout viewport. */
 @media (max-height: 500px) and (pointer: coarse) {
   .main-shell:has(.main-content :is(input:not([type=checkbox]):not([type=radio]), textarea, [contenteditable=true]):focus) .mobile-tabbar { visibility: hidden; }
+}
+
+/* Keep the status-bar inset inside the pinned header as the document scrolls. */
+@media (max-width: 1180px), (any-pointer: coarse) {
+  html:has(.topbar) {
+    --studio-header-height: calc(4rem + env(safe-area-inset-top, 0px));
+    scroll-padding-top: calc(var(--studio-header-height) + 8px);
+  }
+  html[data-native-mobile] .studio-shell:has(.topbar) { padding-top: 0; }
+  .topbar {
+    position: sticky; top: 0; z-index: 11;
+    flex: none; flex-wrap: nowrap; min-block-size: var(--studio-header-height);
+    padding-block: calc(4px + env(safe-area-inset-top, 0px)) 4px;
+  }
+  .topbar > .row:first-child { flex-wrap: nowrap; }
+  .topbar > .row:first-child > span:last-child {
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  }
+  .topbar-actions { flex: none; }
+  html:has(.settings-page > .page-heading) { scroll-padding-top: calc(var(--studio-header-height) + 6rem); }
+  .settings-page > .page-heading { top: var(--studio-header-height); }
+  .media-details { top: calc(var(--studio-header-height) + 12px); }
+}
+@media (max-width: 760px), (max-width: 1024px) and (pointer: coarse) {
+  html:has(.topbar) { --studio-header-height: calc(3.5rem + env(safe-area-inset-top, 0px)); }
+}
+@media (max-height: 500px) and (pointer: coarse) {
+  .settings-page > .page-heading { position: static; }
 }
