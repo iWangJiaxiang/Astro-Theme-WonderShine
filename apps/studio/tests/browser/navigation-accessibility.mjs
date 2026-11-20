@@ -200,6 +200,7 @@ async function checkTouchNavigation(page, screenshots) {
     await active('article');
     await phone.screenshot({ path: `${screenshots}/phone-navigation-landscape.png` });
     await phone.tap('.topbar .icon-button');
+    await phone.select('.topbar select', 'zh-CN');
     await phone.tap('.mobile-menu');
     await waitForDrawer(phone, true);
     await phone.$eval('.sidebar nav[aria-label="站点设置"]', nav => [...nav.querySelectorAll('button')].find(button => button.textContent.trim() === '站点信息').click());
