@@ -34,7 +34,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       .finally(() => { if (active && sequence === requestSequence.current) setStage(''); });
     return () => { active = false; };
   }, [publishPath]);
-  const [pending, setPending] = useState<'commit' | 'sync' | 'commit-sync' | null>(null);
+  const [pending, setPending] = useState<'commit' | 'sync' | 'commit-sync' | 'publish' | null>(null);
   async function review(kind: 'commit' | 'sync' | 'commit-sync' | 'publish') {
     const sequence = ++requestSequence.current;
     setStage('正在检查工作区…'); setError(''); setNotice('');
@@ -43,13 +43,15 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       if (sequence !== requestSequence.current) return;
       if (!reviewed.confirmation) throw new Error('工作区已变化，请刷新并重新确认提交范围');
       setStatus(reviewed);
-      setPending(kind === 'publish' ? (reviewed.dirty ? 'commit-sync' : 'sync') : kind);
+      if (kind !== 'publish') setPending(kind);
+      else if (!reviewed.dirty) setPending('sync');
+      else setPending(reviewed.canPublish ? 'publish' : 'commit-sync');
     } catch (reason) { if (sequence === requestSequence.current) { setError(errorMessage(reason)); setPending(null); } }
     finally { if (sequence === requestSequence.current) setStage(''); }
   }
-  async function action(kind: 'refresh' | 'commit' | 'sync' | 'commit-sync') {
+  async function action(kind: 'refresh' | 'commit' | 'sync' | 'commit-sync' | 'publish') {
     requestSequence.current++;
-    setStage(kind === 'sync' ? '正在同步仓库…' : kind === 'refresh' ? '正在检查工作区…' : '正在保存版本…'); setError(''); setNotice('');
+    setStage(kind === 'publish' ? '正在发布…' : kind === 'sync' ? '正在同步仓库…' : kind === 'refresh' ? '正在检查工作区…' : '正在保存版本…'); setError(''); setNotice('');
     let committed = false, syncing = false, reviewSync = false;
     try {
       let current = status;
@@ -72,22 +74,26 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
           reviewSync = true;
           setNotice('已提交到设备，尚未推送。请核对提交后的状态，再确认同步 Git。');
         }
-        if (kind === 'sync') {
+        if (kind === 'sync' || kind === 'publish') {
           const credential = nativeGitCredential.current;
           if (credential && credential.id === session.value?.identity.id && tokenInput.current?.value) {
             credential.set(tokenInput.current.value);
             tokenInput.current.value = '';
           }
           syncing = true;
-          current = await api<WorkspaceStatus>('/workspace/sync', 'POST', { confirmation: current.confirmation });
+          if (kind === 'publish') {
+            await api('/workspace/publish', 'POST', { message, confirmation: current.confirmation });
+            current = null;
+          } else current = await api<WorkspaceStatus>('/workspace/sync', 'POST', { confirmation: current.confirmation });
           setPushed(true);
         }
       }
       setStatus(current);
       if (kind === 'commit') setNotice('已提交到设备，尚未推送到远端。');
-      if (kind === 'sync') setNotice('已与 Git 远端同步；网站上线状态请以部署平台为准。');
+      if (kind === 'sync' || kind === 'publish') setNotice('已与 Git 远端同步；网站上线状态请以部署平台为准。');
     } catch (reason) {
-      if (syncing) setNotice(workspaceCommitNotice('unconfirmed'));
+      if (kind === 'publish') setNotice('内容已保存在设备上，可以重试发布。');
+      else if (syncing) setNotice(workspaceCommitNotice('unconfirmed'));
       else if (committed && kind === 'commit-sync') setNotice('已提交到设备，尚未推送。请刷新状态后重新确认同步。');
       setError(errorMessage(reason));
       setStatus(null);
@@ -106,9 +112,10 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       onCancel={event => { event.preventDefault(); if (!busy) onClose?.(pushed); }}>
       <h2 id="publish-heading">{t(pushed ? '动态已发送到仓库' : '发布动态')}</h2>
       {status && pending && !pushed && <>
-        <p>{t(pending === 'sync' ? '将 {count} 个已保存版本发送到 {branch}。' : '此版本包含 {count} 个文件，保存到 {branch}。', {
+        {pending === 'publish' ? <p>{t('将 {count} 个文件发布到 {branch}。', { count: status.changes, branch: status.branch })}
+          {status.ahead > 0 && ' ' + t('同时发送此前保存的 {count} 个版本。', { count: status.ahead })}</p> : <p>{t(pending === 'sync' ? '将 {count} 个已保存版本发送到 {branch}。' : '此版本包含 {count} 个文件，保存到 {branch}。', {
           count: pending === 'sync' ? status.ahead : status.managedChanges?.length || 0, branch: status.branch,
-        })}</p>
+        })}</p>}
         {!!status.managedChanges?.length && <details open={status.managedChanges.some(path => path !== publishPath)}>
           <summary>{t('查看文件')}</summary><ul>{status.managedChanges.map(path => <li key={path}>{path}</li>)}</ul>
         </details>}
@@ -116,7 +123,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       {notice && (pushed || pending !== 'sync') && <p role="status">{t(pushed ? '网站部署后即可查看。' : notice)}</p>}
       {error && <p className="notice error" role="alert">{t(error)}</p>}
       {blocked && !pushed && <p className="notice error">{t(blocked)}</p>}
-      {pending === 'sync' && nativeGitCredential.current && nativeGitCredential.current.id === session.value?.identity.id &&
+      {(pending === 'sync' || pending === 'publish') && nativeGitCredential.current && nativeGitCredential.current.id === session.value?.identity.id &&
         <details className="publish-credential"><summary>{t('仓库登录')}</summary>
           <label className="field">{t('访问令牌')}<input ref={tokenInput} type="password" autoComplete="off" placeholder={t('仅当前会话')} /></label>
         </details>}
@@ -124,7 +131,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         {!pushed && <button className="secondary" disabled={busy} onClick={() => onClose?.(false)}>{t('稍后')}</button>}
         {pushed ? <button className="primary" onClick={() => onClose?.(true)}>{t('完成')}</button>
           : <button className="primary" disabled={busy} onClick={() => pending && !blocked ? void action(pending) : void review('publish')}>
-            {t(busy ? stage : blocked ? '刷新状态' : !pending ? '重试' : pending === 'sync' ? '确认发布' : '保存此版本')}</button>}
+            {t(busy ? stage : blocked ? '刷新状态' : !pending ? '重试' : pending === 'sync' || pending === 'publish' ? '确认发布' : '保存此版本')}</button>}
       </div>
     </dialog>;
   }
