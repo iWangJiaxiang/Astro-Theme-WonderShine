@@ -1,4 +1,4 @@
-//! Narrow process ownership only. Review bytes and Git logic remain in TypeScript.
+//! Process-lifetime ownership for private Studio workspaces and review storage.
 use std::{collections::HashSet, fs::{self, File, OpenOptions}, path::Path, sync::Mutex};
 use tauri::Manager;
 
@@ -14,6 +14,12 @@ struct Owner {
     file: Option<File>,
     epoch: Option<String>,
     claimed: HashSet<String>,
+}
+#[cfg(mobile)]
+impl ReviewOwnership {
+    pub fn owns_workspace(&self, id: &str) -> bool {
+        self.0.lock().is_ok_and(|owner| owner.claimed.contains(id))
+    }
 }
 fn uuid(value: &str) -> bool {
     value.len() == 36 && value.bytes().enumerate().all(|(i, b)| {

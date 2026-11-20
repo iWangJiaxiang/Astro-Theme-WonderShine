@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:https';
 import { spawn, execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { readFile } from 'node:fs/promises';
+import { chmod, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 // Only Tauri IPC and the remote host are replaced. The Linux harness links the same
@@ -12,11 +12,15 @@ export async function mobileGitFixture(base, appData, studio) {
   execFileSync('openssl', ['req','-x509','-newkey','rsa:2048','-nodes','-days','1','-subj','/CN=Studio test',
     '-addext','subjectAltName=IP:127.0.0.1','-keyout',key,'-out',ca], { stdio: 'ignore' });
   const backend = join(execFileSync('git',['--exec-path']).toString().trim(),'git-http-backend');
-  let online = true;
+  let online = true, privateRemote = false;
+  const token = 'fixture-token';
   const server = createServer({ key: await readFile(key), cert: await readFile(ca) }, async (request, response) => {
     const url = new URL(request.url, 'https://127.0.0.1');
     if (!online || !['/remote.git/info/refs','/remote.git/git-upload-pack','/remote.git/git-receive-pack'].includes(url.pathname)) {
       response.writeHead(503).end(); return;
+    }
+    if (privateRemote && request.headers.authorization !== 'Basic ' + Buffer.from('oauth2:' + token).toString('base64')) {
+      response.writeHead(401, { 'WWW-Authenticate': 'Basic realm="fixture"' }).end(); return;
     }
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
@@ -52,5 +56,47 @@ export async function mobileGitFixture(base, appData, studio) {
     assert.ok(result && Object.hasOwn(result,'value'));
     return result.value;
   }
-  return { url, invoke, setOnline(value) { online = value; }, close() { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); } };
+  async function verifySync(profile) {
+    const repo = join(appData,'workspaces',profile.id,'repo');
+    const remote = join(base,'remote.git'), peer = join(base,'peer');
+    const run = (dir, ...args) => execFileSync('git', ['-C',dir,...args], { stdio:'pipe' }).toString().trim();
+    const local = () => run(repo,'rev-parse','HEAD');
+    const remoteHead = () => run(remote,'rev-parse',profile.branch);
+    const sync = (password = token) => invoke({ profile:{ ...profile, username:'oauth2' }, password, job:{ action:'sync',head:local() } });
+    run(base,'clone','--branch',profile.branch,remote,peer);
+    const advancePeer = async text => {
+      await writeFile(join(peer,'data.toml'),text);
+      run(peer,'add','data.toml'); run(peer,'-c','user.name=Fixture','-c','user.email=test@example.com','commit','-m','peer');
+      run(peer,'push','origin',profile.branch);
+    };
+    privateRemote = true;
+    await advancePeer('title="peer"');
+    const before = local();
+    await assert.rejects(sync('invalid-token'));
+    assert.equal(local(), before);
+    assert.equal(await sync(),true);
+    assert.equal(local(),remoteHead());
+    assert.equal(await readFile(join(repo,'data.toml'),'utf8'),'title="peer"');
+    await writeFile(join(repo,'data.toml'),'title="local"');
+    const published = remoteHead();
+    await invoke({ profile,job:{ action:'commit',head:local(),message:'local change',paths:['data.toml'] } });
+    const pending = local();
+    const hook = join(remote,'hooks','pre-receive');
+    await writeFile(hook,'#!/bin/sh\nexit 1\n');
+    await chmod(hook,0o755);
+    await assert.rejects(sync());
+    assert.equal(local(),pending); assert.equal(remoteHead(),published);
+    await chmod(hook,0o644);
+    assert.equal(await sync(),false); assert.equal(remoteHead(),pending);
+    run(peer,'pull','--ff-only','origin',profile.branch);
+    await advancePeer('title="remote change"');
+    await writeFile(join(repo,'data.toml'),'title="divergence"');
+    await invoke({ profile,job:{ action:'commit',head:local(),message:'divergent change',paths:['data.toml'] } });
+    const divergent = local(), theirs = remoteHead();
+    await assert.rejects(sync(), /合并/);
+    assert.equal(local(),divergent); assert.equal(remoteHead(),theirs);
+    privateRemote = false;
+    console.log('PASS: libgit2 authenticated HTTPS, safe fast-forward, rejected/retried push and divergent history.');
+  }
+  return { url, invoke, verifySync, setOnline(value) { online = value; }, close() { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); } };
 }

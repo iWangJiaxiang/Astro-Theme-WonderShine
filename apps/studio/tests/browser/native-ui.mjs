@@ -160,7 +160,7 @@ try {
           case 'mkdir': await fs.mkdir(path, { recursive: !!args.options?.recursive, mode: args.options?.mode }); break;
           case 'read_file': value = [...await fs.readFile(path)]; break;
           case 'read_dir':
-            assert.ok(!path.endsWith('/repo/assets/git-fixture'), 'Mobile Git never enumerates tracked assets via WebView IPC');
+            assert.ok(!gitInspections || !path.endsWith('/repo/assets/git-fixture'), 'Mobile Git never enumerates tracked assets via WebView IPC');
             value = (await fs.readdir(path, { withFileTypes: true })).map(item => ({ name: item.name, isFile: item.isFile(), isDirectory: item.isDirectory(), isSymlink: item.isSymbolicLink() })); break;
           case 'remove': { const stat = await fs.lstat(path); if (stat.isDirectory() && !stat.isSymbolicLink()) await fs.rmdir(path); else await fs.unlink(path); break; }
           case 'stat': case 'lstat': value = fileInfo(await fs[operation](path)); break;
@@ -637,6 +637,10 @@ try {
   await click('站点信息'); await page.waitForSelector('.settings-card input');
   assert.deepEqual(await page.$$eval('.settings-card input:not([type=checkbox]):not([type=radio]):not([type=color]), .settings-card select, .settings-card textarea', fields => fields.filter(node => node.getClientRects().length && (parseFloat(getComputedStyle(node).fontSize) < 16 || node.getBoundingClientRect().height < 44)).map(node => node.outerHTML.slice(0,80))), [], 'Native iOS settings retain readable editing size and touch targets');
   await screenshot('settings-iphone'); await noOverflow('iPhone settings');
+  const legacyHead = git(['rev-parse','HEAD']);
+  assert.equal(await mobile.invoke({ profile,job:{ action:'open',clone:false } }),profile.branch);
+  assert.equal(git(['rev-parse','HEAD']),legacyHead,'Upgrading the earlier isomorphic-git checkout preserves its commits');
+  await mobile.verifySync(saved[0]);
   assert.deepEqual(errors, []); assert.deepEqual(cspErrors, []); assert.deepEqual(failedResources, []);
   console.log('Native UI passed: desktop/mobile connection modes, offline dashboard, source save, bundled Vditor, native asset preview, client API settings, secret redaction, configuration reopen, logout.');
   console.log('Screenshots: ' + screenshots);

@@ -221,7 +221,11 @@ jobs:
       - name: Android NDK
         run: |
           sdkmanager 'ndk;27.2.12479018'
-          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          ndk="$ANDROID_HOME/ndk/27.2.12479018"
+          echo "NDK_HOME=$ndk" >> "$GITHUB_ENV"
+          for target in aarch64_linux_android armv7_linux_androideabi i686_linux_android x86_64_linux_android; do
+            echo "RANLIB_$target=$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib" >> "$GITHUB_ENV"
+          done
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
