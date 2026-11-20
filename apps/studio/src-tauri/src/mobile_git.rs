@@ -1,0 +1,26 @@
+use serde_json::{json, Value};
+use std::{cell::RefCell, sync::Mutex, time::{Duration, Instant}};
+use tauri::{ipc::Channel, Manager};
+use studio_mobile_git::{Profile, Job};
+
+#[tauri::command]
+pub async fn mobile_git(app: tauri::AppHandle, webview: tauri::Webview, profile: Profile, job: Job,
+    password: Option<String>, progress: Option<Channel<Value>>) -> Result<Value, &'static str> {
+    if webview.label() != "main" { return Err("工作区设置无效"); }
+    let base = app.path().app_data_dir().map_err(|_| "工作区设置无效")?;
+    tauri::async_runtime::spawn_blocking(move || {
+        static GIT: Mutex<()> = Mutex::new(());
+        let _operation = GIT.lock().map_err(|_| "操作失败")?;
+        studio_mobile_git::initialize(&base)?;
+        let last = RefCell::new(None::<(String,Instant,usize)>);
+        studio_mobile_git::execute(&base,&profile,job,password.as_deref().unwrap_or(""),&|phase,n,total| {
+            if let Some(channel) = &progress {
+                let mut last = last.borrow_mut();
+                if last.as_ref().is_some_and(|(old,at,previous)| old == phase && at.elapsed() < Duration::from_millis(100)
+                    && (n != total || *previous == n)) { return; }
+                *last = Some((phase.into(),Instant::now(),n));
+                let _ = channel.send(json!({"phase":phase,"loaded":n,"total":total}));
+            }
+        })
+    }).await.map_err(|_| "操作失败")?
+}

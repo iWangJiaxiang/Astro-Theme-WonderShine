@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import { mobileGitFixture } from './mobile-git-fixture.mjs';
 
 // Real production React/native adapter code; only the Tauri IPC host is mocked.
 const studio = fileURLToPath(new URL('../../', import.meta.url));
@@ -19,7 +20,7 @@ const profile = { id: 'f6347560-bbe9-4c35-9d89-b0429108882b', label: '本地写�
 const root = join(appData, 'workspaces', profile.id, 'repo');
 const localRoot = join(base, 'selected local blog');
 let selectedFolder = null, folderGranted = false;
-let browser, server, page;
+let browser, server, page, mobile;
 const errors = [], cspErrors = [], failedResources = [], ipcFailures = [];
 const commands = new Set();
 const reviewClaims = new Set();
@@ -32,7 +33,7 @@ let releaseDownload = () => {}, releaseCheckout = () => {};
 let downloadGate = Promise.resolve(), checkoutGate = Promise.resolve();
 let writeGate = Promise.resolve(), releaseWrite = () => {};
 const requests = new Map(), responses = new Map(), fileHandles = new Map();
-let nextResource = 1, worktreeScans = 0;
+let nextResource = 1, worktreeScans = 0, gitInspections = 0;
 try {
   await fs.mkdir(root, { recursive: true }); await fs.mkdir(screenshots, { recursive: true });
   const git = args => execFileSync('git', args, { cwd: root, stdio: 'pipe' }).toString().trim();
@@ -93,10 +94,7 @@ try {
   browser = await puppeteer.launch({ headless: true, executablePath });
   page = await browser.newPage();
   const loadedScripts = new Set();
-  let gitWorkers = 0;
-  page.on('workercreated', worker => {
-    void worker.evaluate(() => self.name).then(name => { if (name === 'Studio Git') gitWorkers++; }).catch(() => {});
-  });
+  mobile = await mobileGitFixture(base, appData, studio);
   const runtimeChunks = (await fs.readdir(join(distribution, 'assets'))).filter(name => /^native-runtime-.*\.js$/.test(name));
   assert.ok(runtimeChunks.length > 0, 'Native runtime must be a separate on-demand chunk');
   page.on('request', request => { if (request.resourceType() === 'script') loadedScripts.add(new URL(request.url()).pathname.split('/').at(-1)); });
@@ -162,7 +160,7 @@ try {
           case 'mkdir': await fs.mkdir(path, { recursive: !!args.options?.recursive, mode: args.options?.mode }); break;
           case 'read_file': value = [...await fs.readFile(path)]; break;
           case 'read_dir':
-            if (path.endsWith('/repo/assets/git-fixture')) worktreeScans++;
+            assert.ok(!path.endsWith('/repo/assets/git-fixture'), 'Mobile Git never enumerates tracked assets via WebView IPC');
             value = (await fs.readdir(path, { withFileTypes: true })).map(item => ({ name: item.name, isFile: item.isFile(), isDirectory: item.isDirectory(), isSymlink: item.isSymbolicLink() })); break;
           case 'remove': { const stat = await fs.lstat(path); if (stat.isDirectory() && !stat.isSymbolicLink()) await fs.rmdir(path); else await fs.unlink(path); break; }
           case 'stat': case 'lstat': value = fileInfo(await fs[operation](path)); break;
@@ -220,33 +218,21 @@ try {
         } else if (operation === 'fetch_cancel' || operation === 'fetch_cancel_body') {
           requests.delete(args.rid); responses.delete(args.rid);
         } else throw new Error('Unexpected OAuth HTTP operation');
-      } else if (allowCloneHttp && command.startsWith('plugin:http|')) {
-        const operation = command.split('|')[1];
-        if (operation === 'fetch') {
-          const config = args.clientConfig, url = new URL(config.url);
-          assert.equal(url.origin, 'https://git.example.test');
-          assert.ok(['/remote.git/info/refs', '/remote.git/git-upload-pack', '/remote.git/git-receive-pack'].includes(url.pathname));
-          value = nextResource++; requests.set(value, config);
-        } else if (operation === 'fetch_send') {
+      } else if (command === 'mobile_git') {
+        mobile.setOnline(allowCloneHttp);
+        if (args.job.action === 'open' && args.job.clone) {
           await downloadGate;
-          if (failNextHttp) { failNextHttp = false; requests.delete(args.rid); throw new Error('Simulated unavailable repository'); }
-          const config = requests.get(args.rid), url = new URL(config.url);
-          const headers = new Map(config.headers);
-          const backend = join(execFileSync('git', ['--exec-path']).toString().trim(), 'git-http-backend');
-          const bytes = execFileSync(backend, [], {input:Buffer.from(config.data || []), env:{...process.env,
-            GIT_PROJECT_ROOT:base,GIT_HTTP_EXPORT_ALL:'1',PATH_INFO:url.pathname,REQUEST_METHOD:config.method,
-            QUERY_STRING:url.search.slice(1),CONTENT_TYPE:headers.get('content-type')||'',REMOTE_ADDR:'127.0.0.1'}});
-          const end = bytes.indexOf('\r\n\r\n'); assert.ok(end >= 0);
-          const entries = bytes.subarray(0,end).toString().split('\r\n').map(line => { const colon = line.indexOf(':'); return [line.slice(0,colon),line.slice(colon+1).trim()]; });
-          const rid = nextResource++; responses.set(rid, bytes.subarray(end+4));
-          value = {rid,status:200,statusText:'OK',url:config.url,headers:entries};
-          requests.delete(args.rid);
-        } else if (operation === 'fetch_read_body') {
-          const body = responses.get(args.rid);
-          value = body?.length ? [...body,0] : [1]; responses.delete(args.rid);
-        } else if (operation === 'fetch_cancel_body' || operation === 'fetch_cancel') {
-          requests.delete(args.rid); responses.delete(args.rid);
-        } else throw new Error('Unexpected HTTP operation: ' + operation);
+          if (failNextHttp) { failNextHttp = false; mobile.setOnline(false); }
+        }
+        if (args.job.action === 'inspect') { gitInspections++; if (args.job.paths == null) worktreeScans++; }
+        let sentProgress = false;
+        value = await mobile.invoke(args, async event => {
+          if (!sentProgress && event.total > 0) {
+            sentProgress = true;
+            await page.evaluate(event => window.gitProgress?.(event), event);
+            await checkoutGate;
+          }
+        });
       } else throw new Error('Unexpected native command, external HTTP is disabled: ' + command);
       return { value };
     } catch (error) {
@@ -264,12 +250,13 @@ try {
       invoke: async (command, args = {}, options) => {
         const value = args instanceof Uint8Array ? Array.from(args) : args;
         if (value.data instanceof Uint8Array) value.data = Array.from(value.data);
+        if (command === 'mobile_git' && args.progress) window.gitProgress = event => args.progress.onmessage(event);
         const result = await window.tauriInvoke(command, value, options);
         if (result.error) throw result.error;
         return result.value;
       },
       convertFileSrc: path => location.origin + '/__asset/' + encodeURIComponent(path),
-      transformCallback: () => { throw new Error('Unexpected native callback in filesystem smoke'); },
+      transformCallback: () => 1,
     };
   }, profile);
   const click = async text => {
@@ -575,7 +562,7 @@ try {
   // Download an actual temporary Git repository through the native HTTP adapter.
   console.log('PASS: offline native UI; starting real clone fixture.');
   await page.select('.language-switcher select','zh-CN');
-  await page.type('.connection-url input','https://git.example.test/remote.git');
+  await page.type('.connection-url input',mobile.url);
   assert.equal(await page.$eval('input[placeholder="自动识别默认分支"]', input => input.value), '');
   assert.equal(await page.$eval('input[placeholder="自动识别默认分支"]', input => input.required), false);
   await page.click('.connection-options summary');
@@ -606,7 +593,7 @@ try {
   assert.equal(await page.$('.native-connect'), null, 'A cold phone launch reopens the last checkout offline');
   await screenshot('phone-composer', false);
   await page.type('.thread-composer textarea', 'Phone publication fixture');
-  const workersBeforeReview = gitWorkers;
+  const inspectionsBeforeReview = gitInspections;
   await page.evaluate(() => {
     window.gitFrames = { count: 0, longest: 0 };
     let previous = performance.now();
@@ -622,7 +609,7 @@ try {
   await click('发布动态');
   await page.waitForSelector('dialog.publish-dialog[open] ul li');
   const frames = await page.evaluate(() => { const result = window.gitFrames; delete window.gitFrames; return result; });
-  assert.ok(gitWorkers > workersBeforeReview, 'The mobile review calculates Git state in a dedicated worker');
+  assert.ok(gitInspections > inspectionsBeforeReview, 'The mobile review runs in the linked libgit2 engine');
   assert.ok(frames.count >= 2 && frames.longest < 1000, 'The WebView must keep drawing frames during Git review: ' + JSON.stringify(frames));
   console.log('Mobile Git review with 128 tracked assets:', JSON.stringify(frames));
   assert.equal(await page.$('.thread-composer .language-versions'), null, 'Language tools stay in More options after saving');
@@ -675,6 +662,7 @@ try {
 } finally {
   releaseDownload(); releaseCheckout(); releaseWrite(); releaseAccount();
   await browser?.close();
+  await mobile?.close();
   await Promise.all([...fileHandles.values()].map(handle => handle.close()));
   if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   await fs.rm(base, { recursive: true, force: true });

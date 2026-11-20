@@ -1,99 +1,100 @@
-import GitWorker from './mobile-git.worker?worker&inline';
-import type { HttpClient, ProgressCallback } from 'isomorphic-git';
+import { Channel, invoke } from '@tauri-apps/api/core';
+import type { GitProgressEvent, ProgressCallback } from 'isomorphic-git';
 import { StudioError } from '../core/errors';
-import type { BranchSave } from '../shared/save';
-import type { WorkspaceControl, WorkspaceStatus } from '../shared/workspace';
-import type { WorkspaceReviewAdapter } from '../shared/workspace-confirmation';
-import type { WorkspaceFiles } from './filesystem';
+import { validateMediaPath } from '../core/media-validation';
+import { validatePath } from '../shared/repository';
+import type { BranchFile, BranchSave } from '../shared/save';
+import type { ReviewRow, WorkspaceReviewAdapter } from '../shared/workspace-confirmation';
+import type { WorkspaceStatus } from '../shared/workspace';
+import { missingFile, type WorkspaceFiles } from './filesystem';
 import type { WorkspaceProfile } from './hosting';
-import { failure, restoreError, type DeviceIO, type GitJob, type JobRequest } from './mobile-git-protocol';
 import { withWorkspaceLock } from './queue';
 
+type Inspection = Pick<WorkspaceStatus, 'head' | 'remoteHead' | 'ahead' | 'behind'> & { rows: ReviewRow[] };
+function managed(path: string) {
+  try { validatePath(path); return true; } catch { /* Try media. */ }
+  try { validateMediaPath(path); return true; } catch { return false; }
+}
+
 export function mobileGit(files: WorkspaceFiles, root: string, state: string, profile: WorkspaceProfile,
-  http: HttpClient, password: () => string, reviews: WorkspaceReviewAdapter) {
+  password: () => string, reviews: WorkspaceReviewAdapter) {
   const owner = {};
-  let handoff: { after: 'review' | 'commitForReview'; paths: string[] } | undefined;
-  // Acquire the same queue as FileRepository BEFORE starting the worker, and hold
-  // it until every dispatched device write has settled, including on worker failure.
-  function run<T>(job: GitJob, onProgress?: ProgressCallback): Promise<T> {
-    return withWorkspaceLock(root, async uninterrupted => {
-      // Only this sandboxed checkout's uninterrupted review → commit → review → sync
-      // may narrow discovery. A save, recovery, failed job or new session starts fresh.
-      const followsReview = handoff?.after === 'review' && (job.action === 'commitForReview' || job.action === 'sync');
-      const followsCommit = handoff?.after === 'commitForReview' && job.action === 'review';
-      const reviewPaths = uninterrupted && (followsReview || followsCommit) ? handoff?.paths : undefined;
+  let handoff: { after: 'review' | 'commit'; paths: string[] } | undefined;
+  async function command<T>(action: string, args: Record<string, unknown> = {}, progress?: ProgressCallback): Promise<T> {
+    const channel = progress && new Channel<GitProgressEvent>(progress);
+    try {
+      return await invoke<T>('mobile_git', { profile, job: { action, ...args }, progress: channel ?? null,
+        password: action === 'sync' || action === 'open' && args.clone ? password() : null });
+    } catch (reason) { throw new StudioError(409, typeof reason === 'string' ? reason : '操作失败'); }
+  }
+  const inspect = (paths?: string[], writable = false) => command<Inspection>('inspect', { paths, writable });
+  function reviewState(current: Inspection) {
+    return { scope: 'native:' + root, branch: profile.branch, head: current.head, rows: current.rows.filter(([path]) => managed(path)) };
+  }
+  async function status(current: Inspection): Promise<WorkspaceStatus> {
+    const { rows, ...refs } = current;
+    let lastSync = null;
+    try { lastSync = String(await files.readFile(state + '/last-sync', 'utf8')); }
+    catch (error) { if (!missingFile(error)) throw error; }
+    return { ...refs, branch: profile.branch, lastSync, canSync: true, diverged: refs.ahead > 0 && refs.behind > 0,
+      changes: rows.length, dirty: !!rows.length, managedChanges: reviewState(current).rows.map(([path]) => path) };
+  }
+  // The connection owns a private checkout. Another lock holder, an error, an
+  // explicit refresh or a reopened session invalidates the changed-path list.
+  function run<T>(after: 'review' | 'commit' | null, operation: (paths?: string[]) => Promise<T>) {
+    return withWorkspaceLock(root, uninterrupted => {
+      const paths = uninterrupted && handoff?.after === after ? handoff?.paths : undefined;
       handoff = undefined;
-      const worker = new GitWorker({ name: 'Studio Git' });
-      const pending = new Set<Promise<void>>();
-      const bodies = new Map<number, AsyncIterableIterator<Uint8Array>>();
-      let responseId = 0;
-      const io: DeviceIO = {
-        readFile: files.readFile, writeFile: files.writeFile, readdir: files.readdir,
-        mkdir: files.mkdir, rmdir: files.rmdir, unlink: files.unlink, rename: files.rename, chmod: files.chmod,
-        async stat(path, link) {
-          const info = await (link ? files.lstat(path) : files.stat(path));
-          const { isFile, isDirectory, isSymbolicLink, ...fields } = info;
-          return { ...fields, file: info.isFile(), directory: info.isDirectory(), symlink: info.isSymbolicLink() };
-        },
-        async request(request, bytes) {
-          const { body, ...response } = await http.request({ ...request, body: bytes && (async function* () { yield bytes; })() });
-          const id = ++responseId;
-          if (body) bodies.set(id, body);
-          return { ...response, id };
-        },
-        async readBody(id) {
-          const part = await bodies.get(id)?.next();
-          return !part || part.done ? null : part.value;
-        },
-        async closeBody(id) { const body = bodies.get(id); bodies.delete(id); await body?.return?.(); },
-        review: snapshot => reviews.store.createReview(snapshot, reviews.source),
-        validate: (token, snapshot) => reviews.store.validateReview(token, snapshot, reviews.source),
-      };
-      const reply = async (method: keyof DeviceIO, args: unknown[], port: MessagePort) => {
-        try {
-          if (!Object.hasOwn(io, method)) throw new Error('操作失败');
-          const value = await Reflect.apply(io[method] as (...args: unknown[]) => unknown, io, args);
-          // Native reads return owned buffers. Transfer ownership without copying pack data.
-          const transfer = value instanceof Uint8Array && value.buffer instanceof ArrayBuffer ? [value.buffer] : [];
-          port.postMessage({ value }, transfer);
-        } catch (error) { port.postMessage({ error: failure(error) }); }
-        finally { port.close(); }
-      };
-      try {
-        return await new Promise<T>((resolve, reject) => {
-          worker.onmessage = ({ data, ports }) => {
-            if (data.kind === 'done') {
-              if (data.error) { reject(restoreError(data.error)); return; }
-              if ((job.action === 'review' || job.action === 'commitForReview') && data.reviewPaths) {
-                handoff = { after: job.action, paths: data.reviewPaths };
-              }
-              resolve(data.value);
-            }
-            else if (data.kind === 'progress') onProgress?.(data.event);
-            else if (data.kind === 'io') {
-              const task = reply(data.method, data.args, ports[0]);
-              pending.add(task); void task.then(() => pending.delete(task), reject);
-            }
-          };
-          worker.onerror = worker.onmessageerror = () => reject(new StudioError(503, 'Git 处理已中断，请检查工作区后重试。'));
-          worker.postMessage({ job, root, state, profile, reviewPaths, password: job.action === 'open' || job.action === 'sync' ? password() : '' } satisfies JobRequest);
-        });
-      } finally {
-        worker.onmessage = null;
-        worker.terminate();
-        await Promise.allSettled(pending);
-        await Promise.allSettled([...bodies.keys()].map(id => io.closeBody(id)));
-      }
+      return operation(paths);
     }, owner);
   }
-  const workspace: WorkspaceControl & { open(onProgress?: ProgressCallback, allowClone?: boolean): Promise<void> } = {
-    async open(progress, allowClone = true) { profile.branch = await run<string>({ action: 'open', allowClone }, progress); },
-    status: () => run<WorkspaceStatus>({ action: 'status' }),
-    createReview: () => run<WorkspaceStatus>({ action: 'review' }),
-    commit: (message, confirmation) => run<WorkspaceStatus>({ action: 'commit', message, confirmation }),
-    commitForReview: (message, confirmation) => run<void>({ action: 'commitForReview', message, confirmation }),
-    sync: confirmation => run<WorkspaceStatus>({ action: 'sync', confirmation }),
-    saveBranch: (key, files) => run<BranchSave>({ action: 'branch', key, files }),
+  async function validate(current: Inspection, confirmation?: string) {
+    if (!confirmation) throw new StudioError(400, '工作区已变化，请刷新并重新确认提交范围');
+    await reviews.store.validateReview(confirmation, reviewState(current), reviews.source);
+  }
+  function commit(message: string, confirmation: string | undefined, followUp: boolean) {
+    return run('review', async paths => {
+      const current = await inspect(paths, true);
+      await validate(current, confirmation);
+      await command('commit', { head: current.head, message, paths: reviewState(current).rows.map(([path]) => path) });
+      const candidates = current.rows.map(([path]) => path);
+      if (followUp) { handoff = { after: 'commit', paths: candidates }; return; }
+      return status(await inspect(candidates));
+    });
+  }
+  return {
+    async open(progress?: ProgressCallback, allowClone = true) {
+      profile.branch = await run(null, () => command<string>('open', { clone: allowClone }, progress));
+    },
+    // FileRepository already holds the workspace lock.
+    assertWritable: () => command<void>('guard'),
+    status: () => run(null, async () => status(await inspect())),
+    createReview: () => run('commit', async paths => {
+      const current = await inspect(paths, true);
+      const result = await reviews.store.createReview(reviewState(current), reviews.source);
+      const view = await status(current);
+      handoff = { after: 'review', paths: current.rows.map(([path]) => path) };
+      return { ...view, confirmation: result.confirmation, confirmationExpiresAt: result.expiresAt };
+    }),
+    commit: async (message: string, confirmation?: string) => (await commit(message, confirmation, false))!,
+    commitForReview: async (message: string, confirmation: string) => { await commit(message, confirmation, true); },
+    sync: (confirmation?: string) => run('review', async paths => {
+      const current = await inspect(paths, true);
+      await validate(current, confirmation);
+      if (current.rows.length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
+      const checkedOut = await command<boolean>('sync', { head: current.head });
+      await files.writeFile(state + '/last-sync', new Date().toISOString());
+      return status(await inspect(checkedOut ? undefined : []));
+    }),
+    saveBranch: (key: string, files: BranchFile[]) => run(null, async () => {
+      validatePath(key);
+      const expected = [];
+      for (const { path, data, onlyIfMissing } of files) {
+        if (!managed(path)) throw new StudioError(400, '不允许访问此文件路径');
+        const bytes = data && new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(data)));
+        expected.push({ path, digest: bytes && Array.from(bytes, value => value.toString(16).padStart(2, '0')).join(''), onlyIfMissing });
+      }
+      return command<BranchSave>('branch', { key, files: expected });
+    }),
   };
-  return workspace;
 }

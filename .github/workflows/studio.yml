@@ -110,6 +110,10 @@ jobs:
       - run: npm run test:native-browser -w @wondershine/studio
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Build and test the mobile libgit2 engine and browser harness
+        run: |
+          cargo test --locked --manifest-path apps/studio/src-tauri/mobile-git/Cargo.toml
+          cargo build --locked --manifest-path apps/studio/src-tauri/mobile-git/Cargo.toml --example browser_fixture
       - run: node apps/studio/tests/browser/native-ui.mjs
         env:
           STUDIO_TEST_OAUTH: fixture

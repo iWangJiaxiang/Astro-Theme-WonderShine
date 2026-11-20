@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-mobile-git"
+description = "Operate on a private Studio mobile checkout by workspace ID."
+commands.allow = ["mobile_git"]
