@@ -40,9 +40,9 @@
     },
     {
       "area": "ci",
-      "checked_at": "2026-11-19",
-      "result": "Tasks 4,2,9 reviewed issues/comments, CSS build, CI, release/image tests and tgz consumer. Fallback 8: no measured image opportunity; 10: #13 unchanged; 7: found bootstrap contradicts dry-run-only docs; filed #18. No local execution.",
-      "follow_up": "Await maintainer decision on bootstrap policy; #13 remote validation and #15 existing branch remain pending. No local execution or release attempted."
+      "checked_at": "2026-11-20",
+      "result": "Tasks 10,1,4 and fallback 2: five labelled issues, comments and PR checked; no new human activity. Sweep 9,8,7,5: release tests/tgz consumer, image encoder, Starter docs and routes inspected. Candidates already tracked by #13/#15/#18; no new action.",
+      "follow_up": "#13 remote validation unavailable; local execution prohibited. #15 existing branch awaits review; #18 policy pending. No source changes or tests."
     }
   ],
   "completed_actions": [],
