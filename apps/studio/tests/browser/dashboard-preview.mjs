@@ -63,8 +63,8 @@ createRoot(document.getElementById('root')).render(<App />);
     loader: { '.css': 'empty' },
     plugins: [{ name: 'isolate-app-children', setup(build) {
       build.onResolve({ filter: /(?:components\/|platform\/(?:LegacyRecovery|NativeAiSettings|WorkspacePanel))/ }, args => {
-        // Keep real shell icons for layout captures; stateful child views stay isolated.
-        if (args.path === './components/Icon') return;
+        // Render the shell and its children, isolating only the page-level fixtures below.
+        if (args.path === './components/Icon' || args.path === './components/ViewTransition') return;
         if (args.importer.endsWith('/src/App.tsx')) return { path: args.path, namespace: 'app-child' };
       });
       build.onLoad({ filter: /.*/, namespace: 'app-child' }, args => ({ loader: 'tsx', resolveDir: fileURLToPath(new URL('../../', import.meta.url)), contents: `
