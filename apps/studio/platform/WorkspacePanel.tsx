@@ -132,7 +132,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
     {error && <p role="alert" className="notice error">{t(error)}</p>}{notice && <p role="status" className="notice success">{t(notice)}</p>}
     {busy && <p role="status" className="muted small">{t(stage)}</p>}
     {status && <div className="card workspace-sync-card"><h2>{status.branch}</h2>
-      {status && <><dl className="workspace-status-grid"><div><dt>{t('本地修改')}</dt><dd>{status.changes}</dd></div><div><dt>{t('待推送提交')}</dt><dd>{status.ahead}</dd></div><div><dt>{t('远端新提交（上次获取）')}</dt><dd>{status.behind}</dd></div></dl>
+      <dl className="workspace-status-grid"><div><dt>{t('本地修改')}</dt><dd>{status.changes}</dd></div><div><dt>{t('待推送提交')}</dt><dd>{status.ahead}</dd></div><div><dt>{t('远端新提交（上次获取）')}</dt><dd>{status.behind}</dd></div></dl>
         {status.diverged && <p className="notice error">{t('双方都有新提交。请先在 Git 工具中合并，本地内容会保留。')}</p>}
         <label className="field"><span>{t('提交说明')}</span><input disabled={busy || !!pending} value={message} maxLength={500} onChange={event => setMessage(event.target.value)} /></label>
         {status.canSync === false && <p className="muted small">{t('App 同步需要 HTTPS 远端；本地保存和提交仍可使用')}</p>}
@@ -147,7 +147,6 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
           <div className="publish-actions"><button className="primary" disabled={busy} onClick={() => void action(pending)}>{busy ? t('处理中…') : t('确认执行')}</button>
           <button className="secondary" disabled={busy} onClick={() => setPending(null)}>{t('取消')}</button></div>
         </div>}
-        </>}
     </div>}
   </section>;
 }

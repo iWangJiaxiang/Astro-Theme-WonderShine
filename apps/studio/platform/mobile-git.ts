@@ -1,5 +1,6 @@
 import GitWorker from './mobile-git.worker?worker&inline';
 import type { HttpClient, ProgressCallback } from 'isomorphic-git';
+import { StudioError } from '../core/errors';
 import type { BranchSave } from '../shared/save';
 import type { WorkspaceControl, WorkspaceStatus } from '../shared/workspace';
 import type { WorkspaceReviewAdapter } from '../shared/workspace-confirmation';
@@ -60,10 +61,11 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
               pending.add(task); void task.then(() => pending.delete(task), reject);
             }
           };
-          worker.onerror = worker.onmessageerror = () => reject(new Error('Git 处理已中断，请检查工作区后重试。'));
+          worker.onerror = worker.onmessageerror = () => reject(new StudioError(503, 'Git 处理已中断，请检查工作区后重试。'));
           worker.postMessage({ job, root, state, profile, password: job.action === 'open' || job.action === 'sync' ? password() : '' } satisfies JobRequest);
         });
       } finally {
+        worker.onmessage = null;
         worker.terminate();
         await Promise.allSettled(pending);
         await Promise.allSettled([...bodies.keys()].map(id => io.closeBody(id)));
