@@ -6,7 +6,7 @@ import {routes} from '../../lib/routes';
 import type {Document} from '../../lib/types';
 import {featuredDocument} from './data';
 
-const {site,lang,page=1}=Astro.props;
+const {site,lang}=Astro.props;
 const config=localizeConfig(site,lang),data=localizeData(site,lang),top=config.extra.top;
 const url=(path:string)=>localizeUrl(path,lang,site),tr=(key:string)=>t(key,lang,site);
 const left=top.banner_left,settings=top.banner_right.recommend_post;
@@ -14,7 +14,7 @@ const skills=data.skill?.items||[];
 const pairs=Array.from({length:Math.ceil(skills.length/2)},(_,index)=>skills.slice(index*2,index*2+2));
 const configured=left.category_groups||[];
 const paths=new Set(routes(site).filter(route=>route.lang===lang).map(route=>route.path));
-const groups=configured.filter((group:any)=>!/^\/(tags|categories)\//.test(group.url)||paths.has(url(group.url).replace(/\/?$/,'/')));
+const groups=configured.filter((group:any)=>!/^\/(tags|categories)\//.test(group.url)||paths.has(url(group.url).split(/[?#]/)[0].replace(/\/?$/,'/')));
 if(configured.length&&!groups.length){
   for(const group of [
     {title:tr('archive_title'),url:'/archives/',icon:'icon-book'},
@@ -33,10 +33,11 @@ const posts=selected.filter(post=>post.url!==daily?.url).slice(0,Math.min(6,sett
 const Recommendations=daily?'details':'div';
 const colorStyle=(group:any)=>({'--group-light-one':group.colors?.light_one,'--group-light-two':group.colors?.light_two,'--group-dark-one':group.colors?.dark_one,'--group-dark-two':group.colors?.dark_two});
 ---
-{top.recent_top&&page===1&&<div class="recent-top-post-group" id="recent-top-post-group"><div class="recent-post-top" id="recent-post-top">
+<div class="recent-top-post-group" id="recent-top-post-group"><div class="recent-post-top" id="recent-post-top">
   <div id="bannerGroup"><div id="banners">
     {pairs.length>0&&<div class="tags-group-all" aria-hidden="true"><div class="tags-group-wrapper">{pairs.map(pair=><div class="tags-group-icon-pair">{pair.map((tech:any)=><div class="tags-group-icon" style={{background:tech.bg_color}}>{tech.logo?<img src={tech.logo} alt="" loading="lazy" decoding="async"/>:tech.icon?<i class={tech.icon}/>:tech.svg_symbol_id&&<svg><use href={`${tech.svg_sprite||data.skill.svg_sprite}#${tech.svg_symbol_id}`}/></svg>}</div>)}</div>)}</div></div>}
-    <div class="banners-title"><div role="heading" aria-level={top.above?.enable_above||top.above?.enable?2:1} set:html={left.title_big}/>{left.title_small&&<div class="banners-title-small" set:html={left.title_small}/>}</div>
+    {!skills.length&&config.extra.site.logo&&<img class="banner-logo" src={config.extra.site.logo} alt="" decoding="async"/>}
+    <div class="banners-title"><div role="heading" aria-level={(top.above?.enable_above??top.above?.enable)?2:1} set:html={left.title_big}/>{left.title_small&&<div class="banners-title-small" set:html={left.title_small}/>}</div>
     <div class="banners-link">{groups.slice(0,2).map((group:any,index:number)=><a class={`banners-link-btn ${index?'blb-top':'blb-hot'}`} href={url(group.url)} style={colorStyle(group)}>
       {/^https?:|^\//.test(group.icon)?<img src={group.icon} alt="" loading="lazy"/>:<i class={group.icon} aria-hidden="true"/>}
       <span class="banners-link-title">{group.title}</span>
@@ -55,4 +56,4 @@ const colorStyle=(group:any)=>({'--group-light-one':group.colors?.light_one,'--g
       </a>)}</div>
     </Recommendations>}
   </div>}
-</div></div>}
+</div></div>

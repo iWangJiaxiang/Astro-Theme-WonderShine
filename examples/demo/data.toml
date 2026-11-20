@@ -27,7 +27,4 @@ id = "journal"
 name = "Journal"
 
 [post]
-recommend_posts = ["collections/field-notes/first.md"]
-
-[post.today_recommend]
-post_path = "articles/welcome/index.md"
+recommend_posts = ["articles/welcome/index.md", "collections/field-notes/first.md"]

@@ -67,6 +67,13 @@ export async function checkBrowser(options = demo) {
       const background = document.querySelector('#loading-box .loading-bg');
       return (!background || getComputedStyle(background).visibility === 'hidden') && !document.documentElement.hasAttribute('data-astro-transition');
     });
+    const finishLayout = () => page.evaluate(async () => {
+      await document.fonts.ready;
+      await new Promise(requestAnimationFrame);
+      await Promise.allSettled(document.getAnimations()
+        .filter(animation => animation.effect?.getComputedTiming().endTime < Infinity)
+        .map(animation => animation.finished));
+    });
     for (const [name, route] of options.pages) {
       requests.length = 0;
       const response = await page.goto(origin + route, { waitUntil: 'networkidle0' });
@@ -77,6 +84,12 @@ export async function checkBrowser(options = demo) {
         assert.equal(await page.$eval('#todayCard', link => link.pathname), prefix + '/articles/welcome/');
         for (const width of [1440, 390]) {
           await page.setViewport({width, height:900});
+          await finishLayout();
+          assert.ok(await page.evaluate(() => {
+            const button = document.querySelector('#topGroup summary').getBoundingClientRect();
+            const text = document.querySelector('.todayCard-info').getBoundingClientRect();
+            return button.bottom <= text.top;
+          }));
           await page.focus('#topGroup summary');
           await page.keyboard.press('Enter');
           assert.ok(await page.$('#topGroup details[open]'));
@@ -96,12 +109,14 @@ export async function checkBrowser(options = demo) {
         assert.equal(await page.$eval('#aside-content .card-recent-post .title', link => link.pathname), '/articles/welcome/');
         assert.ok(await page.$('#aside-content .activity-topic-counts a'));
         await page.setViewport({width:390,height:844});
+        await finishLayout();
         assert.ok(await page.evaluate(() => {
           const aside = document.querySelector('#aside-content').getBoundingClientRect();
-          return aside.width > 0 && aside.top >= document.querySelector('.activity-main').getBoundingClientRect().bottom
+          const links = document.querySelectorAll('#aside-content .card-recent-post .title, #aside-content .activity-topic-counts a');
+          return [...links].every(link => link.getBoundingClientRect().height > 0) && aside.height > 0 && aside.top >= document.querySelector('.activity-main').getBoundingClientRect().bottom
             && document.documentElement.scrollWidth <= innerWidth;
         }));
-        await page.$eval('#aside-content', aside => aside.scrollIntoView());
+        await page.$eval('#aside-content', aside => aside.scrollIntoView({behavior:'instant'}));
         await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-sidebar-mobile.png')});
         await page.setViewport({width:1440,height:900});
         await page.evaluate(() => window.scrollTo({top:0,behavior:'instant'}));
@@ -128,6 +143,7 @@ export async function checkBrowser(options = demo) {
         await page.screenshot({path:path.join(screenshots,'blog-activity-mobile.png')});
         await page.setViewport({width:1440,height:900});
       }
+      await finishLayout();
       await page.screenshot({ path: path.join(screenshots, `blog-${name}.png`) });
       const broken = await page.$$eval('img', images => images.filter(image => image.offsetParent && image.complete && !image.naturalWidth && image.src.startsWith(location.origin)).map(image => image.src));
       assert.deepEqual(broken, [], route);

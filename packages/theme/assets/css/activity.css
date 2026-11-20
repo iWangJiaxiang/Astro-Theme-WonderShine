@@ -1,5 +1,5 @@
-/* Activity pages share the theme palette. Desktop home changes start at 1200px. */
-.activity-layout,.activity-detail{
+/* Activity pages share the theme palette. */
+.activity-layout{
   --activity-line:var(--wjx-card-border,#e3e6ed);
   --activity-muted:var(--wjx-secondtext,#6b7280);
   color:var(--wjx-fontcolor,#263043)
@@ -14,7 +14,7 @@
   align-items:start
 }
 /* Thread pages use the same discovery widgets as articles. */
-.thread-layout #aside-content { display: block; width: 100%; min-width: 0; padding: 0; }
+.thread-layout #aside-content { display: block; width: 100%; min-width: 0; padding: 0; animation: none; scroll-margin-top: 72px; }
 .thread-layout #aside-content .sticky_layout { position: static; margin: 0; }
 .thread-layout #aside-content .card-widget { margin: 0 0 1rem; }
 @media (min-width: 901px) {
@@ -95,7 +95,7 @@
   font-size:14px;
   margin-bottom:22px
 }
-.activity-layout .thread-author img,.activity-detail .thread-author img{
+.activity-layout .thread-author img{
   width:36px;
   height:36px;
   min-width:36px;
@@ -194,11 +194,6 @@
   border-top:1px solid var(--activity-line);
   margin:24px 0
 }
-.activity-avatar{
-  width:64px;
-  height:64px;
-  border-radius:18px
-}
 .activity-empty{
   padding:48px 32px;
   background:var(--wjx-card-bg,#fff);
@@ -256,11 +251,6 @@
 }
 .timeline-read{
   font-size:13px
-}
-.activity-detail{
-  max-width:940px;
-  margin:32px auto 80px;
-  padding:0 32px
 }
 .activity-detail-top{
   display:flex;
@@ -381,12 +371,8 @@
     padding-top:16px;
     border-top:1px solid var(--wjx-card-border)
   }
-  .activity-aside .activity-avatar{width:48px;height:48px}
   .thread-author{flex-wrap:wrap}
   .thread-author time{font-size:12px}
-  .activity-detail{
-    padding:0 16px
-  }
   .thread-card{
     padding:22px 18px
   }
@@ -414,7 +400,7 @@
 }
 
 /* Public topic metadata is independent from associated content activity. */
-.activity-layout [hidden],.activity-detail [hidden]{display:none!important}
+.activity-layout [hidden]{display:none!important}
 .activity-toolbar button,.activity-pagination button{font:inherit;cursor:pointer;border:0;background:none}
 .activity-pagination button:disabled{opacity:.4;cursor:default}
 .activity-toolbar button:focus-visible,.activity-pagination button:focus-visible,.content-topics a:focus-visible{outline:2px solid var(--wjx-theme);outline-offset:3px}

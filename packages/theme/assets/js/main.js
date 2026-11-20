@@ -116,17 +116,6 @@ function percent() {
         window.onscroll = percent
 }
 
-// 今日推荐展示更多
-function bindTodayCardHoverEvent() {
-    $(".topGroup").hover((function () { }
-    ), (function () {
-        hoverOnCommentBarrage = !1,
-            document.getElementById("topGroup").classList.remove("hideCard"),
-            document.getElementById("topGroup").style.zIndex = 1
-    }
-    ))
-}
-
 // 检查AVIF图片是否支持，并处理图片加载格式
 // 如不支持，则换成webp格式
 function checkAvif() {
@@ -262,7 +251,6 @@ const initializeBlogOnce = runOnce('initBlog')(() => {
         GLOBAL_CONFIG.rightMenuEnable && addRightMenuClickEvent(),
         percent(),
         listenToPageInputPress(),
-        wjx.topPostScroll(),
         wjx.sayhi(),
         wjx.stopImgRightDrag(),
         //右下角 snackbar 弹窗
@@ -272,8 +260,7 @@ const initializeBlogOnce = runOnce('initBlog')(() => {
         wjx.reflashEssayWaterFall(),
         wjx.topCategoriesBarScroll(),
         // ClientRouter owns loading completion, including overlapping navigation.
-        GLOBAL_CONFIG.loadingBox && !document.querySelector('meta[name="astro-view-transitions-enabled"]') && wjx.hideLoading(),
-        bindTodayCardHoverEvent()
+        GLOBAL_CONFIG.loadingBox && !document.querySelector('meta[name="astro-view-transitions-enabled"]') && wjx.hideLoading();
     //halo.getTopSponsors()
 })
 

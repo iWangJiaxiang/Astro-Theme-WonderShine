@@ -16,7 +16,7 @@ const activity=config.extra.activity?.enable,first=(route.page||1)===1,recent=th
 const tr=(key:string)=>t(key,lang,site,'activity'),url=(path:string)=>localizeUrl(path,lang,site);
 ---
 <div id="home_top" class:list={{'activity-home':activity&&first}}>
-  <RecentTop site={site} lang={lang} page={route.page}/>
+  {first&&config.extra.top.recent_top&&<RecentTop site={site} lang={lang}/>}
   {activity&&first&&<section class="home-threads">
     <a class="home-threads-label" href={url('/threads/')}><span class="activity-dot"/>{tr('recent')} <span>→</span></a>
     <a class="home-threads-more" href={url('/threads/')}>{lang.startsWith('zh')?'全部动态':'View all'} →</a>
