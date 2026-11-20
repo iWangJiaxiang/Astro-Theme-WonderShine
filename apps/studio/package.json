@@ -23,7 +23,7 @@
     "app:dev": "tauri dev",
     "app:build": "tauri build",
     "app:android": "tauri android dev",
-    "app:ios": "XCODE_XCCONFIG_FILE=\"$PWD/src-tauri/mobile-git.xcconfig\" tauri ios dev",
+    "app:ios": "node scripts/configure-ios.mjs && tauri ios dev",
     "test:native-browser": "node tests/browser/native.mjs",
     "test:react-browser": "node tests/browser/react-lifecycle.mjs",
     "test:native-macos": "node tests/native/macos.mjs",

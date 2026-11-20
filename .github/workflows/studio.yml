@@ -280,7 +280,6 @@ jobs:
       STUDIO_SOURCE: ${{ needs.prepare.outputs.sha }}
       STUDIO_RELEASE: ${{ needs.prepare.outputs.iosRelease }}
       STUDIO_PLATFORM: ios
-      XCODE_XCCONFIG_FILE: ${{ github.workspace }}/apps/studio/src-tauri/mobile-git.xcconfig
       # Simulator builds skip signing but Tauri still requires a non-empty team.
       APPLE_DEVELOPMENT_TEAM: ${{ needs.prepare.outputs.iosRelease == 'true' && secrets.APPLE_DEVELOPMENT_TEAM || '0000000000' }}
     steps:
@@ -325,6 +324,7 @@ jobs:
       - run: npm ci
       - run: node apps/studio/scripts/release/version.mjs
       - run: npm exec -w @wondershine/studio -- tauri ios init --ci
+      - run: node apps/studio/scripts/configure-ios.mjs
       - run: node apps/studio/scripts/release/icons.mjs ios
       - name: Simulator app (no distribution credentials)
         if: needs.prepare.outputs.iosRelease != 'true'

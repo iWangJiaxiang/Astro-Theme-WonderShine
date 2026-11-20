@@ -138,4 +138,4 @@ The save split button supports local files and an independent local Git branch f
 
 On mobile, a cold launch reopens the last successfully connected workspace. A downloaded checkout can reopen offline. First launch, an unavailable checkout, or choosing **Switch workspace** opens the chooser. A saved service address still uses its own login. When a downloaded repository has no configured author name or email, Studio uses the application signature `WonderShine Studio <studio@localhost>`; connection settings accept a personal signature.
 
-The iOS developer command and release workflow pass `src-tauri/mobile-git.xcconfig` to Xcode so that the final app links the SDK's zlib and iconv libraries. When invoking the Tauri iOS CLI directly, set `XCODE_XCCONFIG_FILE` to the absolute path of that file.
+After Tauri initializes the iOS project, the Studio developer command and CI add the SDK's zlib and iconv libraries to its Xcode target. When using the Tauri CLI directly, run `node apps/studio/scripts/configure-ios.mjs` from the repository root after `tauri ios init` and before the first build.
