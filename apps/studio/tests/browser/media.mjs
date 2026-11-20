@@ -40,6 +40,8 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
     if (confirm) { await click('使用这张图片'); await page.waitForFunction(() => !document.querySelector('dialog.media-dialog[open]')); }
   };
   await click('媒体库'); await heading('媒体库');
+  // These files were written outside Studio after earlier visits cached the listing.
+  await click('刷新仓库');
   await fill('[aria-label="搜索仓库图片"]', '媒体 配图');
   await page.waitForSelector(`[data-media-path="${shared}"] img`);
   await page.waitForFunction(path => document.querySelector(`[data-media-path="${path}"] img`)?.naturalWidth > 0, {}, shared);
