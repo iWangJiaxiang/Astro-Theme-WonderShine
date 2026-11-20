@@ -124,6 +124,7 @@ async function checkWorkspaceLayout(page, screenshots) {
           docked: Math.abs(bar.bottom - innerHeight) < 1 && bar.width === innerWidth,
           barHeight: bar.height,
           headerHeight: topbar.height,
+          primaryAboveNavigation: rect('.composer-publish .save-button-main').bottom <= bar.top,
           modesVisible,
           cardWidth: card.width,
         };
@@ -133,6 +134,7 @@ async function checkWorkspaceLayout(page, screenshots) {
       assert.ok(layout.headerHeight <= 76, `Header wraps at ${width}x${height}`);
       if (width <= 760) assert.ok(layout.docked && layout.barHeight >= 48, 'Phone navigation is anchored and touch sized');
       else assert.equal(layout.barHeight, 0, 'Desktop uses the sidebar');
+      if (width === 320) assert.ok(layout.primaryAboveNavigation, 'Small phones show the composer action above navigation on launch');
       assert.equal(layout.modesVisible, false, 'Writing starts without technical mode controls');
       await page.screenshot({ path: `${screenshots}/workspace-${width}x${height}-en.png` });
     }
