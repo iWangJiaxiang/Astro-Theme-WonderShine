@@ -1,8 +1,6 @@
 import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { readAppMetadata } from './verify-ios-sdk.mjs';
-import { checkTestFlight } from './testflight-status.mjs';
 
 const key = process.env.APPLE_API_KEY;
 if (!/^[A-Z0-9]+$/.test(key || '')) throw new Error('Invalid App Store Connect key ID');
@@ -29,7 +27,4 @@ try {
     throw new Error(`TestFlight upload failed. ${reason} Raw Apple output is withheld to protect account information.`);
   }
   console.log('Apple confirmed the TestFlight upload.');
-  await checkTestFlight(readAppMetadata(resolve('temp/studio-artifacts', ipa.name)), {
-    id: key, issuer: process.env.APPLE_API_ISSUER, pem: Buffer.from(process.env.APPLE_API_KEY_BASE64, 'base64'),
-  });
 } finally { await rm(directory, { recursive: true, force: true }); }

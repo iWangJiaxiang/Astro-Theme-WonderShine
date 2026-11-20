@@ -368,7 +368,10 @@ jobs:
           path: temp/studio-artifacts
       - name: Select upload tools
         run: sudo xcode-select --switch "$DEVELOPER_DIR"
-      - run: node apps/studio/scripts/release/testflight.mjs
+      - name: Upload signed IPA and check TestFlight processing
+        run: |
+          node apps/studio/scripts/release/testflight.mjs
+          node apps/studio/scripts/release/testflight-status.mjs
         env:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}

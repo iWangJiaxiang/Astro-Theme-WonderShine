@@ -1,4 +1,8 @@
 import { sign } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readAppMetadata } from './verify-ios-sdk.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
 
 // The upload has already succeeded. Query that signed build without changing tester groups.
@@ -48,4 +52,14 @@ export async function checkTestFlight(metadata, credentials) {
     await delay(30_000);
   }
   console.log(`${label}: uploaded; Apple processing has not been confirmed yet.`);
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const manifest = JSON.parse(await readFile('temp/studio-artifacts/ios.json', 'utf8'));
+  const ipa = manifest.files.find(file => /^[\w.-]+\.ipa$/.test(file.name));
+  if (!ipa) throw new Error('Missing iOS IPA');
+  await checkTestFlight(readAppMetadata(resolve('temp/studio-artifacts', ipa.name)), {
+    id: process.env.APPLE_API_KEY, issuer: process.env.APPLE_API_ISSUER,
+    pem: Buffer.from(process.env.APPLE_API_KEY_BASE64, 'base64'),
+  });
 }
