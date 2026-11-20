@@ -13,7 +13,7 @@ const demo = {
   siteRoot: path.join(workspace, 'examples/demo'),
   pages: [
     ['home', '/'], ['article', '/articles/welcome/'],
-    ['thread', '/threads/11111111-2222-4333-8444-555555555555/'],
+    ['threads', '/threads/'], ['thread', '/threads/11111111-2222-4333-8444-555555555555/'],
     ['series', '/collections/field-notes/'], ['tags', '/tags/design/'], ['timeline', '/timeline/'],
     ['chinese', '/zh-CN/'],
   ],
@@ -72,6 +72,40 @@ export async function checkBrowser(options = demo) {
       const response = await page.goto(origin + route, { waitUntil: 'networkidle0' });
       assert.equal(response.status(), 200, route);
       await settled();
+      if (options === demo && ['home', 'chinese'].includes(name)) {
+        const prefix = name === 'chinese' ? '/zh-CN' : '';
+        assert.equal(await page.$eval('#todayCard', link => link.pathname), prefix + '/articles/welcome/');
+        for (const width of [1440, 390]) {
+          await page.setViewport({width, height:900});
+          await page.focus('#topGroup summary');
+          await page.keyboard.press('Enter');
+          assert.ok(await page.$('#topGroup details[open]'));
+          assert.equal(await page.$eval('#todayCard', link => link.offsetWidth), 0);
+          const target = await page.$eval('#topGroup .recent-post-item', link => link.href);
+          assert.ok(new URL(target).pathname.startsWith(prefix + '/collections/'));
+          assert.equal((await fetch(target)).status, 200);
+          if (width === 1440) await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-recommendations.png')});
+          await page.keyboard.press('Enter');
+          assert.ok(await page.$eval('#todayCard', link => link.offsetWidth > 0));
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+          if (width === 390) await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-mobile.png')});
+        }
+        await page.setViewport({width:1440,height:900});
+      }
+      if (options === demo && ['thread', 'threads'].includes(name)) {
+        assert.equal(await page.$eval('#aside-content .card-recent-post .title', link => link.pathname), '/articles/welcome/');
+        assert.ok(await page.$('#aside-content .activity-topic-counts a'));
+        await page.setViewport({width:390,height:844});
+        assert.ok(await page.evaluate(() => {
+          const aside = document.querySelector('#aside-content').getBoundingClientRect();
+          return aside.width > 0 && aside.top >= document.querySelector('.activity-main').getBoundingClientRect().bottom
+            && document.documentElement.scrollWidth <= innerWidth;
+        }));
+        await page.$eval('#aside-content', aside => aside.scrollIntoView());
+        await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-sidebar-mobile.png')});
+        await page.setViewport({width:1440,height:900});
+        await page.evaluate(() => window.scrollTo({top:0,behavior:'instant'}));
+      }
       if (options === demo && ['thread', 'timeline'].includes(name)) {
         const times = await page.$$eval('.thread-author time, .timeline-event[data-kind="thread"] .timeline-date time', nodes => nodes.map(node => ({text:node.textContent,date:node.getAttribute('datetime')})));
         assert.ok(times.length, 'Thread publication times are present');

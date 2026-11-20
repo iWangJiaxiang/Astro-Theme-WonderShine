@@ -25,3 +25,9 @@ name = "Design"
 [[post.categories]]
 id = "journal"
 name = "Journal"
+
+[post]
+recommend_posts = ["collections/field-notes/first.md"]
+
+[post.today_recommend]
+post_path = "articles/welcome/index.md"

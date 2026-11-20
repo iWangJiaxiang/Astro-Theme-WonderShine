@@ -8,6 +8,9 @@ export interface Feed { path: string; lang: string; kind: string; items: Documen
 function filenames(site: Site, lang: string): string[] {
   return site.config.languages?.[lang]?.feed_filenames || site.config.feed_filenames || ['atom.xml'];
 }
+export function siteFeedFilenames(site: Site, lang: string): string[] {
+  return (site.config.languages?.[lang]?.generate_feeds ?? site.config.generate_feeds) === true ? filenames(site, lang) : [];
+}
 function articleFeedItems(site: Site, lang: string, supplied?: Document[]): Document[] {
   // Existing article feeds also contain dated collection chapters and music works.
   return (supplied || site.documents).filter(doc => doc.lang === lang && doc.date && !['thread', 'topic'].includes(doc.kind) && isPublic(doc, site)).sort(byDate);
@@ -30,7 +33,7 @@ export function feeds(site: Site): Feed[] {
   for (const lang of site.languages) {
     const language = site.config.languages?.[lang] || {};
     const prefix = lang === site.defaultLanguage ? '' : `${lang}/`;
-    if ((language.generate_feeds ?? site.config.generate_feeds) === true) addScope(prefix, lang, site.documents);
+    if (siteFeedFilenames(site, lang).length) addScope(prefix, lang, site.documents);
     const taxonomies = lang === site.defaultLanguage ? site.config.taxonomies : language.taxonomies;
     for (const taxonomy of taxonomies || []) {
       if (!taxonomy.feed) continue;
