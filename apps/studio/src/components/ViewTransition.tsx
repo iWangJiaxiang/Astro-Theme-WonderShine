@@ -27,5 +27,5 @@ export default function ViewTransition({ viewId, mode, children }: Props) {
     return () => animation.cancel();
   }, [viewId, mode, scope, animate]);
 
-  return <div ref={scope}>{children}</div>;
+  return <div className="studio-view" ref={scope}>{children}</div>;
 }

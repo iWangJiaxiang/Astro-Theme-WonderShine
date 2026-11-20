@@ -129,12 +129,13 @@ export async function checkLoading({ browser, origin, screenshots }) {
       page.click('.library-row .content-row'),
     ]);
     assert.equal(failedDocument.status(), 502, 'opening a document reaches the injected document failure');
-    await page.waitForSelector('.main-content > .notice.error button', { visible: true });
+    const documentRetry = '.studio-view > .notice.error button';
+    await page.waitForSelector(documentRetry, { visible: true });
     assert.equal(await page.$('.markdown-source'), null, 'failed document request must not expose an empty editable document');
     failDocument = false;
     const [recoveredDocument] = await Promise.all([
       page.waitForResponse(response => new URL(response.url()).pathname === '/api/document'),
-      page.click('.main-content > .notice.error button'),
+      page.click(documentRetry),
     ]);
     assert.equal(recoveredDocument.status(), 200, 'document retry receives the saved document');
     await page.waitForSelector('.markdown-source');

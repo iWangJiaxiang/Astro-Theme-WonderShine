@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 export async function checkViewTransitions({ page, click, fill, heading }) {
   // Keep the real WAAPI effects so even a slow CI runner can inspect short transitions.
   const probe = await page.evaluateHandle(() => {
-    const surface = document.querySelector('.home-grid').closest('.main-content > div');
+    const surface = document.querySelector('.studio-view');
     const effects = [];
     surface.animate = function (...args) {
       const animation = Element.prototype.animate.apply(this, args);
