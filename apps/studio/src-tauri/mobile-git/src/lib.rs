@@ -50,6 +50,11 @@ pub enum Job {
         paths: Vec<String>,
         message: String,
     },
+    Publish {
+        head: String,
+        paths: Vec<String>,
+        message: String,
+    },
     Sync {
         head: String,
     },
@@ -395,6 +400,15 @@ pub fn execute(
         } => {
             commit(&repo, &root, p, &head, &paths, &message)?;
             Ok(Value::Null)
+        }
+        Job::Publish {
+            head,
+            paths,
+            message,
+        } => {
+            commit(&repo, &root, p, &head, &paths, &message)?;
+            // The local commit is durable even if the remote rejects the push.
+            Ok(json!({"syncError": network::sync(&repo,p,&state,password).err()}))
         }
         Job::Sync { head: expected } => {
             if head(&repo)?.to_string() != expected {

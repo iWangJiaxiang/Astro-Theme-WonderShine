@@ -11,6 +11,7 @@ export interface WorkspaceStatus {
   remoteHead: string | null;
   lastSync: string | null;
   canSync?: boolean;
+  canPublish?: boolean;
   managedChanges?: string[];
   /** Present only on explicit createReview(), never status/commit/sync responses. */
   confirmation?: string;
@@ -19,6 +20,7 @@ export interface WorkspaceStatus {
 
 /** Save, local commit, and remote synchronization are distinct operations. */
 export interface WorkspaceControl {
+  publish?(message: string, confirmation: string): Promise<void>;
   saveBranch?(key: string, files: BranchFile[]): Promise<BranchSave>;
   status(): Promise<WorkspaceStatus>;
   /** Explicit user review; captures exact managed bytes under the workspace lock. */

@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdir, readdir, writeFile, copyFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import assert from 'node:assert/strict';
+import sharp from 'sharp';
 
 const run = (args, timeout = 120000) => execFileSync('xcrun', args, { encoding: 'utf8', timeout });
 const output = resolve('apps/studio/test-results/ios-simulator');
@@ -36,8 +37,25 @@ try {
   run(['simctl', 'status_bar', device.udid, 'override', '--time', '9:41', '--dataNetwork', 'wifi', '--wifiMode', 'active', '--wifiBars', '3', '--batteryState', 'charged', '--batteryLevel', '100']);
   run(['simctl', 'install', device.udid, app]);
   const launch = run(['simctl', 'launch', device.udid, plist.CFBundleIdentifier]);
-  await new Promise(resolve => setTimeout(resolve, 6000));
-  run(['simctl', 'io', device.udid, 'screenshot', join(output, 'studio-launch.png')]);
+  // A booted simulator may launch the process before WKWebView paints its form.
+  const capture = join(output, 'studio-launch.png');
+  const deadline = Date.now() + 60_000;
+  let painted = false;
+  do {
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    run(['simctl', 'io', device.udid, 'screenshot', capture]);
+    const { data, info } = await sharp(capture).resize({ width: 160 }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    // Inspect the app body, excluding the status bar and home indicator.
+    let blue = 0;
+    for (let y = Math.floor(info.height * 0.12); y < info.height * 0.88; y++) {
+      for (let x = 0; x < info.width; x++) {
+        const offset = (y * info.width + x) * info.channels;
+        if (data[offset + 2] - data[offset] > 75 && data[offset + 2] - data[offset + 1] > 45) blue++;
+      }
+    }
+    painted = blue > 60;
+  } while (!painted && Date.now() < deadline);
+  assert.ok(painted, 'The workspace connection screen must appear after launching Studio');
   await writeFile(join(output, 'result.json'), JSON.stringify({ identifier: plist.CFBundleIdentifier, icon: 'AppIcon', device: device.name, launch: launch.trim(), checks: ['compiled icon references', 'install', 'launch', 'screenshot'], limitation: 'Pinch, keyboard and assistive interactions still require device acceptance.' }, null, 2));
 } finally {
   run(['simctl', 'shutdown', device.udid]);

@@ -5,7 +5,7 @@ use std::{
     time::{Duration, Instant},
 };
 use studio_mobile_git::{Job, Profile};
-use tauri::{ipc::Channel, Manager};
+use tauri::{ipc::JavaScriptChannelId, Manager};
 
 #[tauri::command]
 pub async fn mobile_git(
@@ -15,11 +15,12 @@ pub async fn mobile_git(
     profile: Profile,
     job: Job,
     password: Option<String>,
-    progress: Option<Channel<Value>>,
+    progress: Option<JavaScriptChannelId>,
 ) -> Result<Value, &'static str> {
     if webview.label() != "main" || !ownership.owns_workspace(profile.workspace_id()) {
         return Err("工作区设置无效");
     }
+    let progress = progress.map(|id| id.channel_on::<_, Value>(webview));
     let base = app.path().app_data_dir().map_err(|_| "工作区设置无效")?;
     tauri::async_runtime::spawn_blocking(move || {
         static GIT: Mutex<()> = Mutex::new(());

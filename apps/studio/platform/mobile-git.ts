@@ -24,7 +24,7 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
     const channel = progress && new Channel<GitProgressEvent>(progress);
     try {
       return await invoke<T>('mobile_git', { profile, job: { action, ...args }, progress: channel ?? null,
-        password: action === 'sync' || action === 'open' && args.clone ? password() : null });
+        password: action === 'publish' || action === 'sync' || action === 'open' && args.clone ? password() : null });
     } catch (reason) { throw new StudioError(409, typeof reason === 'string' ? reason : '操作失败'); }
   }
   const inspect = (paths?: string[], writable = false) => command<Inspection>('inspect', { paths, writable });
@@ -74,10 +74,20 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
       const result = await reviews.store.createReview(reviewState(current), reviews.source);
       const view = await status(current);
       handoff = { after: 'review', paths: current.rows.map(([path]) => path) };
-      return { ...view, confirmation: result.confirmation, confirmationExpiresAt: result.expiresAt };
+      return { ...view, canPublish: true, confirmation: result.confirmation, confirmationExpiresAt: result.expiresAt };
     }),
     commit: async (message: string, confirmation?: string) => (await commit(message, confirmation, false))!,
     commitForReview: async (message: string, confirmation: string) => { await commit(message, confirmation, true); },
+    publish: (message: string, confirmation: string) => run('review', async paths => {
+      const current = await inspect(paths, true);
+      await validate(current, confirmation);
+      const managed = reviewState(current).rows;
+      if (managed.length !== current.rows.length) throw new StudioError(409, '存在托管范围以外的修改，请先在 Git 工具中处理再同步。');
+      const result = await command<{ syncError?: string }>('publish', { head: current.head, message, paths: managed.map(([path]) => path) });
+      if (result.syncError) throw new StudioError(409, result.syncError);
+      // A bookkeeping failure after a confirmed push must not turn it into an upload retry.
+      await files.writeFile(state + '/last-sync', new Date().toISOString()).catch(() => {});
+    }),
     sync: (confirmation?: string) => run('review', async paths => {
       const current = await inspect(paths, true);
       await validate(current, confirmation);

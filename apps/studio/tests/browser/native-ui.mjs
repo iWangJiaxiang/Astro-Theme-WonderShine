@@ -619,7 +619,6 @@ try {
   assert.equal(await page.$('dialog.publish-dialog[open]'), null);
   const scansBeforePublish = worktreeScans;
   await click('发布动态');
-  await click('保存此版本');
   await page.waitForFunction(() => document.querySelector('.publish-actions .primary')?.textContent === '确认发布');
   const remoteArgs = ['--git-dir=' + join(base, 'remote.git')];
   assert.equal(execFileSync('git', [...remoteArgs, 'log', '-1', '--format=%s', 'release/blog']).toString().trim(), 'initial');
