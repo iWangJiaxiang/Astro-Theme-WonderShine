@@ -11,10 +11,18 @@ import { withWorkspaceLock } from './queue';
 
 export function mobileGit(files: WorkspaceFiles, root: string, state: string, profile: WorkspaceProfile,
   http: HttpClient, password: () => string, reviews: WorkspaceReviewAdapter) {
+  const owner = {};
+  let handoff: { after: 'review' | 'commitForReview'; paths: string[] } | undefined;
   // Acquire the same queue as FileRepository BEFORE starting the worker, and hold
   // it until every dispatched device write has settled, including on worker failure.
   function run<T>(job: GitJob, onProgress?: ProgressCallback): Promise<T> {
-    return withWorkspaceLock(root, async () => {
+    return withWorkspaceLock(root, async uninterrupted => {
+      // Only this sandboxed checkout's uninterrupted review → commit → review → sync
+      // may narrow discovery. A save, recovery, failed job or new session starts fresh.
+      const followsReview = handoff?.after === 'review' && (job.action === 'commitForReview' || job.action === 'sync');
+      const followsCommit = handoff?.after === 'commitForReview' && job.action === 'review';
+      const reviewPaths = uninterrupted && (followsReview || followsCommit) ? handoff?.paths : undefined;
+      handoff = undefined;
       const worker = new GitWorker({ name: 'Studio Git' });
       const pending = new Set<Promise<void>>();
       const bodies = new Map<number, AsyncIterableIterator<Uint8Array>>();
@@ -54,7 +62,13 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
       try {
         return await new Promise<T>((resolve, reject) => {
           worker.onmessage = ({ data, ports }) => {
-            if (data.kind === 'done') { if (data.error) reject(restoreError(data.error)); else resolve(data.value); }
+            if (data.kind === 'done') {
+              if (data.error) { reject(restoreError(data.error)); return; }
+              if ((job.action === 'review' || job.action === 'commitForReview') && data.reviewPaths) {
+                handoff = { after: job.action, paths: data.reviewPaths };
+              }
+              resolve(data.value);
+            }
             else if (data.kind === 'progress') onProgress?.(data.event);
             else if (data.kind === 'io') {
               const task = reply(data.method, data.args, ports[0]);
@@ -62,7 +76,7 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
             }
           };
           worker.onerror = worker.onmessageerror = () => reject(new StudioError(503, 'Git 处理已中断，请检查工作区后重试。'));
-          worker.postMessage({ job, root, state, profile, password: job.action === 'open' || job.action === 'sync' ? password() : '' } satisfies JobRequest);
+          worker.postMessage({ job, root, state, profile, reviewPaths, password: job.action === 'open' || job.action === 'sync' ? password() : '' } satisfies JobRequest);
         });
       } finally {
         worker.onmessage = null;
@@ -70,7 +84,7 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
         await Promise.allSettled(pending);
         await Promise.allSettled([...bodies.keys()].map(id => io.closeBody(id)));
       }
-    });
+    }, owner);
   }
   const workspace: WorkspaceControl & { open(onProgress?: ProgressCallback, allowClone?: boolean): Promise<void> } = {
     async open(progress, allowClone = true) { profile.branch = await run<string>({ action: 'open', allowClone }, progress); },

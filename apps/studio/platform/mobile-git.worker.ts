@@ -59,14 +59,15 @@ const http: HttpClient = { async request({ url, method, headers, body }) {
   })() };
 } };
 
-worker.onmessage = async ({ data: { job, root, state, profile, password } }) => {
+worker.onmessage = async ({ data: { job, root, state, profile, password, reviewPaths } }) => {
   try {
+    const scope = { paths: reviewPaths };
     const git = new NativeGitEngine(files, root, state, profile, http, () => ({ username: profile.username || 'oauth2', password }), {
       // The native process owner and its checked source handles stay in the WebView.
       source: async () => { throw new Error('操作失败'); },
       store: { createReview: state => call('review', state), validateReview: (token, state) => call('validate', token, state),
         cleanup: async () => { throw new Error('操作失败'); } },
-    });
+    }, profile.source === 'local' ? undefined : scope);
     let value;
     switch (job.action) {
       case 'open': {
@@ -86,6 +87,6 @@ worker.onmessage = async ({ data: { job, root, state, profile, password } }) => 
       case 'sync': value = await git.sync(job.confirmation); break;
       case 'branch': value = await git.saveBranch(job.key, job.files); break;
     }
-    worker.postMessage({ kind: 'done', value });
+    worker.postMessage({ kind: 'done', value, reviewPaths: scope.paths });
   } catch (error) { worker.postMessage({ kind: 'done', error: failure(error) }); }
 };

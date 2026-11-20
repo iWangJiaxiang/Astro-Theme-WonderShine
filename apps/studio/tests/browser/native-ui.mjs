@@ -641,7 +641,7 @@ try {
   await page.waitForSelector('dialog.publish-dialog[open] [role=status]');
   await page.waitForFunction(() => document.querySelector('.publish-dialog h2')?.textContent === '动态已发送到仓库');
   assert.match(execFileSync('git', [...remoteArgs, 'grep', '-l', 'Phone publication fixture', 'release/blog', '--', 'content/threads']).toString(), /index.*\.md/);
-  assert.equal(worktreeScans - scansBeforePublish, 4, 'Each explicit review and each confirmed mutation examines the checkout once');
+  assert.equal(worktreeScans - scansBeforePublish, 1, 'An uninterrupted mobile publish visits unrelated tracked assets only during initial discovery');
   console.log('Mobile publish worktree scans:', worktreeScans - scansBeforePublish);
   await click('完成');
   await click('切换工作区'); await heading('连接创作工作区');

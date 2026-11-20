@@ -23,7 +23,7 @@ export class NativeGitEngine implements WorkspaceControl {
   constructor(private files: WorkspaceFiles, private root: string, private stateRoot: string,
     private profile: WorkspaceProfile, private http: HttpClient,
     private credentials: () => { username: string; password: string },
-    private reviews?: WorkspaceReviewAdapter) {
+    private reviews?: WorkspaceReviewAdapter, private reviewScope?: { paths?: string[] }) {
     validateProfile(profile, { allowAutomaticBranch: true });
     if (!root || root === '/' || root.endsWith('/') || root.split('/').some(part => part === '.' || part === '..')
       || stateRoot === root || stateRoot.startsWith(root + '/')) throw new Error('Git 工作区与状态目录必须分开存储');
@@ -103,12 +103,18 @@ export class NativeGitEngine implements WorkspaceControl {
       throw new StudioError(409, 'Git 操作尚未完成，请先在 Git 工具中完成合并、变基或其他操作');
     }
   }
-  private async rows(cache = {}) {
+  private async rows(cache = {}, filepaths?: string[]) {
+    if (filepaths?.length === 0) return [];
     // statusMatrix's filter omits result rows but still descends into excluded directories.
     const files: WorkspaceFiles = Object.create(this.files);
     files.readdir = path => internal(path.slice(this.root.length + 1)) ? Promise.resolve([]) : this.files.readdir(path);
-    return (await git.statusMatrix({ fs: { promises: files }, dir: this.root, cache, refresh: false, filter: path => !internal(path) }))
+    return (await git.statusMatrix({ fs: { promises: files }, dir: this.root, cache, filepaths, refresh: false, filter: path => !internal(path) }))
       .filter(([, head, worktree, stage]) => head !== worktree || head !== stage);
+  }
+  private async reviewRows(cache = {}) {
+    const rows = await this.rows(cache, this.reviewScope?.paths);
+    if (this.reviewScope) this.reviewScope.paths = rows.map(([path]) => path);
+    return rows;
   }
   status(): Promise<WorkspaceStatus> {
     return withWorkspaceLock(this.root, async () => { await this.openUnlocked(); return this.statusUnlocked(); });
@@ -116,7 +122,8 @@ export class NativeGitEngine implements WorkspaceControl {
   createReview(): Promise<WorkspaceStatus> {
     return withWorkspaceLock(this.root, async () => {
       await this.openUnlocked(); await this.assertWritable();
-      const { status, review } = await this.inspectUnlocked();
+      const cache = {};
+      const { status, review } = await this.inspectUnlocked(await this.reviewRows(cache), cache);
       const adapter = this.reviewAdapter();
       const result = await adapter.store.createReview(review, adapter.source);
       return { ...status, confirmation: result.confirmation, confirmationExpiresAt: result.expiresAt };
@@ -134,7 +141,7 @@ export class NativeGitEngine implements WorkspaceControl {
     return { scope: 'native:' + this.root, branch: this.profile.branch, head, rows: rows.filter(([path]) => managed(path)) };
   }
   private async checkedRows(confirmation?: string): Promise<StatusRow[]> {
-    const rows = await this.rows();
+    const rows = await this.reviewRows();
     if (confirmation !== undefined) {
       const adapter = this.reviewAdapter();
       await adapter.store.validateReview(confirmation, this.reviewState(await this.head(), rows), adapter.source);
@@ -162,14 +169,12 @@ export class NativeGitEngine implements WorkspaceControl {
     return { head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0 };
   }
   private async statusUnlocked(knownClean?: StatusRow[]): Promise<WorkspaceStatus> { return (await this.inspectUnlocked(knownClean)).status; }
-  private async inspectUnlocked(knownClean?: StatusRow[]): Promise<{ status: WorkspaceStatus; review: ReviewState }> {
-    // Only share Git's pack/index cache within this read, never across a mutation.
-    const cache = {};
+  private async inspectUnlocked(knownRows?: StatusRow[], cache = {}): Promise<{ status: WorkspaceStatus; review: ReviewState }> {
     const branch = await this.branchStatus(cache);
     let lastSync: string | null = null;
     try { lastSync = String(await this.files.readFile(this.stateRoot + '/last-sync', 'utf8')); }
     catch (error) { if (!missingFile(error)) throw error; }
-    const rows = knownClean ?? await this.rows(cache);
+    const rows = knownRows ?? await this.rows(cache);
     const review = this.reviewState(branch.head, rows);
     const managedChanges = review.rows.map(([path]) => path);
     const changes = rows.length;
