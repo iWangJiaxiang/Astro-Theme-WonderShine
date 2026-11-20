@@ -747,6 +747,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 "aria-labelledby": "creation-title",
                 className: classes("creation-dialog"),
                 onCancel: domEvent((event: Event) => {
+                  if (event.target !== event.currentTarget) return;
                   event.preventDefault();
                   creating.value = false;
                 }),

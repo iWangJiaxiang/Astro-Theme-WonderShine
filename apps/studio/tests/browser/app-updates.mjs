@@ -1,3 +1,4 @@
+import { auditViewports } from './audit-viewports.mjs';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
@@ -61,10 +62,10 @@ try {
   });
   assert.notEqual(buttonStyle.background, 'rgba(0, 0, 0, 0)', 'Update action must remain visible before a workspace theme is loaded');
   assert.notEqual(buttonStyle.foreground, buttonStyle.background);
-  for (const width of [1440, 1024, 390]) {
-    await page.setViewport({ width, height: 850, deviceScaleFactor: 1 });
+  for (const { width, height, screenshot } of await auditViewports(page)) {
+    await page.setViewport({ width, height, deviceScaleFactor: 1 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    await page.screenshot({ path: join(out, `update-${width}.png`), fullPage: true });
+    if (screenshot) await page.screenshot({ path: join(out, `update-${width}.png`), fullPage: true });
   }
   await page.click('.native-update-notice .primary');
   assert.deepEqual(await page.evaluate(() => window.updateFixture.opened), ['https://github.com/example/studio/releases/tag/studio-v0.2.0']);

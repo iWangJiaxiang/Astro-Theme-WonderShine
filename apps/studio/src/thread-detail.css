@@ -50,3 +50,7 @@
 @media(min-width:1600px) { .thread-reading-card { padding: 38px 44px; } .thread-detail-layout { gap: 32px; grid-template-columns: minmax(0,1fr) 300px; } }
 @media(max-width:1000px) { .thread-detail-layout { grid-template-columns: minmax(0,1fr); } .detail-properties dl { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media(max-width:760px) { .thread-reading-card { padding: 22px; } .detail-language-tabs > span { width: 100%; } .detail-properties dl { grid-template-columns: minmax(0,1fr); } .library-item-actions { flex-direction: column; gap: 0; padding-right: 10px; } }
+
+@media (max-width: 760px) {
+  .thread-detail-page .page-heading .row > :is(button, a) { flex: 1 1 max-content; }
+}

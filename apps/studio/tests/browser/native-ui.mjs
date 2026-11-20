@@ -288,7 +288,7 @@ try {
   async function auditNativePage(name) {
     const originalViewport = page.viewport();
     for (const { width, height, screenshot: capture } of await auditViewports(page)) {
-      await page.setViewport({ width, height });
+      await page.setViewport({ ...originalViewport, width, height });
       if (capture) await screenshot(`audit-${name}-${width}`, false);
       await noOverflow(`${name} ${width}x${height}`);
     }
@@ -525,11 +525,13 @@ try {
       await click(`使用 ${provider} 登录`); await page.waitForSelector('.oauth-code');
       assert.equal(await page.$eval('.oauth-code', node => node.textContent), 'TEST-CODE');
       await screenshot('oauth-device-' + provider.toLowerCase());
+      await auditNativePage('oauth-device-' + provider.toLowerCase());
       oauthApproved = true; await page.waitForSelector('.oauth-repository');
       assert.equal(await page.$('.oauth-device'), null, 'Successful sign-in leaves the device authorization stage');
       assert.equal(await page.$('.oauth-dialog [role=alert]'), null, 'A fresh sign-in clears previous diagnostics');
       await page.type('.oauth-dialog input', 'blog');
       await screenshot('oauth-repositories-' + provider.toLowerCase());
+      await auditNativePage('oauth-repositories-' + provider.toLowerCase());
       await page.setViewport({width:390,height:430,isMobile:true,hasTouch:true});
       await page.waitForFunction(() => parseFloat(document.documentElement.style.getPropertyValue('--native-visible-height')) < 500);
       assert.ok(await page.$eval('.oauth-dialog', node => node.getBoundingClientRect().bottom <= visualViewport.height + visualViewport.offsetTop + 1), 'Repository picker fits visible keyboard viewport');
@@ -625,6 +627,7 @@ try {
   assert.equal(await page.$('.thread-composer .language-versions'), null, 'Language tools stay in More options after saving');
   assert.equal(await page.$('.thread-composer .notice.success'), null, 'The review is the active save feedback');
   await screenshot('phone-publish-review', false);
+  await auditNativePage('publish-review');
   await click('稍后');
   assert.equal(await page.$('dialog.publish-dialog[open]'), null);
   const scansBeforePublish = worktreeScans;

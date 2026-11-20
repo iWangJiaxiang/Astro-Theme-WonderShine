@@ -89,6 +89,13 @@ try {
  await click('详情');await page.waitForSelector('.thread-detail-page');await capture('thread-detail');await click('编辑动态');await page.waitForSelector('.thread-editor');await capture('thread-editor',{expand:true});
  await click('话题管理');await page.waitForFunction(() => document.querySelector('.page-heading h1')?.textContent === '话题管理');await capture('topics');await click('新建话题');await page.waitForSelector('.editor-page');await capture('topic-editor',{expand:true});
  await click('文章');await page.waitForSelector('.content-row[data-path="content/articles/welcome/index.md"]');await page.click('.content-row[data-path="content/articles/welcome/index.md"]');await page.waitForSelector('.markdown-source');await capture('article-editor',{expand:true});
+ await click('正文预览');
+ await page.waitForSelector('.markdown-preview');
+ await capture('article-preview');
+ await click('可视化编辑');
+ await page.waitForSelector('.vditor-ir [contenteditable=true]');
+ await capture('article-rich-editor');
+ await click('Markdown 源码');
  await click('＋ 添加语言');await page.waitForSelector('.language-version-create');await capture('add-language');await click('＋ 添加语言');
  await page.select('.language-switcher select','en');await capture('article-editor-en');if(await page.$eval('.autosave-control select', el=>el.selectedOptions[0].textContent)!=='Off')throw new Error('Autosave must follow the UI language');await page.select('.language-switcher select','zh-CN');
  await click('AI 摘要');await page.waitForSelector('dialog[open]');await capture('ai-summary');await click('取消');
@@ -96,12 +103,32 @@ try {
  await click('选择或上传');await page.waitForSelector('dialog[open]');await capture('image-picker');await closeDialog();
  await click('删除当前语言版本');await page.waitForSelector('dialog[open],.modal');await capture('delete-content');await click('取消');
  await click('合集管理');await page.waitForSelector('.section-edit');await page.click('.section-edit');await page.waitForSelector('.editor-page');await capture('collection-editor',{expand:true});
+ await click('合集管理');
+ for (const [path, name, ready] of [
+   ['docs/_index.md', 'collection-column', '[data-path="content/collections/docs/user/_index.md"]'],
+   ['docs/user/_index.md', 'collection-series', '[data-path="content/collections/docs/user/01 intro.md"]'],
+   ['docs/user/01 intro.md', 'chapter-editor', '.markdown-source'],
+ ]) {
+   await page.locator(`.content-row[data-path="content/collections/${path}"]`).click();
+   await page.waitForSelector(ready);
+   await capture(name);
+ }
+ await click('页面');
+ await page.locator('.content-row[data-path="content/pages/privacy.md"]').click();
+ await page.waitForSelector('.markdown-source');
+ await capture('page-body');
+ await click('页面设置');
+ await page.waitForSelector('.template-intro');
+ await capture('page-without-settings');
  for(const layout of ['about','equipment','friends','music','wechat','archives','subscribe']){
   await click('页面');await page.waitForSelector(`.content-row[data-path="content/pages/${layout}.md"]`);await page.click(`.content-row[data-path="content/pages/${layout}.md"]`);await page.waitForSelector('.page-editor-tabs');await click('页面设置');await page.waitForSelector('.settings-group-tabs button');
   const groups=pageProfile(layout==='subscribe'?'empty':layout,layout==='subscribe'?'{{ subscribe_list() }}':'').groups;
   for(const [index,group] of groups.entries()){await page.click(`.settings-group-tabs button:nth-child(${index+1})`);await page.waitForSelector('.embedded-settings .settings-grid');await settle();await capture('page-'+layout+'-'+group.id,{expand:true});}
  }
  await click('媒体库');await page.waitForSelector('.media-browser');await capture('media-library',{expand:true});
+ await page.locator('[data-media-path="public/img/logo.webp"]').click();
+ await page.waitForSelector('.media-details dd');
+ await capture('media-details');
  await page.select('.language-switcher select','en');await capture('media-library-en');
  await writeFile(join(screenshots,'report.json'),JSON.stringify({records,errors},null,2));
  console.log(JSON.stringify({measurements:records.length,screenshots:records.filter(r=>r.file).length,issues:records.filter(r=>r.issues.length),errors},null,2));

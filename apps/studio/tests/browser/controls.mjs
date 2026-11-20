@@ -124,7 +124,9 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   assert.equal(parse(await readFile(base + '/site/data.toml', 'utf8')).post.today_recommend.post_path, path);
 
   // Creation form remains open when Enter is pressed in a nested chooser.
-  await click('页面'); await heading('页面'); await click('新建页面');
+  await click('页面'); await heading('页面');
+  const createButton = '.content-library .page-heading button.primary';
+  await page.locator(createButton).click();
   await fill('.modal input[placeholder="给它取个名字"]', 'Enter should not create');
   await fill('.modal input[placeholder="my-first-story"]', 'do-not-create');
   await page.click('button[name="page-template"]'); await page.waitForSelector('.selection-dialog[open]');
@@ -141,6 +143,7 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   assert.ok(await page.$eval('.creation-dialog', dialog => dialog.matches(':modal')), 'creation stays modal after the chooser closes');
   await page.keyboard.press('Escape');
   await page.waitForSelector('.creation-dialog', { hidden: true });
+  assert.ok(await page.$eval(createButton, button => button === document.activeElement), 'closing creation returns focus to the opener');
   await page.setViewport({ width: 1440, height: 1000 });
 
   await mkdir(base + '/site/content/articles/date-control', { recursive: true });

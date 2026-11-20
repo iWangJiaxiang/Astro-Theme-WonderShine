@@ -99,3 +99,17 @@
 
 .media-dialog .media-toolbar { flex-wrap: wrap; }
 .media-dialog .media-search { flex: 1 1 16rem; }
+
+@media (min-width: 600px) and (max-height: 500px) {
+  .media-dialog { max-height: calc(100dvh - 16px); }
+  .media-dialog-panel { max-height: calc(100dvh - 18px); }
+  .media-dialog-panel > .card-heading, .media-dialog .selection-footer { padding: 6px 16px; }
+  .media-dialog-body { padding: 12px 16px; }
+  .media-dialog .media-results:has(.media-upload-disclosure:not([open])) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px 16px;
+  }
+  .media-dialog .media-results > :not(.media-upload-disclosure, .media-toolbar) { grid-column: 1 / -1; }
+  .media-dialog .media-results:has(.media-upload-disclosure:not([open])) > :is(.media-upload-disclosure, .media-toolbar, .media-filters) { margin-bottom: 0; }
+}
