@@ -48,15 +48,15 @@ const GettingStarted: StudioComponent<Props, Events> = component<Props, Events>(
       {
         view: "taxonomies",
         icon: "tag",
-        title: "准备标签与分类",
-        description: "先维护名称，再在文章中选择；已有文章里的旧标签会保留。",
+        title: "设置标签与分类",
+        description: "添加标签和分类，写文章时就能选用。已有文章保留原标签。",
       },
       {
         view: "media",
         icon: "image",
-        title: "准备写作图片",
+        title: "管理图片",
         description:
-          "上传图片或选择仓库已有图片。上传立即保存，选图后仍需保存表单。",
+          "上传会立即保存图片。选用仓库里的图片后，还要保存表单。",
       },
       {
         view: "article",
@@ -77,7 +77,7 @@ const GettingStarted: StudioComponent<Props, Events> = component<Props, Events>(
         icon: "tag",
         title: "用话题串联内容",
         description:
-          "创建话题介绍，再在文章或动态中选择关联；标签与分类仍按原来的方式使用。",
+          "写好话题介绍后，就能在文章或动态中选用这个话题。标签和分类仍可单独设置。",
       },
     ];
     return () =>
@@ -102,13 +102,6 @@ const GettingStarted: StudioComponent<Props, Events> = component<Props, Events>(
                   { id: "guide-title" },
                   props.expanded ? t("使用指南") : t("从这里开始"),
                 ),
-                props.expanded
-                  ? element(
-                      "p",
-                      { className: classes("muted") },
-                      t("按需要完成这些步骤，随时可以开始写作。"),
-                    )
-                  : null,
               ),
               !props.expanded
                 ? element(
@@ -205,7 +198,7 @@ const GettingStarted: StudioComponent<Props, Events> = component<Props, Events>(
               ? element(
                   "p",
                   { className: classes("muted small") },
-                  t("关闭后可从左侧「使用指南」重新查看。"),
+                  t("收起后，可从导航中的「使用指南」重新打开。"),
                 )
               : null,
             props.expanded

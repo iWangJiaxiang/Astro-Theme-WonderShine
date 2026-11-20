@@ -73,60 +73,14 @@ const LoginView: StudioComponent<Props, Events> = component<Props, Events>(
         ),
         element(
           "section",
-          { className: classes("login-intro") },
-          element(
-            "div",
-            { className: classes("brand") },
-            element(
-              "span",
-              { className: classes("brand-mark") },
-              "W",
-              element("span", null, "·"),
-            ),
-            element(
-              "div",
-              null,
-              "Wonder Shine",
-              element("small", null, t("为创造者而生")),
-            ),
-          ),
-          element(
-            "div",
-            null,
-
-            element(
-              "h1",
-              null,
-              t("让想法，"),
-              element("br", null),
-              t("成为下一篇故事。"),
-            ),
-            element(
-              "p",
-              { className: classes("login-description") },
-              t("文章、专栏与站点设置，"),
-              element("br", null),
-              t("都在你的创作中心。"),
-            ),
-          ),
-          element(
-            "div",
-            { className: classes("login-foot") },
-            element("span", { className: classes("status-dot") }),
-            " ",
-            t("你的内容，你的站点。"),
-          ),
-        ),
-        element(
-          "section",
           { className: classes("login-panel card") },
           element(
             "div",
-            { className: classes("login-symbol") },
-            element(Icon, { name: "pen", size: 28 }),
+            { className: classes("brand") },
+            element("span", { className: classes("brand-mark"), "aria-hidden": true }, "W", element("span", null, "·")),
+            "WonderShine Studio",
           ),
-          element("h2", null, t("欢迎回来")),
-
+          element("h1", null, t("管理员登录")),
           error.value
             ? element(
                 "p",
@@ -158,7 +112,7 @@ const LoginView: StudioComponent<Props, Events> = component<Props, Events>(
                 },
                 element(
                   "label",
-                  { className: classes("field field-inline") },
+                  { className: classes("field field-stacked") },
                   element("span", null, t("账号")),
                   element("input", {
                     value: username.value ?? "",
@@ -176,7 +130,7 @@ const LoginView: StudioComponent<Props, Events> = component<Props, Events>(
                 ),
                 element(
                   "label",
-                  { className: classes("field field-inline") },
+                  { className: classes("field field-stacked") },
                   element("span", null, t("密码")),
                   element("input", {
                     value: password.value ?? "",
@@ -255,11 +209,6 @@ const LoginView: StudioComponent<Props, Events> = component<Props, Events>(
                 "连接失败时运行 npm run doctor；完整步骤见 docs/deployment.md。",
               ),
             ),
-          ),
-          element(
-            "p",
-            { className: classes("login-note") },
-            t("仅向站点管理员开放 · 内容仓库凭据由服务端保管"),
           ),
         ),
       );

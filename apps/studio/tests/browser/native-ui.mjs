@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import { auditViewports } from './audit-viewports.mjs';
 import { mobileGitFixture } from './mobile-git-fixture.mjs';
 
 // Real production React/native adapter code; only the Tauri IPC host is mocked.
@@ -284,6 +285,15 @@ try {
     await page.evaluate(async () => { window.scrollTo(0, 0); await document.fonts.ready; for (const animation of document.getAnimations()) { if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) { try { animation.finish(); } catch {} } } await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
     return page.screenshot({ path: join(screenshots, name + '.png'), fullPage });
   };
+  async function auditNativePage(name) {
+    const originalViewport = page.viewport();
+    for (const [width, height] of auditViewports) {
+      await page.setViewport({ width, height });
+      await screenshot(`audit-${name}-${width}`, false);
+      await noOverflow(`${name} ${width}x${height}`);
+    }
+    await page.setViewport(originalViewport);
+  }
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.goto(origin, { waitUntil: 'networkidle0' }); await heading('连接创作工作区');
   assert.equal(runtimeChunks.some(name => loadedScripts.has(name)), false, 'Connection screen must not load the Git/content runtime before opening a workspace');
@@ -314,8 +324,8 @@ try {
   assert.ok(await fs.stat(root), 'archive/restore retains the original checkout');
   const restored = await page.evaluate(() => JSON.parse(localStorage.getItem('wondershine.native.workspaces.v1')));
   assert.deepEqual(restored.find(record => record.id === profile.id), profile, 'restore preserves the complete original record and recovery ID');
-  await screenshot('connection-git-desktop'); await noOverflow('desktop connection');
-  await click('本地文件夹'); await screenshot('connection-folder-desktop');
+  await screenshot('connection-git-desktop'); await auditNativePage('git'); await noOverflow('desktop connection');
+  await click('本地文件夹'); await screenshot('connection-folder-desktop'); await auditNativePage('folder');
   await page.click('.folder-picker');
   assert.equal(await page.$('.selected-repository'), null, 'cancelled picker does not select a folder');
   selectedFolder = localRoot; await page.click('.folder-picker'); await page.waitForSelector('.selected-repository');
@@ -332,7 +342,7 @@ try {
   assert.equal(await page.$$('.workspace-record').then(records => records.length), 3, 'local, clone and service records coexist');
   await click('远程仓库');
 
-  await click('连接自建创作中心'); await page.waitForSelector('input[placeholder="https://studio.example.com"]'); await screenshot('connection-remote-desktop');
+  await click('连接自建创作中心'); await page.waitForSelector('input[placeholder="https://studio.example.com"]'); await screenshot('connection-remote-desktop'); await auditNativePage('service');
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('connection-remote-mobile'); await noOverflow('mobile remote connection');
   await click('远程仓库'); await screenshot('connection-git-mobile'); await noOverflow('mobile Git connection');
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
@@ -426,7 +436,7 @@ try {
   await page.waitForFunction(() => [...document.querySelectorAll('img')].some(image => image.src.includes('/__asset') && image.complete && image.naturalWidth > 0));
   await screenshot('media-desktop');
   await click('工作区同步'); await page.waitForSelector('.workspace-status-grid');
-  await screenshot('workspace-desktop'); await noOverflow('desktop workspace');
+  await screenshot('workspace-desktop'); await auditNativePage('workspace'); await noOverflow('desktop workspace');
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('workspace-mobile'); await noOverflow('mobile workspace');
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await click('客户端 API 设置'); await heading('客户端 API 设置');
@@ -442,7 +452,7 @@ try {
   await click('保存 API 配置'); await page.waitForSelector('.native-ai-settings .notice.success');
   assert.equal(await page.$eval('.native-ai-settings input[type="password"]', input => input.value), '');
   assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('browser-fixture-secret')), false);
-  await screenshot('api-settings-desktop');
+  await screenshot('api-settings-desktop'); await auditNativePage('api-settings');
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('api-settings-mobile'); await noOverflow('mobile API settings');
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.select('.language-switcher select', 'en'); await heading('Client API settings');

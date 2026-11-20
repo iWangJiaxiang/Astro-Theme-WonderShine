@@ -1,3 +1,4 @@
+import { auditViewports } from './audit-viewports.mjs';
 import { prepareBrowserFixture } from './site-fixture.mjs';
 import { hashPassword } from '../../server/password.ts';
 import { settingsSchemas } from '../../shared/settings.ts';
@@ -34,7 +35,7 @@ try {
  const settle=()=>page.waitForFunction(()=>!document.querySelector('[aria-busy=true]'));
  const capture=async(name,{expand=false}={})=>{
   if(expand)await page.evaluate(()=>{document.querySelectorAll('.main-content details').forEach(e=>e.open=true);document.querySelectorAll('.structured-toggle[aria-expanded=false]').forEach(e=>e.click());});
-  for(const [width,height]of [[1440,1000],[1024,768],[390,844]]){
+  for(const [width,height]of auditViewports){
    await page.setViewport({width,height,deviceScaleFactor:1});
    await page.evaluate(async()=>{window.scrollTo(0,0);await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));await Promise.allSettled(document.getAnimations().filter(a=>a.playState==='running'&&a.effect?.getTiming().iterations!==Infinity).map(a=>a.finished));});
    const issues=await page.evaluate(()=>{
@@ -56,15 +57,16 @@ try {
    });
    const titleWidth=await page.$eval('.editor-page > .page-heading > div:first-child',e=>e.getBoundingClientRect().width).catch(()=>null);if(width===1024&&titleWidth!==null&&titleWidth<240)issues.push({type:'editor-title-squeezed',width:titleWidth});
    const sidebar=await page.$eval('.sidebar', e=>e.getBoundingClientRect().right).catch(()=>0);if(width===390&&sidebar>1)issues.push({type:'sidebar-obscures-content',right:sidebar});
-   const file=`${name}-${width}.png`;await page.screenshot({path:join(screenshots,file),fullPage:!await page.$('dialog[open],.modal')});records.push({name,width,file,issues});
+   const file=`${name}-${width}.png`;await page.screenshot({path:join(screenshots,file),fullPage:false});records.push({name,width,height,file,issues});
   }
   await page.setViewport({width:1440,height:1000});console.log('Captured '+name);
  };
  await page.goto(origin,{waitUntil:'networkidle0'});await capture('login');
  await page.type('[name=username]','owner');await page.type('[name=password]','studio-form-test-2026');await click('进入创作中心');await page.waitForSelector('.thread-composer textarea');await capture('dashboard');
+ await click('使用指南'); await page.waitForSelector('.guide-page'); await capture('guide', {expand:true});
  for(const schema of settingsSchemas){await click(schema.title);await page.waitForFunction(title=>document.querySelector('.settings-page h1')?.textContent===title,{},schema.title);await page.waitForSelector('.settings-grid');await capture('settings-'+schema.id,{expand:true});}
  for(const [kind,newLabel]of [['文章','新建文章'],['页面','新建页面'],['合集管理','新建内容']]){
-  await click(kind);await page.waitForSelector('.content-library');await click(newLabel);await page.waitForSelector('.modal');await capture('create-'+({'文章':'article','页面':'page','合集管理':'collection'}[kind]));
+  await click(kind);await page.waitForSelector('.content-library');await capture('library-'+({'文章':'article','页面':'page','合集管理':'collection'}[kind]));await click(newLabel);await page.waitForSelector('.modal');await capture('create-'+({'文章':'article','页面':'page','合集管理':'collection'}[kind]));
   if(kind==='页面'){await page.click('button[name="page-template"]');await page.waitForSelector('dialog[open]');await capture('select-template');await closeDialog();}
   await click('取消');
  }
@@ -80,7 +82,7 @@ try {
  await page.waitForSelector('.thread-properties-heading');await capture('thread-publishing');
  await page.click('.thread-composer .thread-date-trigger');await page.waitForSelector('.publication-date-dialog[open]');await capture('publication-date');await closeDialog();
  await click('详情');await page.waitForSelector('.thread-detail-page');await capture('thread-detail');await click('编辑动态');await page.waitForSelector('.thread-editor');await capture('thread-editor',{expand:true});
- await click('话题管理');await click('新建话题');await page.waitForSelector('.editor-page');await capture('topic-editor',{expand:true});
+ await click('话题管理');await page.waitForFunction(() => document.querySelector('.page-heading h1')?.textContent === '话题管理');await capture('topics');await click('新建话题');await page.waitForSelector('.editor-page');await capture('topic-editor',{expand:true});
  await click('文章');await page.waitForSelector('.content-row[data-path="content/articles/welcome/index.md"]');await page.click('.content-row[data-path="content/articles/welcome/index.md"]');await page.waitForSelector('.markdown-source');await capture('article-editor',{expand:true});
  await click('＋ 添加语言');await page.waitForSelector('.language-version-create');await capture('add-language');await click('＋ 添加语言');
  await page.select('.language-switcher select','en');await capture('article-editor-en');if(await page.$eval('.autosave-control select', el=>el.selectedOptions[0].textContent)!=='Off')throw new Error('Autosave must follow the UI language');await page.select('.language-switcher select','zh-CN');
