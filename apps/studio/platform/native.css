@@ -1,5 +1,6 @@
 .workspace-status-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin:1.5rem 0 }
-.workspace-status-grid dt { color:var(--text-secondary,#777);font-size:.85rem }
+.workspace-status-grid > div { display: flex; flex-direction: column; min-width: 0; }
+.workspace-status-grid dt { flex: 1; color: var(--studio-muted); font-size: .85rem; overflow-wrap: anywhere; }
 .workspace-status-grid dd { margin:.25rem 0 0;font-size:2rem;font-weight:650 }
 .workspace-panel .field { margin:1.5rem 0;max-width:42rem }
 .native-connect { min-height:100vh;display:grid;place-items:center;padding:2rem;background:var(--bg,#f5f6f8) }
@@ -36,7 +37,7 @@ section.native-ai-settings { max-width: 960px; }
 .workspace-panel .workspace-sync-card { padding: 28px; }
 .workspace-sync-card h2 { margin-bottom: 0; }
 .workspace-sync-card .workspace-status-grid { padding-bottom: 24px; border-bottom: 1px solid var(--studio-line); }
-.workspace-panel .workspace-sync-actions { justify-content: flex-end; margin-top: 24px; }
+.workspace-panel .workspace-sync-actions { justify-content: flex-end; flex-wrap: wrap; margin-top: 24px; }
 @media (max-width: 600px) {
   .native-ai-settings .native-ai-form, .workspace-panel .workspace-sync-card { padding: 20px; }
   .native-ai-settings .field { grid-template-columns: 1fr; gap: 8px; }
@@ -45,7 +46,7 @@ section.native-ai-settings { max-width: 960px; }
   .native-ai-actions .primary { flex: 1; }
   .workspace-status-grid { gap: 12px; }
   .workspace-status-grid dt { font-size: 12px; }
-  .workspace-panel .workspace-sync-actions > button { flex: 1; }
+  .workspace-panel .workspace-sync-actions > button { flex: 1 1 max-content; max-width: 100%; }
 }
 
 /* Folder and URL are the primary actions; credentials stay in a disclosure. */

@@ -31,7 +31,7 @@ try {
  await page.evaluateOnNewDocument(()=>Object.defineProperty(navigator,'languages',{get:()=>['zh-CN']}));
  await page.setRequestInterception(true);page.on('request',r=>r.url().startsWith(origin)||r.url().startsWith('data:')||r.url().startsWith('blob:')?r.continue():r.abort());
  const click=async text=>{await page.waitForFunction(text=>[...document.querySelectorAll('button')].some(b=>b.textContent.trim().replace(/^✦\s*/, '')===text&&!b.disabled),{},text);await page.evaluate(text=>[...document.querySelectorAll('button')].find(b=>b.textContent.trim().replace(/^✦\s*/, '')===text&&!b.disabled).click(),text);};
- const closeDialog=async()=>{await page.evaluate(()=>{const dialog=[...document.querySelectorAll('dialog[open]')].at(-1);const cancel=[...dialog.querySelectorAll('button')].find(button=>button.textContent.trim()==='取消');if(!cancel)throw new Error('Dialog has no cancel action');cancel.click();});await page.waitForSelector('dialog[open]',{hidden:true});};
+ const closeDialog=async()=>{await page.evaluate(()=>{const dialog=[...document.querySelectorAll('dialog[open]')].at(-1);const cancel=[...dialog.querySelectorAll('button')].find(button=>button.textContent.trim()==='取消');if(!cancel)throw new Error('Dialog has no cancel action');cancel.click();});await page.waitForSelector('dialog[open]:not(.creation-dialog)',{hidden:true});};
  const settle=()=>page.waitForFunction(()=>!document.querySelector('[aria-busy=true]'));
  const capture=async(name,{expand=false}={})=>{
   if(expand)await page.evaluate(()=>{document.querySelectorAll('.main-content details').forEach(e=>e.open=true);document.querySelectorAll('.structured-toggle[aria-expanded=false]').forEach(e=>e.click());});
@@ -67,7 +67,7 @@ try {
  for(const schema of settingsSchemas){await click(schema.title);await page.waitForFunction(title=>document.querySelector('.settings-page h1')?.textContent===title,{},schema.title);await page.waitForSelector('.settings-grid');await capture('settings-'+schema.id,{expand:true});}
  for(const [kind,newLabel]of [['文章','新建文章'],['页面','新建页面'],['合集管理','新建内容']]){
   await click(kind);await page.waitForSelector('.content-library');await capture('library-'+({'文章':'article','页面':'page','合集管理':'collection'}[kind]));await click(newLabel);await page.waitForSelector('.modal');await capture('create-'+({'文章':'article','页面':'page','合集管理':'collection'}[kind]));
-  if(kind==='页面'){await page.click('button[name="page-template"]');await page.waitForSelector('dialog[open]');await capture('select-template');await closeDialog();}
+  if(kind==='页面'){await page.click('button[name="page-template"]');await page.waitForSelector('.selection-dialog[open]');await capture('select-template');await closeDialog();}
   await click('取消');
  }
  await click('文章');await click('新建文章');await page.waitForSelector('.modal');

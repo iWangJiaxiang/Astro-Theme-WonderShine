@@ -17,7 +17,7 @@ import type {
   Json,
   Settings,
 } from "../../shared/types";
-import { api, errorMessage } from "../api";
+import { api, errorMessage, reauthentication } from "../api";
 import { t, translateOptions, type Message } from "../i18n";
 import {
   classes,
@@ -227,6 +227,12 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
           .filter(Boolean)
           .join(" · ") || t("尚未设置日期与分类")
       );
+    }
+    let creationDialog: HTMLDialogElement | null = null;
+    function mountCreationDialog(node: HTMLDialogElement | null) {
+      creationDialog?.close();
+      creationDialog = node;
+      node?.showModal();
     }
     function startCreate() {
       createLanguage.value = language.value;
@@ -733,11 +739,17 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
               )
             : null,
         ),
-        creating.value
+        creating.value && !reauthentication.value
           ? element(
-              "div",
+              "dialog",
               {
-                className: classes("modal-backdrop"),
+                ref: mountCreationDialog,
+                "aria-labelledby": "creation-title",
+                className: classes("creation-dialog"),
+                onCancel: domEvent((event: Event) => {
+                  event.preventDefault();
+                  creating.value = false;
+                }),
                 onClick: domEvent(($event: Event) => {
                   if ($event.target !== $event.currentTarget) return;
                   creating.value = false;
@@ -755,7 +767,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 element(
                   "div",
                   { className: classes("card-heading") },
-                  element("h2", null, t("新建内容")),
+                  element("h2", { id: "creation-title" }, t("新建内容")),
                   element(
                     "button",
                     {
