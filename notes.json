@@ -34,9 +34,9 @@
     },
     {
       "area": "docs",
-      "checked_at": "2026-11-19",
-      "result": "Fallback 7: compared releasing.md and getting-started.md; Starter source mismatch is unchanged and already covered by #15. No duplicate proposal.",
-      "follow_up": "Review existing #15 documentation branch."
+      "checked_at": "2026-11-20",
+      "result": "Tasks 7,3,5: reviewed all five open issues/comments, open PRs, build-theme.mjs, Starter dependency, releasing.md, npm-release.mjs and routes.ts. No new human activity; existing #13/#15/#18 cover verified candidates. Consolidated duplicated monthly summary and replaced unresolved temporary #18 link.",
+      "follow_up": "#13 requires remote validation before fix PR; #15 existing documentation branch awaits review; #18 awaits bootstrap policy decision. No local install/build/tests or remote validation executed."
     },
     {
       "area": "ci",
