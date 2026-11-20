@@ -35,7 +35,9 @@ section.native-ai-settings { max-width: 960px; }
 .connection-modes button[aria-pressed=true] { background: var(--studio-card); color: var(--wjx-theme); box-shadow: 0 1px 4px #0000000d; font-weight: 600; }
 .connection-storage-note { margin: 20px 0 0; }
 .workspace-panel .workspace-sync-card { padding: 28px; }
-.workspace-sync-card h2 { margin-bottom: 0; }
+.workspace-sync-card h2 { margin-bottom: 0; overflow-wrap: anywhere; }
+.workspace-sync-card li { overflow-wrap: anywhere; }
+.workspace-sync-card ul { padding-inline-start: 1.25rem; }
 .workspace-sync-card .workspace-status-grid { padding-bottom: 24px; border-bottom: 1px solid var(--studio-line); }
 .workspace-panel .workspace-sync-actions { justify-content: flex-end; flex-wrap: wrap; margin-top: 24px; }
 @media (max-width: 600px) {
