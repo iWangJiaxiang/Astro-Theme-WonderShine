@@ -36,7 +36,7 @@ export function chooser(page) {
       await page.waitForSelector(`dialog[open] input[value="${value}"]`);
       await page.click(`dialog[open] input[value="${value}"]`);
       await page.click('dialog[open] .selection-footer button');
-      await page.waitForFunction(() => !document.querySelector('dialog[open]'));
+      await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
     } else {
       await page.waitForSelector(`${root} input[value="${value}"]`);
       await page.click(`${root} input[value="${value}"]`);
@@ -124,19 +124,26 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   assert.equal(parse(await readFile(base + '/site/data.toml', 'utf8')).post.today_recommend.post_path, path);
 
   // Creation form remains open when Enter is pressed in a nested chooser.
-  await click('页面'); await heading('页面'); await click('新建页面');
+  await click('页面'); await heading('页面');
+  const createButton = '.content-library .page-heading button.primary';
+  await page.locator(createButton).click();
   await fill('.modal input[placeholder="给它取个名字"]', 'Enter should not create');
   await fill('.modal input[placeholder="my-first-story"]', 'do-not-create');
-  await page.click('button[name="page-template"]'); await page.waitForSelector('dialog[open]');
-  await page.type('dialog[open] input[type=search]', '装备'); await page.keyboard.press('Enter');
+  await page.click('button[name="page-template"]'); await page.waitForSelector('.selection-dialog[open]');
+  await page.type('.selection-dialog[open] input[type=search]', '装备'); await page.keyboard.press('Enter');
   assert.ok(await page.$('.modal'), 'Enter inside dialog must not submit parent creation form');
-  assert.ok(await page.$('dialog[open]'));
-  await page.focus('dialog[open] input[value="equipment"]'); await page.keyboard.press('Enter');
+  assert.ok(await page.$('.selection-dialog[open]'));
+  await page.focus('.selection-dialog[open] input[value="equipment"]'); await page.keyboard.press('Enter');
   assert.ok(await page.$('.modal'), 'Enter on a radio must not submit the creation form');
   await page.setViewport({ width: 390, height: 844 });
-  assert.ok(await page.$eval('dialog[open]', el => el.getBoundingClientRect().width <= innerWidth));
+  assert.ok(await page.$eval('.selection-dialog[open]', el => el.getBoundingClientRect().width <= innerWidth));
   await page.screenshot({ path: screenshots + '/form-picker-mobile.png', fullPage: true });
-  await page.keyboard.press('Escape'); await click('取消');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.selection-dialog', { hidden: true });
+  assert.ok(await page.$eval('.creation-dialog', dialog => dialog.matches(':modal')), 'creation stays modal after the chooser closes');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.creation-dialog', { hidden: true });
+  assert.ok(await page.$eval(createButton, button => button === document.activeElement), 'closing creation returns focus to the opener');
   await page.setViewport({ width: 1440, height: 1000 });
 
   await mkdir(base + '/site/content/articles/date-control', { recursive: true });

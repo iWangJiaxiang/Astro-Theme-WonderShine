@@ -187,3 +187,21 @@ h1 { font-size: 26px; margin-bottom: 8px; }
   .stat-card .muted { font-size: 11px; }
   .getting-started:not(.guide-page) .guide-heading { flex-direction: row; text-align: start; }
 }
+
+/* Nested settings share space with the sidebar, item actions and parent groups. */
+.structured { container: structured-list / inline-size; }
+.object-fields:not(.compact-object) {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+}
+@container structured-list (max-width: 30rem) {
+  .structured .compact-item { grid-template-columns: minmax(0, 1fr); }
+  .compact-item > .item-actions { grid-column: 1; grid-row: 2; }
+  .collapsible-item > .structured-body { margin-inline-start: 0; padding-inline: 8px 0; }
+  .structured.nested { padding-inline-start: 8px; }
+  .object-fields .field-inline, .object-fields .image-field {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .object-fields .image-field-preview { order: 1; }
+}
