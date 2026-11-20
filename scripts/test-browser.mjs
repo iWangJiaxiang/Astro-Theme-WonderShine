@@ -87,20 +87,28 @@ export async function checkBrowser(options = demo) {
         for (const width of [1440, 390]) {
           await page.setViewport({width, height:900});
           await finishLayout();
+          const toggle = await page.$('#topGroup summary');
+          const label = () => toggle.evaluate(button => button.innerText.trim());
+          const show = name === 'chinese' ? '更多推荐' : 'More recommendations';
+          const hide = name === 'chinese' ? '收起推荐' : 'Hide recommendations';
+          assert.equal(await label(), show);
+          if (width === 390) await toggle.click();
+          else { await toggle.focus(); await page.keyboard.press('Enter'); }
+          assert.equal(await label(), hide);
           assert.ok(await page.evaluate(() => {
+            const cover = document.querySelector('#todayCard').getBoundingClientRect();
             const button = document.querySelector('#topGroup summary').getBoundingClientRect();
-            const text = document.querySelector('.todayCard-info').getBoundingClientRect();
-            return button.bottom <= text.top;
+            const row = document.querySelector('.recommendation-link').getBoundingClientRect();
+            return cover.height > 0 && cover.bottom <= button.top + 1 && row.top >= button.bottom - 1 && row.height > 0;
           }));
-          await page.focus('#topGroup summary');
-          await page.keyboard.press('Enter');
-          assert.ok(await page.$('#topGroup details[open]'));
-          assert.equal(await page.$eval('#todayCard', link => link.offsetWidth), 0);
-          const target = await page.$eval('#topGroup .recent-post-item', link => link.href);
+          const target = await page.$eval('#topGroup .recommendation-link', link => link.href);
           assert.ok(new URL(target).pathname.startsWith(prefix + '/collections/'));
           assert.equal((await fetch(target)).status, 200);
-          if (width === 1440) await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-recommendations.png')});
-          await page.keyboard.press('Enter');
+          await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-recommendations' + (width === 390 ? '-mobile' : '') + '.png')});
+          if (width === 390) await toggle.click();
+          else await page.keyboard.press('Enter');
+          assert.equal(await label(), show);
+          assert.equal(await page.$eval('.recommendation-link', link => link.checkVisibility()), false);
           assert.ok(await page.$eval('#todayCard', link => link.offsetWidth > 0));
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
           if (width === 390) await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-mobile.png')});

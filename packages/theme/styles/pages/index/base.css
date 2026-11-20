@@ -84,40 +84,66 @@
 #topGroup .todayCard::after { content: ''; background: linear-gradient(transparent, rgb(10 15 30 / 86%)); }
 .todayCard-tips { font-size: .8rem; }
 .todayCard-title { font-size: clamp(1.4rem, 2.5vw, 2.3rem); line-height: 1.25; font-weight: 700; overflow-wrap: anywhere; }
-#topGroup:has(summary) .todayCard { padding-top: 5rem; }
-#topGroup:has(details[open]) .todayCard { display: none; }
-#topGroup .recommendations { margin: 0; padding: 0; min-height: 0; border: 0; background: none; overflow: visible; }
-#topGroup details:not([open]) { position: absolute; top: 1rem; right: 1rem; }
+#topGroup:has(.recommendations) {
+    border: var(--style-border);
+    border-radius: 12px;
+    background: var(--wjx-card-bg);
+    box-shadow: var(--wjx-shadow-border);
+    overflow: hidden;
+}
+#topGroup:has(summary) .todayCard {
+    height: auto;
+    min-height: clamp(182px, calc(22vw - 48px), 282px);
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+#topGroup .recommendations { margin: 0; padding: 0; min-height: 0; border: 0; border-radius: 0; background: none; }
 #topGroup summary {
     position: static;
     display: flex;
     align-items: center;
-    gap: .4rem;
-    width: fit-content;
-    margin: 0 0 .5rem auto;
-    padding: .4rem .85rem;
-    min-height: 40px;
-    border-radius: 2rem;
-    background: var(--wjx-card-bg);
+    justify-content: space-between;
+    gap: .75rem;
+    width: 100%;
+    min-height: 46px;
+    margin: 0;
+    padding: .5rem 1.25rem;
     color: var(--wjx-fontcolor);
-    font: inherit;
-    font-size: .85rem;
-    cursor: pointer;
+    background: var(--wjx-card-bg);
+    box-shadow: none;
+    font-weight: 600;
     list-style: none;
+    cursor: pointer;
 }
 #topGroup summary::before, #topGroup summary::after, #topGroup summary::-webkit-details-marker { display: none; }
-#topGroup details[open] summary i { transform: rotate(45deg); }
-#topGroup .recent-post-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: .5rem; margin: 0 !important; }
-#topGroup .recent-post-item { min-width: 0; overflow: hidden; border: var(--style-border); border-radius: 12px; background: var(--wjx-card-bg); }
-#topGroup .post_cover img { width: 100%; height: clamp(5rem, 8vw, 8rem); object-fit: cover; }
-#topGroup .article-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: .5rem .75rem; font-weight: 600; line-height: 1.4; }
+#topGroup summary:hover, #topGroup .recommendation-link:hover { color: var(--wjx-lighttext); background: var(--wjx-secondbg); }
+#topGroup details:not([open]) .hide-recommendations, #topGroup details[open] .show-recommendations { display: none; }
+#topGroup details[open] summary i { transform: rotate(180deg); }
+#topGroup .recommendation-list { display: grid; list-style: none; padding: 0; margin: 0 !important; }
+#topGroup .recommendation-link {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    height: 100%;
+    min-width: 0;
+    padding: .75rem 1.25rem;
+    border-top: var(--style-border);
+}
+.recommendation-link img { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; }
+.recommendation-copy { flex: 1; min-width: 0; line-height: 1.4; overflow-wrap: anywhere; }
+.recommendation-copy strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.recommendation-copy time, .recommendation-link > i { color: var(--wjx-secondtext); font-size: .8rem; }
+@media (min-width: 1000px) {
+    #topGroup .recommendation-list:has(> li:nth-child(3)) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 #recent-post-top :is(a,summary):focus-visible { outline: 3px solid var(--wjx-theme); outline-offset: -3px; }
 
 @media (max-width: 700px) {
     #recent-post-top { grid-template-columns: minmax(0, 1fr); gap: .65rem; }
     #home_top:not(.activity-home) #recent-post-top { margin: .75rem 1rem; }
     #bannerGroup #banners { min-height: 0; gap: .85rem; }
-    #topGroup .todayCard { min-height: 180px; }
+    #topGroup .todayCard, #topGroup:has(summary) .todayCard { min-height: 156px; }
 }
 @media (prefers-reduced-motion: reduce) {
     #bannerGroup .tags-group-wrapper { animation: none; }

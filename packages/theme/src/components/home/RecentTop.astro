@@ -1,6 +1,6 @@
 ---
 import ResponsiveImage from '../ResponsiveImage.astro';
-import {articles,cover} from '../../lib/queries';
+import {articles,cover,formatDate} from '../../lib/queries';
 import {localizeConfig,localizeData,localizeUrl,t} from '../../lib/locale';
 import {routes} from '../../lib/routes';
 import type {Document} from '../../lib/types';
@@ -49,11 +49,22 @@ const colorStyle=(group:any)=>({'--group-light-one':group.colors?.light_one,'--g
       <div class="todayCard-info"><div class="todayCard-tips">{today.small_title||t('featured',lang,site,'activity')}</div><div class="todayCard-title">{daily.title}</div></div>
     </a>}
     {posts.length>0&&<Recommendations class="recommendations">
-      {daily&&<summary class="banner-button"><i class="icon-circle-plus" aria-hidden="true"/>{tr('ui_more_recommendations')}</summary>}
-      <div class="recent-post-group">{posts.map(post=><a class="recent-post-item" href={post.url}>
-        {cover(post,site)&&<div class="post_cover"><ResponsiveImage site={site} class="post_bg" src={cover(post,site)} alt="" width={480} sizes="(max-width: 700px) 45vw, 22vw"/></div>}
-        <div class="recent-post-info"><span class="article-title">{post.title}</span></div>
-      </a>)}</div>
+      {daily&&<summary>
+        <span class="show-recommendations">{tr('ui_more_recommendations')}</span>
+        <span class="hide-recommendations">{tr('ui_collapse_recommendations')}</span>
+        <i class="icon-angle-down" aria-hidden="true"/>
+      </summary>}
+      <ul class="recommendation-list">{posts.map(post=>{
+        const thumbnail=cover(post,site,false);
+        return <li><a class="recommendation-link" href={post.url}>
+          {thumbnail&&<ResponsiveImage site={site} src={thumbnail} alt="" width={96} sizes="48px"/>}
+          <span class="recommendation-copy">
+            <strong>{post.title}</strong>
+            {post.date&&<time datetime={post.date}>{formatDate(post.date,lang)}</time>}
+          </span>
+          <i class="icon-chevron-right" aria-hidden="true"/>
+        </a></li>;
+      })}</ul>
     </Recommendations>}
   </div>}
 </div></div>
