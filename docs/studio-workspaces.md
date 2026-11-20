@@ -117,3 +117,6 @@ A `pending` marker in `content-revisions-v1` means baseline publication was inte
 API：`PUT /api/document` 和 `PUT /api/settings/:id` 接受可选 `saveMode: "local" | "branch" | "remote"`。服务端按实际能力校验，不支持的模式在写入前返回 400。`/api/bootstrap` 返回 `saveCapabilities.modes` 和不含明文目录的 `saveScope`。部分成功响应保留 `revision`，并带 `branchPending: true`；成功的分支保存返回 `branch` 和 `commit`。
 
 The thread editor's **Publish thread** action in a persistent Git workspace saves the content locally and opens the review in place. The review lists all managed changes on the configured branch. Confirm the local commit, then confirm pushing the newly reviewed branch. Closing the review keeps the local save. A later click reopens the review, including after a failed push. The native push step accepts a replacement access token for the current session under **Repository sign-in**. Draft saves, autosaves and saving to a separate branch do not start this flow.
+
+
+In an app-managed checkout, committing before an explicit follow-up review can acknowledge the commit without computing a disposable status. The next review reads the new HEAD and file state. Each mutation validates the review bytes, and can reuse its own scan while holding the workspace lock. Synchronization reads the remote refs after fetching and pushing. A fast-forward checkout or an externally editable folder gets a fresh final worktree status.

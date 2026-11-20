@@ -57,8 +57,9 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       else {
         if (!current?.confirmation) throw new Error('工作区已变化，请刷新并重新确认提交范围');
         if (kind === 'commit' || kind === 'commit-sync') {
-          current = await api<WorkspaceStatus>('/workspace/commit', 'POST', { message, confirmation: current.confirmation });
-          setStatus(current);
+          const input = { message, confirmation: current.confirmation };
+          if (kind === 'commit-sync') await api('/workspace/commit', 'POST', { ...input, followUpReview: true });
+          else current = await api<WorkspaceStatus>('/workspace/commit', 'POST', input);
           committed = true;
           setNotice(workspaceCommitNotice(kind === 'commit-sync' ? 'pending' : 'none'));
         }

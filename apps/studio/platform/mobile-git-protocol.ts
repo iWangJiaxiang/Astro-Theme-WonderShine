@@ -6,7 +6,7 @@ import type { FileInfo, WorkspaceFiles } from './filesystem';
 import type { WorkspaceProfile } from './hosting';
 
 export type GitJob = { action: 'open'; allowClone: boolean } | { action: 'status' | 'review' }
-  | { action: 'commit'; message: string; confirmation?: string } | { action: 'sync'; confirmation?: string }
+  | { action: 'commit'; message: string; confirmation?: string } | { action: 'commitForReview'; message: string; confirmation: string } | { action: 'sync'; confirmation?: string }
   | { action: 'branch'; key: string; files: BranchFile[] };
 export type JobRequest = { job: GitJob; root: string; state: string; profile: WorkspaceProfile; password: string };
 export type StatInfo = Omit<FileInfo, 'isFile' | 'isDirectory' | 'isSymbolicLink'> & { file: boolean; directory: boolean; symlink: boolean };

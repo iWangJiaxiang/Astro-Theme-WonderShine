@@ -1,7 +1,7 @@
 import { commitBranchSnapshot, assertBranchSnapshot } from './branch-save.js';
 import type { BranchFile, BranchSave } from '../shared/save.js';
 import './buffer.js';
-import { add, checkout, clone, commit, currentBranch, fetch, getConfig, listFiles, log, push, remove, resolveRef, statusMatrix, writeRef, type HttpClient, type ProgressCallback } from 'isomorphic-git';
+import { add, checkout, clone, commit, currentBranch, fetch, getConfig, listFiles, log, push, readCommit, remove, resolveRef, statusMatrix, writeRef, type HttpClient, type ProgressCallback, type StatusRow } from 'isomorphic-git';
 import { StudioError } from '../core/errors.js';
 import { validateMediaPath } from '../core/media-validation.js';
 import { validatePath } from '../shared/repository.js';
@@ -10,7 +10,7 @@ import { workspaceReviewUnavailable, type ReviewState, type WorkspaceReviewAdapt
 import { ensureDirectory, missingFile, parentPath, type WorkspaceFiles } from './filesystem.js';
 import { validateBranch, validateProfile, validateRemote, type WorkspaceProfile } from './hosting.js';
 import { withWorkspaceLock } from './queue.js';
-const git = { add, checkout, clone, commit, currentBranch, fetch, getConfig, listFiles, log, push, remove, resolveRef, statusMatrix, writeRef };
+const git = { add, checkout, clone, commit, currentBranch, fetch, getConfig, listFiles, log, push, readCommit, remove, resolveRef, statusMatrix, writeRef };
 
 const internal = (path: string) => path === '.studio-history' || path.startsWith('.studio-history/') || path === '.studio-write-lock' || path.startsWith('.studio-write-lock/');
 function managed(path: string): boolean {
@@ -98,12 +98,16 @@ export class NativeGitEngine implements WorkspaceControl {
   /** Caller may already hold the workspace queue. Never nest a queue here. */
   async assertWritable(): Promise<void> {
     if (await this.exists(this.journal)) throw new StudioError(409, '上次同步中断，请先检查 Git 工作区并完成恢复；现有内容已保留');
-    for (const marker of ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply', 'sequencer', 'BISECT_LOG', 'index.lock']) {
-      if (await this.exists(this.root + '/.git/' + marker)) throw new StudioError(409, 'Git 操作尚未完成，请先在 Git 工具中完成合并、变基或其他操作');
+    const entries = new Set((await this.files.readdir(this.root + '/.git')).map(name => name.toLowerCase()));
+    if (['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply', 'sequencer', 'BISECT_LOG', 'index.lock'].some(marker => entries.has(marker.toLowerCase()))) {
+      throw new StudioError(409, 'Git 操作尚未完成，请先在 Git 工具中完成合并、变基或其他操作');
     }
   }
   private async rows(cache = {}) {
-    return (await git.statusMatrix({ ...this.options, cache, refresh: false, filter: path => !internal(path) }))
+    // statusMatrix's filter omits result rows but still descends into excluded directories.
+    const files: WorkspaceFiles = Object.create(this.files);
+    files.readdir = path => internal(path.slice(this.root.length + 1)) ? Promise.resolve([]) : this.files.readdir(path);
+    return (await git.statusMatrix({ fs: { promises: files }, dir: this.root, cache, refresh: false, filter: path => !internal(path) }))
       .filter(([, head, worktree, stage]) => head !== worktree || head !== stage);
   }
   status(): Promise<WorkspaceStatus> {
@@ -122,40 +126,58 @@ export class NativeGitEngine implements WorkspaceControl {
     if (!this.reviews) throw new StudioError(503, workspaceReviewUnavailable);
     return this.reviews;
   }
-  private async validateReview(confirmation: string): Promise<void> {
-    const { review } = await this.inspectUnlocked();
-    const adapter = this.reviewAdapter();
-    await adapter.store.validateReview(confirmation, review, adapter.source);
+  private async head(): Promise<string | null> {
+    try { return await git.resolveRef({ ...this.options, ref: 'HEAD' }); }
+    catch (error) { if ((error as { code?: string }).code !== 'NotFoundError') throw error; return null; }
   }
-  private async statusUnlocked(): Promise<WorkspaceStatus> { return (await this.inspectUnlocked()).status; }
-  private async inspectUnlocked(): Promise<{ status: WorkspaceStatus; review: ReviewState }> {
-    // In isomorphic-git 1.44.4, logs populate only the pack cache. Share it with
-    // one final matrix, then discard: never carry its index cache across mutations.
-    const cache = {};
-    let head: string | null = null;
-    try { head = await git.resolveRef({ ...this.options, ref: 'HEAD' }); } catch (error) {
-      if ((error as { code?: string }).code !== 'NotFoundError') throw error;
+  private reviewState(head: string | null, rows: StatusRow[]): ReviewState {
+    return { scope: 'native:' + this.root, branch: this.profile.branch, head, rows: rows.filter(([path]) => managed(path)) };
+  }
+  private async checkedRows(confirmation?: string): Promise<StatusRow[]> {
+    const rows = await this.rows();
+    if (confirmation !== undefined) {
+      const adapter = this.reviewAdapter();
+      await adapter.store.validateReview(confirmation, this.reviewState(await this.head(), rows), adapter.source);
+      // A user-selected desktop checkout can also be changed by an external Git client.
+      if (this.profile.source === 'local') return this.rows();
     }
+    return rows;
+  }
+  private async branchStatus(cache: object) {
+    const head = await this.head();
     let remoteHead: string | null = null;
     try { remoteHead = await git.resolveRef({ ...this.options, ref: this.remoteRef }); } catch { /* No remote tip yet. */ }
     let ahead = 0, behind = 0;
     if (head !== remoteHead) {
-      const local = new Set(head ? (await git.log({ ...this.options, cache, ref: head })).map(entry => entry.oid) : []);
-      const remote = new Set(remoteHead ? (await git.log({ ...this.options, cache, ref: remoteHead })).map(entry => entry.oid) : []);
-      ahead = [...local].filter(oid => !remote.has(oid)).length;
-      behind = [...remote].filter(oid => !local.has(oid)).length;
+      // The normal publish path is one new, non-merge commit above the fetched tip.
+      const parents = head && remoteHead ? (await git.readCommit({ ...this.options, cache, oid: head })).commit.parent : [];
+      if (parents.length === 1 && parents[0] === remoteHead) ahead = 1;
+      else {
+        const local = new Set(head ? (await git.log({ ...this.options, cache, ref: head })).map(entry => entry.oid) : []);
+        const remote = new Set(remoteHead ? (await git.log({ ...this.options, cache, ref: remoteHead })).map(entry => entry.oid) : []);
+        for (const oid of local) if (!remote.has(oid)) ahead++;
+        for (const oid of remote) if (!local.has(oid)) behind++;
+      }
     }
+    return { head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0 };
+  }
+  private async statusUnlocked(knownClean?: StatusRow[]): Promise<WorkspaceStatus> { return (await this.inspectUnlocked(knownClean)).status; }
+  private async inspectUnlocked(knownClean?: StatusRow[]): Promise<{ status: WorkspaceStatus; review: ReviewState }> {
+    // Only share Git's pack/index cache within this read, never across a mutation.
+    const cache = {};
+    const branch = await this.branchStatus(cache);
     let lastSync: string | null = null;
     try { lastSync = String(await this.files.readFile(this.stateRoot + '/last-sync', 'utf8')); }
     catch (error) { if (!missingFile(error)) throw error; }
-    const rows = await this.rows(cache);
-    const managedChanges = rows.filter(([path]) => managed(path)).map(([path]) => path);
+    const rows = knownClean ?? await this.rows(cache);
+    const review = this.reviewState(branch.head, rows);
+    const managedChanges = review.rows.map(([path]) => path);
     const changes = rows.length;
     let canSync = true;
     try { validateRemote(this.profile.url); } catch { canSync = false; }
     return {
-      status: { branch: this.profile.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, canSync, managedChanges },
-      review: { scope: 'native:' + this.root, branch: this.profile.branch, head, rows: rows.filter(([path]) => managed(path)) },
+      status: { branch: this.profile.branch, dirty: changes > 0, changes, ...branch, lastSync, canSync, managedChanges },
+      review,
     };
   }
 
@@ -173,36 +195,41 @@ export class NativeGitEngine implements WorkspaceControl {
 
   commit(message: string, confirmation?: string): Promise<WorkspaceStatus> {
     return withWorkspaceLock(this.root, async () => {
-      await this.openUnlocked(); await this.assertWritable();
-      if (confirmation !== undefined) await this.validateReview(confirmation);
-      if (!this.profile.authorName.trim() || !this.profile.authorEmail.trim()) throw new StudioError(400, '请在连接设置中填写提交者名称和邮箱');
-      if (typeof message !== 'string' || !message.trim() || message.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)) throw new StudioError(400, '请输入不超过 500 字的提交说明');
-      const rows = await this.rows();
-      if ((await git.listFiles(this.options)).some(internal)) throw new StudioError(409, 'Git 暂存区包含创作中心备份文件，请先在 Git 工具中处理');
-      if (rows.some(([path, head, , stage]) => !managed(path) && head !== stage)) throw new StudioError(409, '暂存区含有创作中心以外的文件，请先在 Git 工具中处理');
-      const entries = rows.filter(([path]) => managed(path));
-      if (!entries.length) throw new StudioError(409, '没有可提交的内容修改');
-      for (const [path] of entries) await this.safeFile(path);
-      for (const [path, , worktree] of entries) {
-        if (worktree) await git.add({ ...this.options, filepath: path });
-        else await git.remove({ ...this.options, filepath: path });
-      }
-      await git.commit({ ...this.options, message: message.trim(), author: { name: this.profile.authorName, email: this.profile.authorEmail } });
+      await this.commitUnlocked(message, confirmation);
       return this.statusUnlocked();
     });
+  }
+  commitForReview(message: string, confirmation: string): Promise<void> {
+    return withWorkspaceLock(this.root, () => this.commitUnlocked(message, confirmation));
+  }
+  private async commitUnlocked(message: string, confirmation?: string) {
+    await this.openUnlocked(); await this.assertWritable();
+    if (!this.profile.authorName.trim() || !this.profile.authorEmail.trim()) throw new StudioError(400, '请在连接设置中填写提交者名称和邮箱');
+    if (typeof message !== 'string' || !message.trim() || message.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)) throw new StudioError(400, '请输入不超过 500 字的提交说明');
+    const rows = await this.checkedRows(confirmation);
+    if ((await git.listFiles(this.options)).some(internal)) throw new StudioError(409, 'Git 暂存区包含创作中心备份文件，请先在 Git 工具中处理');
+    if (rows.some(([path, head, , stage]) => !managed(path) && head !== stage)) throw new StudioError(409, '暂存区含有创作中心以外的文件，请先在 Git 工具中处理');
+    const entries = rows.filter(([path]) => managed(path));
+    if (!entries.length) throw new StudioError(409, '没有可提交的内容修改');
+    for (const [path] of entries) await this.safeFile(path);
+    for (const [path, , worktree] of entries) {
+      if (worktree) await git.add({ ...this.options, filepath: path });
+      else await git.remove({ ...this.options, filepath: path });
+    }
+    await git.commit({ ...this.options, message: message.trim(), author: { name: this.profile.authorName, email: this.profile.authorEmail } });
   }
 
   sync(confirmation?: string): Promise<WorkspaceStatus> {
     return withWorkspaceLock(this.root, async () => {
       await this.openUnlocked(); await this.assertWritable();
-      if (confirmation !== undefined) await this.validateReview(confirmation);
       try { validateRemote(this.profile.url); } catch { throw new StudioError(400, 'App 同步需要 HTTPS 远端；本地保存和提交仍可使用'); }
-      if ((await this.rows()).length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
+      const rows = await this.checkedRows(confirmation);
+      if (rows.length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
       try {
         await git.fetch({ ...this.options, http: this.http, url: this.profile.url, remote: 'origin', ref: this.profile.branch,
           singleBranch: true, onAuth: this.credentials });
       } catch { throw new StudioError(502, '暂时无法连接 Git 远端，本地文件和提交已保留'); }
-      let status = await this.statusUnlocked();
+      const status = await this.branchStatus({});
       if (status.diverged) throw new StudioError(409, '本地与远端都有新提交，请先在 Git 工具中合并；双方提交均已保留');
       if (status.behind && status.remoteHead) {
         await git.checkout({ ...this.options, ref: status.remoteHead, noUpdateHead: true, nonBlocking: true, batchSize: 8, dryRun: true });
@@ -211,7 +238,6 @@ export class NativeGitEngine implements WorkspaceControl {
         await git.checkout({ ...this.options, ref: status.remoteHead, noUpdateHead: true, nonBlocking: true, batchSize: 8 });
         await git.writeRef({ ...this.options, ref: `refs/heads/${this.profile.branch}`, value: status.remoteHead, force: true });
         await this.files.unlink(this.journal);
-        status = await this.statusUnlocked();
       }
       if (status.ahead) {
         try {
@@ -221,7 +247,8 @@ export class NativeGitEngine implements WorkspaceControl {
         } catch { throw new StudioError(409, 'Git 推送未确认，请重试同步以核对远端；本地提交已保留'); }
       }
       await this.files.writeFile(this.stateRoot + '/last-sync', new Date().toISOString());
-      return this.statusUnlocked();
+      // Fetch/push change refs only. Reinspect files after a checkout or in an externally editable folder.
+      return this.statusUnlocked(status.behind || this.profile.source === 'local' ? undefined : rows);
     });
   }
 }

@@ -82,6 +82,7 @@ worker.onmessage = async ({ data: { job, root, state, profile, password } }) => 
       case 'status': value = await git.status(); break;
       case 'review': value = await git.createReview(); break;
       case 'commit': value = await git.commit(job.message, job.confirmation); break;
+      case 'commitForReview': await git.commitForReview(job.message, job.confirmation); break;
       case 'sync': value = await git.sync(job.confirmation); break;
       case 'branch': value = await git.saveBranch(job.key, job.files); break;
     }

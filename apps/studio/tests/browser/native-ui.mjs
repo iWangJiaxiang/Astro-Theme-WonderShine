@@ -32,7 +32,7 @@ let releaseDownload = () => {}, releaseCheckout = () => {};
 let downloadGate = Promise.resolve(), checkoutGate = Promise.resolve();
 let writeGate = Promise.resolve(), releaseWrite = () => {};
 const requests = new Map(), responses = new Map(), fileHandles = new Map();
-let nextResource = 1;
+let nextResource = 1, worktreeScans = 0;
 try {
   await fs.mkdir(root, { recursive: true }); await fs.mkdir(screenshots, { recursive: true });
   const git = args => execFileSync('git', args, { cwd: root, stdio: 'pipe' }).toString().trim();
@@ -161,7 +161,9 @@ try {
         switch (operation) {
           case 'mkdir': await fs.mkdir(path, { recursive: !!args.options?.recursive, mode: args.options?.mode }); break;
           case 'read_file': value = [...await fs.readFile(path)]; break;
-          case 'read_dir': value = (await fs.readdir(path, { withFileTypes: true })).map(item => ({ name: item.name, isFile: item.isFile(), isDirectory: item.isDirectory(), isSymlink: item.isSymbolicLink() })); break;
+          case 'read_dir':
+            if (path.endsWith('/repo/assets/git-fixture')) worktreeScans++;
+            value = (await fs.readdir(path, { withFileTypes: true })).map(item => ({ name: item.name, isFile: item.isFile(), isDirectory: item.isDirectory(), isSymlink: item.isSymbolicLink() })); break;
           case 'remove': { const stat = await fs.lstat(path); if (stat.isDirectory() && !stat.isSymbolicLink()) await fs.rmdir(path); else await fs.unlink(path); break; }
           case 'stat': case 'lstat': value = fileInfo(await fs[operation](path)); break;
           default: throw new Error('Unsupported fixture FS command: ' + command);
@@ -628,6 +630,7 @@ try {
   await screenshot('phone-publish-review', false);
   await click('稍后');
   assert.equal(await page.$('dialog.publish-dialog[open]'), null);
+  const scansBeforePublish = worktreeScans;
   await click('发布动态');
   await click('保存此版本');
   await page.waitForFunction(() => document.querySelector('.publish-actions .primary')?.textContent === '确认发布');
@@ -638,6 +641,8 @@ try {
   await page.waitForSelector('dialog.publish-dialog[open] [role=status]');
   await page.waitForFunction(() => document.querySelector('.publish-dialog h2')?.textContent === '动态已发送到仓库');
   assert.match(execFileSync('git', [...remoteArgs, 'grep', '-l', 'Phone publication fixture', 'release/blog', '--', 'content/threads']).toString(), /index.*\.md/);
+  assert.equal(worktreeScans - scansBeforePublish, 4, 'Each explicit review and each confirmed mutation examines the checkout once');
+  console.log('Mobile publish worktree scans:', worktreeScans - scansBeforePublish);
   await click('完成');
   await click('切换工作区'); await heading('连接创作工作区');
   assert.equal(await page.$('.studio-shell'), null, 'Explicit switching leaves the chooser open');

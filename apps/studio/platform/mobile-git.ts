@@ -77,6 +77,7 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
     status: () => run<WorkspaceStatus>({ action: 'status' }),
     createReview: () => run<WorkspaceStatus>({ action: 'review' }),
     commit: (message, confirmation) => run<WorkspaceStatus>({ action: 'commit', message, confirmation }),
+    commitForReview: (message, confirmation) => run<void>({ action: 'commitForReview', message, confirmation }),
     sync: confirmation => run<WorkspaceStatus>({ action: 'sync', confirmation }),
     saveBranch: (key, files) => run<BranchSave>({ action: 'branch', key, files }),
   };
