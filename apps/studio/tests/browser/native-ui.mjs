@@ -31,7 +31,7 @@ let allowCloneHttp = false, failNextHttp = false, failNextBranchWrite = false;
 let releaseDownload = () => {}, releaseCheckout = () => {};
 let downloadGate = Promise.resolve(), checkoutGate = Promise.resolve();
 let writeGate = Promise.resolve(), releaseWrite = () => {};
-const requests = new Map(), responses = new Map();
+const requests = new Map(), responses = new Map(), fileHandles = new Map();
 let nextResource = 1;
 try {
   await fs.mkdir(root, { recursive: true }); await fs.mkdir(screenshots, { recursive: true });
@@ -58,6 +58,12 @@ try {
     const location = resolve(path);
     if (location !== appData && !location.startsWith(appData + sep) && !(folderGranted && (location === localRoot || location.startsWith(localRoot + sep)))) throw new Error('Fixture filesystem request escaped AppData');
     return location;
+  }
+  function fileInfo(stat) {
+    return { size: stat.size, isFile: stat.isFile(), isDirectory: stat.isDirectory(), isSymlink: stat.isSymbolicLink(),
+      mtime: stat.mtime.toISOString(), atime: stat.atime.toISOString(), birthtime: stat.birthtime.toISOString(),
+      readonly: false, fileAttributes: null, mode: stat.mode, dev: stat.dev, ino: stat.ino, nlink: stat.nlink,
+      uid: stat.uid, gid: stat.gid, rdev: stat.rdev, blksize: stat.blksize, blocks: stat.blocks };
   }
   server = createServer(async (request, response) => {
     try {
@@ -120,20 +126,34 @@ try {
         if (path.includes('.clone-') && path.endsWith('/config.toml')) await checkoutGate;
         await fs.writeFile(path, new Uint8Array(args));
       } else if (command === 'plugin:fs|rename') await fs.rename(confined(args.oldPath), confined(args.newPath));
-      else if (command.startsWith('plugin:fs|')) {
+      else if (command === 'plugin:fs|open') {
+        const path = confined(args.path);
+        assert.ok(args.options.read || (args.options.write && args.options.createNew));
+        const handle = await fs.open(path, args.options.createNew ? 'wx' : 'r', args.options.mode);
+        value = nextResource++;
+        fileHandles.set(value, handle);
+      } else if (command === 'plugin:fs|read') {
+        const buffer = Buffer.alloc(args.len + 8);
+        const { bytesRead } = await fileHandles.get(args.rid).read(buffer, 0, args.len);
+        // The plugin appends the byte count as a big-endian u64.
+        buffer.writeBigUInt64BE(BigInt(bytesRead), bytesRead);
+        value = Array.from(buffer.subarray(0, bytesRead + 8));
+      } else if (command === 'plugin:fs|write') {
+        const result = await fileHandles.get(args.rid).write(Buffer.from(args.data));
+        value = result.bytesWritten;
+      } else if (command === 'plugin:fs|fstat') {
+        value = fileInfo(await fileHandles.get(args.rid).stat());
+      } else if (command === 'plugin:resources|close' && fileHandles.has(args.rid)) {
+        await fileHandles.get(args.rid).close();
+        fileHandles.delete(args.rid);
+      } else if (command.startsWith('plugin:fs|')) {
         const path = confined(args.path), operation = command.split('|')[1];
         switch (operation) {
-          case 'mkdir': await fs.mkdir(path, { recursive: !!args.options?.recursive }); break;
+          case 'mkdir': await fs.mkdir(path, { recursive: !!args.options?.recursive, mode: args.options?.mode }); break;
           case 'read_file': value = [...await fs.readFile(path)]; break;
           case 'read_dir': value = (await fs.readdir(path, { withFileTypes: true })).map(item => ({ name: item.name, isFile: item.isFile(), isDirectory: item.isDirectory(), isSymlink: item.isSymbolicLink() })); break;
           case 'remove': { const stat = await fs.lstat(path); if (stat.isDirectory() && !stat.isSymbolicLink()) await fs.rmdir(path); else await fs.unlink(path); break; }
-          case 'stat': case 'lstat': {
-            const stat = await fs[operation](path);
-            value = { size: stat.size, isFile: stat.isFile(), isDirectory: stat.isDirectory(), isSymlink: stat.isSymbolicLink(),
-              mtime: stat.mtime.toISOString(), atime: stat.atime.toISOString(), birthtime: stat.birthtime.toISOString(),
-              readonly: false, fileAttributes: null, mode: null, dev: null, ino: null, nlink: null, uid: null, gid: null, rdev: null, blksize: null, blocks: null };
-            break;
-          }
+          case 'stat': case 'lstat': value = fileInfo(await fs[operation](path)); break;
           default: throw new Error('Unsupported fixture FS command: ' + command);
         }
       } else if (allowOAuthHttp && command === 'plugin:opener|open_url') {
@@ -231,6 +251,7 @@ try {
     window.__TAURI_INTERNALS__ = {
       invoke: async (command, args = {}, options) => {
         const value = args instanceof Uint8Array ? Array.from(args) : args;
+        if (value.data instanceof Uint8Array) value.data = Array.from(value.data);
         const result = await window.tauriInvoke(command, value, options);
         if (result.error) throw result.error;
         return result.value;
@@ -260,9 +281,9 @@ try {
     await page.goto(origin, { waitUntil: 'networkidle0' });
   };
   const noOverflow = async label => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, label + ' must fit viewport');
-  const screenshot = async name => {
+  const screenshot = async (name, fullPage = true) => {
     await page.evaluate(async () => { window.scrollTo(0, 0); await document.fonts.ready; for (const animation of document.getAnimations()) { if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) { try { animation.finish(); } catch {} } } await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
-    return page.screenshot({ path: join(screenshots, name + '.png'), fullPage: true });
+    return page.screenshot({ path: join(screenshots, name + '.png'), fullPage });
   };
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.goto(origin, { waitUntil: 'networkidle0' }); await heading('连接创作工作区');
@@ -571,21 +592,24 @@ try {
   await heading('今天，写点什么？');
   await page.waitForSelector('.thread-composer textarea');
   assert.equal(await page.$('.native-connect'), null, 'A cold phone launch reopens the last checkout offline');
+  await screenshot('phone-composer', false);
   await page.type('.thread-composer textarea', 'Phone publication fixture');
   await click('发布动态');
   await page.waitForSelector('dialog.publish-dialog[open] ul li');
-  await screenshot('phone-publish-review');
+  assert.equal(await page.$('.thread-composer .language-versions'), null, 'Language tools stay in More options after saving');
+  assert.equal(await page.$('.thread-composer .notice.success'), null, 'The review is the active save feedback');
+  await screenshot('phone-publish-review', false);
   await click('稍后');
   assert.equal(await page.$('dialog.publish-dialog[open]'), null);
   await click('发布动态');
-  await click('确认提交');
-  await page.waitForFunction(() => document.querySelector('.publish-actions .primary')?.textContent === '确认推送');
+  await click('保存此版本');
+  await page.waitForFunction(() => document.querySelector('.publish-actions .primary')?.textContent === '确认发布');
   const remoteArgs = ['--git-dir=' + join(base, 'remote.git')];
   assert.equal(execFileSync('git', [...remoteArgs, 'log', '-1', '--format=%s', 'release/blog']).toString().trim(), 'initial');
   allowCloneHttp = true;
-  await click('确认推送');
+  await click('确认发布');
   await page.waitForSelector('dialog.publish-dialog[open] [role=status]');
-  await page.waitForFunction(() => document.querySelector('.publish-dialog h2')?.textContent === '已推送到远端');
+  await page.waitForFunction(() => document.querySelector('.publish-dialog h2')?.textContent === '动态已发送到仓库');
   assert.match(execFileSync('git', [...remoteArgs, 'grep', '-l', 'Phone publication fixture', 'release/blog', '--', 'content/threads']).toString(), /index.*\.md/);
   await click('完成');
   await click('切换工作区'); await heading('连接创作工作区');
@@ -619,6 +643,7 @@ try {
 } finally {
   releaseDownload(); releaseCheckout(); releaseWrite(); releaseAccount();
   await browser?.close();
+  await Promise.all([...fileHandles.values()].map(handle => handle.close()));
   if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   await fs.rm(base, { recursive: true, force: true });
 }

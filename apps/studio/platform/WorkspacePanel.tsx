@@ -96,19 +96,20 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
   if (publishPath) {
     const blocked = status?.canSync === false ? 'App 同步需要 HTTPS 远端；本地保存和提交仍可使用'
       : status?.diverged ? '双方都有新提交。请先在 Git 工具中合并，本地内容会保留。'
-      : status && (status.changes !== status.managedChanges?.length || (pending === 'sync' && status.dirty)) ? '存在托管范围以外的修改，请先在 Git 工具中处理再同步。' : '';
+      : status && status.changes !== status.managedChanges?.length ? '存在托管范围以外的修改，请先在 Git 工具中处理再同步。'
+      : pending === 'sync' && status?.dirty ? '工作区已变化，请刷新并重新确认提交范围' : '';
     return <dialog ref={dialog} className="publish-dialog" aria-labelledby="publish-heading"
       onCancel={event => { event.preventDefault(); if (!busy) onClose?.(pushed); }}>
-      <h2 id="publish-heading">{t(pushed ? '已推送到远端' : '发布动态')}</h2>
-      {status && !pushed && <>
-        <p>{t(pending === 'sync' ? '将 {count} 个提交推送到 {branch}。' : '将 {count} 个文件提交到 {branch}。', {
+      <h2 id="publish-heading">{t(pushed ? '动态已发送到仓库' : '发布动态')}</h2>
+      {status && pending && !pushed && <>
+        <p>{t(pending === 'sync' ? '将 {count} 个已保存版本发送到 {branch}。' : '此版本包含 {count} 个文件，保存到 {branch}。', {
           count: pending === 'sync' ? status.ahead : status.managedChanges?.length || 0, branch: status.branch,
         })}</p>
         {!!status.managedChanges?.length && <details open={status.managedChanges.some(path => path !== publishPath)}>
           <summary>{t('查看文件')}</summary><ul>{status.managedChanges.map(path => <li key={path}>{path}</li>)}</ul>
         </details>}
       </>}
-      {notice && <p role="status">{t(pushed ? '网站部署后即可查看。' : pending === 'sync' ? '修改已保存，可以发送到仓库。' : notice)}</p>}
+      {notice && (pushed || pending !== 'sync') && <p role="status">{t(pushed ? '网站部署后即可查看。' : notice)}</p>}
       {error && <p className="notice error" role="alert">{t(error)}</p>}
       {blocked && !pushed && <p className="notice error">{t(blocked)}</p>}
       {pending === 'sync' && nativeGitCredential.current && nativeGitCredential.current.id === session.value?.identity.id &&
@@ -119,7 +120,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         {!pushed && <button className="secondary" disabled={busy} onClick={() => onClose?.(false)}>{t('稍后')}</button>}
         {pushed ? <button className="primary" onClick={() => onClose?.(true)}>{t('完成')}</button>
           : <button className="primary" disabled={busy} onClick={() => pending && !blocked ? void action(pending) : void review('publish')}>
-            {t(busy ? '处理中…' : blocked ? '刷新状态' : !pending ? '重试' : pending === 'sync' ? '确认推送' : '确认提交')}</button>}
+            {t(busy ? '处理中…' : blocked ? '刷新状态' : !pending ? '重试' : pending === 'sync' ? '确认发布' : '保存此版本')}</button>}
       </div>
     </dialog>;
   }

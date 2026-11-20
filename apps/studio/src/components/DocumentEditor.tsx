@@ -129,7 +129,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         : saveMode.value === "remote" ? "远端保存 · 可发布" : isThread ? "保存动态" : "本地保存 · 可发布";
       return element(SaveButton, {
         mode: saveMode.value,
-        showModes: !props.embedded || threadAdvanced.value,
+        showModes: !isThread || threadAdvanced.value,
         onModeChange: (value: SaveMode) => { saveMode.value = value; },
         busy: busy.value,
         disabled: !direct && !dirty.value && !branchPending.value && saveMode.value !== "branch" && (!publish || values.value.draft === false),
@@ -874,8 +874,14 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         originalBody.value = submittedBody;
         branchPending.value = result.branchPending === true;
         savedBranch.value = result.branch || "";
-        message.value = result.branchPending ? "" : result.message;
-        if (result.branchPending) { error.value = result.message; autosavePaused.value = true; }
+        message.value = result.message;
+        if (isThread && saveMode.value === "local" && !result.branchPending)
+          message.value = submittedValues.draft ? "草稿已保存" : "动态已保存在工作区。";
+        if (result.branchPending) {
+          message.value = "";
+          error.value = result.message;
+          autosavePaused.value = true;
+        }
         if (isTopic) {
           try {
             const saved = await api<Article>(
@@ -1016,7 +1022,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       ),
                       element(
                         "details",
-                        { className: classes("editor-file-location") },
+                        { className: classes("editor-file-location"), hidden: isThread && !threadAdvanced.value },
                         element("summary", null, t("文件位置")),
                         element(
                           "p",
@@ -1030,7 +1036,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       { className: classes("row editor-save-actions") },
                       element(
                         "label",
-                        { className: classes("autosave-control") },
+                        { className: classes("autosave-control"), hidden: isThread && !threadAdvanced.value },
                         element("span", null, t("自动保存")),
                         element(
                           "select",
@@ -1058,6 +1064,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                                 busy.value ||
                                 translating.value ||
                                 settingsDirty.value,
+                              hidden: isThread && !threadAdvanced.value,
                               className: classes("secondary danger"),
                               onClick: domEvent(($event: Event) => {
                                 remove();
@@ -1069,6 +1076,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       element(
                         "button",
                         {
+                          hidden: isThread && !threadAdvanced.value,
                           className: classes("secondary"),
                           onClick: domEvent(($event: Event) => {
                             download();
@@ -1103,7 +1111,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     ),
                   )
                 : null,
-              autosaveSeconds.value
+              autosaveSeconds.value && (!isThread || threadAdvanced.value || autosavePaused.value)
                 ? element(
                     "p",
                     { role: "status", className: classes("autosave-status") },
@@ -1128,7 +1136,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     ),
                   )
                 : null,
-              message.value
+              message.value && !publishing.value
                 ? element(
                     "p",
                     { role: "status", className: classes("notice success") },
@@ -1167,7 +1175,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     ),
                   )
                 : null,
-              supportsTranslation && (!props.embedded || revision.value)
+              supportsTranslation && (!props.embedded || revision.value) && (!isThread || threadAdvanced.value || translating.value)
                 ? element(LocalizedContentContext, {
                     kind: isTopic
                       ? "topic"
@@ -1594,7 +1602,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                                     threadAdvanced.value = !threadAdvanced.value;
                                   }),
                                 },
-                                t("更多属性"),
+                                t(threadAdvanced.value ? "收起设置" : "更多选项"),
                               )
                             : null,
                           isThread && threadAdvanced.value
@@ -2256,7 +2264,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     publishPath: props.path,
                     onClose: (pushed: boolean) => {
                       publishing.value = false;
-                      message.value = pushed ? "已与 Git 远端同步；网站上线状态请以部署平台为准。" : "动态已保存在工作区。";
+                      message.value = pushed ? "动态已发送到仓库" : "动态已保存在工作区。";
                     },
                   })
                 : null,

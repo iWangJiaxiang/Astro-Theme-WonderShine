@@ -139,7 +139,7 @@
   .thread-properties-fields, .thread-properties-switches { grid-template-columns: minmax(0, 1fr); gap: 12px; }
 }
 
-.thread-editor .editor-tabs[hidden], .composer-publish .autosave-control[hidden] { display: none; }
+.thread-editor [hidden] { display: none; }
 .composer-tools:not(.expanded) > :not(button) { display: none; }
 .thread-composer .composer-tools { flex-basis: auto; }
 .thread-composer .composer-heading { padding-bottom: 0; }
