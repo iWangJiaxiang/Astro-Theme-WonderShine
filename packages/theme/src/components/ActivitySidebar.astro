@@ -1,8 +1,11 @@
 ---
 import {activitySummary,formatDateTime,plain} from '../lib/queries';
+import {siteFeedFilenames} from '../lib/feeds';
 import {localeHome,t} from '../lib/locale';
-const {site,lang}=Astro.props;
+const {site,lang,current}=Astro.props;
 const summary=activitySummary(site,lang),home=localeHome(lang,site);
+const recent=summary.recent.filter(thread=>thread.url!==current);
+const feeds=siteFeedFilenames(site,lang).filter(name=>['threads.xml','timeline.xml'].includes(name));
 const tr=(key:string)=>t(key,lang,site,'activity');
 ---
 <section class="activity-overview" aria-label={tr('public_overview')}>
@@ -12,14 +15,18 @@ const tr=(key:string)=>t(key,lang,site,'activity');
     <a href={`${home}threads/`}><strong>{summary.threadCount}</strong>{tr('threads')}</a>
     <a href={`${home}topics/`}><strong>{summary.topics.length}</strong>{tr('topics')}</a>
   </div>
-  <h3>{tr('recent')}</h3>
-  {summary.recent.length ? <ul class="activity-recent">{summary.recent.map(thread=><li><a href={thread.url}>{thread.title||plain(thread.html).slice(0,80)||tr('thread')}</a><time datetime={thread.date}>{formatDateTime(thread.date,lang)}</time></li>)}</ul> : <p>{tr('empty')}</p>}
+  {recent.length>0&&<><h3>{tr('recent')}</h3>
+   <ul class="activity-recent">{recent.map(thread=><li><a href={thread.url}>{thread.title||plain(thread.html).slice(0,80)||tr('thread')}</a><time datetime={thread.date}>{formatDateTime(thread.date,lang)}</time></li>)}</ul></>}
   <h3>{tr('topics')}</h3>
   {summary.topics.length ? <ul class="activity-topic-counts">{summary.topics.map(({topic,count})=><li><a href={topic.url}>#{topic.title}<span>{count} {tr('entries')}</span></a></li>)}</ul> : <p>{tr('empty_topics')}</p>}
-  <nav class="activity-subscriptions" aria-label={tr('subscribe')}><a href={`${home}threads.xml`}>{tr('threads')} RSS ↗</a><a href={`${home}timeline.xml`}>{tr('timeline')} RSS ↗</a></nav>
+  {feeds.length>0&&<nav class="activity-subscriptions" aria-label={tr('subscribe')}>{feeds.map(name=>{
+    const kind=name.split('.')[0];
+    return <a href={home+name}>{tr(kind)} RSS ↗</a>;
+  })}</nav>}
 </section>
 <style>
 .activity-overview { margin-top:20px; border-top:1px solid var(--wjx-card-border); padding-top:16px; min-width:0; }
+:global(.card-widget) .activity-overview { margin:0; border:0; padding:0; }
 .activity-overview h3 { font-size:15px; margin:18px 0 8px; }
 .activity-counts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; text-align:center; }
 .activity-counts a { display:flex; flex-direction:column; font-size:13px; }

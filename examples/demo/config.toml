@@ -4,6 +4,7 @@ description = "Stories, ideas and everyday moments."
 author = "Alex"
 default_language = "en"
 generate_feeds = true
+feed_filenames = ["atom.xml", "threads.xml", "timeline.xml"]
 
 [[taxonomies]]
 name = "tags"
@@ -54,3 +55,7 @@ img = "/img/logo.svg"
 
 [extra.locale.zh-CN.sidebar.profile]
 profile_desc = "记录生活，分享想法。"
+
+[extra.locale.zh-CN.top.banner_left]
+title_big = "<div class=\"banners-title-big\">记录灵感与生活</div>"
+title_small = "让每个想法都有归处。"

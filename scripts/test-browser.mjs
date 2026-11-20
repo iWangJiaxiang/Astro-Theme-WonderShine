@@ -13,7 +13,7 @@ const demo = {
   siteRoot: path.join(workspace, 'examples/demo'),
   pages: [
     ['home', '/'], ['article', '/articles/welcome/'],
-    ['thread', '/threads/11111111-2222-4333-8444-555555555555/'],
+    ['threads', '/threads/'], ['thread', '/threads/11111111-2222-4333-8444-555555555555/'],
     ['series', '/collections/field-notes/'], ['tags', '/tags/design/'], ['timeline', '/timeline/'],
     ['chinese', '/zh-CN/'],
   ],
@@ -67,11 +67,70 @@ export async function checkBrowser(options = demo) {
       const background = document.querySelector('#loading-box .loading-bg');
       return (!background || getComputedStyle(background).visibility === 'hidden') && !document.documentElement.hasAttribute('data-astro-transition');
     });
+    const finishLayout = () => page.evaluate(async () => {
+      await new Promise(requestAnimationFrame);
+      // Capture the final responsive layout while leaving persistent animations alone.
+      for (const animation of document.getAnimations()) {
+        if (animation.playState === 'running' && animation.effect?.getComputedTiming().endTime <= 1000) {
+          animation.finish();
+        }
+      }
+    });
     for (const [name, route] of options.pages) {
       requests.length = 0;
       const response = await page.goto(origin + route, { waitUntil: 'networkidle0' });
       assert.equal(response.status(), 200, route);
       await settled();
+      if (options === demo && ['home', 'chinese'].includes(name)) {
+        const prefix = name === 'chinese' ? '/zh-CN' : '';
+        assert.equal(await page.$eval('#todayCard', link => link.pathname), prefix + '/articles/welcome/');
+        for (const width of [1440, 390]) {
+          await page.setViewport({width, height:900});
+          await finishLayout();
+          const toggle = await page.$('#topGroup summary');
+          const label = () => toggle.evaluate(button => button.innerText.trim());
+          const show = name === 'chinese' ? '更多推荐' : 'More recommendations';
+          const hide = name === 'chinese' ? '收起推荐' : 'Hide recommendations';
+          assert.equal(await label(), show);
+          if (width === 390) await toggle.click();
+          else { await toggle.focus(); await page.keyboard.press('Enter'); }
+          assert.equal(await label(), hide);
+          assert.ok(await page.evaluate(() => {
+            const cover = document.querySelector('#todayCard').getBoundingClientRect();
+            const button = document.querySelector('#topGroup summary').getBoundingClientRect();
+            const row = document.querySelector('.recommendation-link').getBoundingClientRect();
+            return cover.height > 0 && cover.bottom <= button.top + 1 && row.top >= button.bottom - 1 && row.height > 0;
+          }));
+          const target = await page.$eval('#topGroup .recommendation-link', link => link.href);
+          assert.ok(new URL(target).pathname.startsWith(prefix + '/collections/'));
+          assert.equal((await fetch(target)).status, 200);
+          await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-recommendations' + (width === 390 ? '-mobile' : '') + '.png')});
+          if (width === 390) await toggle.click();
+          else await page.keyboard.press('Enter');
+          assert.equal(await label(), show);
+          assert.equal(await page.$eval('.recommendation-link', link => link.checkVisibility()), false);
+          assert.ok(await page.$eval('#todayCard', link => link.offsetWidth > 0));
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+          if (width === 390) await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-mobile.png')});
+        }
+        await page.setViewport({width:1440,height:900});
+      }
+      if (options === demo && ['thread', 'threads'].includes(name)) {
+        assert.equal(await page.$eval('#aside-content .card-recent-post .title', link => link.pathname), '/articles/welcome/');
+        assert.ok(await page.$('#aside-content .activity-topic-counts a'));
+        await page.setViewport({width:390,height:844});
+        await finishLayout();
+        assert.ok(await page.evaluate(() => {
+          const aside = document.querySelector('#aside-content').getBoundingClientRect();
+          const links = document.querySelectorAll('#aside-content .card-recent-post .title, #aside-content .activity-topic-counts a');
+          return [...links].every(link => link.getBoundingClientRect().height > 0) && aside.height > 0 && aside.top >= document.querySelector('.activity-main').getBoundingClientRect().bottom
+            && document.documentElement.scrollWidth <= innerWidth;
+        }));
+        await page.$eval('#aside-content', aside => aside.scrollIntoView({behavior:'instant'}));
+        await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-sidebar-mobile.png')});
+        await page.setViewport({width:1440,height:900});
+        await page.evaluate(() => window.scrollTo({top:0,behavior:'instant'}));
+      }
       if (options === demo && ['thread', 'timeline'].includes(name)) {
         const times = await page.$$eval('.thread-author time, .timeline-event[data-kind="thread"] .timeline-date time', nodes => nodes.map(node => ({text:node.textContent,date:node.getAttribute('datetime')})));
         assert.ok(times.length, 'Thread publication times are present');
@@ -94,6 +153,7 @@ export async function checkBrowser(options = demo) {
         await page.screenshot({path:path.join(screenshots,'blog-activity-mobile.png')});
         await page.setViewport({width:1440,height:900});
       }
+      await finishLayout();
       await page.screenshot({ path: path.join(screenshots, `blog-${name}.png`) });
       const broken = await page.$$eval('img', images => images.filter(image => image.offsetParent && image.complete && !image.naturalWidth && image.src.startsWith(location.origin)).map(image => image.src));
       assert.deepEqual(broken, [], route);
