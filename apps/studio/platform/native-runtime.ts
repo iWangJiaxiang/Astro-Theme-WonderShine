@@ -46,14 +46,15 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
   // before opening Git or exposing any workspace operation to the transport.
   await ensureDirectory(files, state);
   const reviewStore = await openNativeWorkspaceReviews(state, base);
-  const git = new NativeGitEngine(files, root, state, profile, http, () => ({ username: profile.username || 'oauth2', password: token }), {
-    store: reviewStore, source: nativeReviewSource(root),
-  });
+  const reviews = { store: reviewStore, source: nativeReviewSource(root) };
+  const engine = new NativeGitEngine(files, root, state, profile, http, () => ({ username: profile.username || 'oauth2', password: token }), reviews);
+  const git = typeof document !== 'undefined' && document.documentElement.dataset.nativeMobile
+    ? (await import('./mobile-git')).mobileGit(files, root, state, profile, http, () => token, reviews) : engine;
   const diagnostics = createLoadDiagnostics(localStorage);
   const progress = diagnostics.progress(onProgress);
   try { await diagnostics.measure('git-open', () => git.open(progress.onProgress, allowClone)); }
   finally { progress.finish(); }
-  const local = new FileRepository(files, root, state, () => git.assertWritable());
+  const local = new FileRepository(files, root, state, () => engine.assertWritable());
   await diagnostics.measure('recovery', () => local.recover());
   const repository = Object.assign(local, { mode: 'git' as const, workspace: git });
   // Bind persisted projections to the actual checkout, not merely a recent-list ID.

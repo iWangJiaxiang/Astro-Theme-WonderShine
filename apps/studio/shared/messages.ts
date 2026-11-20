@@ -576,6 +576,7 @@ export const english: Record<string, string> = {
   "保存此版本": "Save this version",
   "完成": "Done",
   "仓库登录": "Repository sign-in",
+  "Git 处理已中断，请检查工作区后重试。": "Git processing stopped. Check the workspace and try again.",
   "动态已发送到仓库": "Thread sent to the repository",
   "将 {count} 个已保存版本发送到 {branch}。": "Send {count} saved version(s) to {branch}.",
   "此版本包含 {count} 个文件，保存到 {branch}。": "Save these files ({count}) to {branch} as one version.",

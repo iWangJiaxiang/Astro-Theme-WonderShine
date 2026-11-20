@@ -7,9 +7,15 @@ export function createGitHttp(remote: string, requestFetch: typeof fetch): HttpC
     if (url.origin !== origin || url.username || url.password) throw new Error('Git 请求不能越过配置的仓库域名');
     const chunks: Uint8Array[] = [];
     if (request.body) for await (const chunk of request.body) chunks.push(chunk);
-    const body = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.byteLength, 0));
-    let offset = 0;
-    for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+    const single = chunks[0];
+    let body: Uint8Array<ArrayBuffer>;
+    if (chunks.length === 1 && single.buffer instanceof ArrayBuffer) {
+      body = new Uint8Array(single.buffer, single.byteOffset, single.byteLength);
+    } else {
+      body = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.byteLength, 0));
+      let offset = 0;
+      for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+    }
     const response = await requestFetch(request.url, { method: request.method, headers: request.headers, redirect: 'error',
       ...(body.length ? { body } : {}), signal: AbortSignal.timeout(60_000) });
     if (response.status >= 300 && response.status < 400 || response.url && new URL(response.url).origin !== origin) {

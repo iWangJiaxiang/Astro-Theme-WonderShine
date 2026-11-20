@@ -74,7 +74,7 @@ export class NativeGitEngine implements WorkspaceControl {
       await this.files.mkdir(staging);
       try {
         await git.clone({ fs: { promises: this.files }, http: this.http, dir: staging, url: this.profile.url,
-          ...(this.profile.branch ? { ref: this.profile.branch } : {}), singleBranch: true, onAuth: this.credentials, onProgress });
+          ...(this.profile.branch ? { ref: this.profile.branch } : {}), singleBranch: true, nonBlocking: true, batchSize: 8, onAuth: this.credentials, onProgress });
         const detectedBranch = await git.currentBranch({ fs: { promises: this.files }, dir: staging });
         validateBranch(detectedBranch || '');
         if (this.profile.branch && detectedBranch !== this.profile.branch) throw new Error('Clone branch mismatch');
@@ -205,10 +205,10 @@ export class NativeGitEngine implements WorkspaceControl {
       let status = await this.statusUnlocked();
       if (status.diverged) throw new StudioError(409, '本地与远端都有新提交，请先在 Git 工具中合并；双方提交均已保留');
       if (status.behind && status.remoteHead) {
-        await git.checkout({ ...this.options, ref: status.remoteHead, noUpdateHead: true, dryRun: true });
+        await git.checkout({ ...this.options, ref: status.remoteHead, noUpdateHead: true, nonBlocking: true, batchSize: 8, dryRun: true });
         await this.files.writeFile(this.journal + '.tmp', JSON.stringify({ before: status.head, target: status.remoteHead }));
         await this.files.rename(this.journal + '.tmp', this.journal);
-        await git.checkout({ ...this.options, ref: status.remoteHead, noUpdateHead: true });
+        await git.checkout({ ...this.options, ref: status.remoteHead, noUpdateHead: true, nonBlocking: true, batchSize: 8 });
         await git.writeRef({ ...this.options, ref: `refs/heads/${this.profile.branch}`, value: status.remoteHead, force: true });
         await this.files.unlink(this.journal);
         status = await this.statusUnlocked();

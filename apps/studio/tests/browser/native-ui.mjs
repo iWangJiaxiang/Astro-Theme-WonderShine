@@ -43,6 +43,12 @@ try {
   await fs.writeFile(join(root, 'data.toml'), '[post]\ntags=[]\ncategories=[]\n');
   await fs.writeFile(join(root, 'content/articles/example/index.md'), '+++\ntitle="离线文章示例"\ndraft=true\ndate="2026-10-31"\n+++\nNative UI fixture.\n');
   await fs.writeFile(join(root, 'public/uploads/example.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNwinr/HwAE+AKLJh4rzQAAAABJRU5ErkJggg==', 'base64'));
+  // Enough distinct tracked objects to exercise pack work and multiple checkout batches.
+  const assets = join(root, 'assets', 'git-fixture');
+  await fs.mkdir(assets, { recursive: true });
+  for (let index = 0; index < 128; index++) {
+    await fs.writeFile(join(assets, index + '.txt'), ('Asset ' + index + '\n').repeat(512));
+  }
   git(['add', '.']); git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', 'commit', '-m', 'initial']);
   git(['config', 'user.name', 'Folder writer']); git(['config', 'user.email', 'folder@example.test']);
   await fs.cp(root, localRoot, { recursive: true });
@@ -87,6 +93,10 @@ try {
   browser = await puppeteer.launch({ headless: true, executablePath });
   page = await browser.newPage();
   const loadedScripts = new Set();
+  let gitWorkers = 0;
+  page.on('workercreated', worker => {
+    void worker.evaluate(() => self.name).then(name => { if (name === 'Studio Git') gitWorkers++; }).catch(() => {});
+  });
   const runtimeChunks = (await fs.readdir(join(distribution, 'assets'))).filter(name => /^native-runtime-.*\.js$/.test(name));
   assert.ok(runtimeChunks.length > 0, 'Native runtime must be a separate on-demand chunk');
   page.on('request', request => { if (request.resourceType() === 'script') loadedScripts.add(new URL(request.url()).pathname.split('/').at(-1)); });
@@ -594,8 +604,25 @@ try {
   assert.equal(await page.$('.native-connect'), null, 'A cold phone launch reopens the last checkout offline');
   await screenshot('phone-composer', false);
   await page.type('.thread-composer textarea', 'Phone publication fixture');
+  const workersBeforeReview = gitWorkers;
+  await page.evaluate(() => {
+    window.gitFrames = { count: 0, longest: 0 };
+    let previous = performance.now();
+    const tick = now => {
+      if (!window.gitFrames) return;
+      window.gitFrames.count++;
+      window.gitFrames.longest = Math.max(window.gitFrames.longest, now - previous);
+      previous = now;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
   await click('发布动态');
   await page.waitForSelector('dialog.publish-dialog[open] ul li');
+  const frames = await page.evaluate(() => { const result = window.gitFrames; delete window.gitFrames; return result; });
+  assert.ok(gitWorkers > workersBeforeReview, 'The mobile review calculates Git state in a dedicated worker');
+  assert.ok(frames.count >= 2 && frames.longest < 1000, 'The WebView must keep drawing frames during Git review: ' + JSON.stringify(frames));
+  console.log('Mobile Git review with 128 tracked assets:', JSON.stringify(frames));
   assert.equal(await page.$('.thread-composer .language-versions'), null, 'Language tools stay in More options after saving');
   assert.equal(await page.$('.thread-composer .notice.success'), null, 'The review is the active save feedback');
   await screenshot('phone-publish-review', false);
