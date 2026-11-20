@@ -35,19 +35,19 @@ try {
  const settle=()=>page.waitForFunction(()=>!document.querySelector('[aria-busy=true]'));
  const capture=async(name,{expand=false}={})=>{
   if(expand)await page.evaluate(()=>{document.querySelectorAll('.main-content details').forEach(e=>e.open=true);document.querySelectorAll('.structured-toggle[aria-expanded=false]').forEach(e=>e.click());});
-  for(const [width,height]of auditViewports){
+  for (const { width, height, screenshot } of await auditViewports(page)) {
    await page.setViewport({width,height,deviceScaleFactor:1});
    await page.evaluate(async()=>{window.scrollTo(0,0);await document.fonts.ready;await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));await Promise.allSettled(document.getAnimations().filter(a=>a.playState==='running'&&a.effect?.getTiming().iterations!==Infinity).map(a=>a.finished));});
    const issues=await page.evaluate(()=>{
     const visible=e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden';
     const bad=[];
     if(document.documentElement.scrollWidth>innerWidth+1)bad.push({type:'page-overflow',width:document.documentElement.scrollWidth});
-    for(const e of document.querySelectorAll('input:not([type=hidden]):not([type=file]),select,textarea,dialog[open],.modal')){
+    for(const e of document.querySelectorAll('input:not([type=hidden]):not([type=file]),select,textarea,dialog[open]')){
      if(!visible(e)||e.closest('[inert]')||document.querySelector('dialog[open]')&&!e.closest('dialog[open]')||getComputedStyle(e).position==='absolute')continue;
      const r=e.getBoundingClientRect();if(r.width<1||r.height<1)continue;
      if(e.matches('input:not([type=checkbox]):not([type=radio]):not([type=color]),select,textarea')&&!e.closest('.composer-initial-language')&&r.width<72)bad.push({type:'control-squeezed',name:e.name||e.getAttribute('aria-label')||e.closest('label')?.textContent.trim()||e.className,width:Math.round(r.width)});
      if(r.left< -1||r.right>innerWidth+1)bad.push({type:'control-overflow',name:e.name||e.className,width:Math.round(r.width),left:Math.round(r.left)});
-     if(e.matches('dialog,.modal')&&(r.top< -1||r.bottom>innerHeight+1))bad.push({type:'dialog-height',height:Math.round(r.height),top:Math.round(r.top)});
+     if(e.matches('dialog')&&(r.top< -1||r.bottom>innerHeight+1))bad.push({type:'dialog-height',height:Math.round(r.height),top:Math.round(r.top)});
     }
     for(const field of document.querySelectorAll('.field-inline')){
      const [label,control]=field.children;if(!label||!control||!visible(label)||!visible(control)||document.querySelector('dialog[open]')&&!field.closest('dialog[open]'))continue;
@@ -57,7 +57,12 @@ try {
    });
    const titleWidth=await page.$eval('.editor-page > .page-heading > div:first-child',e=>e.getBoundingClientRect().width).catch(()=>null);if(width===1024&&titleWidth!==null&&titleWidth<240)issues.push({type:'editor-title-squeezed',width:titleWidth});
    const sidebar=await page.$eval('.sidebar', e=>e.getBoundingClientRect().right).catch(()=>0);if(width===390&&sidebar>1)issues.push({type:'sidebar-obscures-content',right:sidebar});
-   const file=`${name}-${width}.png`;await page.screenshot({path:join(screenshots,file),fullPage:false});records.push({name,width,height,file,issues});
+   const file = screenshot || issues.length ? `${name}-${width}.png` : null;
+   if (file) {
+     const fullPage = (width === 390 || width === 1440) && !await page.$('dialog[open]');
+     await page.screenshot({ path: join(screenshots, file), fullPage });
+   }
+   records.push({ name, width, height, file, issues });
   }
   await page.setViewport({width:1440,height:1000});console.log('Captured '+name);
  };
@@ -99,7 +104,7 @@ try {
  await click('媒体库');await page.waitForSelector('.media-browser');await capture('media-library',{expand:true});
  await page.select('.language-switcher select','en');await capture('media-library-en');
  await writeFile(join(screenshots,'report.json'),JSON.stringify({records,errors},null,2));
- console.log(JSON.stringify({screenshots:records.length,issues:records.filter(r=>r.issues.length),errors},null,2));
+ console.log(JSON.stringify({measurements:records.length,screenshots:records.filter(r=>r.file).length,issues:records.filter(r=>r.issues.length),errors},null,2));
  if(errors.length||records.some(r=>r.issues.length))throw new Error('Form audit detected layout or browser errors; see report.json');
 } catch(error){if(browser){const pages=await browser.pages();await pages.at(-1)?.screenshot({path:join(screenshots,'failure.png'),fullPage:true});console.error((await pages.at(-1)?.evaluate(()=>document.body.innerText))?.slice(-2000));}throw error;}
 finally{await browser?.close();server.kill('SIGTERM');await new Promise(r=>server.exitCode!==null||server.signalCode?r():server.once('exit',r));await rm(base,{recursive:true,force:true});}

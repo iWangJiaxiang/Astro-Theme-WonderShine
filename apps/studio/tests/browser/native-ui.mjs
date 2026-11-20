@@ -287,9 +287,9 @@ try {
   };
   async function auditNativePage(name) {
     const originalViewport = page.viewport();
-    for (const [width, height] of auditViewports) {
+    for (const { width, height, screenshot: capture } of await auditViewports(page)) {
       await page.setViewport({ width, height });
-      await screenshot(`audit-${name}-${width}`, false);
+      if (capture) await screenshot(`audit-${name}-${width}`, false);
       await noOverflow(`${name} ${width}x${height}`);
     }
     await page.setViewport(originalViewport);
