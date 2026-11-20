@@ -70,8 +70,13 @@ export function createContentTransport(repository: Repository, options: ContentT
         return json(await repository.workspace.createReview());
       }
       if (path === '/api/workspace/commit' && method === 'POST' && repository.workspace) {
-        const body = await input<{ message: string; confirmation?: string }>();
-        return json(await repository.workspace.commit(body?.message, requireWorkspaceConfirmation(body?.confirmation)));
+        const body = await input<{ message: string; confirmation?: string; followUpReview?: boolean }>();
+        const token = requireWorkspaceConfirmation(body?.confirmation);
+        if (body.followUpReview === true && repository.workspace.commitForReview) {
+          await repository.workspace.commitForReview(body.message, token);
+          return json({ committed: true });
+        }
+        return json(await repository.workspace.commit(body?.message, token));
       }
       if (path === '/api/workspace/sync' && method === 'POST' && repository.workspace) {
         const text = new TextDecoder().decode(await readUploadBody(request, 1024 * 1024));

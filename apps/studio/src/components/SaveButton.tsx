@@ -5,8 +5,8 @@ import { rememberSaveMode, saveContext, saveModeLabel } from '../save-preference
 import { t } from '../i18n';
 import { useSignals } from '../reactivity';
 
-type Props = { mode: SaveMode; onModeChange(mode: SaveMode): void; onSave(): void; disabled?: boolean; busy?: boolean; label?: string };
-export default function SaveButton({ mode, onModeChange, onSave, disabled, busy, label }: Props) {
+type Props = { mode: SaveMode; onModeChange(mode: SaveMode): void; onSave(): void; disabled?: boolean; busy?: boolean; label?: string; showModes?: boolean };
+export default function SaveButton({ mode, onModeChange, onSave, disabled, busy, label, showModes = true }: Props) {
   useSignals();
   const [open, setOpen] = useState(false), [error, setError] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
@@ -39,7 +39,7 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
     <button type="button" className="primary save-button-main" disabled={disabled || busy} onClick={onSave}>
       {busy ? t('正在保存…') : label || t(saveModeLabel[mode])}
     </button>
-    <button type="button" className="primary save-button-toggle" ref={trigger} disabled={busy} aria-label={t('选择保存方式')} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => { setError(false); setOpen(!open); }}>⌄</button>
+    {showModes && <button type="button" className="primary save-button-toggle" ref={trigger} disabled={busy} aria-label={t('选择保存方式')} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => { setError(false); setOpen(!open); }}>⌄</button>}
     {open && createPortal(<div id={id} className="save-mode-menu" role="dialog" aria-label={t('保存方式')} ref={panel} style={{ top: position.top, left: position.left }}>
       <div role="radiogroup" aria-label={t('保存方式')} onKeyDown={event => {
         if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;

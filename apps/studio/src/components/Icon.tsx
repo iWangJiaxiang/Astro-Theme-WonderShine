@@ -17,6 +17,9 @@ const Icon: StudioComponent<Props, Events> = component<Props, Events>(
       tag: "M3 3h8l10 10-8 8L3 11ZM7 7h.01",
       globe:
         "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18",
+      thread: "M4 4h16v12H10l-5 4v-4H4ZM8 8h8M8 12h5",
+      more: "M4 12h.1M12 12h.1M20 12h.1",
+      external: "M14 3h7v7M21 3l-11 11M10 5H4v15h15v-6",
       menu: "M4 6h16M4 12h16M4 18h16",
       link: "m10 13 4-4M8 15l-2 2a4 4 0 0 1-5-5l5-5a4 4 0 0 1 6 0M16 9l2-2a4 4 0 0 1 5 5l-5 5a4 4 0 0 1-6 0",
       user: "M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 21v-3a8 8 0 0 1 16 0v3",

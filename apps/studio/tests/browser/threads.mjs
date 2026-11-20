@@ -89,7 +89,7 @@ try {
   assert.equal(thread.draft, true); assert.equal(thread.extra.kind, 'thread');
   assert.deepEqual(thread.extra.topics, [initialTopic.extra.id]);
   assert.equal(thread.extra.thread_root, undefined); assert.equal(thread.extra.reply_to, undefined);
-  await click('本地保存 · 可发布'); await saved(); assert.equal((await metadata(threadPath)).draft, false);
+  await click('保存动态'); await saved(); assert.equal((await metadata(threadPath)).draft, false);
   await click('en · 创建译文草稿'); await page.waitForFunction(() => document.querySelector('.path-label')?.textContent.endsWith('index.en.md'));
   assert.equal(await page.$eval('.markdown-source', input => input.value), '记录一个独立的想法。');
   await fill('.markdown-source', 'An independent thought.'); await click('保存草稿'); await saved();

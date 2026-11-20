@@ -73,8 +73,6 @@
 .reauth-backdrop .login-language { top: 50px; }
 @media (max-width: 760px) {
   .topbar { gap: 8px; }
-  .topbar > .row:first-child { flex-basis: 100%; }
-  .topbar-actions { width: 100%; justify-content: flex-end; }
   .language-switcher select { min-height: 44px; }
   .login-page { padding-top: 88px; }
   .reauth-backdrop .login-page { padding-top: 115px; }

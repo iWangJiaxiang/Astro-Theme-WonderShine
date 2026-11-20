@@ -102,6 +102,136 @@ async function checkBreakpointFocus(page) {
   }
 }
 
+async function checkWorkspaceLayout(page, screenshots) {
+  const sizes = [[320, 568], [390, 844], [768, 1024], [844, 390], [1024, 768], [1440, 900], [1920, 1080]];
+  await page.select('.topbar select', 'en');
+  try {
+    for (const [width, height] of sizes) {
+      await page.setViewport({ width, height });
+      if (width <= 760) await waitForDrawer(page, false);
+      else await waitForDesktopNavigation(page);
+      const layout = await page.evaluate(() => {
+        const rect = selector => document.querySelector(selector).getBoundingClientRect();
+        const topbar = rect('.topbar');
+        const card = rect('.stat-card');
+        const modesVisible = !!document.querySelector('.composer-mode-tabs')?.getClientRects().length;
+        const bar = rect('.mobile-tabbar');
+        const overflow = [...document.querySelectorAll('.topbar :is(button, select, a), .composer-publish :is(button, select)')]
+          .filter(node => node.getClientRects().length)
+          .some(node => node.getBoundingClientRect().right > innerWidth + 1 || node.getBoundingClientRect().left < 0);
+        return {
+          overflow: overflow || document.documentElement.scrollWidth > innerWidth + 1,
+          docked: Math.abs(bar.bottom - innerHeight) < 1 && bar.width === innerWidth,
+          barHeight: bar.height,
+          headerHeight: topbar.height,
+          primaryAboveNavigation: rect('.composer-publish .save-button-main').bottom <= bar.top,
+          modesVisible,
+          cardWidth: card.width,
+        };
+      });
+      assert.equal(layout.overflow, false, `Workspace controls overflow at ${width}x${height}`);
+      assert.ok(layout.cardWidth >= (width <= 760 ? 60 : 120), `Dashboard cards squeezed at ${width}x${height}`);
+      assert.ok(layout.headerHeight <= 76, `Header wraps at ${width}x${height}`);
+      if (width <= 760) assert.ok(layout.docked && layout.barHeight >= 48, 'Phone navigation is anchored and touch sized');
+      else assert.equal(layout.barHeight, 0, 'Desktop uses the sidebar');
+      if (width === 320) assert.ok(layout.primaryAboveNavigation, 'Small phones show the composer action above navigation on launch');
+      assert.equal(layout.modesVisible, false, 'Writing starts without technical mode controls');
+      await page.screenshot({ path: `${screenshots}/workspace-${width}x${height}-en.png` });
+    }
+  } finally {
+    await page.select('.topbar select', 'zh-CN');
+  }
+}
+
+async function checkTouchNavigation(page, screenshots) {
+  // Isolate the unsaved draft and keep touch emulation off the desktop page.
+  const context = await page.browser().createBrowserContext();
+  try {
+    await context.setCookie(...await page.browserContext().cookies());
+    const phone = await context.newPage();
+    const origin = new URL(page.url()).origin;
+    await phone.setRequestInterception(true);
+    phone.on('request', request => request.url().startsWith(origin + '/') || request.url().startsWith('data:') ? request.continue() : request.abort());
+    await phone.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+    await phone.goto(page.url());
+    await waitForDrawer(phone, false);
+    const tab = id => `.mobile-tabbar [data-destination="${id}"]`;
+    const active = id => phone.waitForSelector(tab(id) + '[aria-current="page"]');
+    await active('home');
+    const source = '.thread-composer .markdown-source';
+    await phone.waitForSelector(source);
+    await phone.type(source, 'Keep this draft');
+    await phone.tap(tab('home'));
+    assert.equal(await phone.$eval(source, node => node.value), 'Keep this draft');
+    const cancelled = new Promise(resolve => phone.once('dialog', async dialog => { await dialog.dismiss(); resolve(); }));
+    await Promise.all([cancelled, phone.tap(tab('media'))]);
+    await active('home');
+    assert.equal(await phone.$eval(source, node => node.value), 'Keep this draft');
+    phone.once('dialog', dialog => dialog.accept());
+    await phone.tap(tab('article'));
+    await active('article');
+    await phone.tap(tab('thread'));
+    await active('thread');
+    await phone.tap(tab('media'));
+    await active('media');
+    await phone.waitForSelector('.media-card');
+    await phone.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    assert.ok(await phone.evaluate(() => document.querySelector('.studio-footer').getBoundingClientRect().bottom <=
+      document.querySelector('.mobile-tabbar').getBoundingClientRect().top + 1), 'The final page content clears the bar');
+    await phone.tap(tab('media'));
+    await phone.waitForFunction(() => scrollY === 0);
+    await phone.tap('.mobile-menu');
+    await waitForDrawer(phone, true);
+    await phone.tap('.sidebar nav button[aria-current="page"] + button');
+    await waitForDrawer(phone, false);
+    assert.equal(await phone.$eval('.mobile-menu', node => node.getAttribute('aria-current')), 'true');
+    await phone.tap(tab('article'));
+    await phone.tap('.topbar .icon-button');
+    await phone.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    await phone.screenshot({ path: `${screenshots}/phone-navigation-dark.png` });
+    await phone.setViewport({ width: 844, height: 390, isMobile: true, hasTouch: true, isLandscape: true });
+    await waitForDrawer(phone, false);
+    await phone.tap(tab('media'));
+    await active('media');
+    await phone.tap('.media-search input');
+    assert.equal(await phone.$eval('.mobile-tabbar', node => getComputedStyle(node).visibility), 'hidden');
+    await phone.$eval('.media-search input', node => node.blur());
+    await phone.tap(tab('article'));
+    await active('article');
+    await phone.screenshot({ path: `${screenshots}/phone-navigation-landscape.png` });
+    await phone.tap('.topbar .icon-button');
+    await phone.select('.topbar select', 'zh-CN');
+    await phone.tap('.mobile-menu');
+    await waitForDrawer(phone, true);
+    await phone.$eval('.sidebar nav[aria-label="站点设置"]', nav => [...nav.querySelectorAll('button')].find(button => button.textContent.trim() === '站点信息').click());
+    await phone.waitForSelector('.settings-card input');
+    for (const [width, height] of [[390, 844], [768, 900], [1180, 768]]) {
+      await phone.setViewport({ width, height, isMobile: true, hasTouch: true, isLandscape: width > height });
+      if (width <= 1024) await waitForDrawer(phone, false);
+      else await waitForDesktopNavigation(phone);
+      await phone.evaluate(() => scrollTo(0, 240));
+      await phone.waitForFunction(() => scrollY > 24);
+      const pinned = await phone.evaluate(() => {
+        const header = document.querySelector('.topbar').getBoundingClientRect();
+        const theme = document.querySelector('.topbar .icon-button').getBoundingClientRect();
+        const bar = document.querySelector('.mobile-tabbar').getBoundingClientRect();
+        return {
+          top: header.top, height: header.height,
+          canTap: !!document.elementFromPoint(theme.x + theme.width / 2, theme.y + theme.height / 2)?.closest('.topbar .icon-button'),
+          actionsTop: document.querySelector('.settings-page > .page-heading').getBoundingClientRect().top,
+          bottom: bar.height ? bar.bottom : null,
+        };
+      });
+      assert.ok(Math.abs(pinned.top) <= 1 && pinned.canTap, `Scrolled header at ${width} stays visible and touchable`);
+      assert.ok(pinned.actionsTop >= pinned.height - 1, `Settings actions clear the header at ${width}`);
+      assert.equal(pinned.bottom, width <= 1024 ? height : null);
+      await phone.screenshot({ path: `${screenshots}/scrolled-settings-${width}.png` });
+    }
+  } finally {
+    await context.close();
+  }
+}
+
 export async function checkNavigationAccessibility({ page, screenshots }) {
   for (const width of [320, 390, 760]) {
     await page.setViewport({ width, height: 844, deviceScaleFactor: 1 });
@@ -143,6 +273,8 @@ export async function checkNavigationAccessibility({ page, screenshots }) {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `No horizontal overflow at ${width}`);
     await page.screenshot({ path: `${screenshots}/navigation-${width}.png`, fullPage: true });
   }
+  await checkTouchNavigation(page, screenshots);
+  await checkWorkspaceLayout(page, screenshots);
   await checkBreakpointFocus(page);
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await waitForDesktopNavigation(page);

@@ -31,8 +31,8 @@ let allowCloneHttp = false, failNextHttp = false, failNextBranchWrite = false;
 let releaseDownload = () => {}, releaseCheckout = () => {};
 let downloadGate = Promise.resolve(), checkoutGate = Promise.resolve();
 let writeGate = Promise.resolve(), releaseWrite = () => {};
-const requests = new Map(), responses = new Map();
-let nextResource = 1;
+const requests = new Map(), responses = new Map(), fileHandles = new Map();
+let nextResource = 1, worktreeScans = 0;
 try {
   await fs.mkdir(root, { recursive: true }); await fs.mkdir(screenshots, { recursive: true });
   const git = args => execFileSync('git', args, { cwd: root, stdio: 'pipe' }).toString().trim();
@@ -43,10 +43,17 @@ try {
   await fs.writeFile(join(root, 'data.toml'), '[post]\ntags=[]\ncategories=[]\n');
   await fs.writeFile(join(root, 'content/articles/example/index.md'), '+++\ntitle="离线文章示例"\ndraft=true\ndate="2026-10-31"\n+++\nNative UI fixture.\n');
   await fs.writeFile(join(root, 'public/uploads/example.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNwinr/HwAE+AKLJh4rzQAAAABJRU5ErkJggg==', 'base64'));
+  // Enough distinct tracked objects to exercise pack work and multiple checkout batches.
+  const assets = join(root, 'assets', 'git-fixture');
+  await fs.mkdir(assets, { recursive: true });
+  for (let index = 0; index < 128; index++) {
+    await fs.writeFile(join(assets, index + '.txt'), ('Asset ' + index + '\n').repeat(512));
+  }
   git(['add', '.']); git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', 'commit', '-m', 'initial']);
   git(['config', 'user.name', 'Folder writer']); git(['config', 'user.email', 'folder@example.test']);
   await fs.cp(root, localRoot, { recursive: true });
   execFileSync('git', ['clone', '--bare', root, join(base, 'remote.git')], {stdio:'pipe'});
+  execFileSync('git', ['--git-dir=' + join(base, 'remote.git'), 'config', 'http.receivepack', 'true']);
   execFileSync('git', ['--git-dir=' + join(base, 'remote.git'), 'branch', 'release/blog', 'main']);
   execFileSync('git', ['--git-dir=' + join(base, 'remote.git'), 'symbolic-ref', 'HEAD', 'refs/heads/release/blog']);
   git(['remote', 'add', 'origin', profile.url]); git(['update-ref', 'refs/remotes/origin/main', git(['rev-parse', 'HEAD'])]);
@@ -57,6 +64,12 @@ try {
     const location = resolve(path);
     if (location !== appData && !location.startsWith(appData + sep) && !(folderGranted && (location === localRoot || location.startsWith(localRoot + sep)))) throw new Error('Fixture filesystem request escaped AppData');
     return location;
+  }
+  function fileInfo(stat) {
+    return { size: stat.size, isFile: stat.isFile(), isDirectory: stat.isDirectory(), isSymlink: stat.isSymbolicLink(),
+      mtime: stat.mtime.toISOString(), atime: stat.atime.toISOString(), birthtime: stat.birthtime.toISOString(),
+      readonly: false, fileAttributes: null, mode: stat.mode, dev: stat.dev, ino: stat.ino, nlink: stat.nlink,
+      uid: stat.uid, gid: stat.gid, rdev: stat.rdev, blksize: stat.blksize, blocks: stat.blocks };
   }
   server = createServer(async (request, response) => {
     try {
@@ -80,6 +93,10 @@ try {
   browser = await puppeteer.launch({ headless: true, executablePath });
   page = await browser.newPage();
   const loadedScripts = new Set();
+  let gitWorkers = 0;
+  page.on('workercreated', worker => {
+    void worker.evaluate(() => self.name).then(name => { if (name === 'Studio Git') gitWorkers++; }).catch(() => {});
+  });
   const runtimeChunks = (await fs.readdir(join(distribution, 'assets'))).filter(name => /^native-runtime-.*\.js$/.test(name));
   assert.ok(runtimeChunks.length > 0, 'Native runtime must be a separate on-demand chunk');
   page.on('request', request => { if (request.resourceType() === 'script') loadedScripts.add(new URL(request.url()).pathname.split('/').at(-1)); });
@@ -119,20 +136,36 @@ try {
         if (path.includes('.clone-') && path.endsWith('/config.toml')) await checkoutGate;
         await fs.writeFile(path, new Uint8Array(args));
       } else if (command === 'plugin:fs|rename') await fs.rename(confined(args.oldPath), confined(args.newPath));
-      else if (command.startsWith('plugin:fs|')) {
+      else if (command === 'plugin:fs|open') {
+        const path = confined(args.path);
+        assert.ok(args.options.read || (args.options.write && args.options.createNew));
+        const handle = await fs.open(path, args.options.createNew ? 'wx' : 'r', args.options.mode);
+        value = nextResource++;
+        fileHandles.set(value, handle);
+      } else if (command === 'plugin:fs|read') {
+        const buffer = Buffer.alloc(args.len + 8);
+        const { bytesRead } = await fileHandles.get(args.rid).read(buffer, 0, args.len);
+        // The plugin appends the byte count as a big-endian u64.
+        buffer.writeBigUInt64BE(BigInt(bytesRead), bytesRead);
+        value = Array.from(buffer.subarray(0, bytesRead + 8));
+      } else if (command === 'plugin:fs|write') {
+        const result = await fileHandles.get(args.rid).write(Buffer.from(args.data));
+        value = result.bytesWritten;
+      } else if (command === 'plugin:fs|fstat') {
+        value = fileInfo(await fileHandles.get(args.rid).stat());
+      } else if (command === 'plugin:resources|close' && fileHandles.has(args.rid)) {
+        await fileHandles.get(args.rid).close();
+        fileHandles.delete(args.rid);
+      } else if (command.startsWith('plugin:fs|')) {
         const path = confined(args.path), operation = command.split('|')[1];
         switch (operation) {
-          case 'mkdir': await fs.mkdir(path, { recursive: !!args.options?.recursive }); break;
+          case 'mkdir': await fs.mkdir(path, { recursive: !!args.options?.recursive, mode: args.options?.mode }); break;
           case 'read_file': value = [...await fs.readFile(path)]; break;
-          case 'read_dir': value = (await fs.readdir(path, { withFileTypes: true })).map(item => ({ name: item.name, isFile: item.isFile(), isDirectory: item.isDirectory(), isSymlink: item.isSymbolicLink() })); break;
+          case 'read_dir':
+            if (path.endsWith('/repo/assets/git-fixture')) worktreeScans++;
+            value = (await fs.readdir(path, { withFileTypes: true })).map(item => ({ name: item.name, isFile: item.isFile(), isDirectory: item.isDirectory(), isSymlink: item.isSymbolicLink() })); break;
           case 'remove': { const stat = await fs.lstat(path); if (stat.isDirectory() && !stat.isSymbolicLink()) await fs.rmdir(path); else await fs.unlink(path); break; }
-          case 'stat': case 'lstat': {
-            const stat = await fs[operation](path);
-            value = { size: stat.size, isFile: stat.isFile(), isDirectory: stat.isDirectory(), isSymlink: stat.isSymbolicLink(),
-              mtime: stat.mtime.toISOString(), atime: stat.atime.toISOString(), birthtime: stat.birthtime.toISOString(),
-              readonly: false, fileAttributes: null, mode: null, dev: null, ino: null, nlink: null, uid: null, gid: null, rdev: null, blksize: null, blocks: null };
-            break;
-          }
+          case 'stat': case 'lstat': value = fileInfo(await fs[operation](path)); break;
           default: throw new Error('Unsupported fixture FS command: ' + command);
         }
       } else if (allowOAuthHttp && command === 'plugin:opener|open_url') {
@@ -192,7 +225,7 @@ try {
         if (operation === 'fetch') {
           const config = args.clientConfig, url = new URL(config.url);
           assert.equal(url.origin, 'https://git.example.test');
-          assert.ok(['/remote.git/info/refs', '/remote.git/git-upload-pack'].includes(url.pathname));
+          assert.ok(['/remote.git/info/refs', '/remote.git/git-upload-pack', '/remote.git/git-receive-pack'].includes(url.pathname));
           value = nextResource++; requests.set(value, config);
         } else if (operation === 'fetch_send') {
           await downloadGate;
@@ -230,6 +263,7 @@ try {
     window.__TAURI_INTERNALS__ = {
       invoke: async (command, args = {}, options) => {
         const value = args instanceof Uint8Array ? Array.from(args) : args;
+        if (value.data instanceof Uint8Array) value.data = Array.from(value.data);
         const result = await window.tauriInvoke(command, value, options);
         if (result.error) throw result.error;
         return result.value;
@@ -259,9 +293,9 @@ try {
     await page.goto(origin, { waitUntil: 'networkidle0' });
   };
   const noOverflow = async label => assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, label + ' must fit viewport');
-  const screenshot = async name => {
+  const screenshot = async (name, fullPage = true) => {
     await page.evaluate(async () => { window.scrollTo(0, 0); await document.fonts.ready; for (const animation of document.getAnimations()) { if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) { try { animation.finish(); } catch {} } } await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
-    return page.screenshot({ path: join(screenshots, name + '.png'), fullPage: true });
+    return page.screenshot({ path: join(screenshots, name + '.png'), fullPage });
   };
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.goto(origin, { waitUntil: 'networkidle0' }); await heading('连接创作工作区');
@@ -565,6 +599,54 @@ try {
   assert.equal(saved[0].branch,'release/blog');
   assert.equal(execFileSync('git',['branch','--show-current'],{cwd:join(appData,'workspaces',saved[0].id,'repo')}).toString().trim(),'release/blog');
   await page.select('.language-switcher select', 'zh-CN');
+  allowCloneHttp = false;
+  await restartNativeFixture();
+  await heading('今天，写点什么？');
+  await page.waitForSelector('.thread-composer textarea');
+  assert.equal(await page.$('.native-connect'), null, 'A cold phone launch reopens the last checkout offline');
+  await screenshot('phone-composer', false);
+  await page.type('.thread-composer textarea', 'Phone publication fixture');
+  const workersBeforeReview = gitWorkers;
+  await page.evaluate(() => {
+    window.gitFrames = { count: 0, longest: 0 };
+    let previous = performance.now();
+    const tick = now => {
+      if (!window.gitFrames) return;
+      window.gitFrames.count++;
+      window.gitFrames.longest = Math.max(window.gitFrames.longest, now - previous);
+      previous = now;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await click('发布动态');
+  await page.waitForSelector('dialog.publish-dialog[open] ul li');
+  const frames = await page.evaluate(() => { const result = window.gitFrames; delete window.gitFrames; return result; });
+  assert.ok(gitWorkers > workersBeforeReview, 'The mobile review calculates Git state in a dedicated worker');
+  assert.ok(frames.count >= 2 && frames.longest < 1000, 'The WebView must keep drawing frames during Git review: ' + JSON.stringify(frames));
+  console.log('Mobile Git review with 128 tracked assets:', JSON.stringify(frames));
+  assert.equal(await page.$('.thread-composer .language-versions'), null, 'Language tools stay in More options after saving');
+  assert.equal(await page.$('.thread-composer .notice.success'), null, 'The review is the active save feedback');
+  await screenshot('phone-publish-review', false);
+  await click('稍后');
+  assert.equal(await page.$('dialog.publish-dialog[open]'), null);
+  const scansBeforePublish = worktreeScans;
+  await click('发布动态');
+  await click('保存此版本');
+  await page.waitForFunction(() => document.querySelector('.publish-actions .primary')?.textContent === '确认发布');
+  const remoteArgs = ['--git-dir=' + join(base, 'remote.git')];
+  assert.equal(execFileSync('git', [...remoteArgs, 'log', '-1', '--format=%s', 'release/blog']).toString().trim(), 'initial');
+  allowCloneHttp = true;
+  await click('确认发布');
+  await page.waitForSelector('dialog.publish-dialog[open] [role=status]');
+  await page.waitForFunction(() => document.querySelector('.publish-dialog h2')?.textContent === '动态已发送到仓库');
+  assert.match(execFileSync('git', [...remoteArgs, 'grep', '-l', 'Phone publication fixture', 'release/blog', '--', 'content/threads']).toString(), /index.*\.md/);
+  assert.equal(worktreeScans - scansBeforePublish, 4, 'Each explicit review and each confirmed mutation examines the checkout once');
+  console.log('Mobile publish worktree scans:', worktreeScans - scansBeforePublish);
+  await click('完成');
+  await click('切换工作区'); await heading('连接创作工作区');
+  assert.equal(await page.$('.studio-shell'), null, 'Explicit switching leaves the chooser open');
+  await click('打开工作区'); await heading('今天，写点什么？');
   await click('站点信息'); await page.waitForSelector('.settings-card input');
   assert.deepEqual(await page.$$eval('.settings-card input:not([type=checkbox]):not([type=radio]):not([type=color]), .settings-card select, .settings-card textarea', fields => fields.filter(node => node.getClientRects().length && (parseFloat(getComputedStyle(node).fontSize) < 16 || node.getBoundingClientRect().height < 44)).map(node => node.outerHTML.slice(0,80))), [], 'Native iOS settings retain readable editing size and touch targets');
   await screenshot('settings-iphone'); await noOverflow('iPhone settings');
@@ -593,6 +675,7 @@ try {
 } finally {
   releaseDownload(); releaseCheckout(); releaseWrite(); releaseAccount();
   await browser?.close();
+  await Promise.all([...fileHandles.values()].map(handle => handle.close()));
   if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   await fs.rm(base, { recursive: true, force: true });
 }

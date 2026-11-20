@@ -128,7 +128,7 @@ try {
  await click('工作台');await heading('今天，写点什么？');
  await page.setViewport({width:390,height:844,deviceScaleFactor:1});await page.waitForFunction(() => document.querySelector('.sidebar').getBoundingClientRect().right <= 0);await page.screenshot({path:screenshots+'/dashboard-mobile.png',fullPage:true});
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile overflow');
- await page.click('[aria-label="打开导航"]');await click('友链管理');await heading('友链管理');
+ await page.click('.mobile-menu');await click('友链管理');await heading('友链管理');
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile settings overflow');
  await page.waitForFunction(() => document.querySelector('.sidebar').getBoundingClientRect().right <= 0);await page.screenshot({path:screenshots+'/friends-mobile.png',fullPage:true});
 
