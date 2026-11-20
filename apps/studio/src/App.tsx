@@ -19,6 +19,7 @@ import {
   type EditorHandle,
   type StudioComponent,
 } from "./react-component";
+import ViewTransition from "./components/ViewTransition";
 import LoadingState from "./components/LoadingState";
 import { mediaUploading } from "./media-store";
 import { subscribeWorkspaceChanged } from "./workspace-events";
@@ -715,7 +716,11 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                           ),
                         )
                       : null,
-                    document.value?.mode === "detail"
+                    <ViewTransition
+                      viewId={document.value?.path ?? view.value}
+                      mode={document.value?.mode ?? "section"}
+                    >
+                      {document.value?.mode === "detail"
                       ? element(ThreadDetail, {
                           ref: domRef(editorView),
                           key: `detail:${document.value.path}`,
@@ -1122,7 +1127,8 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                               typeof SettingsView,
                                               "onSaved"
                                             >,
-                                        }),
+                                        })}
+                    </ViewTransition>,
                   ),
                   element(
                     "footer",
