@@ -1,0 +1,2 @@
+// Xcode performs the final link of Rust's static archive against the selected iOS SDK.
+OTHER_LDFLAGS = $(inherited) -lz -liconv
