@@ -635,9 +635,11 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                       "div",
                       { className: classes("row topbar-actions") },
                       props.workspaceSwitcher ? element("button", {
+                        className: classes("workspace-switch"),
+                        title: t("切换工作区"),
                         onClick: domEvent(() => { void logout(); }),
                         disabled: pendingMutations.value > 0,
-                      }, t("切换工作区")) : null,
+                      }, element(Icon, { name: "folder" }), element("span", null, t("切换工作区"))) : null,
                       element(LanguageSwitcher, null),
                       data.value
                         ? element(
@@ -670,8 +672,10 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                               target: "_blank",
                               rel: "noopener noreferrer",
                               className: classes("visit-site"),
+                              title: t("访问主站 ↗"),
                             },
-                            t("访问主站 ↗"),
+                            element(Icon, { name: "external" }),
+                            element("span", null, t("访问主站 ↗")),
                           )
                         : null,
                     ),

@@ -15,7 +15,6 @@
   .studio-shell .field input:not([type=checkbox]):not([type=radio]):not([type=color]) { min-height: 44px; }
   .thread-composer :is(.composer-mode-tabs button, .composer-tool, .choice-compact .choice-trigger, .reference-heading > button, .composer-recovery .text-button, .composer-publish .primary, .composer-initial-language select) { min-height: 44px; }
   .composer-publish { flex-wrap: wrap; }
-  .topbar-actions { flex-wrap: wrap !important; }
   .selection-footer { flex-wrap: wrap; }
   .selection-footer > small { min-width: 0; overflow-wrap: anywhere; }
 }

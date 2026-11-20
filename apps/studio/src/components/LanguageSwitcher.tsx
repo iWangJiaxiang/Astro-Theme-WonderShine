@@ -20,6 +20,7 @@ const LanguageSwitcher: StudioComponent<Props, Events> = component<
         "label",
         { className: classes("language-switcher") },
         element("span", { className: classes("sr-only") }, t("界面语言")),
+        element("span", { className: classes("language-short"), "aria-hidden": true }, locale.value === "en" ? "EN" : "中"),
         element(
           "select",
           {

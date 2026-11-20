@@ -7,7 +7,8 @@
 .sidebar nav button { min-height: 36px; padding: 8px 12px; gap: 10px; }
 .sidebar nav button svg { width: 18px; height: 18px; }
 .sidebar-bottom { flex-shrink: 0; min-height: 60px; padding: 12px 8px 0; margin-top: 0; }
-.topbar { height: 64px; }
+.topbar { min-height: 64px; padding-inline: max(32px, calc((100% - 1510px) / 2 + 32px)); }
+.language-short, .workspace-switch > svg, .visit-site > svg { display: none; }
 .main-content { padding: 28px 32px; }
 .page-heading { margin-bottom: 20px; }
 .page-heading > div:first-child { min-width: 0; }
@@ -99,6 +100,9 @@ h1 { font-size: 26px; margin-bottom: 8px; }
   .main-content { padding-top: 20px; }
   .page-heading { margin-bottom: 16px; }
 }
+@media (min-width: 761px) and (max-width: 980px) {
+  .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 760px) {
   .main-content { padding: 24px 16px; }
   .stats-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
@@ -130,7 +134,31 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 .language-version-bar { gap: 12px; }
 
 @media (max-width: 760px) {
-  .topbar { height: auto; min-height: 64px; row-gap: 12px; }
+  .topbar { flex-wrap: nowrap; gap: 4px; min-height: 56px; padding: 6px 12px; }
+  .topbar > .row:first-child { flex: 1; gap: 4px; }
+  .topbar > .row:first-child > :is(.muted, .breadcrumb) { display: none; }
+  .topbar .mobile-menu { flex-shrink: 0; }
+  .topbar .topbar-actions { gap: 2px; }
+  .topbar :is(.workspace-switch, .visit-site) {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 44px; min-height: 44px; padding: 8px; border: 0; color: inherit;
+  }
+  .topbar :is(.workspace-switch, .visit-site) > svg { display: block; }
+  .topbar :is(.workspace-switch, .visit-site) > span {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+  .stat-card { display: flex; align-items: center; padding: 12px; }
+  .stat-card .stat-icon { flex: none; margin-bottom: 0; }
+  .stat-card .muted { font-size: 12px; overflow-wrap: anywhere; }
+}
+@media (max-width: 480px) {
+  .topbar .language-switcher { position: relative; }
+  .topbar .language-short {
+    display: grid; place-items: center; min-width: 44px; min-height: 44px;
+    color: var(--wjx-theme); font-size: 13px; font-weight: 600;
+  }
+  .topbar .language-switcher select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  .topbar .language-switcher:focus-within { outline: 2px solid var(--wjx-theme); border-radius: 6px; }
 }
 
 /* Keep field actions readable when nested settings narrow the available space. */

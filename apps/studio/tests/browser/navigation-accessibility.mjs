@@ -102,6 +102,42 @@ async function checkBreakpointFocus(page) {
   }
 }
 
+async function checkWorkspaceLayout(page, screenshots) {
+  const sizes = [[320, 568], [390, 844], [768, 1024], [844, 390], [1024, 768], [1440, 900], [1920, 1080]];
+  await page.select('.topbar select', 'en');
+  try {
+    for (const [width, height] of sizes) {
+      await page.setViewport({ width, height });
+      if (width <= 760) await waitForDrawer(page, false);
+      else await waitForDesktopNavigation(page);
+      const layout = await page.evaluate(() => {
+        const rect = selector => document.querySelector(selector).getBoundingClientRect();
+        const topbar = rect('.topbar');
+        const card = rect('.stat-card');
+        const menu = rect('.mobile-menu');
+        const language = rect('.topbar select');
+        const overflow = [...document.querySelectorAll('.topbar :is(button, select, a), .composer-publish :is(button, select)')]
+          .filter(node => node.getClientRects().length)
+          .some(node => node.getBoundingClientRect().right > innerWidth + 1 || node.getBoundingClientRect().left < 0);
+        return {
+          overflow: overflow || document.documentElement.scrollWidth > innerWidth + 1,
+          sameRow: Math.min(menu.bottom, language.bottom) > Math.max(menu.top, language.top),
+          headerHeight: topbar.height,
+          cardWidth: card.width,
+        };
+      });
+      assert.equal(layout.overflow, false, `Workspace controls overflow at ${width}x${height}`);
+      assert.ok(layout.cardWidth >= 120, `Dashboard cards squeezed at ${width}x${height}`);
+      if (width <= 760) {
+        assert.ok(layout.sameRow && layout.headerHeight <= 76, `Mobile header wraps at ${width}x${height}`);
+      }
+      await page.screenshot({ path: `${screenshots}/workspace-${width}x${height}-en.png` });
+    }
+  } finally {
+    await page.select('.topbar select', 'zh-CN');
+  }
+}
+
 export async function checkNavigationAccessibility({ page, screenshots }) {
   for (const width of [320, 390, 760]) {
     await page.setViewport({ width, height: 844, deviceScaleFactor: 1 });
@@ -143,6 +179,7 @@ export async function checkNavigationAccessibility({ page, screenshots }) {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `No horizontal overflow at ${width}`);
     await page.screenshot({ path: `${screenshots}/navigation-${width}.png`, fullPage: true });
   }
+  await checkWorkspaceLayout(page, screenshots);
   await checkBreakpointFocus(page);
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await waitForDesktopNavigation(page);
