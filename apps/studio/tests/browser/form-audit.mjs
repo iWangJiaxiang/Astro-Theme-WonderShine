@@ -89,6 +89,7 @@ try {
  await click('详情');await page.waitForSelector('.thread-detail-page');await capture('thread-detail');await click('编辑动态');await page.waitForSelector('.thread-editor');await capture('thread-editor',{expand:true});
  await click('话题管理');await page.waitForFunction(() => document.querySelector('.page-heading h1')?.textContent === '话题管理');await capture('topics');await click('新建话题');await page.waitForSelector('.editor-page');await capture('topic-editor',{expand:true});
  await click('文章');await page.waitForSelector('.content-row[data-path="content/articles/welcome/index.md"]');await page.click('.content-row[data-path="content/articles/welcome/index.md"]');await page.waitForSelector('.markdown-source');await capture('article-editor',{expand:true});
+ const originalMarkdown = await page.$eval('.markdown-source', field => field.value);
  await click('正文预览');
  await page.waitForSelector('.markdown-preview');
  await capture('article-preview');
@@ -96,6 +97,10 @@ try {
  await page.waitForSelector('.vditor-ir [contenteditable=true]');
  await capture('article-rich-editor');
  await click('Markdown 源码');
+ await page.waitForSelector('.markdown-source');
+ if (await page.$eval('.markdown-source', field => field.value) !== originalMarkdown) {
+   throw new Error('Opening the rich editor changed the source Markdown');
+ }
  await click('＋ 添加语言');await page.waitForSelector('.language-version-create');await capture('add-language');await click('＋ 添加语言');
  await page.select('.language-switcher select','en');await capture('article-editor-en');if(await page.$eval('.autosave-control select', el=>el.selectedOptions[0].textContent)!=='Off')throw new Error('Autosave must follow the UI language');await page.select('.language-switcher select','zh-CN');
  await click('AI 摘要');await page.waitForSelector('dialog[open]');await capture('ai-summary');await click('取消');

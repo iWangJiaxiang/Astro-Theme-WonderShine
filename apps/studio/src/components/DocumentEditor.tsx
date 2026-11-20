@@ -452,6 +452,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       alive = true,
       generation = 0,
       richReady = false;
+    let richBaseline: { source: string; serialized: string } | undefined;
     const storageKey = `studio-draft:${session.value?.identity.method}:${session.value?.identity.id}:${props.path}`;
     const shortcode = computed(() => /\{%|\{\{/.test(body.value));
     const changes = computed(() =>
@@ -678,7 +679,9 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
           ? editor.getValue()
           : undefined,
       (value) => {
-        body.value = richEditorBody(body.value, value);
+        body.value = richBaseline?.serialized === value
+          ? richBaseline.source
+          : richEditorBody(body.value, value);
       },
     );
     function flush() {
@@ -689,6 +692,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       if (sync) flush();
       richSync.cancel();
       generation++;
+      richBaseline = undefined;
       richReady = false;
       const old = editor;
       editor = undefined;
@@ -742,10 +746,11 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
           !editorElement.value
         )
           return;
+        const source = body.value;
         editor = new Vditor(editorElement.value, {
           cdn: `${location.origin}/vendor/vditor`,
           mode: "ir",
-          value: body.value,
+          value: source,
           height: props.embedded ? 180 : isThread ? 360 : 560,
           lang: locale.value === "zh-CN" ? "zh_CN" : "en_US",
           cache: { enable: false },
@@ -783,7 +788,12 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
               richSync.accept(value);
           },
           after: () => {
-            if (generation === instance) richReady = true;
+            queueMicrotask(() => {
+              if (!alive || generation !== instance || !editor) return;
+              // Vditor can normalize Markdown even before the first edit.
+              richBaseline = { source, serialized: editor.getValue() };
+              richReady = true;
+            });
           },
         });
       } catch (e) {
