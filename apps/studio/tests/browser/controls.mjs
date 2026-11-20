@@ -29,9 +29,9 @@ export function chooser(page) {
     await page.waitForSelector(root);
     await revealField(page, root);
     await page.waitForFunction(root => { const el = document.querySelector(root); return el && !el.querySelector('fieldset:disabled, button.choice-trigger:disabled'); }, {}, root);
-    const trigger = await page.$(`${root} > .choice-trigger`);
-    if (trigger) {
-      await trigger.click();
+    const trigger = `${root} > .choice-trigger`;
+    if (await page.$(trigger)) {
+      await page.locator(trigger).click();
       await page.waitForSelector('dialog[open]');
       await page.waitForSelector(`dialog[open] input[value="${value}"]`);
       await page.click(`dialog[open] input[value="${value}"]`);
