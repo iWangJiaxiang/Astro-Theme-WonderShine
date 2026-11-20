@@ -68,11 +68,13 @@ export async function checkBrowser(options = demo) {
       return (!background || getComputedStyle(background).visibility === 'hidden') && !document.documentElement.hasAttribute('data-astro-transition');
     });
     const finishLayout = () => page.evaluate(async () => {
-      await document.fonts.ready;
       await new Promise(requestAnimationFrame);
-      await Promise.allSettled(document.getAnimations()
-        .filter(animation => animation.effect?.getComputedTiming().endTime < Infinity)
-        .map(animation => animation.finished));
+      // Capture the final responsive layout while leaving persistent animations alone.
+      for (const animation of document.getAnimations()) {
+        if (animation.playState === 'running' && animation.effect?.getComputedTiming().endTime <= 1000) {
+          animation.finish();
+        }
+      }
     });
     for (const [name, route] of options.pages) {
       requests.length = 0;
