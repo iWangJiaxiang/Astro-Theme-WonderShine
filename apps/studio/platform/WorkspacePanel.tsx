@@ -11,7 +11,8 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
   useSignals();
   const [status, setStatus] = useState<WorkspaceStatus | null>(null);
   const [message, setMessage] = useState('docs(content): update content');
-  const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState('正在检查工作区…');
+  const busy = !!stage;
   const [error, setError] = useState<Message>('');
   const [notice, setNotice] = useState('');
   const dialog = useRef<HTMLDialogElement>(null);
@@ -29,13 +30,14 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
     const sequence = ++requestSequence.current;
     api<WorkspaceStatus>('/workspace').then(value => {
       if (active && sequence === requestSequence.current) setStatus(value);
-    }).catch(reason => { if (active && sequence === requestSequence.current) setError(errorMessage(reason)); });
+    }).catch(reason => { if (active && sequence === requestSequence.current) setError(errorMessage(reason)); })
+      .finally(() => { if (active && sequence === requestSequence.current) setStage(''); });
     return () => { active = false; };
   }, [publishPath]);
   const [pending, setPending] = useState<'commit' | 'sync' | 'commit-sync' | null>(null);
   async function review(kind: 'commit' | 'sync' | 'commit-sync' | 'publish') {
     const sequence = ++requestSequence.current;
-    setBusy(true); setError(''); setNotice('');
+    setStage('正在检查工作区…'); setError(''); setNotice('');
     try {
       const reviewed = await api<WorkspaceStatus>('/workspace/review', 'POST');
       if (sequence !== requestSequence.current) return;
@@ -43,11 +45,11 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       setStatus(reviewed);
       setPending(kind === 'publish' ? (reviewed.dirty ? 'commit-sync' : 'sync') : kind);
     } catch (reason) { if (sequence === requestSequence.current) { setError(errorMessage(reason)); setPending(null); } }
-    finally { if (sequence === requestSequence.current) setBusy(false); }
+    finally { if (sequence === requestSequence.current) setStage(''); }
   }
   async function action(kind: 'refresh' | 'commit' | 'sync' | 'commit-sync') {
     requestSequence.current++;
-    setBusy(true); setError(''); setNotice('');
+    setStage(kind === 'sync' ? '正在同步仓库…' : kind === 'refresh' ? '正在检查工作区…' : '正在保存版本…'); setError(''); setNotice('');
     let committed = false, syncing = false, reviewSync = false;
     try {
       let current = status;
@@ -63,6 +65,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         if (kind === 'commit-sync') {
           // A commit changes HEAD. Review that new state visibly, never silently
           // replace the user's original token and push an unreviewed state.
+          setStage('正在检查工作区…');
           current = await api<WorkspaceStatus>('/workspace/review', 'POST');
           if (!current.confirmation) throw new Error('工作区已变化，请刷新并重新确认提交范围');
           reviewSync = true;
@@ -86,11 +89,11 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       if (syncing) setNotice(workspaceCommitNotice('unconfirmed'));
       else if (committed && kind === 'commit-sync') setNotice('已提交到设备，尚未推送。请刷新状态后重新确认同步。');
       setError(errorMessage(reason));
-      try { setStatus(await api('/workspace')); } catch { /* Keep the last known status; it cannot confirm a remote outcome. */ }
+      setStatus(null);
     }
     finally {
       if (syncing) notifyWorkspaceChanged();
-      setBusy(false); setPending(reviewSync ? 'sync' : null);
+      setStage(''); setPending(reviewSync ? 'sync' : null);
     }
   }
   if (publishPath) {
@@ -120,14 +123,15 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         {!pushed && <button className="secondary" disabled={busy} onClick={() => onClose?.(false)}>{t('稍后')}</button>}
         {pushed ? <button className="primary" onClick={() => onClose?.(true)}>{t('完成')}</button>
           : <button className="primary" disabled={busy} onClick={() => pending && !blocked ? void action(pending) : void review('publish')}>
-            {t(busy ? '处理中…' : blocked ? '刷新状态' : !pending ? '重试' : pending === 'sync' ? '确认发布' : '保存此版本')}</button>}
+            {t(busy ? stage : blocked ? '刷新状态' : !pending ? '重试' : pending === 'sync' ? '确认发布' : '保存此版本')}</button>}
       </div>
     </dialog>;
   }
   return <section className="settings-page workspace-panel">
     <div className="page-heading"><div><h1>{t('工作区同步')}</h1></div><button disabled={busy || !!pending} onClick={() => void action('refresh')}>{t('刷新状态')}</button></div>
     {error && <p role="alert" className="notice error">{t(error)}</p>}{notice && <p role="status" className="notice success">{t(notice)}</p>}
-    <div className="card workspace-sync-card"><h2>{status?.branch || t('正在读取内容…')}</h2>
+    {busy && <p role="status" className="muted small">{t(stage)}</p>}
+    {status && <div className="card workspace-sync-card"><h2>{status.branch}</h2>
       {status && <><dl className="workspace-status-grid"><div><dt>{t('本地修改')}</dt><dd>{status.changes}</dd></div><div><dt>{t('待推送提交')}</dt><dd>{status.ahead}</dd></div><div><dt>{t('远端新提交（上次获取）')}</dt><dd>{status.behind}</dd></div></dl>
         {status.diverged && <p className="notice error">{t('双方都有新提交。请先在 Git 工具中合并，本地内容会保留。')}</p>}
         <label className="field"><span>{t('提交说明')}</span><input disabled={busy || !!pending} value={message} maxLength={500} onChange={event => setMessage(event.target.value)} /></label>
@@ -144,6 +148,6 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
           <button className="secondary" disabled={busy} onClick={() => setPending(null)}>{t('取消')}</button></div>
         </div>}
         </>}
-    </div>
+    </div>}
   </section>;
 }

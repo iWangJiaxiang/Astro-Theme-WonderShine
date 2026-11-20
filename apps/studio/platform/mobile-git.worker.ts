@@ -12,7 +12,7 @@ async function call<K extends keyof DeviceIO>(method: K, ...args: Parameters<Dev
   else active++;
   const { port1, port2 } = new MessageChannel();
   try {
-    return await new Promise((resolve, reject) => {
+    return await new Promise<Awaited<ReturnType<DeviceIO[K]>>>((resolve, reject) => {
       port1.onmessage = ({ data }) => data.error ? reject(restoreError(data.error)) : resolve(data.value);
       port1.onmessageerror = () => reject(new Error('操作失败'));
       const transfer: Transferable[] = [port2];
