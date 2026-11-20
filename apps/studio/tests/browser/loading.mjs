@@ -27,6 +27,8 @@ export async function checkLoading({ browser, origin, screenshots }) {
       const url = new URL(request.url());
       if (url.origin !== origin) return request.abort();
       requests.push(url.pathname + url.search);
+      // Exercise a cold dashboard even if another page has warmed the shared fixture.
+      if (url.pathname === '/api/content-preview') return request.respond({ contentType: 'application/json', body: 'null' });
       // The dashboard and its embedded composer both request the content library.
       if (holdInitial && ['/api/bootstrap', '/api/content'].includes(url.pathname)) { pending.set(url.pathname, [...(pending.get(url.pathname) || []), request]); return; }
       if ((failContent && url.pathname === '/api/content') || (failDocument && url.pathname === '/api/document')) {
