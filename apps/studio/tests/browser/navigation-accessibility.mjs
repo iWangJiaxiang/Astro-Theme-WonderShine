@@ -115,14 +115,14 @@ async function checkWorkspaceLayout(page, screenshots) {
         const topbar = rect('.topbar');
         const card = rect('.stat-card');
         const tabs = [...document.querySelectorAll('.composer-mode-tabs button')];
-        const menu = rect('.mobile-menu');
-        const language = rect('.topbar select');
+        const bar = rect('.mobile-tabbar');
         const overflow = [...document.querySelectorAll('.topbar :is(button, select, a), .composer-publish :is(button, select)')]
           .filter(node => node.getClientRects().length)
           .some(node => node.getBoundingClientRect().right > innerWidth + 1 || node.getBoundingClientRect().left < 0);
         return {
           overflow: overflow || document.documentElement.scrollWidth > innerWidth + 1,
-          sameRow: Math.min(menu.bottom, language.bottom) > Math.max(menu.top, language.top),
+          docked: Math.abs(bar.bottom - innerHeight) < 1 && bar.width === innerWidth,
+          barHeight: bar.height,
           headerHeight: topbar.height,
           tabRows: new Set(tabs.map(tab => tab.offsetTop)).size,
           cardWidth: card.width,
@@ -131,12 +131,74 @@ async function checkWorkspaceLayout(page, screenshots) {
       assert.equal(layout.overflow, false, `Workspace controls overflow at ${width}x${height}`);
       assert.ok(layout.cardWidth >= 120, `Dashboard cards squeezed at ${width}x${height}`);
       assert.ok(layout.headerHeight <= 76, `Header wraps at ${width}x${height}`);
-      if (width <= 760) assert.ok(layout.sameRow, 'Menu and language controls share a row');
+      if (width <= 760) assert.ok(layout.docked && layout.barHeight >= 48, 'Phone navigation is anchored and touch sized');
+      else assert.equal(layout.barHeight, 0, 'Desktop uses the sidebar');
       if (width <= 480) assert.equal(layout.tabRows, 1, 'All writing modes share a row');
       await page.screenshot({ path: `${screenshots}/workspace-${width}x${height}-en.png` });
     }
   } finally {
     await page.select('.topbar select', 'zh-CN');
+  }
+}
+
+async function checkTouchNavigation(page, screenshots) {
+  // Isolate the unsaved draft and keep touch emulation off the desktop page.
+  const context = await page.browser().createBrowserContext();
+  try {
+    await context.setCookie(...await page.browserContext().cookies());
+    const phone = await context.newPage();
+    const origin = new URL(page.url()).origin;
+    await phone.setRequestInterception(true);
+    phone.on('request', request => request.url().startsWith(origin + '/') || request.url().startsWith('data:') ? request.continue() : request.abort());
+    await phone.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+    await phone.goto(page.url());
+    await waitForDrawer(phone, false);
+    const tab = id => `.mobile-tabbar [data-destination="${id}"]`;
+    const active = id => phone.waitForSelector(tab(id) + '[aria-current="page"]');
+    await active('home');
+    const source = '.thread-composer .markdown-source';
+    await phone.waitForSelector(source);
+    await phone.type(source, 'Keep this draft');
+    await phone.tap(tab('home'));
+    assert.equal(await phone.$eval(source, node => node.value), 'Keep this draft');
+    const cancelled = new Promise(resolve => phone.once('dialog', async dialog => { await dialog.dismiss(); resolve(); }));
+    await Promise.all([cancelled, phone.tap(tab('media'))]);
+    await active('home');
+    assert.equal(await phone.$eval(source, node => node.value), 'Keep this draft');
+    phone.once('dialog', dialog => dialog.accept());
+    await phone.tap(tab('article'));
+    await active('article');
+    await phone.tap(tab('thread'));
+    await active('thread');
+    await phone.tap(tab('media'));
+    await active('media');
+    await phone.waitForSelector('.media-card');
+    await phone.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    assert.ok(await phone.evaluate(() => document.querySelector('.studio-footer').getBoundingClientRect().bottom <=
+      document.querySelector('.mobile-tabbar').getBoundingClientRect().top + 1), 'The final page content clears the bar');
+    await phone.tap(tab('media'));
+    await phone.waitForFunction(() => scrollY === 0);
+    await phone.tap('.mobile-menu');
+    await waitForDrawer(phone, true);
+    await phone.tap('.sidebar nav button[aria-current="page"] + button');
+    await waitForDrawer(phone, false);
+    assert.equal(await phone.$eval('.mobile-menu', node => node.getAttribute('aria-current')), 'true');
+    await phone.tap(tab('article'));
+    await phone.tap('.topbar .icon-button');
+    await phone.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    await phone.screenshot({ path: `${screenshots}/phone-navigation-dark.png` });
+    await phone.setViewport({ width: 844, height: 390, isMobile: true, hasTouch: true, isLandscape: true });
+    await waitForDrawer(phone, false);
+    await phone.tap(tab('media'));
+    await active('media');
+    await phone.tap('.media-search input');
+    assert.equal(await phone.$eval('.mobile-tabbar', node => getComputedStyle(node).visibility), 'hidden');
+    await phone.$eval('.media-search input', node => node.blur());
+    await phone.tap(tab('article'));
+    await active('article');
+    await phone.screenshot({ path: `${screenshots}/phone-navigation-landscape.png` });
+  } finally {
+    await context.close();
   }
 }
 
@@ -181,6 +243,7 @@ export async function checkNavigationAccessibility({ page, screenshots }) {
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `No horizontal overflow at ${width}`);
     await page.screenshot({ path: `${screenshots}/navigation-${width}.png`, fullPage: true });
   }
+  await checkTouchNavigation(page, screenshots);
   await checkWorkspaceLayout(page, screenshots);
   await checkBreakpointFocus(page);
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });

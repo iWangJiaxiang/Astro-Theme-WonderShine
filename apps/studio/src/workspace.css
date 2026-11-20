@@ -139,7 +139,7 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 @media (max-width: 760px) {
   .topbar { flex-wrap: nowrap; gap: 4px; min-height: 56px; padding: 6px 12px; }
   .topbar > .row:first-child { flex: 1; gap: 4px; }
-  .topbar .mobile-menu { flex-shrink: 0; }
+  .topbar > .row:first-child { padding-inline-start: 4px; font-size: 15px; font-weight: 600; }
   .topbar .topbar-actions { gap: 2px; }
   .topbar :is(.workspace-switch, .visit-site) {
     display: inline-flex; align-items: center; justify-content: center;

@@ -70,7 +70,8 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       dirty = ref(false),
       menuOpen = ref(false),
       dark = ref(false);
-    const mobileNavigation = ref(window.matchMedia("(max-width: 760px)").matches);
+    const navigationSize = window.matchMedia("(max-width: 760px), (max-width: 960px) and (max-height: 500px) and (pointer: coarse)");
+    const mobileNavigation = ref(navigationSize.matches);
     let navigationFrame = 0;
     watch(menuOpen, (open) => {
       window.cancelAnimationFrame(navigationFrame);
@@ -80,13 +81,13 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       });
     });
     onMounted(() => {
-      const media = window.matchMedia("(max-width: 760px)");
+      const media = navigationSize;
       const resize = () => {
         const focused = window.document.activeElement;
         // Only migrate controls that this breakpoint hides or makes inert.
         const needsFocus = media.matches
           ? focused?.closest('.sidebar')
-          : focused?.closest('.mobile-menu, .navigation-close, .sidebar-backdrop');
+          : focused?.closest('.mobile-tabbar, .navigation-close, .sidebar-backdrop');
         mobileNavigation.value = media.matches;
         menuOpen.value = false;
         // Replace any drawer-open/close focus request with the breakpoint target.
@@ -157,7 +158,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
     const navigation = [
       { id: "home", label: "工作台", icon: "home" },
       { id: "article", label: "文章", icon: "pen" },
-      { id: "thread", label: "动态", icon: "pen" },
+      { id: "thread", label: "动态", icon: "thread" },
       { id: "topic", label: "话题管理", icon: "tag" },
       { id: "collection", label: "合集管理", icon: "book" },
       { id: "page", label: "页面", icon: "file" },
@@ -166,6 +167,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       { id: "workspace", label: "工作区同步", icon: "globe" },
       { id: "help", label: "使用指南", icon: "book" },
     ];
+    const primaryNavigation = navigation.filter(item => ["home", "article", "thread", "media"].includes(item.id));
     const icons: Record<string, string> = {
       site: "globe",
       navigation: "menu",
@@ -343,6 +345,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       dirty.value = false;
       view.value = next;
       menuOpen.value = false;
+      if (mobileNavigation.value) window.scrollTo(0, 0);
       if (next === "home") void loadArticles();
     }
     function open(
@@ -588,20 +591,6 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                       "div",
                       { className: classes("row") },
                       element(
-                        "button",
-                        {
-                          "aria-label": t("打开导航"),
-                          "aria-expanded": menuOpen.value,
-                          "aria-controls": "studio-navigation",
-                          className: classes("icon-button mobile-menu"),
-                          hidden: !mobileNavigation.value,
-                          onClick: domEvent(($event: Event) => {
-                            menuOpen.value = !menuOpen.value;
-                          }),
-                        },
-                        element(Icon, { name: "menu" }),
-                      ),
-                      element(
                         "span",
                         { className: classes("muted") },
                         t("创作中心"),
@@ -679,6 +668,29 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                           )
                         : null,
                     ),
+                  ),
+                  element(
+                    "nav",
+                    { className: classes("mobile-tabbar"), hidden: !mobileNavigation.value, "aria-label": t("主导航") },
+                    primaryNavigation.map(item => element("button", {
+                      key: item.id,
+                      type: "button",
+                      "data-destination": item.id,
+                      "aria-current": view.value === item.id ? "page" : undefined,
+                      onClick: domEvent(() => {
+                        if (view.value === item.id && !document.value) window.scrollTo(0, 0);
+                        else navigate(item.id);
+                      }),
+                    }, element(Icon, { name: item.icon }), t(item.id === "media" ? "媒体" : item.label))),
+                    element("button", {
+                      type: "button",
+                      hidden: !mobileNavigation.value,
+                      className: classes("mobile-menu"),
+                      "aria-expanded": menuOpen.value,
+                      "aria-controls": "studio-navigation",
+                      "aria-current": primaryNavigation.some(item => item.id === view.value) ? undefined : "true",
+                      onClick: domEvent(() => { menuOpen.value = true; }),
+                    }, element(Icon, { name: "more" }), t("更多")),
                   ),
                   element(
                     "main",
