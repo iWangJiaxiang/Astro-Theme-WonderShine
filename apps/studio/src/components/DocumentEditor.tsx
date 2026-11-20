@@ -29,7 +29,7 @@ import type {
   SaveResult,
   Settings,
 } from "../../shared/types";
-import { api, errorMessage, session } from "../api";
+import { api, errorMessage, session, reauthentication } from "../api";
 import {
   canAutosave,
   readAutosavePreference,
@@ -129,6 +129,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         : saveMode.value === "remote" ? "远端保存 · 可发布" : isThread ? "保存动态" : "本地保存 · 可发布";
       return element(SaveButton, {
         mode: saveMode.value,
+        showModes: !props.embedded || threadAdvanced.value,
         onModeChange: (value: SaveMode) => { saveMode.value = value; },
         busy: busy.value,
         disabled: !direct && !dirty.value && !branchPending.value && saveMode.value !== "branch" && (!publish || values.value.draft === false),
@@ -142,6 +143,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         },
       });
     };
+    watch(reauthentication, required => { if (required) publishing.value = false; });
     function openAi(kind: "summary" | "cover") {
       flush();
       aiSource.value =

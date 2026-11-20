@@ -104,9 +104,11 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         <p>{t(pending === 'sync' ? '将 {count} 个提交推送到 {branch}。' : '将 {count} 个文件提交到 {branch}。', {
           count: pending === 'sync' ? status.ahead : status.managedChanges?.length || 0, branch: status.branch,
         })}</p>
-        {!!status.managedChanges?.length && <ul aria-label={t('本次托管文件范围')}>{status.managedChanges.map(path => <li key={path}>{path}</li>)}</ul>}
+        {!!status.managedChanges?.length && <details open={status.managedChanges.some(path => path !== publishPath)}>
+          <summary>{t('查看文件')}</summary><ul>{status.managedChanges.map(path => <li key={path}>{path}</li>)}</ul>
+        </details>}
       </>}
-      {notice && <p role="status">{t(notice)}</p>}
+      {notice && <p role="status">{t(pushed ? '网站部署后即可查看。' : pending === 'sync' ? '修改已保存，可以发送到仓库。' : notice)}</p>}
       {error && <p className="notice error" role="alert">{t(error)}</p>}
       {blocked && !pushed && <p className="notice error">{t(blocked)}</p>}
       {pending === 'sync' && nativeGitCredential.current && nativeGitCredential.current.id === session.value?.identity.id &&

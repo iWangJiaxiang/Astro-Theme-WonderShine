@@ -30,6 +30,7 @@ const exportsByModule: Record<string, string[]> = {
   './file-repository': ['FileRepository'],
   './git-engine': ['NativeGitEngine'],
   './git-http': ['createGitHttp'],
+  './git-credential': ['nativeGitCredential'],
   './hosting': ['validateProfile', 'validateRemote'],
   './local-workspace': ['inspectLocalRepository'],
   './load-diagnostics': ['createLoadDiagnostics'],
@@ -111,6 +112,7 @@ async function fixture(appData = base + '/', holdState = false) {
       async assertWritable() {}
     } },
     './git-http': { createGitHttp: () => ({}) },
+    './git-credential': { nativeGitCredential: {} },
     './hosting': { validateProfile() {}, validateRemote() {} },
     './local-workspace': { inspectLocalRepository: async () => {
       events.push('local:inspect'); return { branch: 'main', url: 'https://git.example/site.git' };
