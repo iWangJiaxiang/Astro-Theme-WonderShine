@@ -114,6 +114,7 @@ async function checkWorkspaceLayout(page, screenshots) {
         const rect = selector => document.querySelector(selector).getBoundingClientRect();
         const topbar = rect('.topbar');
         const card = rect('.stat-card');
+        const tabs = [...document.querySelectorAll('.composer-mode-tabs button')];
         const menu = rect('.mobile-menu');
         const language = rect('.topbar select');
         const overflow = [...document.querySelectorAll('.topbar :is(button, select, a), .composer-publish :is(button, select)')]
@@ -123,14 +124,15 @@ async function checkWorkspaceLayout(page, screenshots) {
           overflow: overflow || document.documentElement.scrollWidth > innerWidth + 1,
           sameRow: Math.min(menu.bottom, language.bottom) > Math.max(menu.top, language.top),
           headerHeight: topbar.height,
+          tabRows: new Set(tabs.map(tab => tab.offsetTop)).size,
           cardWidth: card.width,
         };
       });
       assert.equal(layout.overflow, false, `Workspace controls overflow at ${width}x${height}`);
       assert.ok(layout.cardWidth >= 120, `Dashboard cards squeezed at ${width}x${height}`);
-      if (width <= 760) {
-        assert.ok(layout.sameRow && layout.headerHeight <= 76, `Mobile header wraps at ${width}x${height}`);
-      }
+      assert.ok(layout.headerHeight <= 76, `Header wraps at ${width}x${height}`);
+      if (width <= 760) assert.ok(layout.sameRow, 'Menu and language controls share a row');
+      if (width <= 480) assert.equal(layout.tabRows, 1, 'All writing modes share a row');
       await page.screenshot({ path: `${screenshots}/workspace-${width}x${height}-en.png` });
     }
   } finally {

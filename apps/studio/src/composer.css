@@ -81,6 +81,12 @@
   .thread-composer .composer-footer { padding-block: 11px 13px; }
 }
 @media (max-width: 480px) {
+  .thread-composer .composer-heading { padding-inline: 16px; gap: 6px; }
+  .thread-composer .composer-mode-tabs {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding-inline: 16px;
+  }
+  .thread-composer .composer-mode-tabs button { padding-inline: 4px; }
+  .thread-composer .composer-mode-tabs > .muted { grid-column: 1 / -1; width: auto; margin: 4px; }
   .thread-composer .composer-footer { margin-inline: 16px; }
   .composer-publish { width: 100%; justify-content: space-between; }
   .composer-publish .autosave-control { flex: 1 1 100%; justify-content: space-between; }
