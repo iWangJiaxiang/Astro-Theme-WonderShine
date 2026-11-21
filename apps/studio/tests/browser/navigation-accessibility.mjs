@@ -171,6 +171,11 @@ async function checkTouchNavigation(page, screenshots) {
     phone.once('dialog', dialog => dialog.accept());
     await phone.tap(tab('article'));
     await active('article');
+    await phone.tap(tab('home'));
+    await phone.waitForSelector('.composer-recovery');
+    await phone.screenshot({ path: `${screenshots}/phone-draft-recovery.png` });
+    await phone.tap(tab('article'));
+    await active('article');
     const swipe = async (from, to, y) => {
       const touch = await phone.touchscreen.touchStart(from, y);
       await touch.move(Math.round((from + to) / 2), y);
