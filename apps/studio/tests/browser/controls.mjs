@@ -66,8 +66,10 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await fill('[name="extra.theme.version"]', '0.2.1');
   await choose('extra.theme.channel', 'canary');
   assert.equal(await page.$eval('[name="extra.theme.version"]', el => el.value), '');
+  await fill('[name="extra.theme.version"]', '0.2.1');
   await page.screenshot({ path: screenshots + '/theme-version-desktop.png' });
   await page.setViewport({ width: 390, height: 844 });
+  await page.waitForFunction(() => document.querySelector('#studio-navigation').getBoundingClientRect().right <= 1);
   await page.screenshot({ path: screenshots + '/theme-version-mobile.png' });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.setViewport({ width: 1440, height: 1000 });
