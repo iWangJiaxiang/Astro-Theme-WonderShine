@@ -7,7 +7,7 @@ import { t } from '../i18n';
 import { useSignals } from '../reactivity';
 import { overlayPosition } from '../overlay-position';
 
-type Props = { mode: SaveMode; onModeChange(mode: SaveMode): void; onSave(): void; disabled?: boolean; busy?: boolean; label?: string; canInteract?(): boolean };
+type Props = { mode: SaveMode; onModeChange(mode: SaveMode): void; onSave(): void; disabled?: boolean; busy?: boolean; label?: string; showModes?: boolean; canInteract?(): boolean };
 export default function SaveButton({ mode, onModeChange, onSave, disabled, busy, label, showModes = true, canInteract }: Props) {
   useSignals();
   const alive = useRef(true);

@@ -12,7 +12,7 @@ const need = value => { if (!value) throw new Error('observer'); };
 // on drift. Approval is not evidence that any bundle or browser case has run.
 export const productContract = Object.freeze({
   approved: true,
-  selectors: Object.freeze({ reload: 'section.notice[role="status"] > button:not(.settings-exit)', exit: '.settings-exit', retired: '.settings-retired', errorRetry: 'p.notice.error[role="alert"] > button' }),
+  selectors: Object.freeze({ reload: 'section.notice[role="status"] > button:not(.settings-exit)', exit: '.settings-exit', retired: '.settings-retired', errorRetry: '.notice.error[role="alert"] > button:not([aria-haspopup])' }),
   neutralMessage: '先前保存的结果无法确认，当前表单和版本信息未更新。',
   // Additional bounded guard probes are separate from the approved 108 Settings
   // capability calls: three sticky-obligation saves and four SaveButton handlers.
