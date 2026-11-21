@@ -172,7 +172,8 @@
 @keyframes sync-rotate { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .quick-sync [aria-busy=true] svg { animation: none; opacity: .6; } }
 .quick-sync [data-updates]::after { content: ""; position: absolute; inset: 3px 3px auto auto; width: 7px; height: 7px; background: var(--wjx-theme); border-radius: 50%; }
-.quick-sync-progress { position: fixed; top: auto; right: 12px; margin-top: 6px; width: min(320px, calc(100vw - 24px)); padding: 12px; border: 1px solid var(--form-rule); border-radius: 8px; background: var(--studio-card); box-shadow: 0 4px 16px #0002; z-index: 2; }
+.quick-sync-progress { margin: auto; width: min(360px, calc(100vw - 32px)); padding: 18px; border: 1px solid var(--form-rule); border-radius: 8px; background: var(--studio-card); box-shadow: 0 4px 16px #0002; z-index: 2; }
+.quick-sync-progress li + li { margin-top: 6px; }
 .quick-sync-progress ol { padding-inline-start: 20px; margin: 0; }
 @media (max-width: 480px) {
   .thread-composer .composer-recovery { display: flex; flex-flow: row wrap; align-items: center; gap: 0 8px; margin-inline: 12px; }

@@ -229,6 +229,7 @@ try {
           requests.delete(args.rid); responses.delete(args.rid);
         } else throw new Error('Unexpected OAuth HTTP operation');
       } else if (command === 'mobile_git') {
+        if (args.job.action === 'checkRemote' && args.profile.url === mobile.url) assert.equal(args.password, 'fixture-token');
         mobile.setOnline(allowCloneHttp);
         if (args.job.action === 'open' && args.job.clone) {
           await downloadGate;
@@ -675,6 +676,7 @@ try {
   assert.equal(await page.$eval('input[placeholder="自动识别默认分支"]', input => input.value), '');
   assert.equal(await page.$eval('input[placeholder="自动识别默认分支"]', input => input.required), false);
   await page.click('.connection-options summary');
+  await page.type('.connection-fields input[type=password]', 'fixture-token');
   allowCloneHttp = true; failNextHttp = true;
   await click('下载并开始创作'); await page.waitForSelector('[role=alert]');
   assert.equal(await page.$('.connection-progress'),null,'failed connection removes stale progress');
@@ -702,6 +704,8 @@ try {
   assert.equal(saved[0].branch,'release/blog');
   assert.equal(execFileSync('git',['branch','--show-current'],{cwd:join(appData,'workspaces',saved[0].id,'repo')}).toString().trim(),'release/blog');
   await page.select('.language-switcher select', 'zh-CN');
+  assert.ok([...keyring.values()].some(secret => JSON.parse(secret).token === 'fixture-token'));
+  assert.ok(!await page.evaluate(() => JSON.stringify(localStorage).includes('fixture-token')));
   allowCloneHttp = false;
   await restartNativeFixture();
   await heading('今天，写点什么？');

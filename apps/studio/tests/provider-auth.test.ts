@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { translate } from '../shared/i18n.js';
-import { beginDeviceLogin, completeDeviceLogin, listRepositories, loadAccount, verificationUrl, delay, ProviderAuthError, type ProviderFetch, type ProviderAccount } from '../platform/provider-auth.js';
+import { renewGitGrant, beginDeviceLogin, completeDeviceLogin, listRepositories, loadAccount, verificationUrl, delay, ProviderAuthError, type ProviderFetch, type ProviderAccount } from '../platform/provider-auth.js';
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
 const signal = () => new AbortController().signal;
 for (const provider of ['github', 'cnb'] as const) {
@@ -170,4 +170,19 @@ test('repository pagination and origin are constrained', async () => {
   assert.equal(result.more, true); assert.match(url, /page=2/);
   await assert.rejects(listRepositories(account, 0, async () => response([]), signal()));
   await assert.rejects(listRepositories(account, 1, async () => response([{ id: 1, path: '../evil' }]), signal()));
+});
+
+test('expiring OAuth grants rotate at the issuing provider and revoked grants require sign-in', async () => {
+  const now = Date.now();
+  const current = { token: 'old', clientId: 'public', refreshToken: 'rotate', expiresAt: now };
+  const renewed = await renewGitGrant('cnb', current, async (url, init) => {
+    assert.equal(url, 'https://cnb.cool/oauth2/token');
+    assert.equal(init?.redirect, 'error');
+    assert.deepEqual(Object.fromEntries(new URLSearchParams(String(init?.body))), { client_id: 'public', refresh_token: 'rotate', grant_type: 'refresh_token' });
+    return response({ token_type: 'Bearer', access_token: 'next', refresh_token: 'rotated', expires_in: 3600 });
+  }, signal());
+  assert.equal(renewed.token, 'next');
+  assert.equal(renewed.refreshToken, 'rotated');
+  assert.ok(renewed.expiresAt! >= now + 3600000);
+  await assert.rejects(renewGitGrant('github', current, async () => response({ error: 'invalid_grant' }, 400), signal()), /重新登录/);
 });

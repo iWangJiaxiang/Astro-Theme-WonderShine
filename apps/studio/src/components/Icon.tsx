@@ -12,6 +12,7 @@ const Icon: StudioComponent<Props, Events> = component<Props, Events>(
       home: "M3 10 12 3l9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z",
       pen: "m16 3 5 5-12 12-6 1 1-6ZM14 5l5 5",
       book: "M3 4h6a4 4 0 0 1 3 2 4 4 0 0 1 3-2h6v15h-6a4 4 0 0 0-3 2 4 4 0 0 0-3-2H3ZM12 6v15",
+      sync: "M20 8a8 8 0 0 0-14-2L3 9m0-6v6h6M4 16a8 8 0 0 0 14 2l3-3m0 6v-6h-6",
       switchWorkspace: "M3 7h16l-4-4M21 17H5l4 4M19 7l-4 4M5 17l4-4",
       folder: "M3 7V4h6l3 3h9v13H3Z",
       file: "M5 3h10l4 4v14H5ZM14 3v5h5M8 12h8M8 16h6",

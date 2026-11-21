@@ -115,6 +115,12 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
   const credentialField = canSignIn && (pending === 'sync' || pending === 'publish') &&
     <details className="publish-credential" open={authFailed || !credential.hasToken()}>
       <summary>{t('仓库登录')}</summary>
+      {credential.hasToken() && <button type="button" className="text-button" disabled={busy} onClick={async () => {
+        setStage('处理中…');
+        try { await credential.set(''); setNotice('已移除仓库授权'); setAuthFailed(true); }
+        catch (reason) { setError(errorMessage(reason)); }
+        finally { setStage(''); }
+      }}>{t('忘记仓库授权')}</button>}
       <label className="field">{t('访问令牌')}<input ref={tokenInput} type="password" disabled={busy} autoComplete="off" placeholder={t('保存到系统凭据存储')} /></label>
     </details>;
   if (publishPath) {

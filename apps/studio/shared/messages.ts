@@ -1,5 +1,9 @@
 // Application copy only. Site content and stored configuration values are never translated.
 export const english: Record<string, string> = {
+  "已合入远端更新": "Integrated remote changes",
+  "已推送本地提交": "Pushed local commits",
+  "忘记仓库授权": "Forget repository credentials",
+  "已移除仓库授权": "Repository credentials removed",
   "引用": "Reference",
   "界面设置": "Interface settings",
   "无法打开主站，请检查系统浏览器。": "Could not open the site. Check your default browser.",

@@ -656,8 +656,8 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                       <button className="theme-switch" aria-pressed={dark.value} onClick={() => {
                         dark.value = !dark.value;
                         try { localStorage.setItem("studio-theme", dark.value ? "dark" : "light"); } catch {}
-                      }}><Icon name={dark.value ? "sun" : "moon"} />{t("切换明暗模式")}</button>
-                      {props.workspaceSwitcher && <button disabled={pendingMutations.value > 0} onClick={() => void logout()}><Icon name="switchWorkspace" />{t("切换工作区")}</button>}
+                      }}><Icon size={18} name={dark.value ? "sun" : "moon"} />{t("切换明暗模式")}</button>
+                      {props.workspaceSwitcher && <button disabled={pendingMutations.value > 0} onClick={() => void logout()}><Icon size={18} name="switchWorkspace" />{t("切换工作区")}</button>}
                     </details>,
                   ),
                   element(LegacyRecovery, null),

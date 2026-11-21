@@ -5,6 +5,7 @@ import { useSignals } from '../reactivity';
 import { notifyWorkspaceChanged } from '../workspace-events';
 import type { WorkspaceStatus } from '../../shared/workspace';
 import Icon from './Icon';
+import Modal from './Modal';
 import { ErrorNotice } from './ErrorNotice';
 
 type Counts = Pick<WorkspaceStatus, 'ahead' | 'behind'>;
@@ -15,6 +16,7 @@ export function QuickSync({ editing, onManage }: { editing: () => boolean; onMan
   const owner = useRef(0), running = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [busy, setBusy] = useState(true), [updates, setUpdates] = useState(false);
+  const [visible, setVisible] = useState(false);
   const [steps, setSteps] = useState<Message[]>([]), [error, setError] = useState<Message>('');
   const [hint, setHint] = useState<Message>('同步 Git');
   useEffect(() => {
@@ -37,6 +39,7 @@ export function QuickSync({ editing, onManage }: { editing: () => boolean; onMan
       if (active !== owner.current) return;
       setUpdates(ahead + behind > 0);
       if (!ahead && !behind) { setHint('分支已同步'); return; }
+      setVisible(true);
       setSteps([{ key: '待拉取 {behind} 个提交，待推送 {ahead} 个提交', params: { ahead, behind } }]);
       const review = await api<WorkspaceStatus>('/workspace/review', 'POST');
       if (active !== owner.current) return;
@@ -45,20 +48,20 @@ export function QuickSync({ editing, onManage }: { editing: () => boolean; onMan
       setSteps(current => [...current, { key: '正在同步分支 {branch}…', params: { branch: review.branch } }]);
       await api('/workspace/sync', 'POST', { confirmation: review.confirmation });
       if (active !== owner.current) return;
-      setSteps(current => [...current, '分支已同步']); setUpdates(false); setHint('分支已同步');
+      setSteps(current => [...current, ...(behind ? ['已合入远端更新'] : []), ...(ahead ? ['已推送本地提交'] : []), '分支已同步']); setUpdates(false); setHint('分支已同步');
       notifyWorkspaceChanged();
       timer.current = setTimeout(() => setSteps([]), 1800);
     } catch (reason) {
-      if (active === owner.current) setError(errorMessage(reason));
+      if (active === owner.current) { setError(errorMessage(reason)); setVisible(true); }
     } finally {
       if (active === owner.current) { running.current = false; setBusy(false); }
     }
   }
   return <div className="quick-sync">
     <button className="icon-button" type="button" aria-label={t('同步 Git')} title={t(updates ? '有提交待同步' : hint)}
-      disabled={busy} data-updates={updates || undefined} aria-busy={busy} onClick={() => void sync()}><Icon name="switchWorkspace" /></button>
-    {(steps.length > 0 || error) && <section className="quick-sync-progress" aria-label={t('同步 Git')}><ol role="status">{steps.map((step, i) => <li key={i}>{t(step)}</li>)}</ol>
+      disabled={busy} data-updates={updates || undefined} aria-busy={busy} onClick={() => void sync()}><Icon name="sync" size={20} /></button>
+    {visible && (steps.length > 0 || error) && <Modal className="quick-sync-progress" label={t('同步 Git')} onCancel={() => setVisible(false)}><h2>{t('同步 Git')}</h2><ol role="status">{steps.map((step, i) => <li key={i}>{t(step)}</li>)}</ol>
       {error && <><ErrorNotice source="QuickSync" message={error} /><button onClick={() => { setSteps([]); setError(''); onManage(); }}>{t('工作区同步')}</button> <button onClick={() => { setSteps([]); setError(''); }}>{t('关闭')}</button></>}
-    </section>}
+    </Modal>}
   </div>;
 }
