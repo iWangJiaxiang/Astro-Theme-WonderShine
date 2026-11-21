@@ -182,4 +182,5 @@
     text-align: center;
   }
   .thread-composer .composer-tools .choice-trigger > span:not(.choice-count) { max-width: 100%; }
+  .thread-composer .composer-tools .choice-trigger:not(:has(.choice-count)) > span { white-space: normal; }
 }

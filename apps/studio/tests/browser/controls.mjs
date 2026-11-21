@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 export async function revealField(page, selector) {
   await page.waitForSelector(selector);
   // Structured forms now start collapsed; open their summaries from the outside in.
-  const handles = await page.evaluateHandle(selector => {
+  await page.evaluate(selector => {
     const summaries = [];
     for (let node = document.querySelector(selector)?.parentElement; node; node = node.parentElement) {
       if (node instanceof HTMLDetailsElement && !node.open) summaries.unshift(node.querySelector(':scope > summary'));
@@ -12,14 +12,9 @@ export async function revealField(page, selector) {
         if (toggle) summaries.unshift(toggle);
       }
     }
-    return summaries;
+    for (const summary of summaries) summary.click();
   }, selector);
-  for (const handle of (await handles.getProperties()).values()) {
-    const element = handle.asElement();
-    if (element) await element.click();
-    await handle.dispose();
-  }
-  await handles.dispose();
+  await page.waitForSelector(selector, { visible: true });
 }
 
 // Exercise real radios/checkboxes and the dialog, without hidden native selects.

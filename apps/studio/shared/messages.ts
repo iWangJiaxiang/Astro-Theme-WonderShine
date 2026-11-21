@@ -429,7 +429,7 @@ export const english: Record<string, string> = {
   "记录想法，分享一篇好文章。": "Capture a thought or share a good article.",
   "＋ 新动态": "＋ New thread",
   "收起属性": "Fewer properties",
-  "引用文章": "Reference an article",
+  "引用文章": "Cite article",
   "本站": "Internal",
   "外部": "External",
   "本站文章": "Site articles",
