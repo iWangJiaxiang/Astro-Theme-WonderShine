@@ -10,39 +10,45 @@
       "state": "commented",
       "updated_at": "2026-11-18",
       "note": "Explained explicit report_incomplete signal versus actual build failure; no logs establish execution failure. Await maintainer acknowledgement; do not repeat comment."
+    },
+    {
+      "number": 18,
+      "state": "commented",
+      "updated_at": "2026-11-21",
+      "note": "Verified b04f230 removed manual bootstrap publication; posted evidence and recommended closing. Static review only; no tests/publication executed."
     }
   ],
   "fixes": [],
   "checks": [
     {
       "area": "code",
-      "checked_at": "2026-11-19",
-      "result": "Tasks 10,3 and fallbacks 2,1: verified four open issues and comments; no human replies, no unlabelled issues or Repo Assist PRs. CSS null-status bug remains #13; no duplicate fix attempted.",
-      "follow_up": "#13 needs remote validation capability; #15 existing documentation branch awaits review."
+      "checked_at": "2026-11-21",
+      "result": "Tasks 2,5: checked five issues and comments, no open PRs; inspected CSS subprocess and routes. New main commit b04f230 resolves #18; commented with evidence and close recommendation.",
+      "follow_up": "Retain #13 remote-validation prerequisite and #15 branch review; #18 can be closed after reviewing evidence."
     },
     {
       "area": "performance",
-      "checked_at": "2026-11-19",
-      "result": "Task 8: inspected responsive-images.ts and image-assets.ts: digest promise deduplication, four workers, encoding recipe cache, copied variant set and manifest version cache already present. No measured new opportunity; no benchmark executed.",
-      "follow_up": "Require comparable remote measurements before performance changes."
+      "checked_at": "2026-11-21",
+      "result": "Inspected responsive image encoder and manifest: recipe cache, promise deduplication, four workers and copied set present. No measured new optimization; no benchmark run.",
+      "follow_up": "Retain #13 remote-validation prerequisite and #15 branch review; #18 can be closed after reviewing evidence."
     },
     {
       "area": "build",
-      "checked_at": "2026-11-19",
-      "result": "Fallback 9: inspected images.test.ts, npm-release.test.mjs and test-package.mjs. Image reuse/no-enlargement and actual tgz consumer covered; CSS failure-path gap already tracked in #13.",
-      "follow_up": "Do not duplicate #13; tests not executed locally."
+      "checked_at": "2026-11-21",
+      "result": "Task 9: inspected image safety/cache/error tests, npm release tests and tgz consumer. Manual dispatch now cannot publish; CSS failure-path gap remains #13. No tests run.",
+      "follow_up": "Retain #13 remote-validation prerequisite and #15 branch review; #18 can be closed after reviewing evidence."
     },
     {
       "area": "docs",
-      "checked_at": "2026-11-20",
-      "result": "Tasks 7,3,5: reviewed all five open issues/comments, open PRs, build-theme.mjs, Starter dependency, releasing.md, npm-release.mjs and routes.ts. No new human activity; existing #13/#15/#18 cover verified candidates. Consolidated duplicated monthly summary and replaced unresolved temporary #18 link.",
-      "follow_up": "#13 requires remote validation before fix PR; #15 existing documentation branch awaits review; #18 awaits bootstrap policy decision. No local install/build/tests or remote validation executed."
+      "checked_at": "2026-11-21",
+      "result": "Compared releasing.md, npm-releases.md and Starter 0.3.0 dependency. #15 still covers stale workspace wording; #18 now resolved in code. No duplicate change.",
+      "follow_up": "Retain #13 remote-validation prerequisite and #15 branch review; #18 can be closed after reviewing evidence."
     },
     {
       "area": "ci",
-      "checked_at": "2026-11-20",
-      "result": "Tasks 10,1,4 and fallback 2: five labelled issues, comments and PR checked; no new human activity. Sweep 9,8,7,5: release tests/tgz consumer, image encoder, Starter docs and routes inspected. Candidates already tracked by #13/#15/#18; no new action.",
-      "follow_up": "#13 remote validation unavailable; local execution prohibited. #15 existing branch awaits review; #18 policy pending. No source changes or tests."
+      "checked_at": "2026-11-21",
+      "result": "Inspected ci.yml and npm-publish.yml. No remote dispatch write tool; no local install/build/test. Scheduled assessment completed with #18 resolution guidance; no new PR.",
+      "follow_up": "Retain #13 remote-validation prerequisite and #15 branch review; #18 can be closed after reviewing evidence."
     }
   ],
   "completed_actions": [],
