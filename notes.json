@@ -39,16 +39,16 @@
       "follow_up": "Retain #13 remote-validation prerequisite and #15 branch review; #18 can be closed after reviewing evidence."
     },
     {
-      "area": "docs",
-      "checked_at": "2026-11-21",
-      "result": "Compared releasing.md, npm-releases.md and Starter 0.3.0 dependency. #15 still covers stale workspace wording; #18 now resolved in code. No duplicate change.",
-      "follow_up": "Retain #13 remote-validation prerequisite and #15 branch review; #18 can be closed after reviewing evidence."
-    },
-    {
       "area": "ci",
       "checked_at": "2026-11-21",
       "result": "Inspected ci.yml and npm-publish.yml. No remote dispatch write tool; no local install/build/test. Scheduled assessment completed with #18 resolution guidance; no new PR.",
       "follow_up": "Retain #13 remote-validation prerequisite and #15 branch review; #18 can be closed after reviewing evidence."
+    },
+    {
+      "area": "docs",
+      "checked_at": "2026-11-21",
+      "result": "Tasks 4,5,3 and fallbacks reviewed CSS build, CI, routes, image tests/encoder, backlog and docs. No new human comments or PRs. Prepared #14 duplicate-body cleanup preserving history and pending actions.",
+      "follow_up": "#13 needs fix and remote CI; #15 awaits branch review; #18 closure guidance posted. No builds/tests run."
     }
   ],
   "completed_actions": [],
