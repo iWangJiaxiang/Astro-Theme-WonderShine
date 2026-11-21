@@ -779,7 +779,6 @@ export const english: Record<string, string> = {
   "设置": "Settings",
   "共 {count} 项": "{count} items",
   " · 当前层级": " · Current level",
-  "网站内容将在下次部署后更新": "The live site updates after the next deployment",
   "上一页": "Previous",
   "下一页": "Next",
   "开始新的创作": "Create content",

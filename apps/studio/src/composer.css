@@ -159,3 +159,27 @@
   .page-heading:has(+ .thread-composer) h1 { font-size: 20px; }
   .thread-composer .markdown-source { min-height: 80px; height: 80px; padding: 10px 16px; }
 }
+
+@media (max-width: 480px) {
+  .thread-composer .composer-tools:not(:has(.reference-chips li)) {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: start;
+    gap: 2px;
+  }
+  .composer-tools:not(:has(.reference-chips li)) :is(.reference-heading, .reference-compact) { display: block; }
+  .thread-composer .composer-tools:not(:has(.reference-chips li)) :is(.composer-tool, .choice-trigger, .reference-heading > button) {
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 3px;
+    width: 100%;
+    padding: 5px 2px;
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: center;
+  }
+  .thread-composer .composer-tools .choice-trigger > span:not(.choice-count) { max-width: 100%; }
+}

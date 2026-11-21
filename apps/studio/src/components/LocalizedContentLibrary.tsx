@@ -483,8 +483,6 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
                   "span",
                   null,
                   t("共 {count} 项", { count: filtered.value.length }),
-                  " · ",
-                  t("网站内容将在下次部署后更新"),
                 ),
                 pages.value > 1
                   ? element(

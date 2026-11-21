@@ -698,8 +698,6 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                   props.kind === "collection" && !searchable.value
                     ? t(" · 当前层级")
                     : "",
-                  " · ",
-                  t("网站内容将在下次部署后更新"),
                 ),
                 pages.value > 1
                   ? element(

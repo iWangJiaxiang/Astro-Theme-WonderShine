@@ -615,11 +615,6 @@ const ThreadDetail: StudioComponent<Props, Events> = component<Props, Events>(
                               )
                             : null,
                         ),
-                        element(
-                          "p",
-                          { className: classes("muted small") },
-                          t("网站内容将在下次部署后更新"),
-                        ),
                       ),
                       element(
                         "details",
