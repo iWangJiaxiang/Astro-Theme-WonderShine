@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { SaveMode } from '../../shared/save';
@@ -54,7 +55,7 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
         </button>)}
       </div>
       <button type="button" className="save-mode-default" disabled={mode === context.defaultMode} onClick={() => { if (rememberSaveMode(mode)) { setOpen(false); trigger.current?.focus(); } else setError(true); }}>{t('将当前方式设为默认')}</button>
-      {error && <p role="alert">{t('无法记住偏好，请检查本地存储权限')}</p>}
+      {error && <ErrorNotice source="SaveButton" message="无法记住偏好，请检查本地存储权限" />}
     </div>, document.body)}
   </div>;
 }

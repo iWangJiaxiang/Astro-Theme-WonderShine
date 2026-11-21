@@ -1,3 +1,4 @@
+import { StudioError } from '../core/errors';
 import { ref, watch } from './reactivity';
 import { InflightQuery } from './inflight-query';
 import { locale, type Message } from './i18n';
@@ -8,6 +9,7 @@ export const reauthentication = ref(false);
 export class ApiError extends Error { constructor(message: string, public status: number, public params?: MessageParams) { super(message); } }
 export type ApiTransport = (path: string, init: RequestInit) => Promise<Response>;
 let transport: ApiTransport = (path, init) => fetch(`/api${path}`, init);
+const failedRequests = new WeakMap<Error, string>();
 const contentQueries = new InflightQuery();
 let transportGeneration = 0;
 let scopeGeneration = 0;
@@ -65,6 +67,14 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
       }
     }
     return await request<T>(path, method, body);
+  } catch (error) {
+    if (error instanceof Error) {
+      // Only keep the API operation. Paths below a resource, query strings and bodies may contain user data.
+      const route = path.split(/[?#]/, 1)[0];
+      const match = /^\/(workspace\/(?:publish|commit|sync|review)|[a-z-]+)(?:\/|$)/.exec(route);
+      if (match) failedRequests.set(error, method + ' /' + match[1]);
+    }
+    throw error;
   } finally {
     if (mutation) {
       contentQueries.invalidate();
@@ -99,4 +109,10 @@ async function request<T>(path: string, method: string, body?: unknown, signal?:
   }
   return data as T;
 }
-export const errorMessage = (error: unknown): Message => error instanceof ApiError ? { key: error.message, params: error.params } : error instanceof Error ? error.message : '操作失败';
+export function errorMessage(error: unknown): Message {
+  if (!(error instanceof Error)) return '操作失败';
+  const apiError = error instanceof ApiError ? error : undefined;
+  return { key: error.message || '操作失败', params: apiError?.params ?? (error instanceof StudioError ? error.params : undefined), diagnostic: {
+    request: failedRequests.get(error), status: apiError?.status, type: apiError ? 'ApiError' : error.name, at: new Date().toISOString(),
+  } };
+}

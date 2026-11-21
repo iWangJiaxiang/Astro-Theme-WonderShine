@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import {
   documentDirectory,
   imageExtension,
@@ -309,9 +310,8 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
                 : null,
               error.value
                 ? element(
-                    "p",
-                    { role: "alert", className: classes("notice error") },
-                    t(error.value),
+                    ErrorNotice,
+                    { source: "MediaUpload", message: error.value },
                   )
                 : null,
               results.value.length
@@ -339,11 +339,8 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
                               t("已上传：{name}", { name: result.item.name }),
                             )
                           : element(
-                              "span",
-                              { className: classes("upload-error") },
-                              result.name,
-                              " — ",
-                              t(result.error),
+                              ErrorNotice,
+                              { source: "MediaUpload", message: result.error || "操作失败", prefix: result.name + " — ", className: "upload-error" },
                             ),
                       ),
                     ),

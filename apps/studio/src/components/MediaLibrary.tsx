@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import { formatBytes, mediaURL, type MediaItem } from "../../shared/media";
 import { t } from "../i18n";
 import { mediaListing, mediaVersion } from "../media-store";
@@ -98,9 +99,8 @@ const MediaLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                         }),
                       })
                     : element(
-                        "p",
-                        { className: classes("muted") },
-                        t("暂时无法预览"),
+                        ErrorNotice,
+                        { source: "MediaLibrary", message: "暂时无法预览" },
                       ),
                   element(
                     "dl",

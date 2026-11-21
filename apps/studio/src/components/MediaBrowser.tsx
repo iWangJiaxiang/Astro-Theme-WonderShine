@@ -1,3 +1,4 @@
+import { ErrorDetails, ErrorNotice } from "./ErrorNotice";
 import {
   formatBytes,
   imageExtension,
@@ -305,9 +306,8 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
               : null,
             mediaError.value
               ? element(
-                  "p",
-                  { role: "alert", className: classes("notice error") },
-                  t(mediaError.value),
+                  ErrorNotice,
+                  { source: "MediaBrowser", message: mediaError.value },
                   " ",
                   element(
                     "button",
@@ -356,8 +356,8 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
               : element(
                   "div",
                   { className: classes("media-grid") },
-                  renderList(items.value).map((item) =>
-                    element(
+                  renderList(items.value).map((item) => {
+                    const card = element(
                       "button",
                       {
                         key: item.path,
@@ -422,8 +422,10 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                         " · ",
                         formatBytes(item.size),
                       ),
-                    ),
-                  ),
+                    );
+                    const issue = item.unavailable || (failed.value.has(item.path) && "暂时无法预览");
+                    return issue ? <div className="media-error-item" key={item.path}>{card}<ErrorDetails message={issue} source="MediaBrowser" /></div> : card;
+                  }),
                 ),
             !mediaLoading.value &&
               !mediaError.value &&

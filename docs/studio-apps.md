@@ -30,10 +30,10 @@ Web users continue to use the existing local-server or cloud-function deployment
 
 1. **Save** updates files on the device (or selected server), without implying a Git push.
 2. **Commit locally** records only allowed content/configuration/media changes. Unrelated staged files must be handled in an external Git tool.
-3. **Sync Git** fetches, fast-forwards when safe, and pushes without force. Dirty or diverged workspaces stop with an explanation; local work remains intact.
+3. **Sync Git** fetches the configured branch, fast-forwards or merges compatible changes, then pushes without force. Uncommitted changes or an unresolved merge conflict stop synchronization and preserve local work.
 4. Website deployment status remains independent of Git synchronization.
 
-Local transaction journals and history backups live outside the native Git checkout. Interrupted writes are recovered only when current bytes match either the previous or attempted value. External edits after a crash block automatic recovery. Interrupted fast-forward operations retain a sync journal and block further mutation until the repository is inspected. No automatic hard reset, forced push or deletion of offline commits occurs.
+Local transaction journals and history backups live outside the native Git checkout. Interrupted writes are recovered only when current bytes match either the previous or attempted value. External edits after a crash block automatic recovery. Interrupted fast-forward or merge checkouts retain a sync journal and block further mutation until the repository is inspected. No automatic hard reset, forced push or deletion of offline commits occurs.
 
 Downloaded repositories use the private App data directory; selected desktop repositories stay in their original location. The App does not yet provide a visual merge resolver, Git LFS, submodule management, background mobile synchronization or secure persistent token storage. Do not uninstall the App before syncing/backing up offline work. Native direct mode supports manual and AI translations, AI summaries and cover generation through client-configured OpenAI-compatible endpoints. Server mode continues to use the server operator’s AI configuration.
 

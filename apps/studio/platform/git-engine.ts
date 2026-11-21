@@ -1,3 +1,4 @@
+import { mergeTarget } from './merge-target.js';
 import { commitBranchSnapshot, assertBranchSnapshot } from './branch-save.js';
 import type { BranchFile, BranchSave } from '../shared/save.js';
 import './buffer.js';
@@ -176,7 +177,7 @@ export class NativeGitEngine implements WorkspaceControl {
     let canSync = true;
     try { validateRemote(this.profile.url); } catch { canSync = false; }
     return {
-      status: { branch: this.profile.branch, dirty: changes > 0, changes, ...branch, lastSync, canSync, managedChanges },
+      status: { branch: this.profile.branch, dirty: changes > 0, changes, ...branch, lastSync, canSync, canMerge: true, managedChanges },
       review,
     };
   }
@@ -230,13 +231,15 @@ export class NativeGitEngine implements WorkspaceControl {
           singleBranch: true, onAuth: this.credentials });
       } catch { throw new StudioError(502, '暂时无法连接 Git 远端，本地文件和提交已保留'); }
       const status = await this.branchStatus({});
-      if (status.diverged) throw new StudioError(409, '本地与远端都有新提交，请先在 Git 工具中合并；双方提交均已保留');
       if (status.behind && status.remoteHead) {
-        await git.checkout({ ...this.options, ref: status.remoteHead, noUpdateHead: true, nonBlocking: true, batchSize: 8, dryRun: true });
-        await this.files.writeFile(this.journal + '.tmp', JSON.stringify({ before: status.head, target: status.remoteHead }));
+        const target = status.diverged && status.head
+          ? await mergeTarget(this.options.fs, this.root, status.head, status.remoteHead, { name: this.profile.authorName, email: this.profile.authorEmail })
+          : status.remoteHead;
+        await git.checkout({ ...this.options, ref: target, noUpdateHead: true, nonBlocking: true, batchSize: 8, dryRun: true });
+        await this.files.writeFile(this.journal + '.tmp', JSON.stringify({ before: status.head, target }));
         await this.files.rename(this.journal + '.tmp', this.journal);
-        await git.checkout({ ...this.options, ref: status.remoteHead, noUpdateHead: true, nonBlocking: true, batchSize: 8 });
-        await git.writeRef({ ...this.options, ref: `refs/heads/${this.profile.branch}`, value: status.remoteHead, force: true });
+        await git.checkout({ ...this.options, ref: target, noUpdateHead: true, nonBlocking: true, batchSize: 8 });
+        await git.writeRef({ ...this.options, ref: `refs/heads/${this.profile.branch}`, value: target, force: true });
         await this.files.unlink(this.journal);
       }
       if (status.ahead) {

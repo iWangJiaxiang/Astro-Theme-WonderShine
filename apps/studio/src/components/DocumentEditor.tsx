@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import { WorkspacePanel } from "../../platform/WorkspacePanel";
 import SaveButton from "./SaveButton";
 import { createDraftBackup } from "../draft-backup";
@@ -971,9 +972,8 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         ? element(LoadingState, { label: "正在载入文稿…" })
         : !ready.value
           ? element(
-              "div",
-              { role: "alert", className: classes("notice error") },
-              t(error.value),
+              ErrorNotice,
+              { source: "DocumentEditor", message: error.value },
               " ",
               element(
                 "button",
@@ -1137,9 +1137,8 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
               savedBranch.value ? element("code", { className: "saved-branch" }, savedBranch.value) : null,
               error.value
                 ? element(
-                    "p",
-                    { role: "alert", className: classes("notice error") },
-                    t(error.value),
+                    ErrorNotice,
+                    { source: "DocumentEditor", message: error.value },
                     " ",
                     t(
                       "编辑内容已保留。如有版本冲突，请先下载备份，再重新打开文件合并。",
@@ -1147,11 +1146,13 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                   )
                 : null,
               message.value && !publishing.value
-                ? element(
-                    "p",
-                    { role: "status", className: classes("notice success") },
-                    t(message.value),
-                  )
+                ? message.value === "浏览器草稿备份不可用，请及时保存或下载。" || message.value === "内容已保存，但时间信息刷新失败。重新打开可查看。"
+                  ? element(ErrorNotice, { source: "DocumentEditor", message: message.value })
+                  : element(
+                      "p",
+                      { role: "status", className: classes("notice success") },
+                      t(message.value),
+                    )
                 : null,
               recovery.value
                 ? element(
@@ -1944,10 +1945,8 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       : null,
                     choicesError.value
                       ? element(
-                          "p",
-                          { role: "alert", className: classes("notice error") },
-                          t("选项载入失败："),
-                          t(choicesError.value),
+                          ErrorNotice,
+                          { source: "DocumentEditor", message: choicesError.value, prefix: t("选项载入失败：") },
                           " ",
                           element(
                             "button",

@@ -1,3 +1,4 @@
+import { ErrorNotice } from "../src/components/ErrorNotice";
 import { useEffect, useRef, useState } from 'react';
 import { providerFetch } from './provider-fetch';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -64,7 +65,7 @@ export default function AccountLogin({ onSelect, disabled }: { onSelect: (accoun
     </div>
     {provider && <dialog ref={dialog} className="selection-dialog oauth-dialog" onCancel={reset} onClose={reset}>
       <section className="selection-panel"><header className="card-heading"><h2>{account ? t('选择仓库') : t('登录 {provider}', { provider: provider === 'github' ? 'GitHub' : 'CNB' })}</h2><button type="button" className="text-button" onClick={() => dialog.current?.close()}>{t('取消')}</button></header>
-        {error && <p className="notice error" role="alert">{t(error)}</p>}
+        {error && <ErrorNotice source="AccountLogin" message={error} />}
         {grant && <div className="oauth-device"><p>{t('在浏览器中输入此代码')}</p><strong className="oauth-code">{grant.userCode}</strong><button type="button" className="primary" onClick={() => void openUrl(grant.verificationUrl).catch(() => setError('无法打开授权页面，请重试'))}>{t('打开授权页面')}</button><span role="status">{t('等待授权…')}</span></div>}
         {account && <><label className="selection-search"><span>{t('搜索仓库')}</span><input autoComplete="off" autoCapitalize="none" value={query} onChange={event => setQuery(event.target.value)} placeholder={t('筛选已加载的仓库')} /></label>
           <div className="oauth-repositories" aria-busy={busy}>{repos.filter(repo => repo.name.toLowerCase().includes(query.toLowerCase())).map(repo => <button key={repo.id} type="button" className="oauth-repository" onClick={() => { onSelect(account, repo); dialog.current?.close(); }}><span>{repo.name}</span><small>{repo.private ? t('私有') : t('公开')}</small></button>)}

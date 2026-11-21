@@ -298,3 +298,21 @@
 }
 .creation-dialog::backdrop { background: #10162a66; }
 .creation-dialog .modal { max-height: none; }
+
+.media-error-item .media-card { width: 100%; }
+.error-more { font-size: inherit; white-space: nowrap; }
+.error-dialog {
+  width: min(32rem, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
+  box-sizing: border-box; padding: 16px; border: 1px solid var(--studio-line); border-radius: 12px;
+  background: var(--studio-card); color: var(--wjx-fontcolor); text-align: start;
+}
+.error-dialog::backdrop { background: #10162a70; }
+.error-dialog h2 { margin: 0 0 8px; font-size: 18px; }
+.error-dialog textarea {
+  display: block; box-sizing: border-box; width: 100%; height: min(13rem, 38dvh); resize: vertical;
+  padding: 8px; border: 1px solid var(--studio-line); border-radius: 6px; color: inherit;
+  background: var(--wjx-background); font: 14px/1.5 monospace; overflow-wrap: anywhere;
+}
+.error-dialog p { margin: 8px 0 0; font-size: 13px; }
+.error-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.error-actions button { min-height: 44px; }

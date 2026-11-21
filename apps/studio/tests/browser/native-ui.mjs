@@ -240,7 +240,7 @@ try {
       // Record command names only: arguments and assertion messages can contain credentials.
       ipcFailures.push({ command, error: error.name, code: error.code ?? null });
       if (ipcFailures.length > 100) ipcFailures.shift();
-      return { error: error.message };
+      return { error: error.gitDetail ? { message: error.message, gitDetail: error.gitDetail } : error.message };
     }
   });
   await page.evaluateOnNewDocument(profile => {
@@ -420,7 +420,7 @@ try {
   assert.equal(await page.$eval('.save-button-main', e => e.textContent), 'Git 分支保存', 'default persists across editors');
   await page.reload({waitUntil:'networkidle0'}); await heading('连接创作工作区'); await click('打开工作区');
   await page.waitForSelector('.native-connect [role="alert"]');
-  assert.equal(await page.$eval('.native-connect [role="alert"]', node => node.textContent), reviewRestart, 'WebView reload cannot replace the live process owner');
+  assert.equal(await page.$eval('.native-connect .error-summary', node => node.textContent), reviewRestart, 'WebView reload cannot replace the live process owner');
   assert.equal(await page.$('.studio-shell'), null, 'Reloaded WebView cannot expose workspace operations');
   await screenshot('connection-reload-requires-restart');
   await restartNativeFixture(); await heading('连接创作工作区'); await click('打开工作区'); await heading('今天，写点什么？');
@@ -585,6 +585,13 @@ try {
   allowCloneHttp = true; failNextHttp = true;
   await click('下载并开始创作'); await page.waitForSelector('[role=alert]');
   assert.equal(await page.$('.connection-progress'),null,'failed connection removes stale progress');
+  await page.click('.native-connect [role=alert] .error-more');
+  await page.waitForSelector('.error-dialog[open]');
+  assert.match(await page.$eval('.error-dialog textarea', node => node.value), /libgit2 fetch/);
+  await screenshot('error-details-mobile', false);
+  await noOverflow('Mobile error report');
+  await page.click('.error-actions .secondary');
+  await page.waitForFunction(() => !document.querySelector('.error-dialog[open]'));
   await screenshot('clone-error-mobile'); console.log('PASS: clone error releases connection state.');
   downloadGate = new Promise(resolve => { releaseDownload = resolve; });
   checkoutGate = new Promise(resolve => { releaseCheckout = resolve; });
@@ -608,6 +615,11 @@ try {
   await page.waitForSelector('.thread-composer textarea');
   assert.equal(await page.$('.native-connect'), null, 'A cold phone launch reopens the last checkout offline');
   await screenshot('phone-composer', false);
+  assert.ok(await page.$eval('.composer-tools .choice-compact .choice-trigger', button => {
+    const icon = button.querySelector('svg').getBoundingClientRect();
+    const label = button.querySelector('span[id]').getBoundingClientRect();
+    return Math.abs(icon.left + icon.width / 2 - label.left - label.width / 2) < 2;
+  }), 'The mobile tag label is centered beneath its icon');
   await page.type('.thread-composer textarea', 'Phone publication fixture');
   const inspectionsBeforeReview = gitInspections;
   await page.evaluate(() => {
@@ -630,7 +642,11 @@ try {
   console.log('Mobile Git review with 128 tracked assets:', JSON.stringify(frames));
   assert.equal(await page.$('.thread-composer .language-versions'), null, 'Language tools stay in More options after saving');
   assert.equal(await page.$('.thread-composer .notice.success'), null, 'The review is the active save feedback');
+  await page.$eval('.publish-dialog > details', node => { node.open = true; });
+  await page.$eval('.publish-credential', node => { node.open = true; });
   await screenshot('phone-publish-review', false);
+  assert.ok(await page.$eval('.publish-dialog', node => node.scrollWidth <= node.clientWidth));
+  assert.ok(await page.$eval('.publish-credential input', node => node.getBoundingClientRect().height >= 44));
   await auditNativePage('publish-review');
   await click('稍后');
   assert.equal(await page.$('dialog.publish-dialog[open]'), null);
@@ -659,7 +675,11 @@ try {
   const legacyHead = git(['rev-parse','HEAD']);
   assert.equal(await mobile.invoke({ profile,job:{ action:'open',clone:false } }),profile.branch);
   assert.equal(git(['rev-parse','HEAD']),legacyHead,'Upgrading the earlier isomorphic-git checkout preserves its commits');
-  await mobile.verifySync(saved[0]);
+  // Exercise direct publication to main independently of the detected release/blog branch.
+  const mainProfile = { ...saved[0], id: crypto.randomUUID(), branch: 'main' };
+  await fs.mkdir(join(appData, 'workspaces', mainProfile.id, 'state'), { recursive: true });
+  await mobile.invoke({ profile: mainProfile, job: { action: 'open', clone: true } });
+  await mobile.verifySync(mainProfile);
   assert.deepEqual(errors, []); assert.deepEqual(cspErrors, []); assert.deepEqual(failedResources, []);
   console.log('Native UI passed: desktop/mobile connection modes, offline dashboard, source save, bundled Vditor, native asset preview, client API settings, secret redaction, configuration reopen, logout.');
   console.log('Screenshots: ' + screenshots);

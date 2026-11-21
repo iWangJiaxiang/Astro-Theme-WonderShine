@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:https';
 import { spawn, execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { chmod, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 
 // Only Tauri IPC and the remote host are replaced. The Linux harness links the same
 // libgit2 engine as iOS/Android and talks real smart HTTPS to a temporary bare Git repo.
@@ -52,7 +52,7 @@ export async function mobileGitFixture(base, appData, studio) {
       else result = message;
     }
     await done;
-    if (result?.error) throw new Error(result.error);
+    if (result?.error) throw Object.assign(new Error(result.error.message ?? result.error), { gitDetail: result.error.gitDetail });
     assert.ok(result && Object.hasOwn(result,'value'));
     return result.value;
   }
@@ -64,12 +64,39 @@ export async function mobileGitFixture(base, appData, studio) {
     const remoteHead = () => run(remote,'rev-parse',profile.branch);
     const sync = (password = token) => invoke({ profile:{ ...profile, username:'oauth2' }, password, job:{ action:'sync',head:local() } });
     run(base,'clone','--branch',profile.branch,remote,peer);
-    const advancePeer = async text => {
-      await writeFile(join(peer,'data.toml'),text);
-      run(peer,'add','data.toml'); run(peer,'-c','user.name=Fixture','-c','user.email=test@example.com','commit','-m','peer');
+    const advancePeer = async (text, path = 'data.toml') => {
+      await writeFile(join(peer,path),text);
+      run(peer,'add',path); run(peer,'-c','user.name=Fixture','-c','user.email=test@example.com','commit','-m','peer');
       run(peer,'push','origin',profile.branch);
     };
     privateRemote = true;
+    const publish = (path, message) => invoke({
+      profile: { ...profile, username: 'oauth2' }, password: token,
+      job: { action: 'publish', head: local(), message, paths: [path] },
+    });
+    const publishThread = async name => {
+      const path = `content/threads/${name}/index.md`;
+      await mkdir(dirname(join(repo, path)), { recursive: true });
+      await writeFile(join(repo, path), name);
+      assert.equal((await publish(path, name)).syncError, null);
+      return path;
+    };
+
+    const first = await publishThread('first-thread');
+    const firstTip = remoteHead();
+    assert.equal(local(), firstTip);
+    run(peer,'pull','--ff-only','origin',profile.branch);
+    await advancePeer('Manual edit between publications', 'README.md');
+    const manualTip = remoteHead();
+    const second = await publishThread('second-thread');
+    assert.equal(remoteHead(), local());
+    assert.equal(run(remote, 'rev-parse', profile.branch + '^1^1'), firstTip);
+    assert.equal(run(remote, 'rev-parse', profile.branch + '^2'), manualTip);
+    assert.equal(run(remote, 'show', profile.branch + ':' + first), 'first-thread');
+    assert.equal(run(remote, 'show', profile.branch + ':' + second), 'second-thread');
+    assert.equal(run(remote, 'show', profile.branch + ':README.md'), 'Manual edit between publications');
+    run(peer,'pull','--ff-only','origin',profile.branch);
+
     await advancePeer('title="peer"');
     const before = local();
     await assert.rejects(sync('invalid-token'));
@@ -89,6 +116,23 @@ export async function mobileGitFixture(base, appData, studio) {
     await chmod(hook,0o644);
     assert.equal(await sync(),false); assert.equal(remoteHead(),pending);
     run(peer,'pull','--ff-only','origin',profile.branch);
+    await advancePeer('title="remote config"');
+    const peerTip = remoteHead();
+    const path = 'data.en.toml';
+    await writeFile(join(repo,path),'title="Publish from phone"');
+    await chmod(hook,0o755);
+    const publication = await publish(path, 'publish translation');
+    assert.ok(publication.syncError);
+    const merged = local();
+    assert.equal(run(repo,'rev-parse','HEAD^2'),peerTip);
+    assert.equal(run(repo,'show','HEAD^1:' + path),'title="Publish from phone"');
+    assert.equal(remoteHead(),peerTip);
+    await chmod(hook,0o644);
+    assert.equal(await sync(),false);
+    assert.equal(remoteHead(),merged);
+    assert.equal(run(remote,'show',profile.branch + ':' + path),'title="Publish from phone"');
+    assert.equal(await readFile(join(repo,'data.toml'),'utf8'),'title="remote config"');
+    run(peer,'pull','--ff-only','origin',profile.branch);
     await advancePeer('title="remote change"');
     await writeFile(join(repo,'data.toml'),'title="divergence"');
     await invoke({ profile,job:{ action:'commit',head:local(),message:'divergent change',paths:['data.toml'] } });
@@ -96,7 +140,7 @@ export async function mobileGitFixture(base, appData, studio) {
     await assert.rejects(sync(), /合并/);
     assert.equal(local(),divergent); assert.equal(remoteHead(),theirs);
     privateRemote = false;
-    console.log('PASS: libgit2 authenticated HTTPS, safe fast-forward, rejected/retried push and divergent history.');
+    console.log('PASS: libgit2 authenticated HTTPS, fast-forward, merged publication, rejected/retried push and conflicting history.');
   }
   return { url, invoke, verifySync, setOnline(value) { online = value; }, close() { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); } };
 }

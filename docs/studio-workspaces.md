@@ -65,7 +65,7 @@ Authenticated HTTP endpoints:
 | `GET /api/workspace` | Local status and the last known remote tip; does not fetch or create a review |
 | `POST /api/workspace/review` | Capture a private temporary review; returns status plus `confirmation` and `confirmationExpiresAt` |
 | `POST /api/workspace/commit` with `{ "message": "docs(content): update posts", "confirmation": "<review token>" }` | Validate the reviewed local state and commit managed content/media locally |
-| `POST /api/workspace/sync` with `{ "confirmation": "<review token>" }` | Validate the reviewed local state, fetch, fast-forward when safe, and push without force |
+| `POST /api/workspace/sync` with `{ "confirmation": "<review token>" }` | Validate the reviewed local state, fetch, fast-forward or merge compatible commits, and push without force |
 
 HTTP and native in-process transport mutations require a nonempty string `confirmation` from an explicit review (400 if missing/invalid). Engines compare the reviewed branch, local HEAD, managed rows and exact file bytes under the workspace lock; expired or stale tokens are rejected with 409 before mutation. Ordinary status and mutation responses do not contain a new token. After committing, create a new review and let the user confirm synchronization separately. Only trusted internal engine/test callers retain optional token omission for compatibility; this is not supported by user-facing transports.
 
@@ -81,11 +81,15 @@ The status includes `branch`, `dirty`, `changes`, `ahead`, `behind`, `diverged`,
 
 Revision checks still reject stale saves. Sync refuses uncommitted changes; committing refuses unrelated staged implementation files. Git history backups are never automatically committed. Push failures retain local commits, and retrying synchronization fetches the remote before pushing again.
 
+Use **More** on an error to open its report and **Copy details** to copy the displayed text. API failures include the Studio request and status when available. For mobile Git network errors, the report also includes the fetch or push stage and libgit2 error class and code.
+
 ## Conflicts and recovery
 
-If both devices created commits, Studio fetches the remote and reports divergence without overwriting either history. Open the workspace in a Git tool, review and merge the changes, commit the resolution, then retry synchronization. No force push or automatic conflict resolution is performed.
+When only the remote has advanced, sync fast-forwards the configured branch. When both sides have commits, Studio builds a two-parent merge before checking it out. Mobile uses libgit2’s three-way merge. Desktop and persistent Node workspaces combine independent file changes and identical edits, and stop if both sides changed the same file differently. An unresolved conflict or unrelated history leaves the working files and both branch tips intact. Resolve conflicts in a Git tool before retrying.
 
-A fast-forward writes `.git/wondershine-sync.json` before changing the working tree and branch. If interrupted, subsequent writes and syncs stop rather than guessing which files are safe to replace. Stop Studio, back up the workspace, inspect the recorded before/target commits and `git status`, and finish recovery with a Git tool. Remove the journal only after verifying the working tree, index and branch agree, then restart Studio.
+Sync pushes only the configured branch, using a non-force push. Direct publication to `main` requires a credential with write access and branch rules permitting that push. If the remote rejects the merge commit or advances during upload, the local commit remains available. Retry fetches the latest tip again.
+
+A fast-forward or merge checkout writes `.git/wondershine-sync.json` before changing the working tree and branch. If interrupted, subsequent writes and syncs stop rather than guessing which files are safe to replace. Stop Studio, back up the workspace, inspect the recorded before/target commits and `git status`, and finish recovery with a Git tool. Remove the journal only after verifying the working tree, index and branch agree, then restart Studio.
 
 A process interruption can also leave a sibling `<workspace>.studio-lock` directory or a `lock` in private revision/review storage. Stop **all** workers using that installation and confirm no operation still owns the lock before an administrator removes an empty lock directory. Age alone is not proof that a lock is abandoned. Never delete the workspace to clear an error.
 
@@ -121,4 +125,4 @@ The thread editor's **Publish thread** action in a persistent Git workspace save
 
 In an app-managed checkout, committing before an explicit follow-up review can acknowledge the commit without computing a disposable status. The next review reads the new HEAD and file state. Each mutation validates the review bytes, and can reuse its own scan while holding the workspace lock. Synchronization reads the remote refs after fetching and pushing. A fast-forward checkout or an externally editable folder gets a fresh final worktree status.
 
-On iOS and Android, Tauri runs libgit2 in a blocking worker thread. The existing clone, index, refs, unpublished commits and private review directory are reused across upgrades. Publishing from an app-managed clone discovers the changed paths once. The next local commit rechecks only those paths and their reviewed bytes. The explicit publish action commits and pushes under the same workspace lock. Manual commit-and-sync still previews the post-commit state. If another workspace operation takes the lock between steps, the next step discovers changes across the checkout again. Path lists live only in the active session. Fetching remote history, rejecting divergence and checking the result of a fast-forward checkout still run independently.
+On iOS and Android, Tauri runs libgit2 in a blocking worker thread. The existing clone, index, refs, unpublished commits and private review directory are reused across upgrades. Publishing from an app-managed clone discovers the changed paths once. The next local commit rechecks only those paths and their reviewed bytes. The explicit publish action commits and pushes under the same workspace lock. Manual commit-and-sync still previews the post-commit state. If another workspace operation takes the lock between steps, the next step discovers changes across the checkout again. Path lists live only in the active session. Fetching remote history, checking merge conflicts and inspecting the resulting checkout still run independently.

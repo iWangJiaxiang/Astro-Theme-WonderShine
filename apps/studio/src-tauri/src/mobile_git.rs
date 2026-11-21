@@ -16,9 +16,9 @@ pub async fn mobile_git(
     job: Job,
     password: Option<String>,
     progress: Option<JavaScriptChannelId>,
-) -> Result<Value, &'static str> {
+) -> Result<Value, Value> {
     if webview.label() != "main" || !ownership.owns_workspace(profile.workspace_id()) {
-        return Err("工作区设置无效");
+        return Err("工作区设置无效".into());
     }
     let progress = progress.map(|id| id.channel_on::<_, Value>(webview));
     let base = app.path().app_data_dir().map_err(|_| "工作区设置无效")?;

@@ -12,6 +12,7 @@ export interface WorkspaceStatus {
   lastSync: string | null;
   canSync?: boolean;
   canPublish?: boolean;
+  canMerge?: boolean;
   managedChanges?: string[];
   /** Present only on explicit createReview(), never status/commit/sync responses. */
   confirmation?: string;

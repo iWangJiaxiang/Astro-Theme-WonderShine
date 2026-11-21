@@ -16,6 +16,14 @@ function managed(path: string) {
   try { validateMediaPath(path); return true; } catch { return false; }
 }
 
+function gitError(reason: unknown) {
+  if (reason && typeof reason === 'object' && 'message' in reason && typeof reason.message === 'string'
+    && 'gitDetail' in reason && typeof reason.gitDetail === 'string' && /^libgit2 (fetch|push) [A-Za-z]+\/[A-Za-z]+$/.test(reason.gitDetail)) {
+    return new StudioError(409, reason.message, { gitDetail: reason.gitDetail });
+  }
+  return new StudioError(409, typeof reason === 'string' ? reason : '操作失败');
+}
+
 export function mobileGit(files: WorkspaceFiles, root: string, state: string, profile: WorkspaceProfile,
   password: () => string, reviews: WorkspaceReviewAdapter) {
   const owner = {};
@@ -25,7 +33,7 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
     try {
       return await invoke<T>('mobile_git', { profile, job: { action, ...args }, progress: channel ?? null,
         password: action === 'publish' || action === 'sync' || action === 'open' && args.clone ? password() : null });
-    } catch (reason) { throw new StudioError(409, typeof reason === 'string' ? reason : '操作失败'); }
+    } catch (reason) { throw gitError(reason); }
   }
   const inspect = (paths?: string[], writable = false) => command<Inspection>('inspect', { paths, writable });
   function reviewState(current: Inspection) {
@@ -36,7 +44,7 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
     let lastSync = null;
     try { lastSync = String(await files.readFile(state + '/last-sync', 'utf8')); }
     catch (error) { if (!missingFile(error)) throw error; }
-    return { ...refs, branch: profile.branch, lastSync, canSync: true, diverged: refs.ahead > 0 && refs.behind > 0,
+    return { ...refs, branch: profile.branch, lastSync, canSync: true, canMerge: true, diverged: refs.ahead > 0 && refs.behind > 0,
       changes: rows.length, dirty: !!rows.length, managedChanges: reviewState(current).rows.map(([path]) => path) };
   }
   // The connection owns a private checkout. Another lock holder, an error, an
@@ -83,8 +91,8 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
       await validate(current, confirmation);
       const managed = reviewState(current).rows;
       if (managed.length !== current.rows.length) throw new StudioError(409, '存在托管范围以外的修改，请先在 Git 工具中处理再同步。');
-      const result = await command<{ syncError?: string }>('publish', { head: current.head, message, paths: managed.map(([path]) => path) });
-      if (result.syncError) throw new StudioError(409, result.syncError);
+      const result = await command<{ syncError?: unknown }>('publish', { head: current.head, message, paths: managed.map(([path]) => path) });
+      if (result.syncError) throw gitError(result.syncError);
       // A bookkeeping failure after a confirmed push must not turn it into an upload retry.
       await files.writeFile(state + '/last-sync', new Date().toISOString()).catch(() => {});
     }),

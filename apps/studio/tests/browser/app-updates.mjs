@@ -83,8 +83,8 @@ try {
   assert.match(await page.$eval('.native-update-controls [role=status]', el => el.textContent), /No update|未发现/);
   await page.evaluate(() => { window.updateFixture.fail = true; });
   await page.click('.native-update-controls button');
-  await page.waitForSelector('.native-update-controls [role=status]');
-  assert.match(await page.$eval('.native-update-controls [role=status]', el => el.textContent), /Could not check|暂时无法/);
+  await page.waitForSelector('.native-update-controls [role=alert]');
+  assert.match(await page.$eval('.native-update-controls [role=alert]', el => el.textContent), /Could not check|暂时无法/);
   assert.deepEqual(errors, []);
 } finally {
   await browser?.close();

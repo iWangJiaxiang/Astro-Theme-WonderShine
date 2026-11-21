@@ -306,7 +306,7 @@ pub fn execute(
     job: Job,
     password: &str,
     progress: &dyn Fn(&str, usize, usize),
-) -> Result<Value> {
+) -> std::result::Result<Value, Value> {
     if !p.id.bytes().enumerate().all(|(i, b)| {
         if [8, 13, 18, 23].contains(&i) {
             b == b'-'
@@ -315,7 +315,7 @@ pub fn execute(
         }
     }) || p.id.len() != 36
     {
-        return Err(INVALID);
+        return Err(INVALID.into());
     }
     let url = url::Url::parse(&p.url).map_err(|_| INVALID)?;
     if url.scheme() != "https"
@@ -326,13 +326,13 @@ pub fn execute(
         || url.query().is_some()
         || url.fragment().is_some()
     {
-        return Err(INVALID);
+        return Err(INVALID.into());
     }
     if !p.branch.is_empty()
         && (!git2::Reference::is_valid_name(&format!("refs/heads/{}", p.branch))
             || p.branch.starts_with('-'))
     {
-        return Err(INVALID);
+        return Err(INVALID.into());
     }
     let workspace = base.join("workspaces").join(&p.id);
     let root = workspace.join("repo");
@@ -346,7 +346,7 @@ pub fn execute(
         if root.try_exists().map_err(|_| READ)? {
             directory(&root)?;
             if fs::read_dir(&root).map_err(|_| READ)?.next().is_some() {
-                return Err("工作区目录已有文件，请选择空目录或匹配的 Git 仓库");
+                return Err("工作区目录已有文件，请选择空目录或匹配的 Git 仓库".into());
             }
         }
         network::clone_into(&root, p, password, progress)?;
@@ -365,11 +365,11 @@ pub fn execute(
         || repo.workdir().and_then(|dir| dir.canonicalize().ok())
             != Some(root.canonicalize().map_err(|_| READ)?)
     {
-        return Err(INVALID);
+        return Err(INVALID.into());
     }
     let remote = repo.find_remote("origin").map_err(|_| READ)?;
     if remote.url() != Some(&p.url) || remote.pushurl().is_some_and(|u| u != p.url) {
-        return Err(INVALID);
+        return Err(INVALID.into());
     }
     let head_ref = repo.head().map_err(|_| READ)?;
     let branch = head_ref
@@ -377,7 +377,7 @@ pub fn execute(
         .filter(|_| head_ref.is_branch())
         .ok_or(INVALID)?;
     if branch != p.branch && !(p.branch.is_empty() && matches!(job, Job::Open { .. })) {
-        return Err(INVALID);
+        return Err(INVALID.into());
     }
     if !matches!(
         job,
@@ -392,7 +392,7 @@ pub fn execute(
     match job {
         Job::Open { .. } => Ok(json!(branch)),
         Job::Guard => Ok(Value::Null),
-        Job::Inspect { paths, .. } => inspect(&repo, branch, paths.as_deref()),
+        Job::Inspect { paths, .. } => Ok(inspect(&repo, branch, paths.as_deref())?),
         Job::Commit {
             head,
             paths,
@@ -412,11 +412,11 @@ pub fn execute(
         }
         Job::Sync { head: expected } => {
             if head(&repo)?.to_string() != expected {
-                return Err(CHANGED);
+                return Err(CHANGED.into());
             }
             Ok(json!(network::sync(&repo, p, &state, password)?))
         }
-        Job::Branch { key, files } => snapshot::save(&repo, &root, p, &key, &files),
+        Job::Branch { key, files } => Ok(snapshot::save(&repo, &root, p, &key, &files)?),
     }
 }
 
@@ -539,13 +539,13 @@ mod tests {
         assert!(git(&root, &["ls-tree", "HEAD", "theme"]).starts_with("160000"));
         assert_eq!(git(&root, &["rev-parse", branch]), saved["commit"]);
         fs::write(state.join("sync.json"), "interrupted").unwrap();
-        assert_eq!(run(Job::Guard), Err(RECOVER));
+        assert_eq!(run(Job::Guard), Err(RECOVER.into()));
         assert_eq!(
             run(Job::Inspect {
                 paths: None,
                 writable: true
             }),
-            Err(RECOVER)
+            Err(RECOVER.into())
         );
         assert!(run(Job::Inspect {
             paths: None,

@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import {
   dateParts,
   fieldChoices,
@@ -225,18 +226,14 @@ const FormField: StudioComponent<Props, Events> = component<Props, Events>(
                   : null,
                 text.value && !parts.value
                   ? element(
-                      "small",
-                      { className: classes("notice error") },
-                      t("无法识别日期“{value}”，请用日期选择器修改。", {
-                        value: text.value,
-                      }),
+                      ErrorNotice,
+                      { source: "FormField", message: { key: "无法识别日期“{value}”，请用日期选择器修改。", params: { value: text.value } } },
                     )
                   : null,
                 props.required && !text.value
                   ? element(
-                      "small",
-                      { className: classes(text.value ? "muted" : "danger") },
-                      t("此类内容需要填写发布时间。"),
+                      ErrorNotice,
+                      { source: "FormField", message: "此类内容需要填写发布时间。", className: "danger small" },
                     )
                   : null,
                 hint.value

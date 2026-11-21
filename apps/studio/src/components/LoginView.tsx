@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import { api, errorMessage, reauthentication, session } from "../api";
 import { t, type Message } from "../i18n";
 import {
@@ -83,9 +84,8 @@ const LoginView: StudioComponent<Props, Events> = component<Props, Events>(
           element("h1", null, t("管理员登录")),
           error.value
             ? element(
-                "p",
-                { role: "alert", className: classes("notice error") },
-                t(error.value),
+                ErrorNotice,
+                { source: "LoginView", message: error.value },
                 " ",
                 !methods.value
                   ? element(
