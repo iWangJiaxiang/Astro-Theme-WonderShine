@@ -6,6 +6,10 @@ use git2::{
 use std::{cell::Cell, sync::OnceLock};
 
 const CONNECT: &str = "暂时无法连接 Git 远端，本地文件和提交已保留";
+const AUTH: &str = "Git 远端认证失败，请检查当前会话的访问令牌和仓库权限";
+const CERT: &str = "Git 远端证书验证失败，请检查仓库地址和设备信任设置";
+const REJECTED: &str = "Git 远端拒绝了推送，请检查分支保护规则和写入权限；本地提交已保留";
+const MERGE: &str = "无法自动合并，请在 Git 工具中处理；双方提交均已保留";
 const PUSH: &str = "Git 推送未确认，请重试同步以核对远端；本地提交已保留";
 const CLONE: &str = "首次下载 Git 工作区失败，请检查连接；已有文件未被替换";
 
@@ -72,7 +76,11 @@ fn callbacks<'a>(
                     .origin(),
             ) != url::Url::parse(&p.url).ok().map(|u| u.origin())
         {
-            return Err(git2::Error::from_str("Authentication failed"));
+            return Err(git2::Error::new(
+                git2::ErrorCode::Auth,
+                git2::ErrorClass::Callback,
+                "Authentication failed",
+            ));
         }
         attempted = true;
         Cred::userpass_plaintext(
@@ -90,13 +98,25 @@ fn callbacks<'a>(
     });
     callbacks
 }
+
+fn network_error(stage: &str, error: git2::Error, fallback: &'static str) -> Value {
+    let message = match error.code() {
+        git2::ErrorCode::Auth => AUTH,
+        git2::ErrorCode::Certificate => CERT,
+        _ => fallback,
+    };
+    // Error messages from transports can contain URLs or credentials. Export only libgit2 enums.
+    json!({"message": message, "gitDetail": format!("libgit2 {} {:?}/{:?}", stage, error.class(), error.code())})
+}
+
 fn fetch(
     repo: &Repository,
     p: &Profile,
     password: &str,
     branch: &str,
     progress: &dyn Fn(&str, usize, usize),
-) -> Result<()> {
+    fallback: &'static str,
+) -> std::result::Result<(), Value> {
     let mut remote = repo.find_remote("origin").map_err(|_| READ)?;
     let mut options = FetchOptions::new();
     options
@@ -109,7 +129,7 @@ fn fetch(
             Some(&mut options),
             None,
         )
-        .map_err(|_| CONNECT)
+        .map_err(|error| network_error("fetch", error, fallback))
 }
 
 pub(super) fn clone_into(
@@ -117,7 +137,7 @@ pub(super) fn clone_into(
     p: &Profile,
     password: &str,
     progress: &dyn Fn(&str, usize, usize),
-) -> Result<()> {
+) -> std::result::Result<(), Value> {
     #[cfg(target_os = "android")]
     android_roots(root.parent().ok_or(INVALID)?)?;
     let staging = tempfile::Builder::new()
@@ -137,7 +157,7 @@ pub(super) fn clone_into(
                     Some(callbacks(p, password, progress)),
                     None,
                 )
-                .map_err(|_| CLONE)?;
+                .map_err(|error| network_error("fetch", error, CLONE))?;
             conn.default_branch()
                 .map_err(|_| CLONE)?
                 .as_str()
@@ -148,10 +168,10 @@ pub(super) fn clone_into(
             p.branch.clone()
         };
         if !git2::Reference::is_valid_name(&format!("refs/heads/{branch}")) {
-            return Err(CLONE);
+            return Err(CLONE.into());
         }
         drop(remote);
-        fetch(&repo, p, password, &branch, progress).map_err(|_| CLONE)?;
+        fetch(&repo, p, password, &branch, progress, CLONE)?;
         let commit = repo
             .find_commit(remote_tip(&repo, &branch)?.ok_or(CLONE)?)
             .map_err(|_| CLONE)?;
@@ -168,18 +188,41 @@ pub(super) fn clone_into(
     Ok(())
 }
 
-pub(super) fn sync(repo: &Repository, p: &Profile, state: &Path, password: &str) -> Result<bool> {
+pub(super) fn sync(repo: &Repository, p: &Profile, state: &Path, password: &str) -> std::result::Result<bool, Value> {
     #[cfg(target_os = "android")]
     android_roots(state)?;
     let no_progress = |_: &str, _: usize, _: usize| {};
-    fetch(repo, p, password, &p.branch, &no_progress)?;
+    fetch(repo, p, password, &p.branch, &no_progress, CONNECT)?;
     let before = head(repo)?;
     let target = remote_tip(repo, &p.branch)?.ok_or(CONNECT)?;
     let (ahead, behind) = counts(repo, before, Some(target))?;
-    if ahead != 0 && behind != 0 {
-        return Err("本地与远端都有新提交，请先在 Git 工具中合并；双方提交均已保留");
-    }
     if behind != 0 {
+        let target = if ahead != 0 {
+            // Compute the merge off-branch. Conflicts never reach the real index or worktree.
+            repo.merge_base(before, target).map_err(|_| MERGE)?;
+            let ours = repo.find_commit(before).map_err(|_| READ)?;
+            let theirs = repo.find_commit(target).map_err(|_| READ)?;
+            let mut index = repo
+                .merge_commits(&ours, &theirs, None)
+                .map_err(|_| MERGE)?;
+            if index.has_conflicts() {
+                return Err(MERGE.into());
+            }
+            let tree_id = index.write_tree_to(repo).map_err(|_| WRITE)?;
+            let tree = repo.find_tree(tree_id).map_err(|_| READ)?;
+            let author = signature(p)?;
+            repo.commit(
+                None,
+                &author,
+                &author,
+                "Merge remote workspace changes",
+                &tree,
+                &[&ours, &theirs],
+            )
+            .map_err(|_| WRITE)?
+        } else {
+            target
+        };
         let object = repo.find_commit(target).map_err(|_| READ)?.into_object();
         let mut check = git2::build::CheckoutBuilder::new();
         check.safe().dry_run();
@@ -199,16 +242,16 @@ pub(super) fn sync(repo: &Repository, p: &Profile, state: &Path, password: &str)
             target,
             true,
             before,
-            "Studio fast-forward",
+            "Studio sync",
         )
         .map_err(|_| RECOVER)?;
         fs::remove_file(journal).map_err(|_| RECOVER)?;
     }
     if ahead != 0 {
-        let rejected = Cell::new(true);
+        let accepted = Cell::new(None);
         let mut cb = callbacks(p, password, &no_progress);
         cb.push_update_reference(|_, error| {
-            rejected.set(error.is_some());
+            accepted.set(Some(error.is_none()));
             Ok(())
         });
         let mut options = PushOptions::new();
@@ -221,9 +264,11 @@ pub(super) fn sync(repo: &Repository, p: &Profile, state: &Path, password: &str)
                 &[format!("refs/heads/{0}:refs/heads/{0}", p.branch)],
                 Some(&mut options),
             )
-            .map_err(|_| PUSH)?;
-        if rejected.get() {
-            return Err(PUSH);
+            .map_err(|error| network_error("push", error, PUSH))?;
+        match accepted.get() {
+            Some(true) => (),
+            Some(false) => return Err(REJECTED.into()),
+            None => return Err(PUSH.into()),
         }
     }
     Ok(behind != 0)

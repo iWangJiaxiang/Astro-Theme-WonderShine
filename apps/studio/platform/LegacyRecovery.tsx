@@ -1,3 +1,4 @@
+import { ErrorNotice } from "../src/components/ErrorNotice";
 import { useState } from 'react';
 import { session } from '../src/api';
 import { useSignals } from '../src/reactivity';
@@ -21,6 +22,7 @@ export function LegacyRecovery() {
         setMessage('恢复复制完成。已有数据保持不变；请重新打开工作区查看草稿和设置。');
       } catch { setMessage('恢复失败。原件保持不变，请检查存储权限并重试。'); }
     }}>{t('复制旧草稿和设置')}</button>
-    {message && <p role="status">{t(message)}</p>}
+    {message === '恢复失败。原件保持不变，请检查存储权限并重试。' ? <ErrorNotice source="LegacyRecovery" message={message} />
+      : message && <p role="status">{t(message)}</p>}
   </details>;
 }

@@ -187,8 +187,19 @@ test('native Git persists offline commits, fast-forwards safely, preserves rejec
   await assert.rejects(interrupted.commit('unsafe'), /上次同步中断/);
   await assert.rejects(interrupted.sync(), /上次同步中断/);
 
-  // Distinct local and remote commits are retained, never force-pushed or reset.
-  await engine.sync();
+  // The primary workspace is behind the remote config change and has a new article commit.
+  await nodeFiles.writeFile(join(root, article), 'Publish from the desktop');
+  const localTip = (await engine.commit('pending article')).head;
+  const peerTip = run(['rev-parse', 'HEAD'], seed);
+  const merged = await engine.sync();
+  assert.equal(merged.dirty, false);
+  assert.equal(merged.ahead, 0);
+  assert.equal(run(['--git-dir=remote.git', 'show', '-s', '--format=%P', 'main']), localTip + ' ' + peerTip);
+  assert.equal(run(['--git-dir=remote.git', 'show', 'main:' + article]), 'Publish from the desktop');
+  assert.match(await nodeFiles.readFile(join(root, 'config.toml'), 'utf8'), /Fast forward/);
+  run(['pull', '--ff-only', '../remote.git', 'main'], seed);
+
+  // Overlapping edits retain both tips.
   await nodeFiles.writeFile(join(root, article), 'Local divergence'); const localDiverged = await engine.commit('local change');
   await nodeFiles.writeFile(join(seed, article), 'Remote divergence'); seedCommit('remote change');
   const remoteHead = run(['--git-dir=remote.git', 'rev-parse', 'main']);

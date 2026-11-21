@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import type { Choice } from "../../shared/choices";
 import type { Json } from "../../shared/types";
 import { errorMessage } from "../api";
@@ -448,12 +449,8 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                             : null,
                           createError.value
                             ? element(
-                                "p",
-                                {
-                                  role: "alert",
-                                  className: classes("notice error"),
-                                },
-                                t(createError.value),
+                                ErrorNotice,
+                                { source: "SelectionField", message: createError.value },
                               )
                             : created.value && props.createdHint
                               ? element(

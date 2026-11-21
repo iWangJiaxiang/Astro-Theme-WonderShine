@@ -1,5 +1,10 @@
 // Application copy only. Site content and stored configuration values are never translated.
 export const english: Record<string, string> = {
+  "错误详情": "Error details",
+  "复制详情": "Copy details",
+  "详情已复制": "Details copied",
+  "请选择详情文字手动复制": "Select the report text and copy it manually.",
+  "关闭": "Close",
   "切换工作区": "Switch workspace",
   "工作区": "Workspaces",
   "正在检查远程内容是否有更新": "Checking for remote content updates…",
@@ -208,6 +213,11 @@ export const english: Record<string, string> = {
   "文件路径超出工作区": "The file path is outside the workspace.",
   "暂存区含有创作中心以外的文件，请先在 Git 工具中处理": "Unrelated files are staged. Handle them in a Git tool first.",
   "暂时无法连接 Git 远端，本地文件和提交已保留": "The Git remote is unavailable. Local files and commits are preserved.",
+  "无法自动合并，请在 Git 工具中处理；双方提交均已保留": "Automatic merge could not complete. Resolve the changes in a Git tool. Both histories are preserved.",
+  "同步时会合并远端更新。如有冲突，双方提交都会保留。": "Sync will merge remote changes. If they conflict, both histories will be preserved.",
+  "Git 远端认证失败，请检查当前会话的访问令牌和仓库权限": "Git authentication failed. Check the access token for this session and your repository permissions.",
+  "Git 远端证书验证失败，请检查仓库地址和设备信任设置": "Git certificate verification failed. Check the repository URL and the device’s certificate trust settings.",
+  "Git 远端拒绝了推送，请检查分支保护规则和写入权限；本地提交已保留": "The remote rejected the push. Check branch protection and write permissions. Your local commits are preserved.",
   "本地与远端都有新提交，请先在 Git 工具中合并；双方提交均已保留": "Both local and remote have new commits. Merge them in a Git tool first; both histories are preserved.",
   "本地仓库的地址或分支与工作区配置不一致，请检查配置": "The local repository URL or branch does not match the workspace settings.",
   "没有可提交的内容修改": "There are no content changes to commit.",

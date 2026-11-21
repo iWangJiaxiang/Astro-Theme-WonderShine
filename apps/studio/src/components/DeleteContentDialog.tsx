@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import { translationLocation } from "../../shared/translation";
 import type { Article, ContentLanguages } from "../../shared/types";
 import { api, ApiError, errorMessage, session } from "../api";
@@ -216,9 +217,8 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
                 : null,
               error.value
                 ? element(
-                    "p",
-                    { role: "alert", className: classes("notice error") },
-                    t(error.value),
+                    ErrorNotice,
+                    { source: "DeleteContentDialog", message: error.value },
                   )
                 : null,
               blocked.value && revision.value

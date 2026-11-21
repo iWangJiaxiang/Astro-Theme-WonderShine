@@ -118,17 +118,4 @@ section.native-ai-settings { max-width: 960px; }
 
 .account-login-buttons > button:only-child { grid-column: 1 / -1; }
 
-.publish-dialog {
-  width: min(420px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
-  padding: 20px; border: 1px solid var(--studio-line); border-radius: 12px;
-  background: var(--studio-card); color: var(--wjx-fontcolor);
-}
-.publish-dialog::backdrop { background: #10162a70; }
-.publish-dialog h2 { margin: 0 0 12px; font-size: 18px; }
-.publish-dialog p, .publish-dialog li { font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
-.publish-dialog ul { padding-inline-start: 18px; max-height: 24dvh; overflow: auto; }
-.publish-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-.publish-actions button { min-height: 44px; }
-.publish-credential { margin-block: 12px; font-size: 13px; }
-.publish-credential summary { cursor: pointer; }
 .workspace-chooser .workspace-record { gap: 4px; padding: 10px 0; border: 0; border-bottom: 1px solid var(--studio-line); border-radius: 0; }

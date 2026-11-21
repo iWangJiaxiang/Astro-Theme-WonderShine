@@ -11,7 +11,7 @@ import { WorkspacePanel } from './platform/WorkspacePanel';
 import { setApiTransport } from './src/api';
 import { locale } from './src/i18n';
 locale.value = 'zh-CN';
-let status = { branch: 'main', dirty: true, changes: 1, managedChanges: ['content/a.md'], ahead: 0, behind: 0, diverged: false };
+let status = { branch: 'main', dirty: true, changes: 1, managedChanges: ['content/a.md'], ahead: 1, behind: 1, diverged: true, canMerge: true };
 let finish;
 window.reviewCalls = 0;
 window.syncCalls = 0;
@@ -25,6 +25,12 @@ setApiTransport(async (path, init) => {
     if (JSON.parse(init.body).confirmation !== 'preview') throw new Error('Wrong commit token');
     status = { ...status, dirty: false, changes: 0, managedChanges: [], ahead: 1 };
   }
+  if (path === '/workspace/publish') {
+    return new Response(JSON.stringify({
+      error: 'Git fetch failed: Authorization: Bearer fixture-secret',
+      params: { gitDetail: 'libgit2 fetch Net/Auth', password: 'fixture-password' },
+    }), { status: 409 });
+  }
   if (path === '/workspace/sync') {
     window.syncCalls++;
     if (JSON.parse(init.body).confirmation !== 'committed') throw new Error('Wrong sync token');
@@ -36,7 +42,13 @@ setApiTransport(async (path, init) => {
   return new Response(JSON.stringify(status));
 });
 window.loseResponse = () => finish();
-createRoot(document.getElementById('root')).render(<WorkspacePanel />);
+const root = createRoot(document.getElementById('root'));
+root.render(<WorkspacePanel />);
+window.openPublish = () => {
+  status = { ...status, dirty: true, changes: 1, managedChanges: ['content/a.md'], canPublish: true };
+  root.render(<WorkspacePanel key="publish" publishPath="content/a.md" />);
+};
+Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.copied = text; } } });
 ` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false,
   });
   const page = await browser.newPage();
@@ -44,6 +56,7 @@ createRoot(document.getElementById('root')).render(<WorkspacePanel />);
     await page.setContent('<div id="root"></div>');
     await page.addScriptTag({ content: fixture.outputFiles[0].text });
     await page.waitForSelector('.workspace-sync-actions');
+    assert.equal(await page.$eval('.workspace-sync-actions button:nth-child(3)', button => button.disabled), false);
     await page.click('.workspace-sync-actions button:nth-child(3)');
     await page.waitForSelector('[role="group"] button');
     await page.click('[role="group"] button');
@@ -57,5 +70,30 @@ createRoot(document.getElementById('root')).render(<WorkspacePanel />);
     assert.match(await page.$eval('[role="status"]', node => node.textContent), /本地提交已保留/);
     assert.doesNotMatch(await page.$eval('[role="status"]', node => node.textContent), /尚未推送|已与 Git/);
     await page.waitForFunction(() => !document.querySelector('.workspace-panel .page-heading button').disabled);
+    await page.evaluate(() => window.openPublish());
+    await page.waitForFunction(() => document.querySelector('.publish-actions .primary')?.textContent === '确认发布');
+    await page.click('.publish-actions .primary');
+    await page.waitForSelector('.publish-dialog .error-more');
+    await page.click('.publish-dialog .error-more');
+    const field = '.error-dialog[open] textarea';
+    await page.waitForSelector(field);
+    const report = await page.$eval(field, node => node.value);
+    for (const detail of ['POST /workspace/publish', 'HTTP 409', 'libgit2 fetch Net/Auth', 'WorkspacePanel']) assert.ok(report.includes(detail));
+    assert.doesNotMatch(report, /fixture-secret|fixture-password/);
+    await page.click('.error-actions .primary');
+    await page.waitForFunction(() => document.querySelector('.error-dialog [role=status]')?.textContent === '详情已复制');
+    assert.equal(await page.evaluate(() => window.copied), report);
+    await page.evaluate(() => {
+      navigator.clipboard.writeText = async () => { throw new Error('Clipboard denied'); };
+      document.execCommand = () => false;
+    });
+    await page.click('.error-actions .primary');
+    await page.waitForFunction(() => document.querySelector('.error-dialog [role=status]')?.textContent === '请选择详情文字手动复制');
+    assert.equal(await page.$eval(field, node => node.selectionStart === 0 && node.selectionEnd === node.value.length), true);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.error-dialog[open]'));
+    assert.ok(await page.$('dialog.publish-dialog[open]'), 'Closing details retains the publish dialog');
+    assert.equal(await page.evaluate(() => document.activeElement?.classList.contains('error-more')), true);
+
   } finally { await page.close(); }
 }

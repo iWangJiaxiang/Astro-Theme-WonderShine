@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import SaveButton from "./SaveButton";
 import { saveContext } from "../save-preferences";
 import type { SaveMode } from "../../shared/save";
@@ -392,9 +393,8 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
             savedBranch.value ? element("code", { className: "saved-branch" }, savedBranch.value) : null,
             error.value
               ? element(
-                  "p",
-                  { role: "alert", className: classes("notice error") },
-                  t(error.value),
+                  ErrorNotice,
+                  { source: "SettingsView", message: error.value },
                   " ",
                   element(
                     "button",
@@ -433,10 +433,8 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
 
               relationsError.value
                 ? element(
-                    "p",
-                    { className: classes("notice error") },
-                    t("无法加载可选内容："),
-                    t(relationsError.value),
+                    ErrorNotice,
+                    { source: "SettingsView", message: relationsError.value, prefix: t("无法加载可选内容：") },
                     " ",
                     element(
                       "button",
@@ -530,9 +528,8 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           )
         : error.value
           ? element(
-              "p",
-              { role: "alert", className: classes("notice error") },
-              t(error.value),
+              ErrorNotice,
+              { source: "SettingsView", message: error.value },
               " ",
               element(
                 "button",

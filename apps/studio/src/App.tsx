@@ -1,3 +1,4 @@
+import { ErrorDetails, ErrorNotice } from "./components/ErrorNotice";
 import { LegacyRecovery } from "../platform/LegacyRecovery";
 import { configureSaving } from "./save-preferences";
 import type { SaveCapabilities } from "../shared/save";
@@ -698,9 +699,8 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                     { className: classes("main-content") },
                     error.value
                       ? element(
-                          "p",
-                          { role: "alert", className: classes("notice error") },
-                          t(error.value),
+                          ErrorNotice,
+                          { source: "App", message: error.value },
                           " ",
                           element(
                             "button",
@@ -937,8 +937,8 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                       : null,
                                   renderList(
                                     dashboardArticles.value.slice(0, 5),
-                                  ).map((item) =>
-                                    element(
+                                  ).map((item) => {
+                                    const row = element(
                                       "button",
                                       {
                                         key: item.path,
@@ -983,8 +983,11 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                                 ? t("草稿")
                                                 : t("已发布"),
                                       ),
-                                    ),
-                                  ),
+                                    );
+                                    return item.error && !showingPreview.value
+                                      ? <div className="library-row" key={item.path}>{row}<ErrorDetails message={item.error} source="App" /></div>
+                                      : row;
+                                  }),
                                 ),
                                 element(
                                   "section",

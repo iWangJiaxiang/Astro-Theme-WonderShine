@@ -1,3 +1,4 @@
+import { ErrorNotice } from "../src/components/ErrorNotice";
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { GitProgressEvent } from 'isomorphic-git';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -6,7 +7,8 @@ import { tauriFiles } from './tauri-filesystem';
 import LoadingState from '../src/components/LoadingState';
 import LanguageSwitcher from '../src/components/LanguageSwitcher';
 import Icon from '../src/components/Icon';
-import { t } from '../src/i18n';
+import { t, type Message } from '../src/i18n';
+import { errorMessage } from '../src/api';
 import { useSignals } from '../src/reactivity';
 import './native.css';
 import AccountLogin from './AccountLogin';
@@ -79,7 +81,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
   const [connection, setConnection] = useState<Connection>(() => folderAvailable && (profiles[0]?.source === 'local' || !profiles.length) ? 'local' : 'clone');
   const [address, setAddress] = useState('');
   const [token, setToken] = useState('');
-  const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [busy, setBusy] = useState(false), [error, setError] = useState<Message>('');
   const [progress, setProgress] = useState<GitProgressEvent | null>(null);
   const progressLabel = progress ? progressLabels[progress.phase] || '下载仓库' : '正在连接仓库';
   const progressValue = progress?.total && progress.total > 0 ? Math.min(100, Math.max(0, Math.floor(progress.loaded / progress.total * 100))) : undefined;
@@ -132,7 +134,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
     } catch (reason) {
       if (mounted.current) {
         if (resume) selectWorkspace(item);
-        setError(reason instanceof Error && reason.name === 'TimeoutError' ? t('连接超时，请重试。') : reason instanceof Error ? reason.message : t('无法打开工作区'));
+        setError(reason instanceof Error && reason.name === 'TimeoutError' ? t('连接超时，请重试。') : reason instanceof Error ? errorMessage(reason) : '无法打开工作区');
       }
     } finally {
       if (mounted.current) { setBusy(false); setResuming(false); }
@@ -173,7 +175,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
       {folderAvailable && <button disabled={busy} aria-pressed={local} onClick={() => switchConnection('local')}><Icon name="folder" size={19} />{t('本地文件夹')}</button>}
       <button disabled={busy} aria-pressed={connection === 'clone'} onClick={() => switchConnection('clone')}><Icon name="link" size={19} />{t('远程仓库')}</button>
     </div>
-    {(error || initial.error) && <p className="notice error" role="alert">{t(error || initial.error)}</p>}
+    {(error || initial.error) && <ErrorNotice source="NativeConnection" message={error || initial.error} />}
     {records.length > 0 && <section className="workspace-chooser" aria-label={t('工作区')}>
       {records.filter(item => !item.archived).map(renderRecord)}
       {records.some(item => item.archived) && <details className="archived-workspaces"><summary>{t('已归档工作区')}</summary>

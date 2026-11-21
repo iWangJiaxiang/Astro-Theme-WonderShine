@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import { translationLocation } from "../../shared/translation";
 import type { ContentLanguages, Json } from "../../shared/types";
 import { api, errorMessage, session } from "../api";
@@ -345,9 +346,8 @@ const ThreadComposer: StudioComponent<Props, Events> = component<Props, Events>(
           : null,
         error.value
           ? element(
-              "p",
-              { role: "alert", className: classes("notice error") },
-              t(error.value),
+              ErrorNotice,
+              { source: "ThreadComposer", message: error.value },
               " ",
               element(
                 "button",

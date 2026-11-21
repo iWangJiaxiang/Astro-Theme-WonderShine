@@ -1,3 +1,4 @@
+import { mergeTarget } from '../platform/merge-target.js';
 import { commitBranchSnapshot, assertBranchSnapshot } from '../platform/branch-save.js';
 import fs from 'node:fs';
 import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
@@ -39,11 +40,7 @@ export class GitWorkspaceRepository implements Repository {
     this.workspace = {
       saveBranch: (key, files) => this.run(async () => {
         await this.mutable();
-        for (const marker of ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply', 'sequencer', 'BISECT_LOG', 'index.lock']) {
-          try { await lstat(join(this.root, '.git', marker)); }
-          catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue; throw error; }
-          throw new StudioError(409, 'Git 操作尚未完成，请先在 Git 工具中完成合并、变基或其他操作');
-        }
+        await this.assertGitIdle();
         await assertBranchSnapshot(files, async path => {
           let content = true;
           try { validatePath(path); } catch { content = false; }
@@ -122,6 +119,14 @@ export class GitWorkspaceRepository implements Repository {
     throw new StudioError(409, '上次同步中断，请先在本地检查 Git 工作区并完成恢复；现有内容已保留');
   }
 
+  private async assertGitIdle() {
+    for (const marker of ['MERGE_HEAD', 'CHERRY_PICK_HEAD', 'REVERT_HEAD', 'rebase-merge', 'rebase-apply', 'sequencer', 'BISECT_LOG', 'index.lock']) {
+      try { await lstat(join(this.root, '.git', marker)); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue; throw error; }
+      throw new StudioError(409, 'Git 操作尚未完成，请先在 Git 工具中完成合并、变基或其他操作');
+    }
+  }
+
   private async rows(cache = {}) {
     return (await git.statusMatrix({ ...this.gitOptions, cache, filter: path => !internal(path) }))
       .filter(([, head, worktree, stage]) => head !== worktree || head !== stage);
@@ -157,7 +162,7 @@ export class GitWorkspaceRepository implements Repository {
     const managedChanges = rows.filter(([path]) => managed(path)).map(([path]) => path);
     const changes = rows.length;
     return {
-      status: { branch: this.options.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, managedChanges },
+      status: { branch: this.options.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, canMerge: true, managedChanges },
       review: { scope: 'server:' + this.root, branch: this.options.branch, head, rows: rows.filter(([path]) => managed(path)) },
     };
   }
@@ -183,19 +188,22 @@ export class GitWorkspaceRepository implements Repository {
 
   private async sync(confirmation?: string): Promise<WorkspaceStatus> {
     await this.mutable();
+    await this.assertGitIdle();
     if (confirmation !== undefined) await this.validateReview(confirmation);
     if ((await this.rows()).length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
     try {
       await git.fetch({ ...this.gitOptions, http: this.http, url: this.options.url, remote: 'origin', ref: this.options.branch, singleBranch: true, onAuth: this.auth });
     } catch { throw new StudioError(502, '暂时无法连接 Git 远端，本地文件和提交已保留'); }
     let status = await this.status();
-    if (status.diverged) throw new StudioError(409, '本地与远端都有新提交，请先在 Git 工具中合并；双方提交均已保留');
     if (status.behind && status.remoteHead) {
+      const target = status.diverged && status.head
+        ? await mergeTarget(fs, this.root, status.head, status.remoteHead, { name: this.options.name, email: this.options.email })
+        : status.remoteHead;
       // Detect collisions before changing either the branch or working files.
-      await git.checkout({ ...this.gitOptions, ref: status.remoteHead, noUpdateHead: true, dryRun: true });
-      await writeFile(this.journal, JSON.stringify({ before: status.head, target: status.remoteHead }), { flag: 'wx', mode: 0o600 });
-      await git.checkout({ ...this.gitOptions, ref: status.remoteHead, noUpdateHead: true });
-      await git.writeRef({ ...this.gitOptions, ref: `refs/heads/${this.options.branch}`, value: status.remoteHead, force: true });
+      await git.checkout({ ...this.gitOptions, ref: target, noUpdateHead: true, dryRun: true });
+      await writeFile(this.journal, JSON.stringify({ before: status.head, target }), { flag: 'wx', mode: 0o600 });
+      await git.checkout({ ...this.gitOptions, ref: target, noUpdateHead: true });
+      await git.writeRef({ ...this.gitOptions, ref: `refs/heads/${this.options.branch}`, value: target, force: true });
       await rm(this.journal);
       status = await this.status();
     }

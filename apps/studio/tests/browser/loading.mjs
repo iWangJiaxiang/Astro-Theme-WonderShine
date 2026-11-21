@@ -5,7 +5,8 @@ export async function checkLoading({ browser, origin, screenshots }) {
   const pending = new Map();
   let holdInitial = true, failContent = false, failDocument = false;
   const requests = [], responses = [], failures = [], pageErrors = [];
-  const workspaceRetry = '.main-content > .notice.error button';
+  // The adjacent details action remains available while a retry is pending.
+  const workspaceRetry = '.main-content > .notice.error > button:not([aria-haspopup])';
   page.on('response', response => {
     const url = new URL(response.url());
     if (url.origin === origin && ['/api/bootstrap', '/api/content', '/api/content-languages', '/api/settings/taxonomies', '/api/document'].includes(url.pathname)) {
@@ -89,11 +90,11 @@ export async function checkLoading({ browser, origin, screenshots }) {
     const optionsError = '.thread-composer .metadata-card > .notice.error';
     await page.waitForFunction(selector => document.querySelector(selector)?.textContent.includes('选项载入失败：连接已更换，请重试'), {}, optionsError);
     await page.click('.thread-composer .composer-tools > button[aria-expanded="false"]');
-    await page.waitForSelector(optionsError + ' button', { visible: true });
+    await page.waitForSelector(optionsError + ' > button:not([aria-haspopup])', { visible: true });
     const [optionsContent, optionsTaxonomies] = await Promise.all([
       page.waitForResponse(response => response.url() === origin + '/api/content?refresh=1'),
       page.waitForResponse(response => new URL(response.url()).pathname === '/api/settings/taxonomies'),
-      page.click(optionsError + ' button'),
+      page.click(optionsError + ' > button:not([aria-haspopup])'),
     ]);
     assert.equal(optionsContent.status(), 200, 'composer option retry reloads content');
     assert.equal(optionsTaxonomies.status(), 200, 'composer option retry completes taxonomy loading');
@@ -113,12 +114,12 @@ export async function checkLoading({ browser, origin, screenshots }) {
       page.click('aside nav button:nth-child(2)'),
     ]);
     assert.equal(failedLibrary.status(), 502, 'library navigation reaches the injected content failure');
-    await page.waitForSelector('.content-library .notice.error button:not(:disabled)');
+    await page.waitForSelector('.content-library .notice.error > button:not([aria-haspopup]):not(:disabled)');
     assert.equal(await page.$('.content-library .empty-state'), null, 'failed library request is not an empty state');
     failContent = false;
     const [recoveredLibrary] = await Promise.all([
       page.waitForResponse(response => response.url() === origin + '/api/content?refresh=1'),
-      page.click('.content-library .notice.error button'),
+      page.click('.content-library .notice.error > button:not([aria-haspopup])'),
     ]);
     assert.equal(recoveredLibrary.status(), 200, 'library retry receives fresh content');
     await page.waitForSelector('.library-row .content-row');

@@ -204,3 +204,20 @@ h1 { font-size: 26px; margin-bottom: 8px; }
   }
   .object-fields .image-field-preview { order: 1; }
 }
+
+.publish-dialog {
+  width: min(420px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
+  padding: 16px; border: 1px solid var(--studio-line); border-radius: 12px;
+  background: var(--studio-card); color: var(--wjx-fontcolor);
+}
+.publish-dialog[open] { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 4px; }
+.publish-dialog::backdrop { background: #10162a70; }
+.publish-dialog > h2 { margin: 0; font-size: 18px; }
+.publish-dialog > p, .publish-dialog > details { margin: 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.publish-dialog > .notice { margin: 0; padding: 8px 12px; font-size: 13px; overflow-wrap: anywhere; }
+.publish-dialog > details > summary { align-content: center; padding-block: 4px; }
+.publish-dialog > details > ul { margin: 0; padding-inline-start: 18px; max-height: min(24dvh, 10rem); overflow: auto; }
+.publish-credential .field { display: grid; grid-template-columns: fit-content(36%) minmax(0, 1fr); align-items: center; gap: 8px; margin: 0; }
+.publish-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.publish-dialog > .publish-actions { margin-top: 4px; }
+.publish-actions button { min-height: 44px; }

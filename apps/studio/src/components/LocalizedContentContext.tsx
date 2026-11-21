@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import {
   translationLocation,
   type TranslationCapabilities,
@@ -209,9 +210,8 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
             ),
         error.value
           ? element(
-              "p",
-              { role: "alert", className: classes("notice error") },
-              t(error.value),
+              ErrorNotice,
+              { source: "LocalizedContentContext", message: error.value },
               " ",
               element(
                 "button",
