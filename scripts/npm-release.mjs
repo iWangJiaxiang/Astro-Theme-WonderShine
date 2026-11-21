@@ -19,6 +19,7 @@ export function themeReleaseContext(eventName, event, pkg, repository, sha) {
   const version = themeVersion(pkg.version);
   const tag = `theme-v${version.version}`;
   if (eventName === 'release') {
+    if (version.distTag === 'canary') throw new Error('Publish canaries directly from main');
     if (event.release?.target_commitish !== 'main') throw new Error('Theme Release must target main');
     if (event.release?.draft || event.release?.tag_name !== tag) throw new Error('Release tag must match packages/theme/package.json exactly');
     if (Boolean(event.release.prerelease) !== version.prerelease) throw new Error('GitHub prerelease status must match the package version');

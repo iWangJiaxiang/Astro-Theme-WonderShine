@@ -20,4 +20,4 @@ Install a channel in your blog and commit the resulting manifest and lockfile:
 
 Run the command again to update. Check channel versions with `npm view @wondershine/theme dist-tags`.
 
-Maintainer releases use `theme-vX.Y.Z` GitHub Releases and the **Theme npm package** workflow. Manual runs validate the packed package without publishing. See `docs/npm-releases.md` in the source repository for trusted publisher setup and prerelease rules.
+Verified main changes publish directly to npm canary. Beta and RC use GitHub prereleases, and stable versions use full GitHub Releases. Manual runs validate the packed package without publishing. See `docs/npm-releases.md` in the source repository for trusted publisher setup and prerelease rules.

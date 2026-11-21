@@ -61,6 +61,7 @@ test('canary dispatch must match the committed canary version', () => {
   const event = { action: 'theme-canary', client_payload: { version: candidate.version } };
   const context = themeReleaseContext('repository_dispatch', event, candidate, repository, sha);
   assert.equal(context.distTag, 'canary');
+  assert.throws(() => themeReleaseContext('release', release('theme-v' + candidate.version, true), candidate, repository, sha), /directly from main/);
   assert.equal(context.publish, 'true');
   assert.throws(() => themeReleaseContext('repository_dispatch', event, pkg, repository, sha));
   assert.throws(() => themeReleaseContext('repository_dispatch', { ...event, action: 'other' }, candidate, repository, sha));

@@ -95,9 +95,9 @@
 
 - Studio 的发行名称是 **WonderShine Studio**，Tauri identifier 为 `wang.jiaxiang.wondershine-studio`；Android 生成的 applicationId 为 `wang.jiaxiang.wondershine_studio`。更改应用身份必须评估旧数据目录、签名与升级影响。
 - Studio 使用 `studio-vX.Y.Z`，主题 npm 包使用 `theme-vX.Y.Z`，互不混用版本或发布触发器。
-- 所有新发行（主题和 Studio，包括稳定版与预发布）必须先将发行代码及版本变更合入远端 `main`，确认该提交通过对应的远程验证，再从 `main` 的已验证提交创建 `theme-v*` 或 `studio-v*` tag 和 GitHub Release（target 为 `main`）。禁止直接从 feature 或其他非 main 分支创建发行 tag 或 Release。已发布的 tag、npm 版本及 Studio 发行不得移动、覆盖或重发；发现违反流程时先说明事实，再通过合并和新版本纠正。
+- 所有新发行（主题和 Studio，包括稳定版与预发布）必须先将发行代码及版本变更合入远端 `main`，确认该提交通过对应的远程验证，主题 canary 直接发 npm，其余发行从 `main` 的已验证提交创建 `theme-v*` 或 `studio-v*` tag 和 GitHub Release（target 为 `main`）。禁止直接从 feature 或其他非 main 分支创建发行 tag 或 Release。已发布的 tag、npm 版本及 Studio 发行不得移动、覆盖或重发；发现违反流程时先说明事实，再通过合并和新版本纠正。
 - 开启仓库变量 `STUDIO_UPLOAD_TESTFLIGHT=true` 后，`main` 的 Studio 代码变更自动构建签名 IPA，通过同一提交的 Studio 验证和 iOS 检查后上传 TestFlight。仅文档或测试变更跳过自动上传。
-- `npm-publish.yml` 的手动入口只有 dry-run；稳定版发 `latest`，beta / RC 发 `next`。main 上的主题变更自动准备 canary 版本提交，通过远程验证并创建 prerelease 后发 `canary`。实际公开发行须在用户授权范围内。
+- `npm-publish.yml` 的手动入口只有 dry-run；稳定版发 `latest`，beta / RC 发 `next`。main 上的主题变更自动准备 canary 版本提交，通过远程验证后直接发 npm 的 `canary`。GitHub prerelease 用于 beta / RC。实际公开发行须在用户授权范围内。
 - 发布已经通过独立安装验证的同一份 tgz，保留源码/版本/SHA-256 校验，不在发布 job 重新打包。
 - npm 正式发布使用 Trusted Publisher/OIDC；dry-run 不证明 scope 权限或信任配置可用。配置以 `docs/npm-releases.md` 为准。
 - 个人博客升级还需在站点仓库更新主题依赖或 submodule 指针，并进行站点自身的内容回归；主题 CI 不等于个人站已部署。

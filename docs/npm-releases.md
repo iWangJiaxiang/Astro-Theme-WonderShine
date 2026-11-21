@@ -19,7 +19,7 @@
 | 入口 | 行为 |
 | --- | --- |
 | 手动运行 **Theme npm package** | 远程验证和 `npm publish --dry-run` |
-| 合入 main 的主题源码、打包脚本或共享构建依赖变更 | 自动准备 canary，将版本提交到 main，验证该版本，创建 GitHub prerelease，然后发布到 `canary` |
+| 合入 main 的主题源码、打包脚本或共享构建依赖变更 | 自动准备 canary，将版本提交到 main，远程验证后直接发布到 npm 的 `canary`，无需 Git tag 或 GitHub Release |
 | 从已验证的 main 提交发布 `theme-vX.Y.Z-beta.N` 或 `theme-vX.Y.Z-rc.N`，勾选 **Pre-release** | 通过发行验证后更新 `next` |
 | 从已验证的 main 提交发布 `theme-vX.Y.Z` 正式 Release | 通过发行验证后更新 `latest` |
 
@@ -44,7 +44,7 @@
    - Workflow filename：`npm-publish.yml`（不是完整路径）
    - Environment name：`npm`（与 workflow 的 environment 完全一致）
    - Allowed actions：启用 **npm publish**。2026-09-03 之后新建的配置默认只允许 staged publishing，本工作流使用直接发布，需要明确开启此项。
-3. 在 GitHub 的 `npm` environment 配置适合仓库的 部署限制或审核人（可选，自动 canary 需要允许 main，手动发行需要允许主题版本 tag）；如果配置了审核，只有真实发布 job 会等待批准，dry-run 不使用该 environment。
+3. 在 GitHub 的 `npm` environment 配置适合仓库的部署限制或审核人（可选，自动 canary 需要允许 main，手动发行需要允许主题版本 tag）；如果配置了审核，只有真实发布 job 会等待批准，dry-run 不使用该 environment。
 4. 新建的 trusted publisher 必须在 2 天内完成首次成功发布，否则需要删除并重新创建。因此建议准备正式发行时再配置，dry-run 不会验证或延长这个期限。
 5. 运行一次手动 dry-run，检查 `theme-npm-package` 与 `theme-npm-browser-results` artifacts。准备好真实发行时再发布 `theme-v*` Release。
 
@@ -52,7 +52,7 @@ OIDC 会自动附带 npm provenance。`package.json` 中的 repository 必须对
 
 ## 版本与失败恢复
 
-同一渠道的版本须递增。已发布 tag、GitHub Release 和 npm 版本保留原记录。若自动 canary 在版本提交后中断，可重新运行失败的工作流；也可在该版本提交通过远程 CI 后，从同一 SHA 创建对应的 canary prerelease。
+同一渠道的版本须递增。已发布 tag、GitHub Release 和 npm 版本保留原记录。若自动 canary 在版本提交后中断，可重新运行失败的工作流。工作流从通过独立安装验证的原始 tgz 恢复发布。
 
 构建/验证失败时修复代码并重跑；npm 认证失败时检查 trusted publisher 的仓库、workflow 和 environment 是否完全匹配。若上传成功后 Actions 中断，先在 npm 核对该版本是否已存在；已存在时保留发行记录，不强行覆盖、不重复提交同版本。工作流不会删除或撤回 npm 包。
 

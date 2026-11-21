@@ -85,7 +85,6 @@ jobs:
     timeout-minutes: 40
     outputs:
       publish: ${{ steps.context.outputs.publish }}
-      tag: ${{ steps.context.outputs.tag }}
       version: ${{ steps.context.outputs.version }}
       dist-tag: ${{ steps.context.outputs.distTag }}
     steps:
@@ -161,34 +160,9 @@ jobs:
           name: theme-npm-browser-results
           path: temp/browser/
           retention-days: 7
-  record-canary:
-    if: github.event_name == 'repository_dispatch'
-    needs: verify
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - name: Tag the verified commit and record the prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.verify.outputs.tag }}
-        run: |
-          repo="repos/$GITHUB_REPOSITORY"
-          if ! gh api "$repo/git/ref/tags/$TAG" --silent; then
-            gh api "$repo/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$GITHUB_SHA" --silent
-          fi
-          test "$(gh api "$repo/git/ref/tags/$TAG" --jq .object.sha)" = "$GITHUB_SHA"
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh api "$repo/releases/tags/$TAG" --jq '.prerelease and (.draft | not) and .target_commitish == "main"' | grep -qx true
-          else
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --target main --prerelease \
-              --title "WonderShine Theme ${TAG#theme-v}" --notes "Canary build of $GITHUB_SHA. Install with npm install --save-exact @wondershine/theme@canary."
-          fi
   publish:
-    needs: [verify, record-canary]
-    if: >-
-      !cancelled() && needs.verify.result == 'success' && needs.verify.outputs.publish == 'true' &&
-      (needs.record-canary.result == 'success' || needs.record-canary.result == 'skipped')
+    needs: verify
+    if: needs.verify.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: npm
