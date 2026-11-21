@@ -147,5 +147,5 @@ test('theme settings pin an exact npm version and persist across Studio sessions
   assert.equal((await save({ [pin]: false })).pinnedThemeVersion, null);
   const config = parse(await readFile(join(root, 'config.toml'), 'utf8'));
   assert.equal(config.title, 'Keep');
-  assert.deepEqual((config.extra as any).theme, { channel: 'canary', pinned: false });
+  assert.deepEqual({ ...(config.extra as any).theme }, { channel: 'canary', pinned: false });
 });
