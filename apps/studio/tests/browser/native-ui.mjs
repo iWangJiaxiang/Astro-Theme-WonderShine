@@ -327,8 +327,6 @@ try {
   await page.click('.connection-about summary');
   await page.waitForSelector('.connection-about .native-update-controls button', { visible: true });
   await page.click('.connection-about summary');
-  await recordAction('a6347560-bbe9-4c35-9d89-b0429108882b', '删除记录');
-  await page.waitForFunction(() => !document.querySelector('[data-workspace-id="a6347560-bbe9-4c35-9d89-b0429108882b"]'));
   await screenshot('connection-git-desktop'); await auditNativePage('git'); await noOverflow('desktop connection');
   await click('本地文件夹'); await screenshot('connection-folder-desktop'); await auditNativePage('folder');
   await page.click('.folder-picker');
@@ -475,6 +473,13 @@ try {
   await page.click('[aria-label="退出登录"]'); await heading('连接创作工作区');
   assert.equal(await page.$('.studio-shell'), null);
   assert.equal([...commands].some(command => command.startsWith('plugin:http|')), false, 'offline workflow must not contact Git or other services');
+  dismissNextDialog = true;
+  await recordAction(profile.id, '删除记录');
+  assert.ok(await page.$(`.workspace-record[data-workspace-id="${profile.id}"]`), 'cancelling deletion keeps the record');
+  await recordAction(profile.id, '删除记录');
+  await page.waitForFunction(id => !document.querySelector(`[data-workspace-id="${id}"]`), {}, profile.id);
+  assert.ok(await fs.stat(root), 'deleting the connection record preserves the checkout');
+  assert.ok(await page.evaluate(key => localStorage.getItem(key), recoveryKey), 'deleting the record preserves drafts');
   await page.evaluate(()=>localStorage.setItem('wondershine.native.workspaces.v1','[]'));
   await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36');
   await page.setViewport({width:390,height:844,isMobile:true,hasTouch:true});
@@ -644,7 +649,10 @@ try {
   await click('完成');
   await click('切换工作区'); await heading('连接创作工作区');
   assert.equal(await page.$('.studio-shell'), null, 'Explicit switching leaves the chooser open');
-  await click('打开工作区'); await heading('今天，写点什么？');
+  await click('添加工作区');
+  await page.type('.connection-url input', mobile.url);
+  await click('下载并开始创作'); await heading('今天，写点什么？');
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('wondershine.native.workspaces.v1')).map(item => item.id)), [saved[0].id], 'adding the same mobile repository reopens its original checkout');
   await click('站点信息'); await page.waitForSelector('.settings-card input');
   assert.deepEqual(await page.$$eval('.settings-card input:not([type=checkbox]):not([type=radio]):not([type=color]), .settings-card select, .settings-card textarea', fields => fields.filter(node => node.getClientRects().length && (parseFloat(getComputedStyle(node).fontSize) < 16 || node.getBoundingClientRect().height < 44)).map(node => node.outerHTML.slice(0,80))), [], 'Native iOS settings retain readable editing size and touch targets');
   await screenshot('settings-iphone'); await noOverflow('iPhone settings');
