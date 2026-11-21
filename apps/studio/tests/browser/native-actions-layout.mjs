@@ -342,7 +342,7 @@ async function reviewCase(page, row, record) {
     const id = await page.$eval(confirmation, group => [...group.querySelectorAll('button')].indexOf(document.activeElement));
     need(id === seen.length, 'focus-identity');
     if (id < 0) continue;
-    await reveal(page, `${confirmation} > button:nth-of-type(${id + 1})`);
+    await reveal(page, `${confirmation} .publish-actions > button:nth-of-type(${id + 1})`);
     await page.evaluate(() => window.nativeActionGeometry.visible(document.activeElement, true));
     need(!seen.includes(id), 'focus-repeat'); seen.push(id);
   }

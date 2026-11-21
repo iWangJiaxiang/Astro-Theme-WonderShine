@@ -85,7 +85,7 @@ const dataFor = (job, stale = false) => job.kind === 'content' ? (stale ? [row()
   : job.kind === 'auth' ? identity() : job.kind === 'bootstrap' ? bootstrap : job.kind === 'preview' ? null
   : job.kind === 'settings' ? settings
   : job.kind === 'taxonomy' ? { id: 'taxonomies', title: '分类', fields: [], values: { 'post.tags': [], 'post.categories': [] }, revision: 'taxonomy-r1' }
-  : job.kind === 'document' ? { path: job.endpoint.includes(encodeURIComponent(translatedPath)) ? translatedPath : path, text: 'Synthetic file', metadata: { title: job.endpoint.includes(encodeURIComponent(translatedPath)) ? 'Synthetic translation' : 'Synthetic article', draft: false }, body: 'Synthetic saved body', revision: 'document-r1' }
+  : job.kind === 'document' ? { path: job.endpoint.includes(encodeURIComponent(translatedPath)) ? translatedPath : path, text: 'Synthetic file', metadata: { title: job.endpoint.includes(encodeURIComponent(translatedPath)) ? 'Synthetic translation' : 'Synthetic article', date: row().date, draft: false }, body: 'Synthetic saved body', revision: 'document-r1' }
   : job.kind === 'save' ? { revision: 'document-r2', message: 'Synthetic saved' }
   : { path: translatedPath, revision: 'translation-r1' };
 function release(id, options = {}) {

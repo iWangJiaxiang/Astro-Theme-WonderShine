@@ -41,7 +41,7 @@ setApiTransport(async (endpoint, init) => {
     if (endpoint === '/content') return Response.json([row]);
     if (endpoint === '/content-preview') return Response.json(null);
     if (endpoint === '/settings/site') return Response.json(settings);
-    if (endpoint === '/document?path=' + encodeURIComponent(path)) return Response.json({ path, text: 'Fixture article file', metadata: { title: row.title, draft: false }, body: 'Fixture saved body', revision: 'document-r1' });
+    if (endpoint === '/document?path=' + encodeURIComponent(path)) return Response.json({ path, text: 'Fixture article file', metadata: { title: row.title, date: row.date, draft: false }, body: 'Fixture saved body', revision: 'document-r1' });
     if (endpoint === '/content-languages') return Response.json({ defaultLanguage: 'zh-CN', languages: ['zh-CN'] });
     if (endpoint === '/translation/config') return Response.json({ enabled: false });
     if (endpoint === '/settings/taxonomies?language=zh-CN') return Response.json({ id: 'taxonomies', title: '分类', fields: [], values: { 'post.tags': [], 'post.categories': [] }, revision: 'taxonomy-r1' });
