@@ -16,6 +16,7 @@ export function installNavigationSwipe(
     if (event.touches.length !== 1 || !(event.target instanceof Element) || !available()) return;
     const target = event.target;
     if (!target.closest('.studio-shell') || target.closest('input, select, textarea, [contenteditable=true], .vditor')) return;
+    if (window.getSelection()?.isCollapsed === false) return;
     const touch = event.touches[0];
     const drawer = document.querySelector('.sidebar.open');
     const area = drawer ? (drawer.contains(target) ? 'drawer' : undefined)

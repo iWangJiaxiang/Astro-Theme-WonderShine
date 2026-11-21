@@ -386,9 +386,37 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       );
     }
     const viewportPosition = navigationPosition();
-    const previousViews = ref<string[]>([]);
-    watch(session, () => { viewportPosition.clear(); previousViews.value = []; });
-    const canSwipeBack = () => !!document.value || previousViews.value.length > 0;
+    type Destination = { view: string; doc: { path: string; mode: "detail" | "edit" } | null };
+    const previous = ref<Destination[]>([]);
+    watch(session, () => { viewportPosition.clear(); previous.value = []; });
+    const canSwipeBack = () => previous.value.length > 0;
+    function rememberDestination(nextKey: string) {
+      const key = positionKey();
+      viewportPosition.remember(key);
+      if (key === nextKey) return;
+      const last = previous.value.at(-1);
+      if (last && positionKey(last.view, last.doc) === nextKey) {
+        previous.value.pop();
+        return;
+      }
+      // Draft contents belong to the editor's recovery store, never navigation.
+      const doc = document.value;
+      if (doc?.initial) return;
+      previous.value = [...previous.value.slice(-31), {
+        view: view.value, doc: doc && { path: doc.path, mode: doc.mode },
+      }];
+    }
+    function swipeBack() {
+      const destination = previous.value.at(-1);
+      if (!destination || !leave()) return;
+      viewportPosition.remember(positionKey());
+      previous.value.pop();
+      document.value = destination.doc;
+      view.value = destination.view;
+      dirty.value = false;
+      viewportPosition.enter(positionKey(), true);
+      if (!destination.doc && destination.view === "home") void loadArticles();
+    }
     let removeSwipe = () => {};
     onMounted(() => {
       removeSwipe = installNavigationSwipe(
@@ -396,15 +424,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         canSwipeBack,
         action => {
           if (action === "close") { menuOpen.value = false; return; }
-          if (action === "back") {
-            if (document.value?.mode === "edit") editorBack();
-            else if (document.value) navigate(view.value);
-            else {
-              const previous = previousViews.value.at(-1);
-              if (previous && navigate(previous, true)) previousViews.value.pop();
-            }
-            return;
-          }
+          if (action === "back") { swipeBack(); return; }
           const index = primaryNavigation.findIndex(item => item.id === view.value);
           const next = primaryNavigation[index + (action === "next" ? 1 : -1)];
           if (index >= 0 && next) navigate(next.id);
@@ -413,22 +433,20 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
     });
     onBeforeUnmount(() => removeSwipe());
     onBeforeUnmount(() => viewportPosition.dispose());
-    function positionKey() { return document.value ? `document:${document.value.path}:${document.value.mode}` : `view:${view.value}`; }
-    function navigate(next: string, back = false) {
-      if (!leave()) return false;
-      if (!back && next !== view.value) {
-        if (next === "home") previousViews.value = [];
-        else previousViews.value = [...previousViews.value.slice(-31), view.value];
-      }
+    function positionKey(section = view.value, doc: Destination["doc"] = document.value) {
+      return doc ? `document:${doc.path}:${doc.mode}` : `view:${section}`;
+    }
+    function navigate(next: string) {
+      if (!leave()) return;
       const returning = !!document.value && next === view.value;
-      viewportPosition.remember(positionKey());
+      rememberDestination(positionKey(next, null));
+      if (next === "home") previous.value = [];
       document.value = null;
       dirty.value = false;
       view.value = next;
       menuOpen.value = false;
       viewportPosition.enter(positionKey(), returning);
       if (next === "home") void loadArticles();
-      return true;
     }
     function open(
       path: string,
@@ -436,13 +454,9 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       initialBody?: string,
     ) {
       if (!leave()) return false;
-      viewportPosition.remember(positionKey());
-      document.value = {
-        path,
-        initial,
-        initialBody,
-        mode: !initial && path.startsWith("content/threads/") ? "detail" : "edit",
-      };
+      const mode = !initial && path.startsWith("content/threads/") ? "detail" : "edit";
+      rememberDestination(positionKey(view.value, { path, mode }));
+      document.value = { path, initial, initialBody, mode };
       dirty.value = false;
       viewportPosition.enter(positionKey());
       return true;
@@ -453,7 +467,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       initialBody?: string,
     ) {
       if (!leave()) return;
-      viewportPosition.remember(positionKey());
+      rememberDestination(positionKey(view.value, { path, mode: "edit" }));
       document.value = { path, initial, initialBody, mode: "edit" };
       dirty.value = false;
       viewportPosition.enter(positionKey());
@@ -466,6 +480,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       void loadArticles();
     }
     function removed(path: string) {
+      previous.value = previous.value.filter(entry => entry.doc?.path !== path);
       if (document.value?.path === path) {
         document.value = null;
         dirty.value = false;
