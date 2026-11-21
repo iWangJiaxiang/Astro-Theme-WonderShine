@@ -38,7 +38,9 @@ let downloadGate = Promise.resolve(), checkoutGate = Promise.resolve();
 let writeGate = Promise.resolve(), releaseWrite = () => {};
 const requests = new Map(), responses = new Map(), fileHandles = new Map();
 const keyring = new Map();
-let openedSite = false;
+const offlineRequests = [];
+let siteOpened;
+const openedSite = new Promise(resolve => { siteOpened = resolve; });
 let nextResource = 1, worktreeScans = 0, gitInspections = 0;
 try {
   await fs.mkdir(root, { recursive: true }); await fs.mkdir(screenshots, { recursive: true });
@@ -175,8 +177,11 @@ try {
       } else if (command === 'plugin:keyring-store|get_passwords') value = args.accounts.map(key => keyring.get(key) ?? null);
       else if (command === 'plugin:keyring-store|set_passwords') { for (const { account, secret } of args.entries) keyring.set(account, secret); }
       else if (command === 'plugin:keyring-store|delete_passwords') { for (const key of args.accounts) keyring.delete(key); }
-      else if (command === 'plugin:opener|open_url' && args.url === 'https://example.com/') openedSite = true;
-      else if (allowOAuthHttp && command === 'plugin:opener|open_url') {
+      else if (command === 'plugin:opener|open_url' && args.url === 'https://example.com/') siteOpened();
+      else if (!allowOAuthHttp && command === 'plugin:http|fetch') {
+        offlineRequests.push([args.clientConfig.method, args.clientConfig.url]);
+        throw new Error('Fixture is offline');
+      } else if (allowOAuthHttp && command === 'plugin:opener|open_url') {
         assert.ok(/^https:\/\/(github.com\/login\/device|cnb.cool\/oauth2\/device)/.test(args.url));
       } else if (allowOAuthHttp && command === 'cnb_account_get') {
         assert.equal(args.token, 'oauth-fixture-token');
@@ -566,7 +571,9 @@ try {
   }, { polling:'raf' }, logout);
   await page.locator(logout).click(); await heading('连接创作工作区');
   assert.equal(await page.$('.studio-shell'), null);
-  assert.equal([...commands].some(command => command.startsWith('plugin:http|')), false, 'offline workflow must not contact Git or other services');
+  assert.ok(offlineRequests.length > 0, 'Opening the HTTPS checkout checks for updates');
+  assert.deepEqual([...new Set(offlineRequests.map(([method, url]) => method + ' ' + url))],
+    ['GET ' + profile.url + '/info/refs?service=git-upload-pack'], 'Offline startup only attempts read-only Git discovery');
   dismissNextDialog = true;
   await recordAction(profile.id, '删除记录');
   assert.ok(await page.$(`.workspace-record[data-workspace-id="${profile.id}"]`), 'cancelling deletion keeps the record');
@@ -675,8 +682,9 @@ try {
   await page.type('.connection-url input',mobile.url);
   assert.equal(await page.$eval('input[placeholder="自动识别默认分支"]', input => input.value), '');
   assert.equal(await page.$eval('input[placeholder="自动识别默认分支"]', input => input.required), false);
-  await page.click('.connection-options summary');
+  if (!await page.$eval('.connection-options', node => node.open)) await page.click('.connection-options summary');
   await page.type('.connection-fields input[type=password]', 'fixture-token');
+  await page.click('.connection-options summary');
   allowCloneHttp = true; failNextHttp = true;
   await click('下载并开始创作'); await page.waitForSelector('[role=alert]');
   assert.equal(await page.$('.connection-progress'),null,'failed connection removes stale progress');
@@ -713,7 +721,7 @@ try {
   assert.equal(await page.$('.native-connect'), null, 'A cold phone launch reopens the last checkout offline');
   await page.click('.visit-site');
   await page.waitForFunction(() => !!document.querySelector('.quick-sync button:not(:disabled)'));
-  assert.equal(openedSite, true, 'The site opens through the native URL handler');
+  await Promise.race([openedSite, new Promise((_, reject) => { const deadline = setTimeout(() => reject(new Error('Native URL handler did not receive the site URL')), 5000); deadline.unref(); })]);
   await screenshot('phone-composer', false);
   assert.ok(await page.$eval('.composer-tools .choice-compact .choice-trigger', button => {
     const icon = button.querySelector('svg').getBoundingClientRect();

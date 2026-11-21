@@ -160,7 +160,7 @@
 @media (max-width: 480px) {
   .thread-composer .composer-tools { gap: 2px; }
   .thread-composer .composer-tools :is(.composer-tool, .choice-trigger, .reference-heading > button) { flex-direction: row; gap: 3px; padding: 6px 4px; min-height: 36px; }
-  .composer-tools .choice-trigger::after { display: none; }
+  .composer-tools .choice-trailing > svg, .composer-tools .choice-trailing:not(:has(.choice-count)) { display: none; }
 }
 .thread-composer .composer-recovery .text-button { padding: 5px 8px; min-height: 32px; border-radius: 6px; border: 1px solid var(--form-rule); color: var(--wjx-fontcolor); background: var(--studio-card); }
 .thread-composer .composer-recovery .text-button:first-of-type { background: var(--wjx-fontcolor); color: var(--studio-card); }
