@@ -10,4 +10,14 @@ Custom CSS: `public/css/custom.css`. Exported components: `@wondershine/theme/co
 
 License: AGPL-3.0-or-later. Source: https://github.com/iWangJiaxiang/Astro-Theme-WonderShine
 
+Install a channel in your blog and commit the resulting manifest and lockfile:
+
+| Channel | Audience | Command |
+| --- | --- | --- |
+| latest | Stable sites (default) | `npm install --save-exact @wondershine/theme@latest` |
+| next | Public beta and release candidate testers | `npm install --save-exact @wondershine/theme@next` |
+| canary | Maintainer blog following verified main changes | `npm install --save-exact @wondershine/theme@canary` |
+
+Run the command again to update. Check channel versions with `npm view @wondershine/theme dist-tags`.
+
 Maintainer releases use `theme-vX.Y.Z` GitHub Releases and the **Theme npm package** workflow. Manual runs validate the packed package without publishing. See `docs/npm-releases.md` in the source repository for trusted publisher setup and prerelease rules.

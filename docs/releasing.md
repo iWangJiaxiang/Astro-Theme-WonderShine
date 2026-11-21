@@ -2,7 +2,7 @@
 
 主题与 Studio 源码托管在 Astro-Theme-WonderShine；主题包和 App 使用各自的发行流程。
 
-推荐在 GitHub Actions 的 **Theme npm package** 中手动运行远程 dry-run，完成打包、独立安装与浏览器验证。正式主题发行使用 `theme-vX.Y.Z` Release，经验证后通过 OIDC 发布 npm；预发布进入 `next`。首次 npm 权限配置、触发规则与失败恢复见 [npm 自动发布](npm-releases.md)。普通手动运行不会发布公共包。
+推荐在 GitHub Actions 的 **Theme npm package** 中手动运行远程 dry-run，完成打包、独立安装与浏览器验证。正式主题发行使用 `theme-vX.Y.Z` Release，经验证后通过 OIDC 发布 npm；beta / RC 进入 `next`，main 的主题变更自动发布到 `canary`。首次 npm 权限配置、触发规则与失败恢复见 [npm 自动发布](npm-releases.md)。普通手动运行不会发布公共包。
 
 下列命令供需要手动打包的主题开发者使用；本项目验收在远程 CI 执行：
 
@@ -24,7 +24,7 @@
 
 个人站点可以复用 `scripts/test-browser.mjs`：传入 JSON 文件，包含相对于配置文件的 `siteRoot`、`pages`（截图名称与路径的数组）和 `navigation`（`path`、`language`、`translatedPath`）。先构建站点；脚本会自动启动与关闭独立 preview，不接触已有服务。
 
-建议站点以 submodule 固定主题提交，并安装从该提交打出的实际 tgz。主题仓库只使用中性 Demo；站点自己的 CI 使用真实内容回归。升级时提交 submodule 指针、包文件、依赖和 lockfile，通过预览验证后再部署。常规 push / PR CI 仅验证与上传构建产物；正式 npm 发布由上述 Release 工作流负责，不部署个人网站。
+建议站点以 submodule 固定主题提交，并安装从该提交打出的实际 tgz。主题仓库只使用中性 Demo；站点自己的 CI 使用真实内容回归。升级时提交 submodule 指针、包文件、依赖和 lockfile，通过预览验证后再部署。主题的三个 npm 渠道由上述发行工作流管理。个人站点独立验证和部署。
 
 
 ## 更新独立站点中的本地包

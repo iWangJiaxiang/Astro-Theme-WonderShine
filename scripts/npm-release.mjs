@@ -4,15 +4,14 @@ import { fileURLToPath } from 'node:url';
 
 export function themeVersion(value) {
   if (typeof value !== 'string' || value.trim() !== value) throw new Error('Theme version must be a non-whitespace string');
-  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/.exec(value);
-  if (!match || match[4]?.split('.').some(part => /^\d+$/.test(part) && part.length > 1 && part.startsWith('0'))) {
-    throw new Error('Use a canonical theme version such as 0.2.0 or 0.2.0-beta.1 (without build metadata)');
-  }
-  return { version: value, prerelease: Boolean(match[4]), distTag: match[4] ? 'next' : 'latest' };
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(beta|rc|canary)\.(0|[1-9]\d*))?$/.exec(value);
+  if (!match) throw new Error('Expected X.Y.Z with an optional -beta.N, -rc.N or -canary.N suffix');
+  const channel = match[4];
+  return { version: value, prerelease: Boolean(channel), distTag: channel === 'canary' ? 'canary' : channel ? 'next' : 'latest' };
 }
 
 export function themeReleaseContext(eventName, event, pkg, repository, sha) {
-  if (!['workflow_dispatch', 'release'].includes(eventName)) throw new Error('Only manual validation and theme releases are supported');
+  if (!['workflow_dispatch', 'repository_dispatch', 'release'].includes(eventName)) throw new Error('Only manual validation and theme releases are supported');
   if (pkg.name !== '@wondershine/theme' || pkg.private) throw new Error('Expected the public @wondershine/theme package');
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[0-9a-f]{40}$/.test(sha)) throw new Error('Invalid release source');
   const expectedRepository = `https://github.com/${repository}.git`;
@@ -20,11 +19,14 @@ export function themeReleaseContext(eventName, event, pkg, repository, sha) {
   const version = themeVersion(pkg.version);
   const tag = `theme-v${version.version}`;
   if (eventName === 'release') {
+    if (event.release?.target_commitish !== 'main') throw new Error('Theme Release must target main');
     if (event.release?.draft || event.release?.tag_name !== tag) throw new Error('Release tag must match packages/theme/package.json exactly');
     if (Boolean(event.release.prerelease) !== version.prerelease) throw new Error('GitHub prerelease status must match the package version');
   }
-  const bootstrap = eventName === 'workflow_dispatch' && String(event.inputs?.bootstrap) === 'true';
-  return { ...version, tag, publish: String(eventName === 'release' || bootstrap), bootstrap: String(bootstrap), sha, repository };
+  if (eventName === 'repository_dispatch' && (event.action !== 'theme-canary' || version.distTag !== 'canary' || event.client_payload?.version !== version.version)) {
+    throw new Error('Canary dispatch must match the committed main canary version');
+  }
+  return { ...version, tag, publish: String(eventName !== 'workflow_dispatch'), sha, repository };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

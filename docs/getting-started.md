@@ -2,7 +2,7 @@
 
 这篇文档从一个空目录开始，搭建独立的 Astro 博客，再连接 WonderShine Studio 写文章。已有 Zola 站点请使用 [迁移指南](migration.md)。
 
-主题已发布到 npm，包名为 `@wondershine/theme`。下面从源码仓库复制最小 Starter，再安装其中锁定版本的主题依赖；不需要自己打包主题。
+主题已发布到 npm，包名为 `@wondershine/theme`。下面从源码仓库复制最小 Starter，再安装稳定版主题；不需要自己打包主题。
 
 ## 1. 准备目录和环境
 
@@ -67,11 +67,11 @@ JS
 
 ## 3. 安装并预览
 
-在新站目录安装依赖。Starter 已指定兼容的 Astro 和主题版本：
+在新站目录安装稳定版主题并固定版本。想参与测试时，可按[渠道说明](npm-releases.md#选择安装渠道)选择 `next` 或 `canary`。
 
 ```sh
 cd "$BLOG_SITE"
-npm install
+npm install --save-exact @wondershine/theme@latest
 npm run dev
 ```
 
