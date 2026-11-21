@@ -17,6 +17,7 @@ import { MAX_UPLOAD_SIZE } from '../shared/media.js';
 export interface ContentTransportOptions {
   /** Use a workspace-specific identity to isolate local recovery drafts. */
   ai?: NativeAiGateway;
+  themeFetch?: typeof fetch;
   /** True only when this gateway writes exclusively through runtime.repository. */
   aiUsesObservedRepository?: boolean;
   runtime?: SummaryRuntime;
@@ -39,7 +40,7 @@ export function createContentTransport(repository: Repository, options: ContentT
     scope: options.identity?.id ?? repository.saveScope ?? 'local-workspace', store: options.summaryStore,
   });
   repository = runtime.repository;
-  const content = new ContentService(repository);
+  const content = new ContentService(repository, undefined, options.themeFetch);
   const translation = new TranslationService(repository);
   const session = {
     identity: { id: options.identity?.id ?? 'local-workspace', name: options.identity?.name ?? 'Local workspace', method: 'password' as const },

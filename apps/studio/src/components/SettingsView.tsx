@@ -147,6 +147,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
         },
       ],
       appearance: [
+        { title: "主题版本", paths: ["extra.theme.channel", "extra.theme.pinned", "extra.theme.version"] },
         {
           title: "主题与字体",
           paths: [
@@ -326,12 +327,19 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       message.value = "";
       const submitted = JSON.parse(JSON.stringify(values.value));
       try {
-        const result = await api<SaveResult>(endpoint.value, "PUT", {
+        const result = await api<SaveResult & { pinnedThemeVersion?: string | null }>(endpoint.value, "PUT", {
           revision: settings.value.revision,
           changes: changes.value,
           saveMode: saveMode.value,
         });
         settings.value.revision = result.revision;
+        if (result.pinnedThemeVersion !== undefined) {
+          const key = "extra.theme.version";
+          if ([key, "extra.theme.channel", "extra.theme.pinned"].every(path => values.value[path] === submitted[path])) {
+            values.value[key] = result.pinnedThemeVersion ?? "";
+          }
+          submitted[key] = result.pinnedThemeVersion ?? "";
+        }
         baseline.value = submitted;
         branchPending.value = result.branchPending === true;
         savedBranch.value = result.branch || "";
@@ -471,7 +479,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                     element(
                       "div",
                       { className: classes("settings-grid") },
-                      renderList(section.fields).map((field) =>
+                      renderList(section.fields.filter(field => field.path !== "extra.theme.version" || values.value["extra.theme.pinned"])).map((field) =>
                         element(
                           Fragment,
                           { key: field.path },
@@ -504,6 +512,9 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                                   "full-width": field.kind === "textarea",
                                 }),
                                 onUpdateModelValue: (($event) => {
+                                  if (field.path === "extra.theme.channel" || (field.path === "extra.theme.pinned" && !$event)) {
+                                    values.value["extra.theme.version"] = "";
+                                  }
                                   values.value[field.path] = $event;
                                 }) satisfies EventHandler<
                                   typeof FormField,

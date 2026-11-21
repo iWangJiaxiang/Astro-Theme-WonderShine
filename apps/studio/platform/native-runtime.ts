@@ -69,7 +69,7 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
   if (httpsRemote) nativeGitCredential.current = credential;
   let disposed = false;
   const dispose = () => { if (disposed) return; disposed = true; diagnostics.dispose(); ai.dispose(); runtime.dispose(); token = ''; if (nativeGitCredential.current === credential) delete nativeGitCredential.current; setMediaResolver(); setApiTransport(); };
-  const transport = createContentTransport(repository, { runtime, ai, aiUsesObservedRepository: true, identity: { id: profile.id, name: profile.authorName || profile.label }, onLogout: () => {
+  const transport = createContentTransport(repository, { runtime, ai, themeFetch: (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }), aiUsesObservedRepository: true, identity: { id: profile.id, name: profile.authorName || profile.label }, onLogout: () => {
     dispose(); onDisconnect();
   } });
   setMediaResolver((path, version) => { validateMediaPath(path); return convertFileSrc(root + '/' + path) + `?v=${version}`; });

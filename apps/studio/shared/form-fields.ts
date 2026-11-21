@@ -6,6 +6,7 @@ export const aboutWidgets = choices(['about-reward', 'author-career', 'content-i
 export const sidebarWidgets = choices(['adbox', 'archives', 'categories', 'comments', 'custom_html', 'friend-link', 'music', 'power', 'profile', 'recent-posts', 'stat', 'steam', 'tags-stat', 'tags', 'toc', 'visit-posts', 'wechat'], ['广告', '归档', '分类', '最新评论', '自定义 HTML', '通讯录', '音乐', '赞助', '个人卡片', '最近文章', '统计', 'Steam', '标签与归档统计', '标签', '目录', '热门文章', '公众号']);
 export function fieldChoices(path: string): Choice[] | undefined {
   const key = path.split('.').at(-1);
+  if (path === 'extra.theme.channel') return choices(['latest', 'next', 'canary'], ['最新', '预览', '开发']);
   if (key === 'color_scheme') return choices(['system', 'light', 'dark'], ['跟随系统', '浅色', '深色']);
   if (key === 'target') return choices(['_self', '_blank'], ['当前窗口', '新窗口']);
   if (key === 'display_style') return choices(['beautify', 'default'], ['卡片', '简洁']);
