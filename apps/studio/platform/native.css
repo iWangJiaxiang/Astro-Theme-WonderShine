@@ -57,7 +57,7 @@ section.native-ai-settings { max-width: 960px; }
   .native-ai-actions .primary { flex: 1; }
   .workspace-status-grid { gap: 12px; }
   .workspace-status-grid dt { font-size: 12px; }
-  .workspace-panel .workspace-sync-actions > button { flex: 1 1 max-content; max-width: 100%; }
+  .workspace-panel .workspace-sync-actions > button { flex-grow: 1; }
 }
 
 /* Folder and URL are the primary actions; credentials stay in a disclosure. */

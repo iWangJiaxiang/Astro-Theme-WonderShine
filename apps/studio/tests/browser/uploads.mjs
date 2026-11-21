@@ -12,7 +12,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNwinr/HwAE+AKLJh4rzQAAAABJRU5ErkJggg==', 'base64');
   await writeFile(source + '/cover-upload.png', png);
   const revealUpload = async () => {
-    await revealField(page, '.upload-file-input');
+    await revealField(page, '.media-upload .upload-actions button');
     await page.waitForSelector('.media-upload-disclosure[open] .upload-actions', { visible: true });
   };
   const upload = async files => {

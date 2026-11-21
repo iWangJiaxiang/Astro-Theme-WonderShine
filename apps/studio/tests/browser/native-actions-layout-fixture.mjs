@@ -342,7 +342,8 @@ function observeModule(text, target) {
   if (!target.endsWith('api.ts')) {
     const anchor = `api<WorkspaceStatus>('/workspace').then(value => {
       if (active && sequence === requestSequence.current) setStatus(value);
-    }).catch(reason => { if (active && sequence === requestSequence.current) setError(errorMessage(reason)); })`;
+    }).catch(reason => { if (active && sequence === requestSequence.current) setError(errorMessage(reason)); })
+      .finally(() => { if (active && sequence === requestSequence.current) setStage(''); })`;
     const start = text.indexOf(anchor);
     if (start < 0 || text.indexOf(anchor, start + 1) !== -1) throw new Error('bundle');
     edits.push([start, start + anchor.length, `window.nativeActionCompletion.chain(window.nativeActionCompletion.begin('effect'), ${anchor})`]);

@@ -432,7 +432,7 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
                             )
                           : element(
                               ErrorNotice,
-                              { source: "MediaUpload", message: result.error || "操作失败", prefix: result.name + " — ", className: "upload-error" },
+                              { source: "MediaUpload", message: result.error || "操作失败", prefix: result.name + " — ", className: "upload-error", announce: props.feedbackMode !== "external" },
                             ),
                       ),
                     ),

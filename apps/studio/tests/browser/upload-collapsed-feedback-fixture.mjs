@@ -225,7 +225,7 @@ window.uploadFeedback = {
         const match = /fixture-([0-9]{2})\\.png$/.exec(path);
         return match ? Number(match[1]) : -3;
       })(),
-      rows: inner?.querySelectorAll('.upload-results li').length || 0, successRows: inner?.querySelectorAll('.upload-results li button').length || 0, errorRows: errors,
+      rows: inner?.querySelectorAll('.upload-results li').length || 0, successRows: inner?.querySelectorAll('.upload-results li > button').length || 0, errorRows: errors,
       confirmationDisabled: host === 'picker' ? !!document.querySelector('.selection-footer > button')?.disabled : null,
       cancelDisabled: host === 'picker' ? !!document.querySelector('.media-dialog .card-heading > button')?.disabled : null,
       modal: !!document.querySelector('dialog.media-dialog[open]:modal'),

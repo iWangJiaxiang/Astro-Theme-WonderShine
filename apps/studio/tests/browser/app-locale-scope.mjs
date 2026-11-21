@@ -108,7 +108,7 @@ root.render(<App />);
       name: 'isolate-unrelated-app-children',
       setup(builder) {
         builder.onResolve({ filter: /(?:components\/|platform\/(?:LegacyRecovery|NativeAiSettings|WorkspacePanel))/ }, args => {
-          if (args.path === './components/Icon' || args.path === './components/LoadingState') return;
+          if (['./components/Icon', './components/LoadingState', './components/ViewTransition', './components/ErrorNotice'].includes(args.path)) return;
           if (args.importer.endsWith('/src/App.tsx')) return { path: args.path, namespace: 'app-locale-child' };
         });
         builder.onLoad({ filter: /.*/, namespace: 'app-locale-child' }, args => ({

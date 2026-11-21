@@ -76,11 +76,11 @@ export function ErrorDetails({ message, source }: DetailsProps) {
   </>;
 }
 
-export function ErrorNotice({ message, source, prefix, children, className = 'notice error' }: DetailsProps & {
-  prefix?: string; children?: ReactNode; className?: string;
+export function ErrorNotice({ message, source, prefix, children, className = 'notice error', announce = true }: DetailsProps & {
+  prefix?: string; children?: ReactNode; className?: string; announce?: boolean;
 }) {
   useSignals();
-  return <div className={className} role="alert">
+  return <div className={className} role={announce ? "alert" : undefined}>
     <span className="error-summary">{prefix}{redact(t(message))}</span>{children}{' '}<ErrorDetails message={message} source={source} />
   </div>;
 }
