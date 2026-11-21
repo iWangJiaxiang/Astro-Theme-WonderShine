@@ -32,3 +32,10 @@ custom-protocol = ["tauri/custom-protocol"]
 [dev-dependencies]
 urlpattern = "0.6"
 regex = "1"
+
+[workspace]
+members = ["mobile-git"]
+resolver = "2"
+
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+studio-mobile-git = { path = "mobile-git" }

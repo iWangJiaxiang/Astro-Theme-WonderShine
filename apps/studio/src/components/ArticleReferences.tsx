@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import type { ArticleSummary, Json } from "../../shared/types";
 import { t } from "../i18n";
 import { createBusinessModal } from "../modal-layer";
@@ -405,12 +406,8 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                           ),
                           error.value
                             ? element(
-                                "p",
-                                {
-                                  role: "alert",
-                                  className: classes("notice error"),
-                                },
-                                t(error.value),
+                                ErrorNotice,
+                                { source: "ArticleReferences", message: error.value },
                               )
                             : null,
                         ),

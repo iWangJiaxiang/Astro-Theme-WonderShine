@@ -3,6 +3,7 @@ import { buildAstro } from '../astro-build.ts';
 import puppeteer from 'puppeteer-core';
 import { checkLoading } from './loading.mjs';
 import { checkNavigationAccessibility } from './navigation-accessibility.mjs';
+import { checkViewTransitions } from './view-transitions.mjs';
 import { checkLanguages } from './languages.mjs';
 import { checkOnboarding } from './onboarding.mjs';
 import { checkMedia } from './media.mjs';
@@ -132,6 +133,7 @@ try {
  await heading(dashboardTitle); await page.waitForSelector('.editor-page .markdown-source');
  await click('工作台'); await heading('今天，写点什么？');
  console.log('PASS: dashboard article shortcut and cancelled navigation preserve the current draft.');
+  await checkViewTransitions({ page, click, fill, heading });
  await click('站点信息');await heading('站点信息');await fill('.settings-grid .field input','Studio integration fixture');await click('本地保存');await page.waitForSelector('.notice.success');
  assert.match(await readFile(base+'/site/config.toml','utf8'),/Studio integration fixture/);
  for(const name of ['导航菜单','友链管理','关于页设置','标签与分类','外观样式']){await click(name);await heading(name);assert.equal(await page.$('.notice.error'),null,name)}
@@ -176,7 +178,7 @@ try {
  await click('工作台');await heading('今天，写点什么？');
  await page.setViewport({width:390,height:844,deviceScaleFactor:1});await page.waitForFunction(() => document.querySelector('.sidebar').getBoundingClientRect().right <= 0);await page.screenshot({path:screenshots+'/dashboard-mobile.png',fullPage:true});
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile overflow');
- await page.click('[aria-label="打开导航"]');await click('友链管理');await heading('友链管理');
+ await page.click('.mobile-menu');await click('友链管理');await heading('友链管理');
  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile settings overflow');
  await page.waitForFunction(() => document.querySelector('.sidebar').getBoundingClientRect().right <= 0);await page.screenshot({path:screenshots+'/friends-mobile.png',fullPage:true});
 

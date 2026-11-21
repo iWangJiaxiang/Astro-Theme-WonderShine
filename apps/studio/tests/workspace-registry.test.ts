@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readWorkspaces, writeWorkspaces, cleanWorkspace, serviceAddress } from '../platform/workspace-registry';
+import { readWorkspaces, writeWorkspaces, cleanWorkspace, serviceAddress, matchWorkspace } from '../platform/workspace-registry';
 import { createRemoteTransport } from '../platform/remote-transport';
 
 const profile = { id: 'f6347560-bbe9-4c35-9d89-b0429108882b', label: 'Blog', provider: 'generic' as const, url: 'https://git.example/blog.git', branch: 'main', username: '', authorName: '', authorEmail: '' };
@@ -25,6 +25,21 @@ test('archive round trips preserve full sanitized records and restore the exact 
   assert.equal(json.includes('secret'), false);
   writeWorkspaces(storage, archived.map(record => ({ ...record, archived: false })));
   assert.deepEqual(readWorkspaces(storage), records);
+});
+test('adding an existing connection reuses only an unambiguous workspace identity', () => {
+  const newId = 'b6347560-bbe9-4c35-9d89-b0429108882b';
+  const again = { ...profile, id: newId, label: 'Other label', url: profile.url + '/', branch: '' };
+  const release = { ...profile, id: 'c6347560-bbe9-4c35-9d89-b0429108882b', branch: 'release' };
+  assert.equal(matchWorkspace([profile], again), profile);
+  assert.equal(matchWorkspace([profile], { ...again, branch: 'release' }), undefined);
+  assert.throws(() => matchWorkspace([profile, release], again), /多个/);
+  assert.equal(matchWorkspace([profile, release], { ...again, branch: 'release' }), release);
+  assert.equal(matchWorkspace([{ ...profile, archived: true }], again)?.archived, true);
+  const local = { ...profile, source: 'local' as const, localPath: '/sites/blog' };
+  assert.equal(matchWorkspace([local], again), undefined);
+  assert.equal(matchWorkspace([local], { ...local, id: newId, localPath: '/sites/blog/' }), local);
+  const service = { id: profile.id, label: 'Studio', source: 'service' as const, address: 'https://studio.example' };
+  assert.equal(matchWorkspace([service], { ...service, id: newId, address: 'https://STUDIO.example/' }), service);
 });
 test('invalid storage and write failures are not silently replaced', () => {
   assert.throws(() => readWorkspaces({ getItem: () => '{' }));

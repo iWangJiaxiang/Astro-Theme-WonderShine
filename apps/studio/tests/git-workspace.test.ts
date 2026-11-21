@@ -142,17 +142,27 @@ test('persistent workspaces retain offline edits, recover on reopen and synchron
   assert.equal(run(['diff', '--cached', '--name-only'], directory), 'unrelated.ts');
   run(['reset', 'HEAD', '--', 'unrelated.ts'], directory);
   await rm(join(directory, 'unrelated.ts'));
-  await reopened.workspace.commit('docs(content): more writing');
+  const pendingArticle = await reopened.workspace.commit('docs(content): more writing');
+
+  // A config update on the peer can merge with the local article even when the push is rejected.
+  await writeFile(join(root, 'seed/config.toml'), 'title="Remote edit"\n');
+  run(['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-am', 'another device'], join(root, 'seed'));
+  run(['push', '../repo.git', 'main'], join(root, 'seed'));
+  const peerTip = run(['--git-dir=repo.git', 'rev-parse', 'main']);
 
   // Rejected pushes preserve local commits and retries converge without duplicate commits.
   const hook = join(root, 'repo.git/hooks/pre-receive');
   await writeFile(hook, '#!/bin/sh\nexit 1\n'); await chmod(hook, 0o700);
-  const beforeRejected = (await reopened.workspace.status()).head;
   await assert.rejects(reopened.workspace.sync(), /本地提交已保留/);
-  assert.equal((await reopened.workspace.status()).head, beforeRejected);
+  const mergeTip = run(['rev-parse', 'HEAD'], directory);
+  assert.equal(run(['show', '-s', '--format=%P', mergeTip], directory), pendingArticle.head + ' ' + peerTip);
+  assert.equal(run(['--git-dir=repo.git', 'rev-parse', 'main']), peerTip);
   await rm(hook);
   await reopened.workspace.sync();
   assert.equal((await reopened.workspace.status()).ahead, 0);
+  assert.equal(run(['--git-dir=repo.git', 'rev-parse', 'main']), mergeTip);
+  assert.match(run(['--git-dir=repo.git', 'show', 'main:' + articlePath]), /More writing/);
+  assert.match((await reopened.read('config.toml'))!.text, /Remote edit/);
 
   // Media uploads are local files first and join the next explicit content commit.
   offline = true;
@@ -165,7 +175,7 @@ test('persistent workspaces retain offline edits, recover on reopen and synchron
   await reopened.workspace.sync();
   assert.deepEqual(execFileSync('git', ['--git-dir=repo.git', 'show', `main:${upload.item.path}`], { cwd: root }), png);
 
-  // Divergence stays unresolved until the owner explicitly merges with a Git tool.
+  // Conflicting changes stay unresolved for the owner.
   const third = (await reopened.read(articlePath))!;
   await reopened.write(articlePath, third.text + '\nLocal branch', third.revision);
   const localCommit = await reopened.workspace.commit('local divergence');

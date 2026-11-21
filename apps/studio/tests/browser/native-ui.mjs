@@ -8,6 +8,8 @@ import { join, resolve, sep, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { configureGestureEmulation, inspectGestureEnvironment, exerciseScroll, exercisePinch } from './ui-audit-gestures.mjs';
+import { auditViewports } from './audit-viewports.mjs';
+import { mobileGitFixture } from './mobile-git-fixture.mjs';
 
 // Real production React/native adapter code; only the Tauri IPC host is mocked.
 const studio = fileURLToPath(new URL('../../', import.meta.url));
@@ -20,7 +22,7 @@ const profile = { id: 'f6347560-bbe9-4c35-9d89-b0429108882b', label: '本地写�
 const root = join(appData, 'workspaces', profile.id, 'repo');
 const localRoot = join(base, 'selected local blog');
 let selectedFolder = null, folderGranted = false;
-let browser, server, page;
+let browser, server, page, mobile;
 const errors = [], cspErrors = [], failedResources = [], ipcFailures = [];
 const nativeGestureRecords = [];
 const gestureFindings = () => nativeGestureRecords.flatMap(record => (record.findings || []).map(finding => ({ name:record.name, ...finding })));
@@ -34,8 +36,8 @@ let allowCloneHttp = false, failNextHttp = false, failNextBranchWrite = false;
 let releaseDownload = () => {}, releaseCheckout = () => {};
 let downloadGate = Promise.resolve(), checkoutGate = Promise.resolve();
 let writeGate = Promise.resolve(), releaseWrite = () => {};
-const requests = new Map(), responses = new Map();
-let nextResource = 1;
+const requests = new Map(), responses = new Map(), fileHandles = new Map();
+let nextResource = 1, worktreeScans = 0, gitInspections = 0;
 try {
   await fs.mkdir(root, { recursive: true }); await fs.mkdir(screenshots, { recursive: true });
   const git = args => execFileSync('git', args, { cwd: root, stdio: 'pipe' }).toString().trim();
@@ -46,10 +48,17 @@ try {
   await fs.writeFile(join(root, 'data.toml'), '[post]\ntags=[]\ncategories=[]\n');
   await fs.writeFile(join(root, 'content/articles/example/index.md'), '+++\ntitle="离线文章示例"\ndraft=true\ndate="2026-10-31"\n+++\nNative UI fixture.\n');
   await fs.writeFile(join(root, 'public/uploads/example.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNwinr/HwAE+AKLJh4rzQAAAABJRU5ErkJggg==', 'base64'));
+  // Enough distinct tracked objects to exercise pack work and multiple checkout batches.
+  const assets = join(root, 'assets', 'git-fixture');
+  await fs.mkdir(assets, { recursive: true });
+  for (let index = 0; index < 128; index++) {
+    await fs.writeFile(join(assets, index + '.txt'), ('Asset ' + index + '\n').repeat(512));
+  }
   git(['add', '.']); git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', 'commit', '-m', 'initial']);
   git(['config', 'user.name', 'Folder writer']); git(['config', 'user.email', 'folder@example.test']);
   await fs.cp(root, localRoot, { recursive: true });
   execFileSync('git', ['clone', '--bare', root, join(base, 'remote.git')], {stdio:'pipe'});
+  execFileSync('git', ['--git-dir=' + join(base, 'remote.git'), 'config', 'http.receivepack', 'true']);
   execFileSync('git', ['--git-dir=' + join(base, 'remote.git'), 'branch', 'release/blog', 'main']);
   execFileSync('git', ['--git-dir=' + join(base, 'remote.git'), 'symbolic-ref', 'HEAD', 'refs/heads/release/blog']);
   git(['remote', 'add', 'origin', profile.url]); git(['update-ref', 'refs/remotes/origin/main', git(['rev-parse', 'HEAD'])]);
@@ -60,6 +69,12 @@ try {
     const location = resolve(path);
     if (location !== appData && !location.startsWith(appData + sep) && !(folderGranted && (location === localRoot || location.startsWith(localRoot + sep)))) throw new Error('Fixture filesystem request escaped AppData');
     return location;
+  }
+  function fileInfo(stat) {
+    return { size: stat.size, isFile: stat.isFile(), isDirectory: stat.isDirectory(), isSymlink: stat.isSymbolicLink(),
+      mtime: stat.mtime.toISOString(), atime: stat.atime.toISOString(), birthtime: stat.birthtime.toISOString(),
+      readonly: false, fileAttributes: null, mode: stat.mode, dev: stat.dev, ino: stat.ino, nlink: stat.nlink,
+      uid: stat.uid, gid: stat.gid, rdev: stat.rdev, blksize: stat.blksize, blocks: stat.blocks };
   }
   server = createServer(async (request, response) => {
     try {
@@ -83,6 +98,7 @@ try {
   browser = await puppeteer.launch({ headless: true, executablePath });
   page = await browser.newPage();
   const loadedScripts = new Set();
+  mobile = await mobileGitFixture(base, appData, studio);
   const runtimeChunks = (await fs.readdir(join(distribution, 'assets'))).filter(name => /^native-runtime-.*\.js$/.test(name));
   assert.ok(runtimeChunks.length > 0, 'Native runtime must be a separate on-demand chunk');
   page.on('request', request => { if (request.resourceType() === 'script') loadedScripts.add(new URL(request.url()).pathname.split('/').at(-1)); });
@@ -122,20 +138,36 @@ try {
         if (path.includes('.clone-') && path.endsWith('/config.toml')) await checkoutGate;
         await fs.writeFile(path, new Uint8Array(args));
       } else if (command === 'plugin:fs|rename') await fs.rename(confined(args.oldPath), confined(args.newPath));
-      else if (command.startsWith('plugin:fs|')) {
+      else if (command === 'plugin:fs|open') {
+        const path = confined(args.path);
+        assert.ok(args.options.read || (args.options.write && args.options.createNew));
+        const handle = await fs.open(path, args.options.createNew ? 'wx' : 'r', args.options.mode);
+        value = nextResource++;
+        fileHandles.set(value, handle);
+      } else if (command === 'plugin:fs|read') {
+        const buffer = Buffer.alloc(args.len + 8);
+        const { bytesRead } = await fileHandles.get(args.rid).read(buffer, 0, args.len);
+        // The plugin appends the byte count as a big-endian u64.
+        buffer.writeBigUInt64BE(BigInt(bytesRead), bytesRead);
+        value = Array.from(buffer.subarray(0, bytesRead + 8));
+      } else if (command === 'plugin:fs|write') {
+        const result = await fileHandles.get(args.rid).write(Buffer.from(args.data));
+        value = result.bytesWritten;
+      } else if (command === 'plugin:fs|fstat') {
+        value = fileInfo(await fileHandles.get(args.rid).stat());
+      } else if (command === 'plugin:resources|close' && fileHandles.has(args.rid)) {
+        await fileHandles.get(args.rid).close();
+        fileHandles.delete(args.rid);
+      } else if (command.startsWith('plugin:fs|')) {
         const path = confined(args.path), operation = command.split('|')[1];
         switch (operation) {
-          case 'mkdir': await fs.mkdir(path, { recursive: !!args.options?.recursive }); break;
+          case 'mkdir': await fs.mkdir(path, { recursive: !!args.options?.recursive, mode: args.options?.mode }); break;
           case 'read_file': value = [...await fs.readFile(path)]; break;
-          case 'read_dir': value = (await fs.readdir(path, { withFileTypes: true })).map(item => ({ name: item.name, isFile: item.isFile(), isDirectory: item.isDirectory(), isSymlink: item.isSymbolicLink() })); break;
+          case 'read_dir':
+            assert.ok(!gitInspections || !path.endsWith('/repo/assets/git-fixture'), 'Mobile Git never enumerates tracked assets via WebView IPC');
+            value = (await fs.readdir(path, { withFileTypes: true })).map(item => ({ name: item.name, isFile: item.isFile(), isDirectory: item.isDirectory(), isSymlink: item.isSymbolicLink() })); break;
           case 'remove': { const stat = await fs.lstat(path); if (stat.isDirectory() && !stat.isSymbolicLink()) await fs.rmdir(path); else await fs.unlink(path); break; }
-          case 'stat': case 'lstat': {
-            const stat = await fs[operation](path);
-            value = { size: stat.size, isFile: stat.isFile(), isDirectory: stat.isDirectory(), isSymlink: stat.isSymbolicLink(),
-              mtime: stat.mtime.toISOString(), atime: stat.atime.toISOString(), birthtime: stat.birthtime.toISOString(),
-              readonly: false, fileAttributes: null, mode: null, dev: null, ino: null, nlink: null, uid: null, gid: null, rdev: null, blksize: null, blocks: null };
-            break;
-          }
+          case 'stat': case 'lstat': value = fileInfo(await fs[operation](path)); break;
           default: throw new Error('Unsupported fixture FS command: ' + command);
         }
       } else if (allowOAuthHttp && command === 'plugin:opener|open_url') {
@@ -190,40 +222,28 @@ try {
         } else if (operation === 'fetch_cancel' || operation === 'fetch_cancel_body') {
           requests.delete(args.rid); responses.delete(args.rid);
         } else throw new Error('Unexpected OAuth HTTP operation');
-      } else if (allowCloneHttp && command.startsWith('plugin:http|')) {
-        const operation = command.split('|')[1];
-        if (operation === 'fetch') {
-          const config = args.clientConfig, url = new URL(config.url);
-          assert.equal(url.origin, 'https://git.example.test');
-          assert.ok(['/remote.git/info/refs', '/remote.git/git-upload-pack'].includes(url.pathname));
-          value = nextResource++; requests.set(value, config);
-        } else if (operation === 'fetch_send') {
+      } else if (command === 'mobile_git') {
+        mobile.setOnline(allowCloneHttp);
+        if (args.job.action === 'open' && args.job.clone) {
           await downloadGate;
-          if (failNextHttp) { failNextHttp = false; requests.delete(args.rid); throw new Error('Simulated unavailable repository'); }
-          const config = requests.get(args.rid), url = new URL(config.url);
-          const headers = new Map(config.headers);
-          const backend = join(execFileSync('git', ['--exec-path']).toString().trim(), 'git-http-backend');
-          const bytes = execFileSync(backend, [], {input:Buffer.from(config.data || []), env:{...process.env,
-            GIT_PROJECT_ROOT:base,GIT_HTTP_EXPORT_ALL:'1',PATH_INFO:url.pathname,REQUEST_METHOD:config.method,
-            QUERY_STRING:url.search.slice(1),CONTENT_TYPE:headers.get('content-type')||'',REMOTE_ADDR:'127.0.0.1'}});
-          const end = bytes.indexOf('\r\n\r\n'); assert.ok(end >= 0);
-          const entries = bytes.subarray(0,end).toString().split('\r\n').map(line => { const colon = line.indexOf(':'); return [line.slice(0,colon),line.slice(colon+1).trim()]; });
-          const rid = nextResource++; responses.set(rid, bytes.subarray(end+4));
-          value = {rid,status:200,statusText:'OK',url:config.url,headers:entries};
-          requests.delete(args.rid);
-        } else if (operation === 'fetch_read_body') {
-          const body = responses.get(args.rid);
-          value = body?.length ? [...body,0] : [1]; responses.delete(args.rid);
-        } else if (operation === 'fetch_cancel_body' || operation === 'fetch_cancel') {
-          requests.delete(args.rid); responses.delete(args.rid);
-        } else throw new Error('Unexpected HTTP operation: ' + operation);
+          if (failNextHttp) { failNextHttp = false; mobile.setOnline(false); }
+        }
+        if (args.job.action === 'inspect') { gitInspections++; if (args.job.paths == null) worktreeScans++; }
+        let sentProgress = false;
+        value = await mobile.invoke(args, async event => {
+          if (!sentProgress && event.total > 0) {
+            sentProgress = true;
+            await page.evaluate(event => window.gitProgress?.(event), event);
+            await checkoutGate;
+          }
+        });
       } else throw new Error('Unexpected native command, external HTTP is disabled: ' + command);
       return { value };
     } catch (error) {
       // Record command names only: arguments and assertion messages can contain credentials.
       ipcFailures.push({ command, error: error.name, code: error.code ?? null });
       if (ipcFailures.length > 100) ipcFailures.shift();
-      return { error: error.message };
+      return { error: error.gitDetail ? { message: error.message, gitDetail: error.gitDetail } : error.message };
     }
   });
   await page.evaluateOnNewDocument(profile => {
@@ -233,12 +253,14 @@ try {
     window.__TAURI_INTERNALS__ = {
       invoke: async (command, args = {}, options) => {
         const value = args instanceof Uint8Array ? Array.from(args) : args;
+        if (value.data instanceof Uint8Array) value.data = Array.from(value.data);
+        if (command === 'mobile_git' && args.progress) window.gitProgress = event => args.progress.onmessage(event);
         const result = await window.tauriInvoke(command, value, options);
         if (result.error) throw result.error;
         return result.value;
       },
       convertFileSrc: path => location.origin + '/__asset/' + encodeURIComponent(path),
-      transformCallback: () => { throw new Error('Unexpected native callback in filesystem smoke'); },
+      transformCallback: () => 1,
     };
   }, profile);
   const click = async text => {
@@ -280,9 +302,9 @@ try {
       && Math.abs((visualViewport?.scale ?? 0) - 1) <= .06,
     {}, viewport);
   };
-  const screenshot = async name => {
+  const screenshot = async (name, fullPage = true) => {
     await page.evaluate(async () => { window.scrollTo(0, 0); await document.fonts.ready; for (const animation of document.getAnimations()) { if (Number.isFinite(animation.effect?.getComputedTiming().endTime)) { try { animation.finish(); } catch {} } } await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
-    await page.screenshot({ path: join(screenshots, name + '.png'), fullPage: true });
+    await page.screenshot({ path: join(screenshots, name + '.png'), fullPage });
     // CDP activates mobile touch without reloading the fixture or losing dialogs.
     // Keep these actual synthetic inputs distinct from viewport-only screenshots.
     const viewport = page.viewport();
@@ -326,6 +348,15 @@ try {
       if (record.findings.length) console.error(`Native synthetic gesture findings: ${name} (${record.findings.length}); continuing fixture.`);
     }
   };
+  async function auditNativePage(name) {
+    const originalViewport = page.viewport();
+    for (const { width, height, screenshot: capture } of await auditViewports(page)) {
+      await setViewport({ ...originalViewport, width, height });
+      if (capture) await screenshot(`audit-${name}-${width}`, false);
+      await noOverflow(`${name} ${width}x${height}`);
+    }
+    await setViewport(originalViewport);
+  }
   await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.goto(origin, { waitUntil: 'networkidle0' }); await heading('连接创作工作区');
   assert.equal(runtimeChunks.some(name => loadedScripts.has(name)), false, 'Connection screen must not load the Git/content runtime before opening a workspace');
@@ -346,18 +377,21 @@ try {
   for (const id of ['a6347560-bbe9-4c35-9d89-b0429108882b', profile.id]) {
     await recordAction(id, '归档记录');
     await page.waitForSelector(`.archived-workspaces [data-workspace-id="${id}"]`);
-    assert.equal(await page.$(`.workspace-record[data-workspace-id="${id}"]`), null);
+    assert.equal(await page.$(`.workspace-chooser > .workspace-record[data-workspace-id="${id}"]`), null);
     await page.reload({waitUntil:'networkidle0'});
     await page.click('.archived-workspaces summary');
     await recordAction(id, '恢复记录');
-    await page.waitForSelector(`.workspace-record[data-workspace-id="${id}"]`);
+    await page.waitForSelector(`.workspace-chooser > .workspace-record[data-workspace-id="${id}"]`);
   }
   assert.equal(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).body, recoveryKey), 'Archive recovery fixture', 'archive/restore retains the original draft identity');
   assert.ok(await fs.stat(root), 'archive/restore retains the original checkout');
   const restored = await page.evaluate(() => JSON.parse(localStorage.getItem('wondershine.native.workspaces.v1')));
   assert.deepEqual(restored.find(record => record.id === profile.id), profile, 'restore preserves the complete original record and recovery ID');
-  await screenshot('connection-git-desktop'); await noOverflow('desktop connection');
-  await click('本地文件夹'); await screenshot('connection-folder-desktop');
+  await page.click('.connection-about summary');
+  await page.waitForSelector('.connection-about .native-update-controls button', { visible: true });
+  await page.click('.connection-about summary');
+  await screenshot('connection-git-desktop'); await auditNativePage('git'); await noOverflow('desktop connection');
+  await click('本地文件夹'); await screenshot('connection-folder-desktop'); await auditNativePage('folder');
   await page.click('.folder-picker');
   assert.equal(await page.$('.selected-repository'), null, 'cancelled picker does not select a folder');
   selectedFolder = localRoot; await page.click('.folder-picker'); await page.waitForSelector('.selected-repository');
@@ -374,7 +408,7 @@ try {
   assert.equal(await page.$$('.workspace-record').then(records => records.length), 3, 'local, clone and service records coexist');
   await click('远程仓库');
 
-  await click('连接自建创作中心'); await page.waitForSelector('input[placeholder="https://studio.example.com"]'); await screenshot('connection-remote-desktop');
+  await click('连接自建创作中心'); await page.waitForSelector('input[placeholder="https://studio.example.com"]'); await screenshot('connection-remote-desktop'); await auditNativePage('service');
   await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('connection-remote-mobile'); await noOverflow('mobile remote connection');
   await click('远程仓库'); await screenshot('connection-git-mobile'); await noOverflow('mobile Git connection');
   await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
@@ -449,7 +483,7 @@ try {
   assert.equal(await page.$eval('.save-button-main', e => e.textContent), 'Git 分支保存', 'default persists across editors');
   await page.reload({waitUntil:'networkidle0'}); await heading('连接创作工作区'); await click('打开工作区');
   await page.waitForSelector('.native-connect [role="alert"]');
-  assert.equal(await page.$eval('.native-connect [role="alert"]', node => node.textContent), reviewRestart, 'WebView reload cannot replace the live process owner');
+  assert.equal(await page.$eval('.native-connect .error-summary', node => node.textContent), reviewRestart, 'WebView reload cannot replace the live process owner');
   assert.equal(await page.$('.studio-shell'), null, 'Reloaded WebView cannot expose workspace operations');
   await screenshot('connection-reload-requires-restart');
   await restartNativeFixture(); await heading('连接创作工作区'); await click('打开工作区'); await heading('今天，写点什么？');
@@ -468,7 +502,7 @@ try {
   await page.waitForFunction(() => [...document.querySelectorAll('img')].some(image => image.src.includes('/__asset') && image.complete && image.naturalWidth > 0));
   await screenshot('media-desktop');
   await click('工作区同步'); await page.waitForSelector('.workspace-status-grid');
-  await screenshot('workspace-desktop'); await noOverflow('desktop workspace');
+  await screenshot('workspace-desktop'); await auditNativePage('workspace'); await noOverflow('desktop workspace');
   await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('workspace-mobile'); await noOverflow('mobile workspace');
   await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await click('客户端 API 设置'); await heading('客户端 API 设置');
@@ -498,7 +532,7 @@ try {
   await click('保存 API 配置'); await page.waitForSelector('.native-ai-settings .notice.success');
   assert.equal(await page.$eval('.native-ai-settings input[type="password"]', input => input.value), '');
   assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('browser-fixture-secret')), false);
-  await screenshot('api-settings-desktop');
+  await screenshot('api-settings-desktop'); await auditNativePage('api-settings');
   await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('api-settings-mobile'); await noOverflow('mobile API settings');
   await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.select('.language-switcher select', 'en'); await heading('Client API settings');
@@ -526,6 +560,13 @@ try {
   await page.locator(logout).click(); await heading('连接创作工作区');
   assert.equal(await page.$('.studio-shell'), null);
   assert.equal([...commands].some(command => command.startsWith('plugin:http|')), false, 'offline workflow must not contact Git or other services');
+  dismissNextDialog = true;
+  await recordAction(profile.id, '删除记录');
+  assert.ok(await page.$(`.workspace-record[data-workspace-id="${profile.id}"]`), 'cancelling deletion keeps the record');
+  await recordAction(profile.id, '删除记录');
+  await page.waitForFunction(id => !document.querySelector(`[data-workspace-id="${id}"]`), {}, profile.id);
+  assert.ok(await fs.stat(root), 'deleting the connection record preserves the checkout');
+  assert.ok(await page.evaluate(key => localStorage.getItem(key), recoveryKey), 'deleting the record preserves drafts');
   await page.evaluate(()=>localStorage.setItem('wondershine.native.workspaces.v1','[]'));
   await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36');
   await setViewport({width:390,height:844,isMobile:true,hasTouch:true});
@@ -581,11 +622,13 @@ try {
       await click(`使用 ${provider} 登录`); await page.waitForSelector('.oauth-code');
       assert.equal(await page.$eval('.oauth-code', node => node.textContent), 'TEST-CODE');
       await screenshot('oauth-device-' + provider.toLowerCase());
+      await auditNativePage('oauth-device-' + provider.toLowerCase());
       oauthApproved = true; await page.waitForSelector('.oauth-repository');
       assert.equal(await page.$('.oauth-device'), null, 'Successful sign-in leaves the device authorization stage');
       assert.equal(await page.$('.oauth-dialog [role=alert]'), null, 'A fresh sign-in clears previous diagnostics');
       await page.type('.oauth-dialog input', 'blog');
       await screenshot('oauth-repositories-' + provider.toLowerCase());
+      await auditNativePage('oauth-repositories-' + provider.toLowerCase());
       await setViewport({width:390,height:430,isMobile:true,hasTouch:true});
       await page.waitForFunction(() => parseFloat(document.documentElement.style.getPropertyValue('--native-visible-height')) < 500);
       assert.ok(await page.$eval('.oauth-dialog', node => node.getBoundingClientRect().bottom <= visualViewport.height + visualViewport.offsetTop + 1), 'Repository picker fits visible keyboard viewport');
@@ -606,19 +649,13 @@ try {
     const layout = await page.evaluate(() => {
       const main = document.querySelector('.native-connect');
       const card = document.querySelector('.connection-card').getBoundingClientRect();
-      const footer = document.querySelector('.native-update-footer').getBoundingClientRect();
+      const footer = document.querySelector('footer');
       const padding = parseFloat(getComputedStyle(main).paddingTop);
-      return { top: card.top, padding, footerBottom: footer.bottom, height: document.documentElement.scrollHeight, viewport: innerHeight };
+      return { top: card.top, padding, hasFooter: !!footer, height: document.documentElement.scrollHeight, viewport: innerHeight };
     });
     assert.ok(Math.abs(layout.top - layout.padding) <= 1, name + ': connection card starts at safe-area padding, without a centering gap');
-    if (height >= 844) {
-      assert.ok(layout.height <= layout.viewport + 1, name + ': first launch does not add a footer beyond the viewport');
-      assert.ok(layout.footerBottom <= layout.viewport + 1, name + ': updates stay visible without scrolling');
-    } else {
-      await page.$eval('.native-update-footer button', node => node.scrollIntoView({ block: 'end' }));
-      assert.ok(await page.$eval('.native-update-footer button', node => node.getBoundingClientRect().bottom <= innerHeight + 1), name + ': short screens retain access to updates');
-      await page.evaluate(() => scrollTo(0, 0));
-    }
+    assert.equal(layout.hasFooter, false, name + ': the native connection page has no footer');
+    if (height >= 844) assert.ok(layout.height <= layout.viewport + 1, name + ': first launch fits the viewport');
     await screenshot('connection-first-launch-' + name); await noOverflow(name + ' first launch');
   }
   await setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
@@ -628,13 +665,20 @@ try {
   // Download an actual temporary Git repository through the native HTTP adapter.
   console.log('PASS: offline native UI; starting real clone fixture.');
   await page.select('.language-switcher select','zh-CN');
-  await page.type('.connection-url input','https://git.example.test/remote.git');
+  await page.type('.connection-url input',mobile.url);
   assert.equal(await page.$eval('input[placeholder="自动识别默认分支"]', input => input.value), '');
   assert.equal(await page.$eval('input[placeholder="自动识别默认分支"]', input => input.required), false);
   await page.click('.connection-options summary');
   allowCloneHttp = true; failNextHttp = true;
   await click('下载并开始创作'); await page.waitForSelector('[role=alert]');
   assert.equal(await page.$('.connection-progress'),null,'failed connection removes stale progress');
+  await page.click('.native-connect [role=alert] .error-more');
+  await page.waitForSelector('.error-dialog[open]');
+  assert.match(await page.$eval('.error-dialog textarea', node => node.value), /libgit2 fetch/);
+  await screenshot('error-details-mobile', false);
+  await noOverflow('Mobile error report');
+  await page.click('.error-actions .secondary');
+  await page.waitForFunction(() => !document.querySelector('.error-dialog[open]'));
   await screenshot('clone-error-mobile'); console.log('PASS: clone error releases connection state.');
   downloadGate = new Promise(resolve => { releaseDownload = resolve; });
   checkoutGate = new Promise(resolve => { releaseCheckout = resolve; });
@@ -652,9 +696,77 @@ try {
   assert.equal(saved[0].branch,'release/blog');
   assert.equal(execFileSync('git',['branch','--show-current'],{cwd:join(appData,'workspaces',saved[0].id,'repo')}).toString().trim(),'release/blog');
   await page.select('.language-switcher select', 'zh-CN');
+  allowCloneHttp = false;
+  await restartNativeFixture();
+  await heading('今天，写点什么？');
+  await page.waitForSelector('.thread-composer textarea');
+  assert.equal(await page.$('.native-connect'), null, 'A cold phone launch reopens the last checkout offline');
+  await screenshot('phone-composer', false);
+  assert.ok(await page.$eval('.composer-tools .choice-compact .choice-trigger', button => {
+    const icon = button.querySelector('svg').getBoundingClientRect();
+    const label = button.querySelector('span[id]').getBoundingClientRect();
+    return Math.abs(icon.left + icon.width / 2 - label.left - label.width / 2) < 2;
+  }), 'The mobile tag label is centered beneath its icon');
+  await page.type('.thread-composer textarea', 'Phone publication fixture');
+  const inspectionsBeforeReview = gitInspections;
+  await page.evaluate(() => {
+    window.gitFrames = { count: 0, longest: 0 };
+    let previous = performance.now();
+    const tick = now => {
+      if (!window.gitFrames) return;
+      window.gitFrames.count++;
+      window.gitFrames.longest = Math.max(window.gitFrames.longest, now - previous);
+      previous = now;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await click('发布动态');
+  await page.waitForSelector('dialog.publish-dialog[open] ul li');
+  const frames = await page.evaluate(() => { const result = window.gitFrames; delete window.gitFrames; return result; });
+  assert.ok(gitInspections > inspectionsBeforeReview, 'The mobile review runs in the linked libgit2 engine');
+  assert.ok(frames.count >= 2 && frames.longest < 1000, 'The WebView must keep drawing frames during Git review: ' + JSON.stringify(frames));
+  console.log('Mobile Git review with 128 tracked assets:', JSON.stringify(frames));
+  assert.equal(await page.$('.thread-composer .language-versions'), null, 'Language tools stay in More options after saving');
+  assert.equal(await page.$('.thread-composer .notice.success'), null, 'The review is the active save feedback');
+  await page.$eval('.publish-dialog > details', node => { node.open = true; });
+  await page.$eval('.publish-credential', node => { node.open = true; });
+  await screenshot('phone-publish-review', false);
+  assert.ok(await page.$eval('.publish-dialog', node => node.scrollWidth <= node.clientWidth));
+  assert.ok(await page.$eval('.publish-credential input', node => node.getBoundingClientRect().height >= 44));
+  await auditNativePage('publish-review');
+  await click('稍后');
+  assert.equal(await page.$('dialog.publish-dialog[open]'), null);
+  const scansBeforePublish = worktreeScans;
+  await click('发布动态');
+  await page.waitForFunction(() => document.querySelector('.publish-actions .primary')?.textContent === '确认发布');
+  const remoteArgs = ['--git-dir=' + join(base, 'remote.git')];
+  assert.equal(execFileSync('git', [...remoteArgs, 'log', '-1', '--format=%s', 'release/blog']).toString().trim(), 'initial');
+  allowCloneHttp = true;
+  await click('确认发布');
+  await page.waitForSelector('dialog.publish-dialog[open] [role=status]');
+  await page.waitForFunction(() => document.querySelector('.publish-dialog h2')?.textContent === '动态已发送到仓库');
+  assert.match(execFileSync('git', [...remoteArgs, 'grep', '-l', 'Phone publication fixture', 'release/blog', '--', 'content/threads']).toString(), /index.*\.md/);
+  assert.equal(worktreeScans - scansBeforePublish, 1, 'An uninterrupted mobile publish visits unrelated tracked assets only during initial discovery');
+  console.log('Mobile publish worktree scans:', worktreeScans - scansBeforePublish);
+  await click('完成');
+  await click('切换工作区'); await heading('连接创作工作区');
+  assert.equal(await page.$('.studio-shell'), null, 'Explicit switching leaves the chooser open');
+  await click('添加工作区');
+  await page.type('.connection-url input', mobile.url);
+  await click('下载并开始创作'); await heading('今天，写点什么？');
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('wondershine.native.workspaces.v1')).map(item => item.id)), [saved[0].id], 'adding the same mobile repository reopens its original checkout');
   await click('站点信息'); await page.waitForSelector('.settings-card input');
   assert.deepEqual(await page.$$eval('.settings-card input:not([type=checkbox]):not([type=radio]):not([type=color]), .settings-card select, .settings-card textarea', fields => fields.filter(node => node.getClientRects().length && (parseFloat(getComputedStyle(node).fontSize) < 16 || node.getBoundingClientRect().height < 44)).map(node => node.outerHTML.slice(0,80))), [], 'Native iOS settings retain readable editing size and touch targets');
   await screenshot('settings-iphone'); await noOverflow('iPhone settings');
+  const legacyHead = git(['rev-parse','HEAD']);
+  assert.equal(await mobile.invoke({ profile,job:{ action:'open',clone:false } }),profile.branch);
+  assert.equal(git(['rev-parse','HEAD']),legacyHead,'Upgrading the earlier isomorphic-git checkout preserves its commits');
+  // Exercise direct publication to main independently of the detected release/blog branch.
+  const mainProfile = { ...saved[0], id: crypto.randomUUID(), branch: 'main' };
+  await fs.mkdir(join(appData, 'workspaces', mainProfile.id, 'state'), { recursive: true });
+  await mobile.invoke({ profile: mainProfile, job: { action: 'open', clone: true } });
+  await mobile.verifySync(mainProfile);
   assert.deepEqual(errors, []); assert.deepEqual(cspErrors, []); assert.deepEqual(failedResources, []);
   assert.deepEqual(gestureFindings(), [], 'Native synthetic gesture findings (all reached mobile screenshot surfaces; see gesture-report.json)');
   console.log('Native UI passed: desktop/mobile connection modes, offline dashboard, source save, bundled Vditor, native asset preview, client API settings, secret redaction, configuration reopen, logout.');
@@ -703,6 +815,8 @@ try {
 } finally {
   releaseDownload(); releaseCheckout(); releaseWrite(); releaseAccount();
   await browser?.close();
+  await mobile?.close();
+  await Promise.all([...fileHandles.values()].map(handle => handle.close()));
   if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   await fs.rm(base, { recursive: true, force: true });
 }

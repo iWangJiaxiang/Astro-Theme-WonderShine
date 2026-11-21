@@ -17,6 +17,7 @@ import { MAX_UPLOAD_SIZE } from '../shared/media.js';
 export interface ContentTransportOptions {
   /** Use a workspace-specific identity to isolate local recovery drafts. */
   ai?: NativeAiGateway;
+  themeFetch?: typeof fetch;
   /** True only when this gateway writes exclusively through runtime.repository. */
   aiUsesObservedRepository?: boolean;
   runtime?: SummaryRuntime;
@@ -39,7 +40,7 @@ export function createContentTransport(repository: Repository, options: ContentT
     scope: options.identity?.id ?? repository.saveScope ?? 'local-workspace', store: options.summaryStore,
   });
   repository = runtime.repository;
-  const content = new ContentService(repository);
+  const content = new ContentService(repository, undefined, options.themeFetch);
   const translation = new TranslationService(repository);
   const session = {
     identity: { id: options.identity?.id ?? 'local-workspace', name: options.identity?.name ?? 'Local workspace', method: 'password' as const },
@@ -69,9 +70,19 @@ export function createContentTransport(repository: Repository, options: ContentT
         await readUploadBody(request, 1024 * 1024);
         return json(await repository.workspace.createReview());
       }
+      if (path === '/api/workspace/publish' && method === 'POST' && repository.workspace?.publish) {
+        const body = await input<{ message: string; confirmation: string }>();
+        await repository.workspace.publish(body.message, requireWorkspaceConfirmation(body.confirmation));
+        return json({ published: true });
+      }
       if (path === '/api/workspace/commit' && method === 'POST' && repository.workspace) {
-        const body = await input<{ message: string; confirmation?: string }>();
-        return json(await repository.workspace.commit(body?.message, requireWorkspaceConfirmation(body?.confirmation)));
+        const body = await input<{ message: string; confirmation?: string; followUpReview?: boolean }>();
+        const token = requireWorkspaceConfirmation(body?.confirmation);
+        if (body.followUpReview === true && repository.workspace.commitForReview) {
+          await repository.workspace.commitForReview(body.message, token);
+          return json({ committed: true });
+        }
+        return json(await repository.workspace.commit(body?.message, token));
       }
       if (path === '/api/workspace/sync' && method === 'POST' && repository.workspace) {
         const text = new TextDecoder().decode(await readUploadBody(request, 1024 * 1024));

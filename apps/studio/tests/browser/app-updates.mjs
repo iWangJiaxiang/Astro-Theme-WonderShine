@@ -1,3 +1,4 @@
+import { auditViewports } from './audit-viewports.mjs';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
@@ -61,29 +62,29 @@ try {
   });
   assert.notEqual(buttonStyle.background, 'rgba(0, 0, 0, 0)', 'Update action must remain visible before a workspace theme is loaded');
   assert.notEqual(buttonStyle.foreground, buttonStyle.background);
-  for (const width of [1440, 1024, 390]) {
-    await page.setViewport({ width, height: 850, deviceScaleFactor: 1 });
+  for (const { width, height, screenshot } of await auditViewports(page)) {
+    await page.setViewport({ width, height, deviceScaleFactor: 1 });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    await page.screenshot({ path: join(out, `update-${width}.png`), fullPage: true });
+    if (screenshot) await page.screenshot({ path: join(out, `update-${width}.png`), fullPage: true });
   }
   await page.click('.native-update-notice .primary');
   assert.deepEqual(await page.evaluate(() => window.updateFixture.opened), ['https://github.com/example/studio/releases/tag/studio-v0.2.0']);
   await page.click('.native-update-skip');
   await page.reload();
   await page.waitForFunction(() => window.updateFixture?.calls === 1);
-  await page.waitForFunction(() => !document.querySelector('.native-update-footer button').disabled);
+  await page.waitForFunction(() => !document.querySelector('.native-update-controls button').disabled);
   assert.equal(await page.$('.native-update-notice'), null, 'Skipped version must stay dismissed across launches');
-  await page.click('.native-update-footer button');
+  await page.click('.native-update-controls button');
   await page.waitForSelector('.native-update-notice');
   await page.evaluate(() => { window.updateFixture.available = false; });
-  await page.waitForFunction(() => !document.querySelector('.native-update-footer button').disabled);
-  await page.click('.native-update-footer button');
+  await page.waitForFunction(() => !document.querySelector('.native-update-controls button').disabled);
+  await page.click('.native-update-controls button');
   await page.waitForFunction(() => !document.querySelector('.native-update-notice'));
-  assert.match(await page.$eval('.native-update-footer [role=status]', el => el.textContent), /No update|未发现/);
+  assert.match(await page.$eval('.native-update-controls [role=status]', el => el.textContent), /No update|未发现/);
   await page.evaluate(() => { window.updateFixture.fail = true; });
-  await page.click('.native-update-footer button');
-  await page.waitForSelector('.native-update-footer [role=status]');
-  assert.match(await page.$eval('.native-update-footer [role=status]', el => el.textContent), /Could not check|暂时无法/);
+  await page.click('.native-update-controls button');
+  await page.waitForSelector('.native-update-controls [role=alert]');
+  assert.match(await page.$eval('.native-update-controls [role=alert]', el => el.textContent), /Could not check|暂时无法/);
   assert.deepEqual(errors, []);
 } finally {
   await browser?.close();

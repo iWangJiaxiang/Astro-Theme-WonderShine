@@ -26,5 +26,5 @@ try {
       : 'Apple did not confirm a successful upload.';
     throw new Error(`TestFlight upload failed. ${reason} Raw Apple output is withheld to protect account information.`);
   }
-  console.log('Apple confirmed the TestFlight upload. App Store Connect processing is separate.');
+  console.log('Apple confirmed the TestFlight upload.');
 } finally { await rm(directory, { recursive: true, force: true }); }

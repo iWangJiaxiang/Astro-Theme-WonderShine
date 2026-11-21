@@ -42,7 +42,7 @@
 
 - 使用现有 npm workspaces 和 `package-lock.json`；依赖与运行时要求以各 `package.json` 及工作流为准，不引入第二套锁文件。
 - 沿用 TypeScript ESM、Astro 和 React。只使用浏览器全局的独立 TS 脚本也应显式成为模块（例如 `export {}`），避免与其他脚本共享全局声明。
-- 服务端专属 API 不得进入浏览器共享业务层。业务逻辑优先复用 TypeScript，Tauri 提供文件、网络与系统能力；当前不引入 Rust/WASM 统一后端或 WebSocket 部署依赖。
+- 服务端专属 API 不得进入浏览器共享业务层。业务逻辑优先复用 TypeScript，Tauri 提供文件、网络与系统能力；手机 App 的 Git 操作由 Tauri 2 后台线程调用 libgit2，桌面与服务端保留各自存储适配器。
 - Git 存储沿用仓库接口和文件/HTTP 适配器，不能将核心持久化绑定到 GitHub 专有 API。云函数、本地服务和 App 模式的能力差异应通过已有接口表达。
 - 保留草稿、隐藏内容、未来发布时间和翻译版本的可见性边界；引用本站文章时按语言解析，不泄露未发布内容。
 - 修改界面文案时同步考虑中英文、已有翻译目录与缺失翻译回退。内容国际化和主题框架国际化是两个不同层次。
@@ -64,6 +64,7 @@
 - 持久工作区可能保存唯一的未发布内容和未推送提交，属于用户数据，不能作为构建缓存清理。`.studio-history/` 和 AppData 同样不能随意删除。
 - `STUDIO_SITE_ROOT` 为本地站点；在线 Git 与持久 Git 工作区的语义见 `docs/studio-workspaces.md`。云函数临时磁盘不能冒充持久离线工作区。
 - Git 分支保存不会自动推送、创建 PR 或合并；工作区同步也不应隐式推送所有保存分支。
+- Studio 将主题渠道与固定版本写入站点 `config.toml`；独立 npm 站点的构建前脚本在部署环境选择实际版本。保存沿用已有工作区语义，见 `docs/deployment.md`。
 - 保留 revision 冲突检测、工作区锁、Origin/CSRF 与权限检查。不得为恢复同步而自动 force push 或删除工作区。
 - API 密钥、Git token、签名材料不得进入版本库、日志、截图或浏览器公开配置。测试使用临时仓库与测试服务，不对真实仓库执行破坏性操作或调用计费 API。
 
@@ -95,8 +96,9 @@
 
 - Studio 的发行名称是 **WonderShine Studio**，Tauri identifier 为 `wang.jiaxiang.wondershine-studio`；Android 生成的 applicationId 为 `wang.jiaxiang.wondershine_studio`。更改应用身份必须评估旧数据目录、签名与升级影响。
 - Studio 使用 `studio-vX.Y.Z`，主题 npm 包使用 `theme-vX.Y.Z`，互不混用版本或发布触发器。
-- 所有新发行（主题和 Studio，包括稳定版与预发布）必须先将发行代码及版本变更合入远端 `main`，确认该提交通过对应的远程验证，再从 `main` 的已验证提交创建 `theme-v*` 或 `studio-v*` tag 和 GitHub Release（target 为 `main`）。禁止直接从 feature 或其他非 main 分支创建发行 tag 或 Release。已发布的 tag、npm 版本及 Studio 发行不得移动、覆盖或重发；发现违反流程时先说明事实，再通过合并和新版本纠正。
-- `npm-publish.yml` 的手动入口只有 dry-run；主题 Release 经验证后，稳定版发 `latest`，预发布发 `next`。实际公开发行须在用户授权范围内。
+- 所有新发行（主题和 Studio，包括稳定版与预发布）必须先将发行代码及版本变更合入远端 `main`，确认该提交通过对应的远程验证，主题 canary 直接发 npm，其余发行从 `main` 的已验证提交创建 `theme-v*` 或 `studio-v*` tag 和 GitHub Release（target 为 `main`）。禁止直接从 feature 或其他非 main 分支创建发行 tag 或 Release。已发布的 tag、npm 版本及 Studio 发行不得移动、覆盖或重发；发现违反流程时先说明事实，再通过合并和新版本纠正。
+- 开启仓库变量 `STUDIO_UPLOAD_TESTFLIGHT=true` 后，`main` 的 Studio 代码变更自动构建签名 IPA，通过同一提交的 Studio 验证和 iOS 检查后上传 TestFlight。仅文档或测试变更跳过自动上传。
+- `npm-publish.yml` 的手动入口只有 dry-run；稳定版发 `latest`，beta / RC 发 `next`。main 上的主题变更自动准备 canary 版本提交，通过远程验证后直接发 npm 的 `canary`。GitHub prerelease 用于 beta / RC。实际公开发行须在用户授权范围内。
 - 发布已经通过独立安装验证的同一份 tgz，保留源码/版本/SHA-256 校验，不在发布 job 重新打包。
 - npm 正式发布使用 Trusted Publisher/OIDC；dry-run 不证明 scope 权限或信任配置可用。配置以 `docs/npm-releases.md` 为准。
 - 个人博客升级还需在站点仓库更新主题依赖或 submodule 指针，并进行站点自身的内容回归；主题 CI 不等于个人站已部署。

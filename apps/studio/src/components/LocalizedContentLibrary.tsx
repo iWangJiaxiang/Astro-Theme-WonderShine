@@ -1,3 +1,4 @@
+import { ErrorDetails, ErrorNotice } from "./ErrorNotice";
 import { isLibraryItem } from "../../shared/library";
 import type { ArticleSummary, Json } from "../../shared/types";
 import { api, errorMessage } from "../api";
@@ -209,9 +210,8 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
           : null,
         error.value
           ? element(
-              "p",
-              { role: "alert", className: classes("notice error") },
-              t(error.value),
+              ErrorNotice,
+              { source: "LocalizedContentLibrary", message: error.value },
               " ",
               element(
                 "button",
@@ -247,38 +247,40 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
                 ),
               ),
               renderList(unclassified.value).map((item) =>
-                element(
-                  "button",
-                  {
-                    key: item.path,
-                    className: classes("content-row"),
-                    onClick: domEvent(($event: Event) => {
-                      openItem(item.path);
-                    }),
-                  },
-                  element(
-                    "span",
-                    { className: classes("content-icon") },
-                    element(Icon, { name: "file" }),
-                  ),
-                  element(
-                    "span",
-                    { className: classes("content-info") },
-                    element("strong", null, item.title || t("无标题动态")),
-                    element("small", null, t("文件位置"), "：", item.path),
+                <div className="library-row" key={item.path}>
+                  {element(
+                    "button",
+                    {
+                      className: classes("content-row"),
+                      onClick: domEvent(($event: Event) => {
+                        openItem(item.path);
+                      }),
+                    },
                     element(
                       "span",
-                      { className: classes("content-description") },
-                      t(item.error),
+                      { className: classes("content-icon") },
+                      element(Icon, { name: "file" }),
                     ),
-                  ),
-                  element(
-                    "span",
-                    { className: classes("badge invalid") },
-                    t("需要检查"),
-                  ),
-                  element(Icon, { name: "arrow" }),
-                ),
+                    element(
+                      "span",
+                      { className: classes("content-info") },
+                      element("strong", null, item.title || t("无标题动态")),
+                      element("small", null, t("文件位置"), "：", item.path),
+                      element(
+                        "span",
+                        { className: classes("content-description") },
+                        t(item.error),
+                      ),
+                    ),
+                    element(
+                      "span",
+                      { className: classes("badge invalid") },
+                      t("需要检查"),
+                    ),
+                    element(Icon, { name: "arrow" }),
+                  )}
+                  {item.error && <ErrorDetails message={item.error} source="LocalizedContentLibrary" />}
+                </div>,
               ),
             )
           : null,
@@ -436,6 +438,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
                 ),
                 element(Icon, { name: "arrow" }),
               ),
+              item.error ? element(ErrorDetails, { message: item.error, source: "LocalizedContentLibrary" }) : null,
               props.kind === "thread"
                 ? element(
                     "div",
@@ -483,8 +486,6 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
                   "span",
                   null,
                   t("共 {count} 项", { count: filtered.value.length }),
-                  " · ",
-                  t("网站内容将在下次部署后更新"),
                 ),
                 pages.value > 1
                   ? element(

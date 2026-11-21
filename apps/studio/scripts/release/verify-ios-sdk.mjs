@@ -15,16 +15,20 @@ export function validateIOSExportCompliance(plist) {
   }
 }
 
+export function readAppMetadata(ipa) {
+  const entries = execFileSync('unzip', ['-Z1', ipa], { encoding: 'utf8' }).split('\n');
+  const plists = entries.filter(entry => /^Payload\/[^/]+\.app\/Info\.plist$/.test(entry));
+  if (plists.length !== 1) throw new Error('Expected one main app Info.plist in the signed IPA');
+  const plist = execFileSync('unzip', ['-p', ipa, plists[0]]);
+  return JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', '-'], { input: plist, encoding: 'utf8' }));
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const manifest = JSON.parse(readFileSync('temp/studio-artifacts/ios.json', 'utf8'));
   const artifact = manifest.files.find(file => /^[\w.-]+\.ipa$/.test(file.name));
   if (!artifact) throw new Error('Missing iOS IPA');
   const ipa = resolve('temp/studio-artifacts', artifact.name);
-  const entries = execFileSync('unzip', ['-Z1', ipa], { encoding: 'utf8' }).split('\n');
-  const plists = entries.filter(entry => /^Payload\/[^/]+\.app\/Info\.plist$/.test(entry));
-  if (plists.length !== 1) throw new Error('Expected one main app Info.plist in the signed IPA');
-  const plist = execFileSync('unzip', ['-p', ipa, plists[0]]);
-  const metadata = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', '-'], { input: plist, encoding: 'utf8' }));
+  const metadata = readAppMetadata(ipa);
   validateIOSExportCompliance(metadata);
   console.log(`Verified signed IPA SDK: ${validateIOSSdk(metadata.DTSDKName)}`);
   console.log(`Verified signed IPA encryption declaration: false; build ${metadata.CFBundleVersion}`);

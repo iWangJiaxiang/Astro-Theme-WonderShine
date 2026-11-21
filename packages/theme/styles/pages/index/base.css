@@ -31,158 +31,123 @@
     background: var(--wjx-lighttext);
 }
 
-/* -------------------- 文章封面 -------------------- */
-
-#recent-post-top .recent-post-item .post_cover {
-    width: 100%;
+#recent-post-top {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+    gap: 1rem;
 }
-
-/* -------------------- 文章置顶卡片样式 -------------------- */
-
-.recent-top-post-group {
-    border-radius: 12px;
-    overflow: hidden;
-    overflow-x: auto;
-    width: 100%;
-    margin-bottom: 0;
-    -webkit-user-select: none
-}
-
-.recent-top-post-group.more-page {
-    display: none
-}
-
-.recent-post-top {
-    display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    width: 100%;
-    overflow-x: scroll
-}
-
-.recent-post-top::-webkit-scrollbar {
-    display: none
-}
-
-.recent-post-top .recent-post-item {
-    display: flex;
-    width: 200px;
-    flex-direction: column;
-    align-items: flex-start;
-    margin-left: .5rem;
-    background: var(--wjx-card-bg);
-    border-radius: 12px;
-    overflow: hidden;
-    height: 164px;
-    max-height: 164px;
-    border: var(--style-border-always);
-    transition: .3s;
+#recent-post-top > * { min-width: 0; }
+#bannerGroup #banners, #topGroup .todayCard {
     position: relative;
-    box-shadow: var(--wjx-shadow-border)
-}
-
-@media screen and (max-width: 768px) {
-    .recent-post-top .recent-post-item {
-        border-radius: 8px;
-        box-shadow: none;
-        clip-path: inset(0 0 0 0 round 8px);
-    }
-
-    .recent-post-top .recent-post-item:last-child {
-        margin-right: 1rem;
-    }
-}
-
-@media screen and (min-width: 1200px) {
-    .recent-post-top .recent-post-item {
-        width:calc(100% / 3 - .25rem);
-        margin-left: 0
-    }
-
-    .recent-post-top .recent-post-item {
-        margin-right: 0;
-        margin-bottom: .5rem
-    }
-
-    .recent-post-top {
-        overflow-x: visible
-    }
-
-    .recent-top-post-group {
-        overflow: visible;
-        overflow-x: visible
-    }
-}
-
-span.recent-post-top-text {
-    position: absolute;
-    top: 0;
-    left: -40px;
     display: flex;
-    z-index: 1;
-    background: var(--wjx-red);
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 1.5rem;
+    min-height: clamp(230px, 22vw, 330px);
+    height: 100%;
+    padding: clamp(1.25rem, 3vw, 3rem);
+    overflow: hidden;
+    border: var(--style-border);
+    border-radius: 12px;
+    background: var(--wjx-card-bg);
+    box-shadow: var(--wjx-shadow-border);
+}
+#bannerGroup #banners { animation: none; transition: none; }
+#bannerGroup .banner-logo { position: absolute; width: 42%; max-height: 95%; object-fit: contain; right: -5%; top: -8%; transform: rotate(12deg); opacity: .1; pointer-events: none; }
+#bannerGroup .tags-group-all { position: absolute; inset: 0; opacity: .3; pointer-events: none; }
+#bannerGroup .banners-title, #bannerGroup .banners-link { position: relative; inset: auto; }
+#bannerGroup .banners-title-big { font-size: clamp(1.75rem, 3.4vw, 3rem); font-weight: 700; line-height: 1.1; text-wrap: balance; }
+#bannerGroup .banners-title-small { margin-top: .65rem; font-size: .9rem; line-height: 1.5; color: var(--wjx-secondtext); }
+#bannerGroup .banners-link { display: flex; flex-wrap: wrap; gap: .5rem; }
+#bannerGroup .banners-link:empty { display: none; }
+.banners-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    min-height: 40px;
+    padding: .35rem 1rem;
+    border-radius: 2rem;
+    background: linear-gradient(110deg, var(--group-light-one, var(--group-default)), var(--group-light-two, var(--group-default)));
+    --group-default: var(--wjx-theme);
     color: var(--wjx-white);
-    padding: 2px 8px;
-    font-size: 0.6rem;
-    border-radius: 12px 0 12px 0;
-    transition: 0.3s;
+    font-weight: 600;
+}
+.banners-link-btn.blb-top { --group-default: var(--wjx-secondtext); }
+[data-theme=dark] .banners-link-btn { background: linear-gradient(110deg, var(--group-dark-one, var(--group-default)), var(--group-dark-two, var(--group-default))); }
+.banners-link-btn img { width: 1em; height: 1em; object-fit: contain; }
+.banners-link-btn:hover { box-shadow: var(--wjx-shadow-border); text-decoration: underline; }
+#topGroup { position: relative; min-width: 0; }
+#topGroup .todayCard { isolation: isolate; background: var(--wjx-fontcolor); color: white; }
+#topGroup .todayCard-cover, #topGroup .todayCard::after { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+#topGroup .todayCard-cover { object-fit: cover; transition: transform .3s; }
+#topGroup .todayCard:hover .todayCard-cover { transform: scale(1.025); }
+#topGroup .todayCard::after { content: ''; background: linear-gradient(transparent, rgb(10 15 30 / 86%)); }
+.todayCard-tips { font-size: .8rem; }
+.todayCard-title { font-size: clamp(1.4rem, 2.5vw, 2.3rem); line-height: 1.25; font-weight: 700; overflow-wrap: anywhere; }
+#topGroup:has(.recommendations) {
+    border: var(--style-border);
+    border-radius: 12px;
+    background: var(--wjx-card-bg);
+    box-shadow: var(--wjx-shadow-border);
+    overflow: hidden;
+}
+#topGroup:has(summary) .todayCard {
+    height: auto;
+    min-height: clamp(182px, calc(22vw - 48px), 282px);
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+#topGroup .recommendations { margin: 0; padding: 0; min-height: 0; border: 0; border-radius: 0; background: none; }
+#topGroup summary {
+    position: static;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+    width: 100%;
+    min-height: 46px;
+    margin: 0;
+    padding: .5rem 1.25rem;
+    color: var(--wjx-fontcolor);
+    background: var(--wjx-card-bg);
+    box-shadow: none;
+    font-weight: 600;
+    list-style: none;
     cursor: pointer;
 }
-
-.recent-post-item:hover .recent-post-top-text {
-    left: 0;
+#topGroup summary::before, #topGroup summary::after, #topGroup summary::-webkit-details-marker { display: none; }
+#topGroup summary:hover, #topGroup .recommendation-link:hover { color: var(--wjx-lighttext); background: var(--wjx-secondbg); }
+#topGroup details:not([open]) .hide-recommendations, #topGroup details[open] .show-recommendations { display: none; }
+#topGroup details[open] summary i { transform: rotate(180deg); }
+#topGroup .recommendation-list { display: grid; list-style: none; padding: 0; margin: 0 !important; }
+#topGroup .recommendation-link {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    height: 100%;
+    min-width: 0;
+    padding: .75rem 1.25rem;
+    border-top: var(--style-border);
 }
-@media screen and (max-width: 768px) {
-    .recent-top-post-group {
-        border-radius: 0;
-        background: var(--wjx-background);
-    }
-
-    .recent-post-top-text {
-        display: none !important;
-    }
-
-    .recent-post-top .recent-post-item .post_cover img {
-        border-radius: 8px 8px 0 0 !important;
-    }
+.recommendation-link img { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; }
+.recommendation-copy { flex: 1; min-width: 0; line-height: 1.4; overflow-wrap: anywhere; }
+.recommendation-copy strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.recommendation-copy time, .recommendation-link > i { color: var(--wjx-secondtext); font-size: .8rem; }
+@media (min-width: 1000px) {
+    #topGroup .recommendation-list:has(> li:nth-child(3)) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+#recent-post-top :is(a,summary):focus-visible { outline: 3px solid var(--wjx-theme); outline-offset: -3px; }
 
-/* 标题 */
-.recent-post-top .recent-post-item .recent-post-info {
-    padding: 0.3rem 0.5rem 0.3rem 0.5rem !important;
-    transition: 0.3s;
+@media (max-width: 700px) {
+    #recent-post-top { grid-template-columns: minmax(0, 1fr); gap: .65rem; }
+    #home_top:not(.activity-home) #recent-post-top { margin: .75rem 1rem; }
+    #bannerGroup #banners { min-height: 0; gap: .85rem; }
+    #topGroup .todayCard, #topGroup:has(summary) .todayCard { min-height: 156px; }
 }
-
-.recent-post-top .recent-post-item:hover .recent-post-info a {
-    color: var(--wjx-fontcolor);
-}
-
-@media screen and (max-width: 1300px) {
-    .recent-post-top .recent-post-item:hover .recent-post-info a {
-        color: var(--wjx-theme);
-        transition: 0.3s;
-    }
-}
-
-@media screen and (min-width: 768px) {
-    .recent-post-top .recent-post-item:hover .recent-post-info a {
-        color:var(--wjx-fontcolor)
-    }
-}
-
-.recent-post-top .recent-post-item .recent-post-info .article-title {
-    -webkit-line-clamp: 2;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    line-height: 1.5;
-    justify-content: center;
-    align-items: flex-end;
-    align-content: center;
-    padding-top: .5rem;
-    font-weight: bold;
-    font-size: 0.8rem !important;
-    padding: 0 !important;
+@media (prefers-reduced-motion: reduce) {
+    #bannerGroup .tags-group-wrapper { animation: none; }
+    #topGroup .todayCard-cover { transition: none; }
 }
 
 .title-and-tips {

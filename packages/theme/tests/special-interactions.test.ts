@@ -82,7 +82,8 @@ test('about statistics remain readable without animation when reduced motion is 
 
 test('reading progress initializes on footerless and non-scrolling pages',()=>{
   const source=readFileSync(new URL('../assets/js/main.js',import.meta.url),'utf8');
-  const percent=source.slice(source.indexOf('function percent()'),source.indexOf('// 今日推荐展示更多'));
+  const percent=source.match(/^function percent\(\) \{[^]*?^\}/m)?.[0];
+  assert.ok(percent);
   for(const height of [771,2000]){
     const label={textContent:'',innerHTML:0},classes=new Set<string>();
     const window:{scrollY:number;pageYOffset:number;onscroll?:unknown}={scrollY:0,pageYOffset:0};

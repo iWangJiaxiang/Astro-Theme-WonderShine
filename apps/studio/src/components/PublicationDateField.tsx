@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import { dateParts } from "../../shared/form-fields";
 import type { Json } from "../../shared/types";
 import { t } from "../i18n";
@@ -181,12 +182,8 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
                       ),
                       !pendingValue.value
                         ? element(
-                            "p",
-                            {
-                              role: "alert",
-                              className: classes("danger small"),
-                            },
-                            t("请填写有效的日期和时间"),
+                            ErrorNotice,
+                            { source: "PublicationDateField", message: "请填写有效的日期和时间", className: "danger small" },
                           )
                         : null,
                       element(

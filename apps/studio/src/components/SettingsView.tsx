@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import SaveButton from "./SaveButton";
 import { saveContext } from "../save-preferences";
 import type { SaveMode } from "../../shared/save";
@@ -222,6 +223,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
         },
       ],
       appearance: [
+        { title: "主题版本", paths: ["extra.theme.channel", "extra.theme.pinned", "extra.theme.version"] },
         {
           title: "主题与字体",
           paths: [
@@ -431,10 +433,17 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       try {
         if (!current()) return;
         operation.initiated = true;
-        const result = await api<SaveResult>(endpoint, "PUT", input);
+        const result = await api<SaveResult & { pinnedThemeVersion?: string | null }>(endpoint, "PUT", input);
         if (!current()) return;
         batch(() => {
           settings.value = { ...settings.value!, revision: result.revision };
+          if (result.pinnedThemeVersion !== undefined) {
+            const key = "extra.theme.version";
+            if ([key, "extra.theme.channel", "extra.theme.pinned"].every(path => values.value[path] === submitted[path])) {
+              values.value[key] = result.pinnedThemeVersion ?? "";
+            }
+            submitted[key] = result.pinnedThemeVersion ?? "";
+          }
           baseline.value = submitted;
           branchPending.value = result.branchPending === true;
           savedBranch.value = result.branch || "";
@@ -523,9 +532,8 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
             savedBranch.value ? element("code", { className: "saved-branch" }, savedBranch.value) : null,
             error.value
               ? element(
-                  "p",
-                  { role: "alert", className: classes("notice error") },
-                  t(error.value),
+                  ErrorNotice,
+                  { source: "SettingsView", message: error.value },
                   " ",
                   element(
                     "button",
@@ -564,10 +572,8 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
 
               relationsError.value || relationsNeedsRetry.value
                 ? element(
-                    "p",
-                    { className: classes("notice error") },
-                    relationsError.value ? t("无法加载可选内容：") : null,
-                    t(relationsError.value || "登录信息已更新，请重试加载选项。"),
+                    ErrorNotice,
+                    { source: "SettingsView", message: relationsError.value || "登录信息已更新，请重试加载选项。", prefix: relationsError.value ? t("无法加载可选内容：") : undefined },
                     " ",
                     element(
                       "button",
@@ -604,7 +610,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                     element(
                       "div",
                       { className: classes("settings-grid") },
-                      renderList(section.fields).map((field) =>
+                      renderList(section.fields.filter(field => field.path !== "extra.theme.version" || values.value["extra.theme.pinned"])).map((field) =>
                         element(
                           Fragment,
                           { key: field.path },
@@ -637,7 +643,11 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                                   "full-width": field.kind === "textarea",
                                 }),
                                 onUpdateModelValue: (($event) => {
-                                  if (canInteract()) values.value[field.path] = $event;
+                                  if (!canInteract()) return;
+                                  if (field.path === "extra.theme.channel" || (field.path === "extra.theme.pinned" && !$event)) {
+                                    values.value["extra.theme.version"] = "";
+                                  }
+                                  values.value[field.path] = $event;
                                 }) satisfies EventHandler<
                                   typeof FormField,
                                   "onUpdateModelValue"
@@ -666,9 +676,8 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
               exitControl())
           : error.value
           ? element(
-              "p",
-              { role: "alert", className: classes("notice error") },
-              t(error.value),
+              ErrorNotice,
+              { source: "SettingsView", message: error.value },
               " ",
               element(
                 "button",

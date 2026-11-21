@@ -1,3 +1,5 @@
+import { ErrorNotice } from "./ErrorNotice";
+import { WorkspacePanel } from "../../platform/WorkspacePanel";
 import SaveButton from "./SaveButton";
 import { createDraftBackup } from "../draft-backup";
 import { createRichEditorSync } from "../rich-editor-sync";
@@ -28,7 +30,7 @@ import type {
   SaveResult,
   Settings,
 } from "../../shared/types";
-import { api, errorMessage, session } from "../api";
+import { api, errorMessage, session, reauthentication } from "../api";
 import {
   canAutosave,
   readAutosavePreference,
@@ -121,14 +123,29 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
     const owner = session.value?.identity.id;
     const saveMode = ref<SaveMode>(saveContext.value.defaultMode);
     const branchPending = ref(false), savedBranch = ref("");
-    const saveAction = (publish = false) => element(SaveButton, {
-      mode: saveMode.value,
-      onModeChange: (value: SaveMode) => { saveMode.value = value; },
-      busy: busy.value,
-      disabled: !dirty.value && !branchPending.value && saveMode.value !== "branch" && (!publish || values.value.draft === false),
-      label: publish ? t(saveMode.value === "branch" ? "分支保存 · 可发布" : saveMode.value === "remote" ? "远端保存 · 可发布" : "本地保存 · 可发布") : undefined,
-      onSave: () => { if (publish) void saveLocalized(false); else void save(); },
-    });
+    const publishing = ref(false);
+    const saveAction = (publish = false) => {
+      const direct = publish && isThread && saveMode.value === "local" && saveContext.value.workspace;
+      const label = direct || (publish && isThread && saveMode.value === "remote") ? "发布动态"
+        : saveMode.value === "branch" ? "分支保存 · 可发布"
+        : saveMode.value === "remote" ? "远端保存 · 可发布" : isThread ? "保存动态" : "本地保存 · 可发布";
+      return element(SaveButton, {
+        mode: saveMode.value,
+        showModes: !isThread || threadAdvanced.value,
+        onModeChange: (value: SaveMode) => { saveMode.value = value; },
+        busy: busy.value,
+        disabled: !direct && !dirty.value && !branchPending.value && saveMode.value !== "branch" && (!publish || values.value.draft === false),
+        label: publish ? t(label) : undefined,
+        onSave: async () => {
+          if (!publish) { await save(); return; }
+          flush();
+          const alreadySaved = direct && revision.value && !dirty.value && values.value.draft === false;
+          if (!alreadySaved && !await saveLocalized(false)) return;
+          if (direct && alive && !branchPending.value && !dirty.value && session.value?.identity.id === owner) publishing.value = true;
+        },
+      });
+    };
+    watch(reauthentication, required => { if (required) publishing.value = false; });
     function openAi(kind: "summary" | "cover") {
       flush();
       aiSource.value =
@@ -437,6 +454,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       alive = true,
       generation = 0,
       richReady = false;
+    let richBaseline: { source: string; serialized: string } | undefined;
     const storageKey = `studio-draft:${session.value?.identity.method}:${session.value?.identity.id}:${props.path}`;
     const shortcode = computed(() => /\{%|\{\{/.test(body.value));
     const changes = computed(() =>
@@ -663,7 +681,9 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
           ? editor.getValue()
           : undefined,
       (value) => {
-        body.value = richEditorBody(body.value, value);
+        body.value = richBaseline?.serialized === value
+          ? richBaseline.source
+          : richEditorBody(body.value, value);
       },
     );
     function flush() {
@@ -674,6 +694,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       if (sync) flush();
       richSync.cancel();
       generation++;
+      richBaseline = undefined;
       richReady = false;
       const old = editor;
       editor = undefined;
@@ -727,10 +748,11 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
           !editorElement.value
         )
           return;
+        const source = body.value;
         editor = new Vditor(editorElement.value, {
           cdn: `${location.origin}/vendor/vditor`,
           mode: "ir",
-          value: body.value,
+          value: source,
           height: props.embedded ? 180 : isThread ? 360 : 560,
           lang: locale.value === "zh-CN" ? "zh_CN" : "en_US",
           cache: { enable: false },
@@ -768,7 +790,12 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
               richSync.accept(value);
           },
           after: () => {
-            if (generation === instance) richReady = true;
+            queueMicrotask(() => {
+              if (!alive || generation !== instance || !editor) return;
+              // Vditor can normalize Markdown even before the first edit.
+              richBaseline = { source, serialized: editor.getValue() };
+              richReady = true;
+            });
           },
         });
       } catch (e) {
@@ -780,7 +807,9 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       if (busy.value || creatingTopic.value) return;
       const previous = values.value.draft;
       values.value.draft = draft;
-      if (!(await save())) values.value.draft = previous;
+      const saved = await save();
+      if (!saved) values.value.draft = previous;
+      return saved;
     }
     async function save(): Promise<boolean> {
       if (
@@ -857,8 +886,14 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         originalBody.value = submittedBody;
         branchPending.value = result.branchPending === true;
         savedBranch.value = result.branch || "";
-        message.value = result.branchPending ? "" : result.message;
-        if (result.branchPending) { error.value = result.message; autosavePaused.value = true; }
+        message.value = result.message;
+        if (isThread && saveMode.value === "local" && !result.branchPending)
+          message.value = submittedValues.draft ? "草稿已保存" : "动态已保存在工作区。";
+        if (result.branchPending) {
+          message.value = "";
+          error.value = result.message;
+          autosavePaused.value = true;
+        }
         if (isTopic) {
           try {
             const saved = await api<Article>(
@@ -938,9 +973,8 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         ? element(LoadingState, { label: "正在载入文稿…" })
         : !ready.value
           ? element(
-              "div",
-              { role: "alert", className: classes("notice error") },
-              t(error.value),
+              ErrorNotice,
+              { source: "DocumentEditor", message: error.value },
               " ",
               element(
                 "button",
@@ -999,7 +1033,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       ),
                       element(
                         "details",
-                        { className: classes("editor-file-location") },
+                        { className: classes("editor-file-location"), hidden: isThread && !threadAdvanced.value },
                         element("summary", null, t("文件位置")),
                         element(
                           "p",
@@ -1013,7 +1047,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       { className: classes("row editor-save-actions") },
                       element(
                         "label",
-                        { className: classes("autosave-control") },
+                        { className: classes("autosave-control"), hidden: isThread && !threadAdvanced.value },
                         element("span", null, t("自动保存")),
                         element(
                           "select",
@@ -1041,6 +1075,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                                 busy.value ||
                                 translating.value ||
                                 settingsDirty.value,
+                              hidden: isThread && !threadAdvanced.value,
                               className: classes("secondary danger"),
                               onClick: domEvent(($event: Event) => {
                                 remove();
@@ -1052,6 +1087,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       element(
                         "button",
                         {
+                          hidden: isThread && !threadAdvanced.value,
                           className: classes("secondary"),
                           onClick: domEvent(($event: Event) => {
                             download();
@@ -1086,7 +1122,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     ),
                   )
                 : null,
-              autosaveSeconds.value
+              autosaveSeconds.value && (!isThread || threadAdvanced.value || autosavePaused.value)
                 ? element(
                     "p",
                     { role: "status", className: classes("autosave-status") },
@@ -1102,21 +1138,22 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
               savedBranch.value ? element("code", { className: "saved-branch" }, savedBranch.value) : null,
               error.value
                 ? element(
-                    "p",
-                    { role: "alert", className: classes("notice error") },
-                    t(error.value),
+                    ErrorNotice,
+                    { source: "DocumentEditor", message: error.value },
                     " ",
                     t(
                       "编辑内容已保留。如有版本冲突，请先下载备份，再重新打开文件合并。",
                     ),
                   )
                 : null,
-              message.value
-                ? element(
-                    "p",
-                    { role: "status", className: classes("notice success") },
-                    t(message.value),
-                  )
+              message.value && !publishing.value
+                ? message.value === "浏览器草稿备份不可用，请及时保存或下载。" || message.value === "内容已保存，但时间信息刷新失败。重新打开可查看。"
+                  ? element(ErrorNotice, { source: "DocumentEditor", message: message.value })
+                  : element(
+                      "p",
+                      { role: "status", className: classes("notice success") },
+                      t(message.value),
+                    )
                 : null,
               recovery.value
                 ? element(
@@ -1150,7 +1187,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     ),
                   )
                 : null,
-              supportsTranslation && (!props.embedded || revision.value)
+              supportsTranslation && (!props.embedded || revision.value) && (!isThread || threadAdvanced.value || translating.value)
                 ? element(LocalizedContentContext, {
                     kind: isTopic
                       ? "topic"
@@ -1375,6 +1412,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                   element(
                     "div",
                     {
+                      hidden: isThread && !threadAdvanced.value && mode.value === "source",
                       className: classes("editor-tabs", {
                         "composer-mode-tabs": props.embedded,
                       }),
@@ -1445,7 +1483,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     ? element("textarea", {
                         ref: domRef(sourceElement),
                         value: body.value ?? "",
-                        "aria-label": t("Markdown 正文"),
+                        "aria-label": t(isThread ? "动态正文" : "Markdown 正文"),
                         placeholder: t(
                           props.embedded
                             ? "此刻，有什么想分享？"
@@ -1506,6 +1544,89 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       : t(revision.value ? "已保存" : "尚未保存"),
                   ),
                 ),
+                props.embedded ? element(
+                  "div",
+                  {
+                    "aria-label": t("动态设置"),
+                    className: classes("composer-tools"),
+                  },
+                  element(
+                    "button",
+                    {
+                      disabled: busy.value || mode.value !== "source",
+                      title:
+                        mode.value !== "source"
+                          ? t("切换到 Markdown 源码后插入图片")
+                          : t("从仓库选择图片插入正文"),
+                      className: classes("composer-tool"),
+                      onClick: domEvent(($event: Event) => {
+                        chooseImage();
+                      }),
+                    },
+                    element(Icon, { name: "image", size: 17 }),
+                    t("插入图片"),
+                  ),
+                  element(ChoiceSelect, {
+                    compact: true,
+                    icon: "tag",
+                    modelValue: values.value["taxonomies.tags"] || [],
+                    options: choices.value["taxonomies.tags"] || [],
+                    disabled: busy.value || choicesLoading.value,
+                    name: "taxonomies.tags",
+                    label: t("标签"),
+                    onUpdateModelValue: (($event) => {
+                      values.value["taxonomies.tags"] = $event;
+                    }) satisfies EventHandler<
+                      typeof ChoiceSelect,
+                      "onUpdateModelValue"
+                    >,
+                  }),
+                  element(SelectionField, {
+                    ...topicSelection.value,
+                    multiple: true,
+                    compact: true,
+                    icon: "hash",
+                    modelValue: values.value["extra.topics"] || [],
+                    options: topicChoices.value,
+                    disabled:
+                      busy.value ||
+                      choicesLoading.value ||
+                      !!choicesError.value,
+                    name: "extra.topics",
+                    label: t("关联话题"),
+                    onUpdateModelValue: (($event) => {
+                      values.value["extra.topics"] = $event;
+                    }) satisfies EventHandler<
+                      typeof SelectionField,
+                      "onUpdateModelValue"
+                    >,
+                  }),
+                  element(ArticleReferences, {
+                    compact: true,
+                    modelValue: values.value["extra.references"],
+                    items: topicItems.value,
+                    language: documentLanguage.value,
+                    disabled: busy.value || choicesLoading.value,
+                    onUpdateModelValue: (($event) => {
+                      values.value["extra.references"] = $event;
+                    }) satisfies EventHandler<
+                      typeof ArticleReferences,
+                      "onUpdateModelValue"
+                    >,
+                  }),
+                  element(
+                    "button",
+                    {
+                      "aria-expanded": threadAdvanced.value,
+                      className: classes("composer-tool"),
+                      onClick: domEvent(($event: Event) => {
+                        threadAdvanced.value = !threadAdvanced.value;
+                      }),
+                    },
+                    element(Icon, { name: "sliders", size: 16 }),
+                    t(threadAdvanced.value ? "收起设置" : "更多选项"),
+                  ),
+                ) : null,
                 element(
                   "aside",
                   {
@@ -1577,7 +1698,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                                     threadAdvanced.value = !threadAdvanced.value;
                                   }),
                                 },
-                                t("更多属性"),
+                                t(threadAdvanced.value ? "收起设置" : "更多选项"),
                               )
                             : null,
                           isThread && threadAdvanced.value
@@ -1614,23 +1735,6 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                               },
                               element("i", { "aria-hidden": "true" }),
                               t(values.value.draft ? "草稿" : "已发布"),
-                            ),
-                            element(
-                              "button",
-                              {
-                                type: "button",
-                                "aria-expanded": threadAdvanced.value,
-                                className: classes("text-button"),
-                                onClick: domEvent(($event: Event) => {
-                                  threadAdvanced.value = !threadAdvanced.value;
-                                }),
-                              },
-                              t(threadAdvanced.value ? "收起设置" : "展开设置"),
-                              element(
-                                "span",
-                                { "aria-hidden": "true" },
-                                threadAdvanced.value ? "⌃" : "⌄",
-                              ),
                             ),
                           ),
                           element(
@@ -1843,10 +1947,8 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       : null,
                     choicesError.value
                       ? element(
-                          "p",
-                          { role: "alert", className: classes("notice error") },
-                          t("选项载入失败："),
-                          t(choicesError.value),
+                          ErrorNotice,
+                          { source: "DocumentEditor", message: choicesError.value, prefix: t("选项载入失败：") },
                           " ",
                           element(
                             "button",
@@ -2036,93 +2138,10 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     { className: classes("composer-footer") },
                     element(
                       "div",
-                      {
-                        "aria-label": t("动态设置"),
-                        className: classes("composer-tools"),
-                      },
-                      element(
-                        "button",
-                        {
-                          disabled: busy.value || mode.value !== "source",
-                          title:
-                            mode.value !== "source"
-                              ? t("切换到 Markdown 源码后插入图片")
-                              : t("从仓库选择图片插入正文"),
-                          className: classes("composer-tool"),
-                          onClick: domEvent(($event: Event) => {
-                            chooseImage();
-                          }),
-                        },
-                        element(Icon, { name: "image", size: 17 }),
-                        t("插入图片"),
-                      ),
-                      element(ChoiceSelect, {
-                        compact: true,
-                        icon: "tag",
-                        modelValue: values.value["taxonomies.tags"] || [],
-                        options: choices.value["taxonomies.tags"] || [],
-                        disabled: busy.value || choicesLoading.value,
-                        name: "taxonomies.tags",
-                        label: t("标签"),
-                        onUpdateModelValue: (($event) => {
-                          values.value["taxonomies.tags"] = $event;
-                        }) satisfies EventHandler<
-                          typeof ChoiceSelect,
-                          "onUpdateModelValue"
-                        >,
-                      }),
-                      element(SelectionField, {
-                        ...topicSelection.value,
-                        multiple: true,
-                        compact: true,
-                        icon: "hash",
-                        modelValue: values.value["extra.topics"] || [],
-                        options: topicChoices.value,
-                        disabled:
-                          busy.value ||
-                          choicesLoading.value ||
-                          !!choicesError.value,
-                        name: "extra.topics",
-                        label: t("关联话题"),
-                        onUpdateModelValue: (($event) => {
-                          values.value["extra.topics"] = $event;
-                        }) satisfies EventHandler<
-                          typeof SelectionField,
-                          "onUpdateModelValue"
-                        >,
-                      }),
-                      element(ArticleReferences, {
-                        compact: true,
-                        modelValue: values.value["extra.references"],
-                        items: topicItems.value,
-                        language: documentLanguage.value,
-                        disabled: busy.value || choicesLoading.value,
-                        onUpdateModelValue: (($event) => {
-                          values.value["extra.references"] = $event;
-                        }) satisfies EventHandler<
-                          typeof ArticleReferences,
-                          "onUpdateModelValue"
-                        >,
-                      }),
-                      element(
-                        "button",
-                        {
-                          "aria-expanded": threadAdvanced.value,
-                          className: classes("composer-tool"),
-                          onClick: domEvent(($event: Event) => {
-                            threadAdvanced.value = !threadAdvanced.value;
-                          }),
-                        },
-                        element(Icon, { name: "sliders", size: 16 }),
-                        t(threadAdvanced.value ? "收起设置" : "发布设置"),
-                      ),
-                    ),
-                    element(
-                      "div",
                       { className: classes("composer-publish") },
                       element(
                         "label",
-                        { className: classes("autosave-control") },
+                        { className: classes("autosave-control"), hidden: !threadAdvanced.value },
                         element("span", null, t("自动保存")),
                         element(
                           "select",
@@ -2232,6 +2251,15 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       aiDialog.value = undefined;
                       aiWorking.value = false;
                     }) satisfies EventHandler<typeof AiAssistant, "onClose">,
+                  })
+                : null,
+              publishing.value
+                ? element(WorkspacePanel, {
+                    publishPath: props.path,
+                    onClose: (pushed: boolean) => {
+                      publishing.value = false;
+                      message.value = pushed ? "动态已发送到仓库" : "动态已保存在工作区。";
+                    },
                   })
                 : null,
               deleteDialog.value

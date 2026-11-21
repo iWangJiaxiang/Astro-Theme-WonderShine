@@ -29,7 +29,9 @@ const exportsByModule: Record<string, string[]> = {
   './tauri-filesystem': ['tauriFiles'],
   './file-repository': ['FileRepository'],
   './git-engine': ['NativeGitEngine'],
+  './mobile-git': ['mobileGit'],
   './git-http': ['createGitHttp'],
+  './git-credential': ['nativeGitCredential'],
   './hosting': ['validateProfile', 'validateRemote'],
   './local-workspace': ['inspectLocalRepository'],
   './load-diagnostics': ['createLoadDiagnostics'],
@@ -99,6 +101,7 @@ async function fixture(appData = base + '/', holdState = false) {
       constructor() { events.push('local:construct'); }
       async recover() { events.push('local:recover'); recoveryEntered.resolve(); await recovered.promise; events.push('local:ready'); }
     } },
+    './mobile-git': { mobileGit: () => { throw new Error('Unexpected mobile worker on desktop'); } },
     './git-engine': { NativeGitEngine: class {
       constructor(_files: unknown, _root: string, _state: string, _profile: unknown, _http: unknown,
         _credentials: unknown, adapter: { store: unknown; source: unknown }) {
@@ -111,6 +114,7 @@ async function fixture(appData = base + '/', holdState = false) {
       async assertWritable() {}
     } },
     './git-http': { createGitHttp: () => ({}) },
+    './git-credential': { nativeGitCredential: {} },
     './hosting': { validateProfile() {}, validateRemote() {} },
     './local-workspace': { inspectLocalRepository: async () => {
       events.push('local:inspect'); return { branch: 'main', url: 'https://git.example/site.git' };

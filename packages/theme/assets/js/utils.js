@@ -470,22 +470,6 @@ var wjx = {
         });
     },
 
-    //置顶文章横向滚动
-    topPostScroll: function () {
-        if (document.getElementById("recent-post-top")) {
-            let xscroll = document.getElementById("recent-post-top");
-            xscroll.addEventListener("mousewheel", function (e) {
-                //计算鼠标滚轮滚动的距离
-                let v = -e.wheelDelta / 2;
-                xscroll.scrollLeft += v;
-                //阻止浏览器默认方法
-                if (document.body.clientWidth < 768) {
-                    e.preventDefault();
-                }
-            }, false);
-        }
-    },
-
     topCategoriesBarScroll: function () {
         if (document.getElementById("category-bar-items")) {
             let xscroll = document.getElementById("category-bar-items");
@@ -614,7 +598,8 @@ var wjx = {
 
     //隐藏今日推荐
     hideTodayCard: function() {
-        document.getElementById("topGroup") && document.getElementById("topGroup").classList.add("hideCard")
+        const recommendations = document.querySelector("#topGroup details");
+        if (recommendations) recommendations.open = true;
     },
 
     //更改主题色

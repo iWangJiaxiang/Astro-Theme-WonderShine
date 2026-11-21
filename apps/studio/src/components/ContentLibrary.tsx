@@ -1,3 +1,4 @@
+import { ErrorDetails, ErrorNotice } from "./ErrorNotice";
 import { collectionChoices, taxonomyChoices } from "../../shared/choices";
 import {
   collectionRoot,
@@ -534,9 +535,8 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
         ),
         error.value && !creating.value
           ? element(
-              "p",
-              { role: "alert", className: classes("notice error") },
-              t(error.value),
+              ErrorNotice,
+              { source: "ContentLibrary", message: error.value },
               " ",
               element(
                 "button",
@@ -774,6 +774,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 ),
                 element(Icon, { name: "arrow" }),
               ),
+              item.error ? element(ErrorDetails, { message: item.error, source: "ContentLibrary" }) : null,
               props.kind === "collection" && isSection(item)
                 ? element(
                     "button",
@@ -817,8 +818,6 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                   props.kind === "collection" && !searchable.value
                     ? t(" · 当前层级")
                     : "",
-                  " · ",
-                  t("网站内容将在下次部署后更新"),
                 ),
                 pages.value > 1
                   ? element(
@@ -862,7 +861,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
           ? element(
               Modal,
               {
-                className: "creation-modal",
+                className: "creation-modal creation-dialog",
                 labelledBy: creationTitleId,
                 initialFocus: 'input[name="creation-title"]',
                 onCancel: () => { creating.value = false; },
@@ -894,9 +893,8 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 ),
                 createError.value
                   ? element(
-                      "p",
-                      { role: "alert", className: classes("notice error") },
-                      t(createError.value),
+                      ErrorNotice,
+                      { source: "ContentLibrary", message: createError.value },
                     )
                   : null,
                 props.kind === "collection"

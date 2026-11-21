@@ -32,8 +32,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: studio-${{ inputs.target || 'all' }}-${{ github.event_name == 'release' && github.event.release.tag_name || inputs.publish && format('studio-v{0}', inputs.version) || github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'release' && !inputs.publish }}
+  # Queue main pushes and signed distributions so a later push cannot cancel an upload.
+  group: ${{ (github.ref == 'refs/heads/main' && github.event_name == 'push' || inputs.publish || github.event_name == 'release') && 'studio-distribution' || format('studio-{0}-{1}', inputs.target || 'all', github.ref) }}
+  queue: ${{ (github.ref == 'refs/heads/main' && github.event_name == 'push' || inputs.publish || github.event_name == 'release') && 'max' || 'single' }}
+  cancel-in-progress: ${{ !(github.ref == 'refs/heads/main' && github.event_name == 'push' || inputs.publish || github.event_name == 'release') }}
 env:
   CARGO_TERM_COLOR: always
   VITE_STUDIO_GITHUB_CLIENT_ID: ${{ vars.STUDIO_GITHUB_CLIENT_ID }}
@@ -55,6 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
+          fetch-depth: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '0' || '1' }}
           persist-credentials: false
       - uses: actions/setup-node@v7.1.0
         with:
@@ -102,6 +105,10 @@ jobs:
       - name: Install fonts for multilingual browser screenshots
         id: fonts
         run: sudo apt-get update && sudo apt-get install -y fonts-noto-cjk fonts-noto-color-emoji
+      - name: Audit Studio pages across viewport sizes
+        run: npx --no-install tsx apps/studio/tests/browser/form-audit.mjs
+        env:
+          STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
       - name: Studio production browser smoke
         timeout-minutes: 10
         run: npx --no-install tsx apps/studio/tests/browser/smoke.mjs
@@ -141,6 +148,10 @@ jobs:
       - run: npm run test:native-browser -w @wondershine/studio
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}
+      - name: Build and test the mobile libgit2 engine and browser harness
+        run: |
+          cargo test --locked --manifest-path apps/studio/src-tauri/mobile-git/Cargo.toml
+          cargo build --locked --manifest-path apps/studio/src-tauri/mobile-git/Cargo.toml --example browser_fixture
       - run: node apps/studio/tests/browser/native-ui.mjs
         env:
           STUDIO_TEST_OAUTH: fixture
@@ -248,7 +259,9 @@ jobs:
         run: cargo test --locked --manifest-path apps/studio/src-tauri/Cargo.toml --features custom-protocol --test http_permissions
       - name: Native review process ownership regression
         if: matrix.platform == 'macos-arm64' || matrix.platform == 'linux-x64' || matrix.platform == 'windows-x64'
-        run: cargo test --locked --manifest-path apps/studio/src-tauri/Cargo.toml --features custom-protocol --lib native_review::tests
+        # A simultaneous process-spawn test can inherit another test's lock between fork and exec.
+        # Each case still exercises its actual concurrent threads and child processes.
+        run: cargo test --locked --manifest-path apps/studio/src-tauri/Cargo.toml --features custom-protocol --lib native_review::tests -- --test-threads=1
       - run: node apps/studio/scripts/release/collect.mjs
         env:
           STUDIO_BUNDLE_DIR: apps/studio/src-tauri/target/${{ matrix.target }}/release/bundle
@@ -296,7 +309,11 @@ jobs:
       - name: Android NDK
         run: |
           sdkmanager 'ndk;27.2.12479018'
-          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+          ndk="$ANDROID_HOME/ndk/27.2.12479018"
+          echo "NDK_HOME=$ndk" >> "$GITHUB_ENV"
+          for target in aarch64_linux_android armv7_linux_androideabi i686_linux_android x86_64_linux_android; do
+            echo "RANLIB_$target=$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib" >> "$GITHUB_ENV"
+          done
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
@@ -393,15 +410,16 @@ jobs:
       - run: npm ci
       - run: node apps/studio/scripts/release/version.mjs
       - run: npm exec -w @wondershine/studio -- tauri ios init --ci
+      - run: node apps/studio/scripts/configure-ios.mjs
       - run: node apps/studio/scripts/release/icons.mjs ios
       - name: Simulator app (no distribution credentials)
-        if: needs.prepare.outputs.iosRelease != 'true'
+        if: github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true'
         run: npm exec -w @wondershine/studio -- tauri ios build --ci --debug --target aarch64-sim --no-sign
       - name: Inspect and launch iOS simulator app
-        if: needs.prepare.outputs.iosRelease != 'true'
+        if: github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true'
         run: node apps/studio/scripts/release/simulator-smoke.mjs
       - uses: actions/upload-artifact@v7.0.2
-        if: always() && needs.prepare.outputs.iosRelease != 'true'
+        if: always() && (github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true')
         with:
           name: studio-ios-screenshots
           path: apps/studio/test-results/ios-simulator/
@@ -447,7 +465,10 @@ jobs:
           path: temp/studio-artifacts
       - name: Select upload tools
         run: sudo xcode-select --switch "$DEVELOPER_DIR"
-      - run: node apps/studio/scripts/release/testflight.mjs
+      - name: Upload signed IPA and check TestFlight processing
+        run: |
+          node apps/studio/scripts/release/testflight.mjs
+          node apps/studio/scripts/release/testflight-status.mjs
         env:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}

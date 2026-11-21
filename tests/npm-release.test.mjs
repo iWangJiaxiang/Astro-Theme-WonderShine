@@ -2,18 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { themeVersion, themeReleaseContext } from '../scripts/npm-release.mjs';
-import { assertUnpublishedPackage } from '../scripts/npm-bootstrap.mjs';
+import { nextCanary } from '../scripts/theme-version.mjs';
 import { artifactManifest, verifyArtifact } from '../scripts/npm-artifact.mjs';
 
 const repository = 'fixture/theme', sha = 'a'.repeat(40);
 const pkg = { name: '@wondershine/theme', version: '0.2.0', repository: { url: `https://github.com/${repository}.git` } };
-const release = (tag_name, prerelease = false) => ({ release: { tag_name, prerelease } });
+const release = (tag_name, prerelease = false) => ({ release: { tag_name, prerelease, target_commitish: 'main' } });
 
 test('theme versions reject unsafe and noncanonical values; prereleases never become latest', () => {
   for (const version of ['1.2', '01.2.3', '1.2.3+build', '1.2.3-beta.01', '1.2.3\nmalicious', '1.2.3\n', '../0.2.0', '1.2.3-', undefined]) assert.throws(() => themeVersion(version));
   assert.equal(themeVersion('0.2.0').distTag, 'latest');
   assert.equal(themeVersion('0.2.0-beta.1').distTag, 'next');
-  assert.equal(themeVersion('1.2.3-0').distTag, 'next');
+  assert.equal(themeVersion('0.2.0-rc.2').distTag, 'next');
+  assert.equal(themeVersion('0.2.0-canary.321').distTag, 'canary');
+  for (const value of ['1.2.3-0', '1.2.3-canary', '1.2.3-alpha.1', '1.2.3-canary.1.extra']) assert.throws(() => themeVersion(value));
 });
 
 test('manual validation cannot publish; theme releases must match version, prerelease state and provenance source', () => {
@@ -54,22 +56,24 @@ test('Studio distribution and isolated acceptance identifiers stay separate and 
 });
 
 
-test('first publication requires an explicit manual bootstrap input; releases keep OIDC', () => {
-  for (const input of [undefined, false, 'false', 'yes']) {
-    const context = themeReleaseContext('workflow_dispatch', { inputs: { bootstrap: input } }, pkg, repository, sha);
-    assert.equal(context.publish, 'false');
-    assert.equal(context.bootstrap, 'false');
-  }
-  for (const input of [true, 'true']) {
-    const context = themeReleaseContext('workflow_dispatch', { inputs: { bootstrap: input } }, pkg, repository, sha);
-    assert.equal(context.publish, 'true');
-    assert.equal(context.bootstrap, 'true');
-  }
-  const event = { ...release('theme-v0.2.0'), inputs: { bootstrap: 'true' } };
-  assert.equal(themeReleaseContext('release', event, pkg, repository, sha).bootstrap, 'false');
+test('canary dispatch must match the committed canary version', () => {
+  const candidate = { ...pkg, version: '0.3.0-canary.123' };
+  const event = { action: 'theme-canary', client_payload: { version: candidate.version } };
+  const context = themeReleaseContext('repository_dispatch', event, candidate, repository, sha);
+  assert.equal(context.distTag, 'canary');
+  assert.throws(() => themeReleaseContext('release', release('theme-v' + candidate.version, true), candidate, repository, sha), /directly from main/);
+  assert.equal(context.publish, 'true');
+  assert.throws(() => themeReleaseContext('repository_dispatch', event, pkg, repository, sha));
+  assert.throws(() => themeReleaseContext('repository_dispatch', { ...event, action: 'other' }, candidate, repository, sha));
+  assert.throws(() => themeReleaseContext('repository_dispatch', event, { ...candidate, version: '0.3.0-canary.124' }, repository, sha));
+  assert.throws(() => themeReleaseContext('release', { release: { ...release('theme-v0.2.0').release, target_commitish: 'feature' } }, pkg, repository, sha));
+  assert.equal(themeReleaseContext('workflow_dispatch', { inputs: { bootstrap: 'true' } }, pkg, repository, sha).publish, 'false');
 });
 
-test('bootstrap rejects existing packages and fails closed on registry errors', () => {
-  assert.doesNotThrow(() => assertUnpublishedPackage(404));
-  for (const status of [200, 301, 401, 403, 429, 500, 503]) assert.throws(() => assertUnpublishedPackage(status));
+test('automatic canaries increment the patch after stable and retain the current prerelease base', () => {
+  assert.equal(nextCanary('0.3.9', '123'), '0.3.10-canary.123');
+  for (const suffix of ['canary.122', 'beta.1', 'rc.2']) {
+    assert.equal(nextCanary('0.4.0-' + suffix, '124'), '0.4.0-canary.124');
+  }
+  assert.throws(() => nextCanary('0.3.0', '01'));
 });

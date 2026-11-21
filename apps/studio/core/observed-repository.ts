@@ -72,6 +72,8 @@ export function observeRepository(repository: Repository, listener: RepositoryMu
       const sync: WorkspaceControl['sync'] = confirmation => mutate('sync', undefined, () => control.sync(confirmation));
       observed = new Proxy(control, { get(target, property) {
         if (property === 'sync') return sync;
+        if (property === 'publish' && target.publish) return (message: string, confirmation: string) =>
+          mutate('sync', undefined, () => target.publish!(message, confirmation));
         // Commit and saveBranch do not change worktree content.
         const value = Reflect.get(target, property, target);
         return typeof value === 'function' ? value.bind(target) : value;

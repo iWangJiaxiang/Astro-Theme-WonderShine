@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 export async function revealField(page, selector) {
   await page.waitForSelector(selector);
   // Structured forms now start collapsed; open their summaries from the outside in.
-  const handles = await page.evaluateHandle(selector => {
+  await page.evaluate(selector => {
     const summaries = [];
     for (let node = document.querySelector(selector)?.parentElement; node; node = node.parentElement) {
       if (node instanceof HTMLDetailsElement && !node.open) summaries.unshift(node.querySelector(':scope > summary'));
@@ -12,14 +12,9 @@ export async function revealField(page, selector) {
         if (toggle) summaries.unshift(toggle);
       }
     }
-    return summaries;
+    for (const summary of summaries) summary.click();
   }, selector);
-  for (const handle of (await handles.getProperties()).values()) {
-    const element = handle.asElement();
-    if (element) await element.click();
-    await handle.dispose();
-  }
-  await handles.dispose();
+  await page.waitForSelector(selector, { visible: true });
 }
 
 // Exercise real radios/checkboxes and the dialog, without hidden native selects.
@@ -29,9 +24,9 @@ export function chooser(page) {
     await page.waitForSelector(root);
     await revealField(page, root);
     await page.waitForFunction(root => { const el = document.querySelector(root); return el && !el.querySelector('fieldset:disabled, button.choice-trigger:disabled'); }, {}, root);
-    const trigger = await page.$(`${root} > .choice-trigger`);
-    if (trigger) {
-      await trigger.click();
+    const trigger = `${root} > .choice-trigger`;
+    if (await page.$(trigger)) {
+      await page.locator(trigger).click();
       await page.waitForSelector('.selection-dialog[open]');
       await page.waitForSelector(`.selection-dialog[open] input[value="${value}"]`);
       await page.click(`.selection-dialog[open] input[value="${value}"]`);
@@ -63,12 +58,29 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await click('外观样式'); await heading('外观样式');
   assert.equal(await page.$$eval('[data-field="extra.style.color_scheme"] input[type=radio]', nodes => nodes.length), 3);
   assert.equal(await page.$$eval('[data-field="extra.style.font_family"] input[type=radio]', nodes => nodes.length), 5, 'exactly five values remain flat');
+  const themeChannel = '[data-field="extra.theme.channel"]';
+  assert.equal(await page.$eval(themeChannel + ' input:checked', el => el.value), 'latest');
+  assert.equal(await page.$eval('[name="extra.theme.pinned"]', el => el.checked), false);
+  assert.equal(await page.$('[name="extra.theme.version"]'), null);
+  await page.click('[name="extra.theme.pinned"]');
+  await fill('[name="extra.theme.version"]', '0.2.1');
+  await choose('extra.theme.channel', 'canary');
+  assert.equal(await page.$eval('[name="extra.theme.version"]', el => el.value), '');
+  await fill('[name="extra.theme.version"]', '0.2.1');
+  await page.screenshot({ path: screenshots + '/theme-version-desktop.png' });
+  await page.setViewport({ width: 390, height: 844 });
+  await page.waitForFunction(() => document.querySelector('#studio-navigation').getBoundingClientRect().right <= 1);
+  await page.screenshot({ path: screenshots + '/theme-version-mobile.png' });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.setViewport({ width: 1440, height: 1000 });
+  await page.click('[name="extra.theme.pinned"]');
   await choose('extra.style.color_scheme', 'light');
   await fill('[aria-label="选择浅色主题色"]', '#3355aa');
   assert.equal(await page.$eval('[name="extra.style.theme_light_skin"]', e => e.value), '#3355aa');
   assert.equal(await page.$eval('[data-field="extra.style.theme_light_skin"] .color-swatch', e => getComputedStyle(e).backgroundColor), 'rgb(51, 85, 170)');
   await saveAppearance();
   assert.equal(parse(await readFile(base + '/site/config.toml', 'utf8')).extra.style.theme_light_skin, '#3355aa');
+  assert.equal(parse(await readFile(base + '/site/config.toml', 'utf8')).extra.theme.channel, 'canary');
   await page.screenshot({ path: screenshots + '/form-colors.png', fullPage: true });
   await click('工作台'); await heading('今天，写点什么？');
   const configFile = base + '/site/config.toml';
@@ -188,7 +200,9 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   assert.equal(parse(await readFile(base + '/site/data.toml', 'utf8')).post.today_recommend.post_path, path);
 
   // Creation form remains open when Enter is pressed in a nested chooser.
-  await click('页面'); await heading('页面'); await click('新建页面');
+  await click('页面'); await heading('页面');
+  const createButton = '.content-library .page-heading button.primary';
+  await page.locator(createButton).click();
   await fill('.modal input[placeholder="给它取个名字"]', 'Enter should not create');
   await fill('.modal input[placeholder="my-first-story"]', 'do-not-create');
   await page.click('button[name="page-template"]'); await page.waitForSelector('.selection-dialog[open]');
@@ -200,7 +214,12 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await page.setViewport({ width: 390, height: 844 });
   assert.ok(await page.$eval('.selection-dialog[open]', el => el.getBoundingClientRect().width <= innerWidth));
   await page.screenshot({ path: screenshots + '/form-picker-mobile.png', fullPage: true });
-  await page.keyboard.press('Escape'); await click('取消');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.selection-dialog', { hidden: true });
+  assert.ok(await page.$eval('.creation-dialog', dialog => dialog.matches(':modal')), 'creation stays modal after the chooser closes');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.creation-dialog', { hidden: true });
+  assert.ok(await page.$eval(createButton, button => button === document.activeElement), 'closing creation returns focus to the opener');
   await page.setViewport({ width: 1440, height: 1000 });
 
   await mkdir(base + '/site/content/articles/date-control', { recursive: true });

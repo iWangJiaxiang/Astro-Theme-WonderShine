@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import * as fs from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { withWorkspaceLock } from '../platform/queue';
 import { FileRepository } from '../platform/file-repository';
 import { RevisionRegistry } from '../core/revision';
 import type { WorkspaceFiles } from '../platform/filesystem';
@@ -17,6 +18,19 @@ async function fixture(run: (repo: FileRepository, root: string, state: string) 
   try { await run(new FileRepository(nativeFiles, root, state), root, state); }
   finally { await fs.rm(base, { recursive: true, force: true }); }
 }
+test('mobile review scope expires on an intervening save, failed write or new session', async () => fixture(async (repo, root) => {
+  const owner = {};
+  const consecutive = (session = owner) => withWorkspaceLock(root, async uninterrupted => uninterrupted, session);
+  assert.equal(await consecutive(), false);
+  assert.equal(await consecutive(), true);
+  const save = repo.write(path, 'new file outside the review', null);
+  const following = consecutive();
+  await save;
+  assert.equal(await following, false);
+  await assert.rejects(repo.write(path, 'stale', null), /文件已更新/);
+  assert.equal(await consecutive(), false);
+  assert.equal(await consecutive({}), false);
+}));
 test('native files preserve offline saves, revisions and backups across reopen', async () => fixture(async (repo, root, state) => {
   const first = await repo.write(path, 'hello', null);
   const second = new FileRepository(nativeFiles, root, state);

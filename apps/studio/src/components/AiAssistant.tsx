@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import type { AiCapabilities, AiImageResult } from "../../shared/ai";
 import {
   documentDirectory,
@@ -217,9 +218,8 @@ const AiAssistant: StudioComponent<Props, Events> = component<Props, Events>(
                 : null,
               error.value
                 ? element(
-                    "p",
-                    { role: "alert", className: classes("notice error") },
-                    t(error.value),
+                    ErrorNotice,
+                    { source: "AiAssistant", message: error.value },
                   )
                 : null,
               element(

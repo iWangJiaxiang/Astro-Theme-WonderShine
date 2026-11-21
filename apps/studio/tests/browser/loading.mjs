@@ -5,7 +5,8 @@ export async function checkLoading({ browser, origin, screenshots }) {
   const pending = new Map();
   let holdInitial = true, failContent = false, failDocument = false;
   const requests = [], responses = [], failures = [], pageErrors = [];
-  const workspaceRetry = '.main-content > .notice.error button';
+  // The adjacent details action remains available while a retry is pending.
+  const workspaceRetry = '.main-content > .notice.error > button:not([aria-haspopup])';
   const waitForHeldReads = (language, count) => Promise.all(['/api/bootstrap', '/api/content'].map(path =>
     page.waitForRequest(request => new URL(request.url()).origin === origin
       && new URL(request.url()).pathname === path
@@ -32,6 +33,8 @@ export async function checkLoading({ browser, origin, screenshots }) {
       const url = new URL(request.url());
       if (url.origin !== origin) return request.abort();
       requests.push(url.pathname + url.search);
+      // Exercise a cold dashboard even if another page has warmed the shared fixture.
+      if (url.pathname === '/api/content-preview') return request.respond({ contentType: 'application/json', body: 'null' });
       // The dashboard and its embedded composer both request the content library.
       if (holdInitial && ['/api/bootstrap', '/api/content'].includes(url.pathname)) { pending.set(url.pathname, [...(pending.get(url.pathname) || []), request]); return; }
       if ((failContent && url.pathname === '/api/content') || (failDocument && url.pathname === '/api/document')) {
@@ -103,11 +106,11 @@ export async function checkLoading({ browser, origin, screenshots }) {
     const optionsError = '.thread-composer .metadata-card > .notice.error';
     await page.waitForFunction(selector => document.querySelector(selector)?.textContent.includes('选项载入失败：连接已更换，请重试'), {}, optionsError);
     await page.click('.thread-composer .composer-tools > button[aria-expanded="false"]');
-    await page.waitForSelector(optionsError + ' button', { visible: true });
+    await page.waitForSelector(optionsError + ' > button:not([aria-haspopup])', { visible: true });
     const [optionsContent, optionsTaxonomies] = await Promise.all([
       page.waitForResponse(response => response.url() === origin + '/api/content?refresh=1'),
       page.waitForResponse(response => new URL(response.url()).pathname === '/api/settings/taxonomies'),
-      page.click(optionsError + ' button'),
+      page.click(optionsError + ' > button:not([aria-haspopup])'),
     ]);
     assert.equal(optionsContent.status(), 200, 'composer option retry reloads content');
     assert.equal(optionsTaxonomies.status(), 200, 'composer option retry completes taxonomy loading');
@@ -127,12 +130,12 @@ export async function checkLoading({ browser, origin, screenshots }) {
       page.click('aside nav button:nth-child(2)'),
     ]);
     assert.equal(failedLibrary.status(), 502, 'library navigation reaches the injected content failure');
-    await page.waitForSelector('.content-library .notice.error button:not(:disabled)');
+    await page.waitForSelector('.content-library .notice.error > button:not([aria-haspopup]):not(:disabled)');
     assert.equal(await page.$('.content-library .empty-state'), null, 'failed library request is not an empty state');
     failContent = false;
     const [recoveredLibrary] = await Promise.all([
       page.waitForResponse(response => response.url() === origin + '/api/content?refresh=1'),
-      page.click('.content-library .notice.error button'),
+      page.click('.content-library .notice.error > button:not([aria-haspopup])'),
     ]);
     assert.equal(recoveredLibrary.status(), 200, 'library retry receives fresh content');
     await page.waitForSelector('.library-row .content-row');
@@ -143,12 +146,13 @@ export async function checkLoading({ browser, origin, screenshots }) {
       page.click('.library-row .content-row'),
     ]);
     assert.equal(failedDocument.status(), 502, 'opening a document reaches the injected document failure');
-    await page.waitForSelector('.main-content > .notice.error button', { visible: true });
+    const documentRetry = '.studio-view > .notice.error button';
+    await page.waitForSelector(documentRetry, { visible: true });
     assert.equal(await page.$('.markdown-source'), null, 'failed document request must not expose an empty editable document');
     failDocument = false;
     const [recoveredDocument] = await Promise.all([
       page.waitForResponse(response => new URL(response.url()).pathname === '/api/document'),
-      page.click('.main-content > .notice.error button'),
+      page.click(documentRetry),
     ]);
     assert.equal(recoveredDocument.status(), 200, 'document retry receives the saved document');
     await page.waitForSelector('.markdown-source');

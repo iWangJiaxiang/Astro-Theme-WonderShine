@@ -1,0 +1,8 @@
+{
+  "identifier": "studio-mobile-git",
+  "description": "Native Git for the local mobile Studio WebView.",
+  "local": true,
+  "webviews": ["main"],
+  "platforms": ["iOS", "android"],
+  "permissions": ["allow-mobile-git"]
+}

@@ -1,15 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { ErrorNotice } from "../src/components/ErrorNotice";
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { GitProgressEvent } from 'isomorphic-git';
 import { open } from '@tauri-apps/plugin-dialog';
 import { hostingProviders, type HostingKind, type WorkspaceProfile } from './hosting';
 import { tauriFiles } from './tauri-filesystem';
+import LoadingState from '../src/components/LoadingState';
 import LanguageSwitcher from '../src/components/LanguageSwitcher';
 import Icon from '../src/components/Icon';
-import { t } from '../src/i18n';
+import { t, type Message } from '../src/i18n';
+import { errorMessage } from '../src/api';
 import { useSignals } from '../src/reactivity';
 import './native.css';
 import AccountLogin from './AccountLogin';
-import { readWorkspaces, writeWorkspaces, serviceAddress, type SavedWorkspace, type ServiceWorkspace } from './workspace-registry';
+import { matchWorkspace, readWorkspaces, writeWorkspaces, serviceAddress, type SavedWorkspace, type ServiceWorkspace } from './workspace-registry';
 function savedProfiles(): { records: SavedWorkspace[]; error: string } {
   try { return { records: readWorkspaces(localStorage), error: '' }; }
   catch { return { records: [], error: '无法读取工作区记录，请检查存储权限或恢复备份。' }; }
@@ -21,12 +24,23 @@ const progressLabels: Record<string, string> = {
   'Updating workdir': '写入本地文件', 'Analyzing workdir': '检查本地文件',
   'Counting objects': '统计仓库文件', 'Compressing objects': '准备仓库数据',
 };
-export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (dispose: () => void) => void; onDisconnect: () => void }) {
+export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, updateControls }: { updateControls?: ReactNode; resumeOnLaunch: boolean; onConnected: (dispose: () => void) => void; onDisconnect: () => void }) {
   useSignals();
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const folderAvailable = !/Android|iPhone|iPad|iPod/.test(navigator.userAgent) && !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const [initial] = useState(savedProfiles);
+  const [resumeTarget] = useState(() => {
+    const recent = initial.records[0];
+    return resumeOnLaunch && !folderAvailable && recent && !recent.archived && recent.source !== 'local' ? recent : null;
+  });
+  const [resuming, setResuming] = useState(!!resumeTarget);
+  const attemptedResume = useRef(false);
+  useEffect(() => {
+    if (!resumeTarget || attemptedResume.current) return;
+    attemptedResume.current = true;
+    void openWorkspace(resumeTarget, '', true);
+  }, [resumeTarget]);
   const [records, setRecords] = useState(initial.records);
   const profiles = records.filter((item): item is WorkspaceProfile => !item.archived && item.source !== 'service');
   const [service, setService] = useState<ServiceWorkspace | null>(null);
@@ -47,16 +61,27 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
     try { persist(records.map(record => record.id === item.id ? { ...record, label } : record)); }
     catch (reason) { setError((reason as Error).message); }
   }
-  function removeWorkspace(item: SavedWorkspace) {
+  function archiveWorkspace(item: SavedWorkspace) {
     if (!confirm(t('归档仅隐藏记录，保留原编号、文件和草稿，可随时恢复。确定继续吗？'))) return;
     try { persist(records.map(record => record.id === item.id ? { ...record, archived: true } : record)); setToken(''); setShowForm(false); }
     catch (reason) { setError((reason as Error).message); }
+  }
+  function deleteRecord(item: SavedWorkspace) {
+    if (!confirm(t('删除「{name}」的连接记录？文件、草稿和本地提交会保留在设备上，重新添加时可能无法找回原草稿。', { name: item.label }))) return;
+    try {
+      const next = records.filter(record => record.id !== item.id);
+      persist(next);
+      if (profile.id === item.id || service?.id === item.id || !next.length) {
+        setProfile(blank()); setService(null); setAddress(''); setToken(''); setShowForm(!next.length);
+      }
+      setError('');
+    } catch (reason) { setError((reason as Error).message); }
   }
   const [profile, setProfile] = useState<WorkspaceProfile>(() => (folderAvailable ? profiles[0] : profiles.find(item => item.source !== 'local')) || blank());
   const [connection, setConnection] = useState<Connection>(() => folderAvailable && (profiles[0]?.source === 'local' || !profiles.length) ? 'local' : 'clone');
   const [address, setAddress] = useState('');
   const [token, setToken] = useState('');
-  const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [busy, setBusy] = useState(false), [error, setError] = useState<Message>('');
   const [progress, setProgress] = useState<GitProgressEvent | null>(null);
   const progressLabel = progress ? progressLabels[progress.phase] || '下载仓库' : '正在连接仓库';
   const progressValue = progress?.total && progress.total > 0 ? Math.min(100, Math.max(0, Math.floor(progress.loaded / progress.total * 100))) : undefined;
@@ -80,55 +105,87 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
     finally { setBusy(false); }
   }
-  async function connect(event: React.FormEvent) {
-    event.preventDefault(); setBusy(true); setError(''); setProgress(null);
+  async function openWorkspace(item: SavedWorkspace, credential: string, resume = false) {
+    setBusy(true); setError(''); setProgress(null);
     try {
-      if (connection === 'remote') {
-        const { connectRemoteWorkspace } = await import('./remote-runtime');
-        const nextService: ServiceWorkspace = { id: service?.id || crypto.randomUUID(), source: 'service', address: serviceAddress(address.trim()), label: service?.label || serviceAddress(address.trim()) };
-        persist([nextService, ...records.filter(item => item.id !== nextService.id)]);
-        const dispose = await connectRemoteWorkspace(nextService.address, onDisconnect, nextService.id);
-        if (!mounted.current) { dispose(); return; }
-        setToken(''); onConnected(dispose); return;
+      const match = matchWorkspace(records, item);
+      if (match?.archived) throw new Error('此工作区已归档，请先从已归档工作区恢复记录。');
+      if (match && match.id !== item.id) {
+        if (match.source !== 'service' && item.source !== 'service') {
+          item = { ...match, username: item.username || match.username,
+            authorName: item.authorName || match.authorName, authorEmail: item.authorEmail || match.authorEmail };
+        } else item = match;
       }
-      if (records.some(item => item.archived && item.id === profile.id)) throw new Error('此工作区已归档，请先从已归档工作区恢复记录。');
-      const nextProfile = { ...profile, url: profile.url.trim(), branch: profile.branch.trim(), label: profile.label.trim() || profile.url.trim().split('/').at(-1)?.replace(/\.git$/, '') || 'Blog' };
-      const { connectNativeWorkspace } = await import('./native-runtime');
-      const dispose = await connectNativeWorkspace(nextProfile, token, onDisconnect, progress => { if (mounted.current) setProgress(progress); });
+      let dispose: () => void;
+      if (item.source === 'service') {
+        const { connectRemoteWorkspace } = await import('./remote-runtime');
+        dispose = await connectRemoteWorkspace(item.address, onDisconnect, item.id);
+      } else {
+        if (item.source !== 'local' && !item.authorName && !item.authorEmail) {
+          item = { ...item, authorName: 'WonderShine Studio', authorEmail: 'studio@localhost' };
+        }
+        const { connectNativeWorkspace } = await import('./native-runtime');
+        dispose = await connectNativeWorkspace(item, credential, onDisconnect, progress => { if (mounted.current) setProgress(progress); }, undefined, !resume);
+      }
       if (!mounted.current) { dispose(); return; }
-      const next = [nextProfile, ...records.filter(item => item.id !== nextProfile.id)];
-      try { persist(next); } catch (reason) { dispose(); throw reason; }
+      try { if (!resume) persist([item, ...records.filter(record => record.id !== item.id)]); }
+      catch (reason) { dispose(); throw reason; }
       setToken(''); onConnected(dispose);
-    } catch (reason) { setError(reason instanceof Error && reason.name === 'TimeoutError' ? t('连接超时，请重试。') : reason instanceof Error ? reason.message : t('无法打开工作区')); }
-    finally { setBusy(false); }
+    } catch (reason) {
+      if (mounted.current) {
+        if (resume) selectWorkspace(item);
+        setError(reason instanceof Error && reason.name === 'TimeoutError' ? t('连接超时，请重试。') : reason instanceof Error ? errorMessage(reason) : '无法打开工作区');
+      }
+    } finally {
+      if (mounted.current) { setBusy(false); setResuming(false); }
+    }
   }
+  function connect(event: React.FormEvent) {
+    event.preventDefault();
+    if (connection === 'remote') {
+      try {
+        const origin = serviceAddress(address.trim());
+        void openWorkspace({ id: service?.id || crypto.randomUUID(), source: 'service', address: origin, label: service?.label || origin }, '');
+      } catch (reason) { setError((reason as Error).message); }
+    } else {
+      void openWorkspace({ ...profile, url: profile.url.trim(), branch: profile.branch.trim(), label: profile.label.trim() || profile.url.trim().split('/').at(-1)?.replace(/\.git$/, '') || 'Blog' }, token);
+    }
+  }
+  function renderRecord(item: SavedWorkspace) {
+    return <div className="workspace-record" data-workspace-id={item.id} key={item.id}>
+      <strong>{item.label}</strong>
+      <small>{item.source === 'service' ? item.address : item.source === 'local' ? item.localPath : item.url}</small>
+      <div className="row">
+        {item.archived ? <button className="secondary" disabled={busy} onClick={() => {
+          try { persist(records.map(record => record.id === item.id ? { ...record, archived: false } : record)); setError(''); }
+          catch (reason) { setError((reason as Error).message); }
+        }}>{t('恢复记录')}</button> : <>
+          <button className="secondary" disabled={busy || (item.source === 'local' && !folderAvailable)} onClick={() => selectWorkspace(item)}>{t('选择工作区')}</button>
+          <button disabled={busy} onClick={() => renameWorkspace(item)}>{t('重命名')}</button>
+          <button disabled={busy} onClick={() => archiveWorkspace(item)}>{t('归档记录')}</button>
+        </>}
+        <button className="danger" disabled={busy} onClick={() => deleteRecord(item)}>{t('删除记录')}</button>
+      </div>
+    </div>;
+  }
+  if (resuming) return <main className="native-connect"><LoadingState label="正在打开工作区…" compact /></main>;
   return <main className="native-connect"><section className="card connection-card">
-    <div className="connection-brand"><span>WonderShine Studio</span><LanguageSwitcher /></div><h1>{t('连接创作工作区')}</h1>
+    <div className="connection-brand"><details className="connection-about"><summary>WonderShine Studio</summary>{updateControls}</details><LanguageSwitcher /></div><h1>{t('连接创作工作区')}</h1>
     <div className="connection-modes" role="group" aria-label={t('连接方式')}>
       {folderAvailable && <button disabled={busy} aria-pressed={local} onClick={() => switchConnection('local')}><Icon name="folder" size={19} />{t('本地文件夹')}</button>}
       <button disabled={busy} aria-pressed={connection === 'clone'} onClick={() => switchConnection('clone')}><Icon name="link" size={19} />{t('远程仓库')}</button>
     </div>
-    {(error || initial.error) && <p className="notice error" role="alert">{t(error || initial.error)}</p>}
-    <section className="workspace-chooser" aria-label={t('工作区')}>
-      {records.filter(item => !item.archived).map(item => <div className="workspace-record" data-workspace-id={item.id} key={item.id}>
-        <strong>{item.label}</strong><small>{item.source === 'service' ? item.address : item.source === 'local' ? item.localPath : item.url}</small>
-        <div className="row"><button disabled={busy || (item.source === 'local' && !folderAvailable)} onClick={() => selectWorkspace(item)}>{t('选择工作区')}</button><button disabled={busy} onClick={() => renameWorkspace(item)}>{t('重命名')}</button><button disabled={busy} onClick={() => removeWorkspace(item)}>{t('归档记录')}</button></div>
-      </div>)}
+    {(error || initial.error) && <ErrorNotice source="NativeConnection" message={error || initial.error} />}
+    {records.length > 0 && <section className="workspace-chooser" aria-label={t('工作区')}>
+      {records.filter(item => !item.archived).map(renderRecord)}
       {records.some(item => item.archived) && <details className="archived-workspaces"><summary>{t('已归档工作区')}</summary>
-        {records.filter(item => item.archived).map(item => <div key={item.id} data-workspace-id={item.id}>
-          <strong>{item.label}</strong><small>{item.source === 'service' ? item.address : item.source === 'local' ? item.localPath : item.url}</small>
-          <button disabled={busy} onClick={() => {
-            try { persist(records.map(record => record.id === item.id ? { ...record, archived: false } : record)); setError(''); }
-            catch (reason) { setError((reason as Error).message); }
-          }}>{t('恢复记录')}</button>
-        </div>)}
+        {records.filter(item => item.archived).map(renderRecord)}
       </details>}
-      <button disabled={busy} onClick={() => { setProfile(blank()); setService(null); setAddress(''); setToken(''); setError(''); setConnection(folderAvailable ? 'local' : 'clone'); setShowForm(true); }}>{t('添加工作区')}</button>
-    </section>
+      <button className="secondary" disabled={busy} onClick={() => { setProfile(blank()); setService(null); setAddress(''); setToken(''); setError(''); setConnection(folderAvailable ? 'local' : 'clone'); setShowForm(true); }}>{t('添加工作区')}</button>
+    </section>}
     {showForm && <>
     {connection === 'clone' && <AccountLogin disabled={busy} onSelect={(account, repository) => {
-      const previous = profiles.find(item => item.url === repository.url && item.source !== 'local');
-      setProfile(previous || { ...blank(), provider: account.provider, url: repository.url, branch: repository.branch, label: repository.name, username: account.username, authorName: account.name, authorEmail: account.email });
+      setProfile({ ...blank(), provider: account.provider, url: repository.url, branch: repository.branch, label: repository.name, username: account.username, authorName: account.name, authorEmail: account.email });
       setToken(account.token); setError('');
     }} />}
     <form onSubmit={connect}><fieldset disabled={busy} className="connection-form-fields">
@@ -153,6 +210,6 @@ export function NativeConnection({ onConnected, onDisconnect }: { onConnected: (
         <progress aria-label={t(progressLabel)} max={100} value={progressValue} />
       </div>}
     </form></>}
-    <div className="connection-footer"><button className="connection-service" disabled={busy} onClick={() => switchConnection(connection === 'remote' ? 'local' : 'remote')}>{connection === 'remote' ? t('返回仓库连接') : t('连接自建创作中心')}<Icon name="arrow" size={16} /></button></div>
+    <div className="connection-footer"><button className="secondary connection-service" disabled={busy} onClick={() => switchConnection(connection === 'remote' ? 'local' : 'remote')}>{connection === 'remote' ? t('返回仓库连接') : t('连接自建创作中心')}<Icon name="arrow" size={16} /></button></div>
   </section></main>;
 }

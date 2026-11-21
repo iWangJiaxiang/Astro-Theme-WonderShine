@@ -73,6 +73,7 @@ const PageSettings: StudioComponent<Props, Events> = component<Props, Events>(
                     "button",
                     {
                       key: group.id,
+                      "aria-current": active.value === group.id ? "true" : undefined,
                       disabled: dirty.value && active.value !== group.id,
                       className: classes({ active: active.value === group.id }),
                       onClick: domEvent(($event: Event) => {

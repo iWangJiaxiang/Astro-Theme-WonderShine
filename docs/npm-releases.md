@@ -2,20 +2,32 @@
 
 发布包为 `@wondershine/theme`。Studio App 使用独立的 `studio-vX.Y.Z` Release，不发布到 npm。主题工作流为 `.github/workflows/npm-publish.yml`，名称 **Theme npm package**。
 
+## 选择安装渠道
+
+在独立博客根目录选择一条命令。三个标签都属于公开包 `@wondershine/theme`。
+
+| npm 标签 | 适用场景 | 安装或切换渠道 |
+| --- | --- | --- |
+| `latest` | 普通用户使用的稳定版，也是 npm 默认渠道 | `npm install --save-exact @wondershine/theme@latest` |
+| `next` | 愿意试用 beta 或 RC 的用户 | `npm install --save-exact @wondershine/theme@next` |
+| `canary` | 维护者自己的博客，试用刚合入 main 的主题改动 | `npm install --save-exact @wondershine/theme@canary` |
+
+`npm view @wondershine/theme dist-tags --json` 可查看当前三个渠道的版本。安装命令会将当时选中的具体版本写入依赖。提交博客的 `package.json` 和 `package-lock.json`，部署时用 `npm ci` 复现。跟进新版或切回稳定版时，重新执行表中对应命令并验证博客；回退可恢复上一次通过验证的两个依赖文件。
+
+使用新版 Starter 或已接入 Studio 构建前脚本的博客，生产构建会按站点 `config.toml` 选择主题，表中的安装命令用于设置初始依赖。切换部署渠道、固定或回退到具体版本，请参阅[部署设置](deployment.md#用-studio-选择主题版本)。
+
 ## 触发与验证
 
 | 入口 | 行为 |
 | --- | --- |
-| Actions → Theme npm package → Run workflow | 远程构建、单元/集成/浏览器验证、打包、干净安装烟测、`npm publish --dry-run`；不上传 npm |
-| 发布 `theme-vX.Y.Z` GitHub Release | 通过相同验证后，发布到 npm 的 `latest` |
-| 发布 `theme-vX.Y.Z-beta.N` 等 GitHub prerelease | 通过验证后，仅发布到 `next` |
-| 普通 push / PR 或 `studio-v*` Release | 不发布 npm；常规 CI 仍按既有规则验证代码 |
+| 手动运行 **Theme npm package** | 远程验证和 `npm publish --dry-run` |
+| 合入 main 的主题源码、打包脚本或共享构建依赖变更 | 自动准备 canary，将版本提交到 main，远程验证后直接发布到 npm 的 `canary`，无需 Git tag 或 GitHub Release |
+| 从已验证的 main 提交发布 `theme-vX.Y.Z-beta.N` 或 `theme-vX.Y.Z-rc.N`，勾选 **Pre-release** | 通过发行验证后更新 `next` |
+| 从已验证的 main 提交发布 `theme-vX.Y.Z` 正式 Release | 通过发行验证后更新 `latest` |
 
-手动执行入口只有 dry-run，没有隐藏的正式发布开关。整个流程在 GitHub-hosted Ubuntu runner 上执行，不在开发电脑上构建或打包。
+维护者选择 beta、RC 或稳定版的发行时机。运行 `node scripts/theme-version.mjs X.Y.Z-beta.1`（将参数换为目标版本）同步主题、Demo、Starter 和 lockfile，提交到 main。等待该提交通过远程 CI，再在该 SHA 上创建同版本的 `theme-v*` tag，并以 `main` 为 target 发布 GitHub Release。GitHub 的 **Pre-release** 选项必须与版本一致。每次发行只更新所属 npm 标签。
 
-正式发行必须先将代码及版本变更合入远端 `main`，确认该提交通过远程验证，再从 `main` 的已验证提交创建 `theme-v*` tag 和 GitHub Release，Release target 指定为 `main`。禁止直接从 feature 分支打 tag 或发布。已发布 tag 和 npm 版本不可移动、覆盖或重发。
-
-正式 Release 的 tag 必须与 `packages/theme/package.json` 的 version 完全一致，GitHub 的 prerelease 复选框也必须与 SemVer 一致。构建元信息（如 `+build`）和非规范版本被拒绝。发布前同时更新 `package-lock.json` 中主题 workspace 的版本；不要改 Studio 的版本来发布主题。
+自动 canary 使用 `X.Y.Z-canary.<GitHub run ID>`。当前版本为稳定版时，默认取下一个 patch；已有预发布时沿用其版本基线。要开始新的 minor 或 major，可显式提交该基线的第一个 canary（如 `0.3.0-canary.1`）。显式提交 beta、RC 或稳定版版本号时，工作流等待维护者创建 Release。纯文档、主题测试和 Studio 源码变更跳过自动 canary。
 
 验证 job 缓存 `.astro/image-cache` 中的图片编码结果；key 隔离操作系统、lockfile 和编码器源码，并按提交保存快照。生成器仍对源图内容与完整编码 recipe 计算 hash，所以恢复旧缓存不会跳过变化图片的重新生成。发布 job 不恢复缓存，也不安装项目依赖；`dist` 与 `node_modules` 不进入这个缓存。
 
@@ -34,7 +46,7 @@
    - Workflow filename：`npm-publish.yml`（不是完整路径）
    - Environment name：`npm`（与 workflow 的 environment 完全一致）
    - Allowed actions：启用 **npm publish**。2026-09-03 之后新建的配置默认只允许 staged publishing，本工作流使用直接发布，需要明确开启此项。
-3. 在 GitHub 的 `npm` environment 配置适合仓库的 tag 限制或审核人（可选）；如果配置了审核，只有真实发布 job 会等待批准，dry-run 不使用该 environment。
+3. 在 GitHub 的 `npm` environment 配置适合仓库的部署限制或审核人（可选，自动 canary 需要允许 main，手动发行需要允许主题版本 tag）；如果配置了审核，只有真实发布 job 会等待批准，dry-run 不使用该 environment。
 4. 新建的 trusted publisher 必须在 2 天内完成首次成功发布，否则需要删除并重新创建。因此建议准备正式发行时再配置，dry-run 不会验证或延长这个期限。
 5. 运行一次手动 dry-run，检查 `theme-npm-package` 与 `theme-npm-browser-results` artifacts。准备好真实发行时再发布 `theme-v*` Release。
 
@@ -42,7 +54,7 @@ OIDC 会自动附带 npm provenance。`package.json` 中的 repository 必须对
 
 ## 版本与失败恢复
 
-预发布统一使用 `next`，不会移动普通用户安装的 `latest`。稳定版本使用 `latest`；发行前应确认版本递增，旧版本的 Release 不应重复触发发布。
+同一渠道的版本须递增。已发布 tag、GitHub Release 和 npm 版本保留原记录。若自动 canary 在版本提交后中断，可重新运行失败的工作流。工作流从通过独立安装验证的原始 tgz 恢复发布。
 
 构建/验证失败时修复代码并重跑；npm 认证失败时检查 trusted publisher 的仓库、workflow 和 environment 是否完全匹配。若上传成功后 Actions 中断，先在 npm 核对该版本是否已存在；已存在时保留发行记录，不强行覆盖、不重复提交同版本。工作流不会删除或撤回 npm 包。
 

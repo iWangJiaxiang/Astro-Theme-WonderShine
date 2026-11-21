@@ -1,5 +1,5 @@
-/* Activity pages share the theme palette. Desktop home changes start at 1200px. */
-.activity-layout,.activity-detail{
+/* Activity pages share the theme palette. */
+.activity-layout{
   --activity-line:var(--wjx-card-border,#e3e6ed);
   --activity-muted:var(--wjx-secondtext,#6b7280);
   color:var(--wjx-fontcolor,#263043)
@@ -12,6 +12,18 @@
   grid-template-columns:minmax(0,900px) 260px;
   gap:48px;
   align-items:start
+}
+/* Thread pages use the same discovery widgets as articles. */
+.thread-layout #aside-content { display: block; width: 100%; min-width: 0; padding: 0; animation: none; scroll-margin-top: 72px; }
+.thread-layout #aside-content .sticky_layout { position: static; margin: 0; }
+.thread-layout #aside-content .card-widget { margin: 0 0 1rem; }
+@media (min-width: 901px) {
+  .thread-layout.left-aside { grid-template-columns: 260px minmax(0, 900px); }
+  .thread-layout.left-aside #aside-content { grid-column: 1; grid-row: 1; }
+  .thread-layout.left-aside .activity-main { grid-column: 2; }
+  .thread-layout.hide-aside, html.hide-aside .thread-layout { grid-template-columns: minmax(0, 900px); justify-content: center; }
+  html.hide-aside .thread-layout #aside-content { display: none; }
+  html.hide-aside .thread-layout .activity-main { grid-column: 1; }
 }
 .activity-main{
   min-width:0
@@ -83,7 +95,7 @@
   font-size:14px;
   margin-bottom:22px
 }
-.activity-layout .thread-author img,.activity-detail .thread-author img{
+.activity-layout .thread-author img{
   width:36px;
   height:36px;
   min-width:36px;
@@ -182,11 +194,6 @@
   border-top:1px solid var(--activity-line);
   margin:24px 0
 }
-.activity-avatar{
-  width:64px;
-  height:64px;
-  border-radius:18px
-}
 .activity-empty{
   padding:48px 32px;
   background:var(--wjx-card-bg,#fff);
@@ -245,11 +252,6 @@
 .timeline-read{
   font-size:13px
 }
-.activity-detail{
-  max-width:940px;
-  margin:32px auto 80px;
-  padding:0 32px
-}
 .activity-detail-top{
   display:flex;
   justify-content:space-between;
@@ -268,7 +270,7 @@
 .activity-comments h2{
   font-size:20px
 }
-.activity-home-hero,.home-threads{
+.home-threads{
   display:none
 }
 @media(min-width:1200px){
@@ -277,82 +279,6 @@
     width:calc(100% - 96px);
     padding:0;
     margin:22px auto 0
-  }
-  .activity-legacy-hero{
-    display:none
-  }
-  .activity-home-hero{
-    display:grid;
-    grid-template-columns:1.1fr 1fr;
-    gap:20px;
-    height:240px
-  }
-  .home-intro{
-    padding:26px 32px;
-    border:1px solid var(--wjx-card-border,#e3e6ed);
-    border-radius:16px;
-    background:var(--wjx-card-bg,#fff);
-    overflow:hidden
-  }
-  .home-intro .activity-eyebrow{
-    margin:0 0 14px
-  }
-  .home-intro h1{
-    font-size:30px;
-    line-height:1.45;
-    letter-spacing:-.5px;
-    white-space:pre-line;
-    margin:0 0 20px;
-    font-weight:700
-  }
-  .home-intro-links{
-    display:flex;
-    gap:24px;
-    font-size:13px
-  }
-  .home-intro-links a:first-child{
-    color:var(--wjx-theme,#425aef)
-  }
-  .home-featured{
-    position:relative;
-    border-radius:16px;
-    overflow:hidden;
-    isolation:isolate;
-    display:block
-  }
-  .home-featured>img{
-    width:100%;
-    height:100%;
-    object-fit:cover;
-    transition:transform .4s ease
-  }
-  .home-featured:after{
-    content:"";
-    position:absolute;
-    inset:0;
-    background:linear-gradient(0deg,rgba(7,12,26,.85),transparent 85%);
-    z-index:0
-  }
-  .home-featured>div{
-    position:absolute;
-    bottom:24px;
-    left:28px;
-    right:28px;
-    color:white;
-    z-index:1
-  }
-  .home-featured span{
-    font-size:12px;
-    letter-spacing:1px
-  }
-  .home-featured h2{
-    font-size:25px;
-    line-height:1.4;
-    margin:8px 0 0;
-    color:#fff
-  }
-  .home-featured:hover>img{
-    transform:scale(1.03)
   }
   .home-threads{
     display:flex;
@@ -427,12 +353,6 @@
   }
 }
 @media(min-width:1700px){
-  .home-intro{
-    padding:28px 38px
-  }
-  .home-intro h1{
-    font-size:34px
-  }
   .activity-layout{
     max-width:1480px;
     grid-template-columns:minmax(0,1000px) 280px;
@@ -451,12 +371,8 @@
     padding-top:16px;
     border-top:1px solid var(--wjx-card-border)
   }
-  .activity-aside .activity-avatar{width:48px;height:48px}
   .thread-author{flex-wrap:wrap}
   .thread-author time{font-size:12px}
-  .activity-detail{
-    padding:0 16px
-  }
   .thread-card{
     padding:22px 18px
   }
@@ -472,11 +388,6 @@
     font-size:30px
   }
 }
-@media(prefers-reduced-motion:reduce){
-  .home-featured>img{
-    transition:none
-  }
-}
 /* Keep article cards on the same theme scale as archives and category pages. */
 @media(min-width:1200px){
   .activity-home + .layout #recent-posts > .recent-post-item,
@@ -489,7 +400,7 @@
 }
 
 /* Public topic metadata is independent from associated content activity. */
-.activity-layout [hidden],.activity-detail [hidden]{display:none!important}
+.activity-layout [hidden]{display:none!important}
 .activity-toolbar button,.activity-pagination button{font:inherit;cursor:pointer;border:0;background:none}
 .activity-pagination button:disabled{opacity:.4;cursor:default}
 .activity-toolbar button:focus-visible,.activity-pagination button:focus-visible,.content-topics a:focus-visible{outline:2px solid var(--wjx-theme);outline-offset:3px}
@@ -508,14 +419,6 @@
 .thread-author>strong,.thread-author>time{white-space:nowrap}
 
 .ai-translation-label{display:inline-block;padding:3px 8px;margin:6px 0;border:1px solid currentColor;border-radius:5px;font-size:12px;line-height:1.5;opacity:.8}
-
-@media (min-width: 1200px) {
-  .activity-home-hero--intro-only { grid-template-columns: minmax(0, 1fr); height: auto; }
-  .activity-home-hero--intro-only .home-intro { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 3rem; min-height: 212px; padding: 26px 36px; }
-  .activity-home-hero--intro-only .activity-eyebrow { grid-column: 1 / -1; }
-  .activity-home-hero--intro-only h1 { margin-bottom: 0; font-size: clamp(32px, 3.1vw, 46px); line-height: 1.2; }
-  .activity-home-hero--intro-only .home-intro-links { align-self: end; padding-bottom: .3rem; }
-}
 
 .timeline-cover { display: block; width: 100%; aspect-ratio: 16/10; border-radius: 10px; overflow: hidden; }
 .timeline-cover picture,.timeline-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }

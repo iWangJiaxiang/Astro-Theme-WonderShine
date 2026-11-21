@@ -14,20 +14,20 @@ test('only stable Studio release tags publish; pushes and PRs never publish', ()
   for (const value of ['0.0.0', '1.2.3-beta', '1.2.3\nmalicious', '1.2', '01.2.3', '2.100.0', '2001.0.0']) assert.throws(() => stableVersion(value));
   assert.equal(stableVersion('0.2.0'), '0.2.0');
   for (const event of ['push', 'pull_request']) assert.equal(releaseContext(event, {}, '0.1.0', 'abc').release, 'false');
-  assert.equal(releaseContext('workflow_dispatch', { inputs: { version: '0.2.0', publish: 'true' } }, '0.1.0', 'abc').tag, 'studio-v0.2.0');
+  assert.equal(releaseContext('workflow_dispatch', { ref: 'refs/heads/main', inputs: { version: '0.2.0', publish: 'true' } }, '0.1.0', 'abc').tag, 'studio-v0.2.0');
   assert.equal(releaseContext('release', { release: { tag_name: 'studio-v0.3.0' } }, '0.1.0', 'abc').version, '0.3.0');
   assert.throws(() => releaseContext('release', { release: { tag_name: 'theme-v1.0.0' } }, '0.1.0', 'abc'));
   assert.throws(() => releaseContext('release', { release: { tag_name: 'studio-v1.0.0', prerelease: true } }, '0.1.0', 'abc'));
 });
 
 test('iOS-only distribution signs and uploads without publishing a GitHub Release', () => {
-  const context = releaseContext('workflow_dispatch', { inputs: { target: 'ios', version: '0.2.0', publish: 'true' } }, '0.1.0', 'abc');
+  const context = releaseContext('workflow_dispatch', { ref: 'refs/heads/main', inputs: { target: 'ios', version: '0.2.0', publish: 'true' } }, '0.1.0', 'abc');
   assert.equal(context.target, 'ios');
   assert.equal(context.iosRelease, 'true');
   assert.equal(context.testflight, 'true');
   assert.equal(context.release, 'false');
   assert.equal(context.version, '0.2.0');
-  const preview = releaseContext('workflow_dispatch', { inputs: { target: 'ios', publish: 'false' } }, '0.1.0', 'abc', true);
+  const preview = releaseContext('workflow_dispatch', { ref: 'refs/heads/main', inputs: { target: 'ios', publish: 'false' } }, '0.1.0', 'abc', true);
   assert.equal(preview.target, 'ios');
   assert.equal(preview.iosRelease, 'false');
   assert.equal(preview.testflight, 'false');
@@ -35,7 +35,7 @@ test('iOS-only distribution signs and uploads without publishing a GitHub Releas
 });
 
 test('full releases retain optional TestFlight while push and PR cannot opt in', () => {
-  const event = { inputs: { target: 'all', publish: 'true' } };
+  const event = { ref: 'refs/heads/main', inputs: { target: 'all', publish: 'true' } };
   for (const enabled of [false, true]) {
     const context = releaseContext('workflow_dispatch', event, '0.1.0', 'abc', enabled);
     assert.equal(context.release, 'true');
@@ -52,7 +52,26 @@ test('full releases retain optional TestFlight while push and PR cannot opt in',
     assert.equal(context.iosRelease, 'false');
     assert.equal(context.testflight, 'false');
   }
-  assert.throws(() => releaseContext('workflow_dispatch', { inputs: { target: 'unknown' } }, '0.1.0', 'abc'), /target/);
+  assert.throws(() => releaseContext('workflow_dispatch', { ref: 'refs/heads/main', inputs: { target: 'unknown' } }, '0.1.0', 'abc'), /target/);
+});
+
+test('automatic TestFlight signs only main Studio changes and leaves public releases manual', () => {
+  const main = { ref: 'refs/heads/main' }, feature = { ref: 'refs/heads/feature' };
+  const code = ['apps/studio/src/App.tsx'];
+  const context = releaseContext('push', main, '0.2.0', 'abc', true, code);
+  assert.equal(context.iosRelease, 'true');
+  assert.equal(context.testflight, 'true');
+  assert.equal(context.release, 'false');
+  for (const [name, event, enabled, paths] of [
+    ['push', feature, true, code], ['pull_request', main, true, code],
+    ['push', { ...main, deleted: true }, true, code], ['push', main, false, code],
+    ['push', main, true, ['packages/theme/index.ts', 'apps/studio/README.md', 'apps/studio/tests/a.ts', 'apps/studio/src-tauri/tests/a.rs']],
+  ]) {
+    const skipped = releaseContext(name, event, '0.2.0', 'abc', enabled, paths);
+    assert.equal(skipped.iosRelease, 'false');
+    assert.equal(skipped.testflight, 'false');
+  }
+  assert.throws(() => releaseContext('workflow_dispatch', { ...feature, inputs: { target: 'ios', publish: 'true' } }, '0.2.0', 'abc'), /from main/);
 });
 
 test('iOS signing and TestFlight preflight require only Apple credentials and never disclose values', () => {

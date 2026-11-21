@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { SaveMode } from '../../shared/save';
@@ -7,7 +8,7 @@ import { useSignals } from '../reactivity';
 import { overlayPosition } from '../overlay-position';
 
 type Props = { mode: SaveMode; onModeChange(mode: SaveMode): void; onSave(): void; disabled?: boolean; busy?: boolean; label?: string; canInteract?(): boolean };
-export default function SaveButton({ mode, onModeChange, onSave, disabled, busy, label, canInteract }: Props) {
+export default function SaveButton({ mode, onModeChange, onSave, disabled, busy, label, showModes = true, canInteract }: Props) {
   useSignals();
   const alive = useRef(true);
   useLayoutEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
@@ -66,7 +67,7 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
     <button type="button" className="primary save-button-main" disabled={disabled || busy} onClick={() => { if (allowed()) onSave(); }}>
       {busy ? t('正在保存…') : label || t(saveModeLabel[mode])}
     </button>
-    <button type="button" className="primary save-button-toggle" ref={trigger} disabled={busy} aria-label={t('选择保存方式')} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => { if (!allowed()) return; setError(false); setOpen(!open); }}>⌄</button>
+    {showModes && <button type="button" className="primary save-button-toggle" ref={trigger} disabled={busy} aria-label={t('选择保存方式')} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => { if (!allowed()) return; setError(false); setOpen(!open); }}>⌄</button>}
     {open && createPortal(<div id={id} className="save-mode-menu" role="dialog" aria-label={t('保存方式')} ref={panel} style={{ top: position.top, left: position.left }}>
       <div role="radiogroup" aria-label={t('保存方式')} onKeyDown={event => {
         if (!allowed() || !panel.current || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
@@ -81,7 +82,7 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
         </button>)}
       </div>
       <button type="button" className="save-mode-default" disabled={mode === context.defaultMode} onClick={() => { if (!allowed()) return; const remembered = rememberPreference(); if (!allowed()) return; if (remembered) { setOpen(false); trigger.current?.focus(); } else setError(true); }}>{t('将当前方式设为默认')}</button>
-      {error && <p role="alert">{t('无法记住偏好，请检查本地存储权限')}</p>}
+      {error && <ErrorNotice source="SaveButton" message="无法记住偏好，请检查本地存储权限" />}
     </div>, document.body)}
   </div>;
 }

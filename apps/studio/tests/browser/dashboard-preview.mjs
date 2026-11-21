@@ -63,8 +63,8 @@ createRoot(document.getElementById('root')).render(<App />);
     loader: { '.css': 'empty' },
     plugins: [{ name: 'isolate-app-children', setup(build) {
       build.onResolve({ filter: /(?:components\/|platform\/(?:LegacyRecovery|NativeAiSettings|WorkspacePanel))/ }, args => {
-        // Keep real shell icons for layout captures; stateful child views stay isolated.
-        if (args.path === './components/Icon') return;
+        // Render the shell and its children, isolating only the page-level fixtures below.
+        if (['./components/Icon', './components/ViewTransition', './components/ErrorNotice'].includes(args.path)) return;
         if (args.importer.endsWith('/src/App.tsx')) return { path: args.path, namespace: 'app-child' };
       });
       build.onLoad({ filter: /.*/, namespace: 'app-child' }, args => ({ loader: 'tsx', resolveDir: fileURLToPath(new URL('../../', import.meta.url)), contents: `
@@ -101,7 +101,7 @@ export { Child as LegacyRecovery, Child as NativeAiSettings, Child as WorkspaceP
     await pending('/content-preview');
     await resolve('/content-preview', 'Cached first');
     await page.waitForSelector('[data-dashboard-preview]');
-    assert.match(await page.$eval('[data-dashboard-preview]', node => node.textContent), /可能已过期/);
+    assert.match(await page.$eval('[data-dashboard-preview]', node => node.textContent), /正在检查远程内容是否有更新/);
     assert.match(await recent(), /Cached first.*缓存摘要/);
     assert.doesNotMatch(await recent(), /已发布/);
     assert.equal(await page.$eval('.stat-card strong', node => node.textContent), '1');

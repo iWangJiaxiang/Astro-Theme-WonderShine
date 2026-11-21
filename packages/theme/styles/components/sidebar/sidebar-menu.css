@@ -991,7 +991,7 @@ span.post-meta-position {
         width: calc(50% - 16px);
     }
 
-    #aside-content .card-widget:not(#card-toc) {
+    #aside-content:not(.thread-layout > aside) .card-widget:not(#card-toc) {
         display: none;
     }
 

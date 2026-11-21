@@ -45,6 +45,7 @@ html[data-native-mobile] :is(input:not([type=checkbox]):not([type=radio]):not([t
   :is(.icon-button, .text-button, .save-button-toggle, .directory-disclosure) { min-width: var(--studio-touch-target) !important; }
   :is(input:not([type=checkbox]):not([type=radio]):not([type=color]), textarea, select, [contenteditable=true]) { font-size: 16px !important; }
   .thread-composer :is(.composer-mode-tabs button, .composer-tool, .reference-heading > button, .composer-recovery .text-button, .composer-publish .primary) { min-height: var(--studio-touch-target); }
+  body:has(.sidebar.open) { overflow: hidden; }
   .composer-publish { flex-wrap: wrap; }
   .selection-footer { flex-wrap: wrap; }
   .selection-footer > small { min-width: 0; overflow-wrap: anywhere; }
@@ -93,4 +94,77 @@ html[data-compact-viewport] .ai-assistant-dialog[open] { display: block; }
 html[data-compact-viewport] .ai-assistant-body { overflow: visible; }
 @media (prefers-reduced-motion: reduce) {
   .sidebar { transition: none; }
+}
+
+/* The navigation stays in the shell so the drawer and reauthentication can isolate it. */
+html:has(.mobile-tabbar:not([hidden])) {
+  --tabbar-height: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+  scroll-padding-bottom: var(--tabbar-height);
+}
+body:has(.mobile-tabbar:not([hidden])) { padding-bottom: var(--tabbar-height); }
+.studio-shell:has(.mobile-tabbar:not([hidden])) { min-height: calc(100dvh - var(--tabbar-height)); }
+.mobile-tabbar:not([hidden]) {
+  position: fixed; inset: auto 0 0; z-index: 12;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  height: var(--tabbar-height);
+  padding: 0 max(4px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(4px, env(safe-area-inset-left));
+  border-top: 1px solid var(--studio-line); background: var(--studio-card);
+}
+.mobile-tabbar > button {
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  gap: 3px; min-width: 0; min-height: 48px; padding: 2px;
+  color: var(--studio-muted); font-size: .6875rem; font-weight: 500; line-height: 1.15;
+}
+.mobile-tabbar svg { width: 44px; height: 24px; padding: 2px 12px; border-radius: 14px; }
+.mobile-tabbar [aria-current] { color: var(--wjx-theme); font-weight: 700; }
+.mobile-tabbar [aria-current] svg { background: color-mix(in srgb, var(--wjx-theme) 13%, var(--studio-card)); stroke-width: 2; }
+.mobile-tabbar .mobile-menu svg { stroke-width: 3.5; }
+.mobile-tabbar button:active svg { background: var(--form-surface); }
+.mobile-tabbar button:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: -3px; border-radius: 6px; }
+
+@media (max-width: 1024px) and (pointer: coarse) {
+  .sidebar { width: min(288px, 85vw); transform: translateX(-100%); }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 39; background: #10162a66; }
+  body:has(.sidebar.open) { overflow: hidden; }
+  .main-shell { margin-left: 0; }
+  .mobile-tabbar:not([hidden]) { padding-inline: max(4px, calc((100% - 720px) / 2), env(safe-area-inset-left)) max(4px, calc((100% - 720px) / 2), env(safe-area-inset-right)); }
+}
+@media (max-width: 1024px) and (max-height: 500px) and (pointer: coarse) {
+  .mobile-tabbar > button { flex-direction: row; gap: 2px; font-size: .75rem; }
+  .mobile-tabbar svg { width: 32px; padding-inline: 6px; }
+  html:has(.mobile-tabbar:not([hidden])) { --tabbar-height: calc(3.125rem + env(safe-area-inset-bottom, 0px)); }
+}
+/* Resizing WebViews expose the keyboard as a shorter layout viewport. Overlay
+   keyboards already cover the fixed bar at the bottom of the layout viewport. */
+@media (max-height: 500px) and (pointer: coarse) {
+  .main-shell:has(.main-content :is(input:not([type=checkbox]):not([type=radio]), textarea, [contenteditable=true]):focus) .mobile-tabbar { visibility: hidden; }
+}
+
+/* Keep the status-bar inset inside the pinned header as the document scrolls. */
+@media (max-width: 1180px), (any-pointer: coarse) {
+  html:has(.topbar) {
+    --studio-header-height: calc(4rem + env(safe-area-inset-top, 0px));
+    scroll-padding-top: calc(var(--studio-header-height) + 8px);
+  }
+  html[data-native-mobile] .studio-shell:has(.topbar) { padding-top: 0; }
+  .topbar {
+    position: sticky; top: 0; z-index: 11;
+    flex: none; flex-wrap: nowrap; min-block-size: var(--studio-header-height);
+    padding-block: calc(4px + env(safe-area-inset-top, 0px)) 4px;
+  }
+  .topbar > .row:first-child { flex-wrap: nowrap; }
+  .topbar > .row:first-child > span:last-child {
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  }
+  .topbar-actions { flex: none; }
+  html:has(.settings-page > .page-heading) { scroll-padding-top: calc(var(--studio-header-height) + 6rem); }
+  .settings-page > .page-heading { top: var(--studio-header-height); }
+  .media-details { top: calc(var(--studio-header-height) + 12px); }
+}
+@media (max-width: 760px), (max-width: 1024px) and (pointer: coarse) {
+  html:has(.topbar) { --studio-header-height: calc(3.5rem + env(safe-area-inset-top, 0px)); }
+}
+@media (max-height: 500px) and (pointer: coarse) {
+  .settings-page > .page-heading { position: static; }
 }

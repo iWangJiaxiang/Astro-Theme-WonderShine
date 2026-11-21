@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import { mediaURL, storedMediaPath, type MediaMode } from "../../shared/media";
 import { t } from "../i18n";
 import { mediaVersion } from "../media-store";
@@ -75,6 +76,7 @@ const ImageField: StudioComponent<Props, Events> = component<Props, Events>(
                       failed.value = true;
                     }),
                   })
+                : failed.value ? element(ErrorNotice, { source: "ImageField", message: "暂时无法预览，已保留原地址", className: "muted small" })
                 : element(
                     "span",
                     {

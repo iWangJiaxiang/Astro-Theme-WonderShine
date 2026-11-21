@@ -1,5 +1,6 @@
 .workspace-status-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1rem;margin:1.5rem 0 }
-.workspace-status-grid dt { color:var(--text-secondary,#777);font-size:.85rem }
+.workspace-status-grid > div { display: flex; flex-direction: column; min-width: 0; }
+.workspace-status-grid dt { flex: 1; color: var(--studio-muted); font-size: .85rem; overflow-wrap: anywhere; }
 .workspace-status-grid dd { margin:.25rem 0 0;font-size:2rem;font-weight:650 }
 .workspace-panel .field { margin:1.5rem 0;max-width:42rem }
 .native-connect { min-height:100vh;display:grid;place-items:center;padding:2rem;background:var(--bg,#f5f6f8) }
@@ -8,7 +9,13 @@
 .workspace-chooser { display:grid;gap:.75rem;margin:1rem 0 }
 .workspace-record { display:grid;gap:.5rem;padding:.75rem;border:1px solid var(--border,#ddd);border-radius:.75rem;min-width:0 }
 .workspace-record small { overflow-wrap:anywhere;color:var(--text-secondary,#777) }
-.workspace-record .row { flex-wrap:wrap }
+.workspace-record .row { flex-wrap:wrap; gap:6px }
+.workspace-record strong { overflow-wrap:anywhere }
+.workspace-record button, .workspace-chooser > .secondary, .connection-footer .connection-service { padding:6px 12px; border:1px solid var(--studio-line); border-radius:6px; font-size:13px; background:var(--studio-card); }
+.workspace-record .secondary, .workspace-chooser > .secondary { color:var(--wjx-theme); background:var(--form-surface); }
+.workspace-record .danger { color:var(--wjx-danger, #b73443); }
+.archived-workspaces > summary, .connection-about > summary { align-content:center; min-height:36px; }
+.connection-about[open] .native-update-controls { justify-content:flex-start; }
 .workspace-record button { min-height:44px }
 .native-connect form { display:grid;gap:1rem;margin-top:1.5rem }
 .native-connect .connection-fields { display:grid;grid-template-columns:1fr 1fr;gap:1rem }
@@ -36,9 +43,11 @@ section.native-ai-settings { max-width: 960px; }
 .workspace-panel .workspace-sync-card { padding: 28px; }
 /* Keep the heading from covering fields during reverse keyboard navigation. */
 .settings-page.workspace-panel > .page-heading { position: static; }
-.workspace-sync-card h2 { margin-bottom: 0; }
+.workspace-sync-card h2 { margin-bottom: 0; overflow-wrap: anywhere; }
+.workspace-sync-card li { overflow-wrap: anywhere; }
+.workspace-sync-card ul { padding-inline-start: 1.25rem; }
 .workspace-sync-card .workspace-status-grid { padding-bottom: 24px; border-bottom: 1px solid var(--studio-line); }
-.workspace-panel .workspace-sync-actions { justify-content: flex-end; margin-top: 24px; }
+.workspace-panel .workspace-sync-actions { justify-content: flex-end; flex-wrap: wrap; margin-top: 24px; }
 .account-login-buttons > button, .workspace-panel .workspace-sync-actions > button { flex: 0 1 auto; inline-size: max-content; max-inline-size: 100%; min-inline-size: 0; white-space: normal; overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   .native-ai-settings .native-ai-form, .workspace-panel .workspace-sync-card { padding: 20px; }
@@ -48,7 +57,7 @@ section.native-ai-settings { max-width: 960px; }
   .native-ai-actions .primary { flex: 1; }
   .workspace-status-grid { gap: 12px; }
   .workspace-status-grid dt { font-size: 12px; }
-  .workspace-panel .workspace-sync-actions > button { flex-grow: 1; }
+  .workspace-panel .workspace-sync-actions > button { flex: 1 1 max-content; max-width: 100%; }
 }
 
 /* Folder and URL are the primary actions; credentials stay in a disclosure. */
@@ -110,3 +119,7 @@ section.native-ai-settings { max-width: 960px; }
 .oauth-repository small { color: var(--studio-muted); flex-shrink: 0; }
 .oauth-dialog .selection-search input { width: 100%; min-width: 0; min-height: 42px; padding: 10px 12px; border: 1px solid var(--studio-line); border-radius: 8px; background: var(--form-surface); color: inherit; outline: none; }
 .oauth-dialog .selection-search input:focus { border-color: var(--wjx-theme); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wjx-theme) 9%, transparent); }
+
+.account-login-buttons > button:only-child { grid-column: 1 / -1; }
+
+.workspace-chooser .workspace-record { gap: 4px; padding: 10px 0; border: 0; border-bottom: 1px solid var(--studio-line); border-radius: 0; }

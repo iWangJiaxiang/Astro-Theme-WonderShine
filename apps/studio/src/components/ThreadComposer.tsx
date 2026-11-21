@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import { translationLocation } from "../../shared/translation";
 import type { ContentLanguages, Json } from "../../shared/types";
 import { api, errorMessage, session } from "../api";
@@ -283,7 +284,7 @@ const ThreadComposer: StudioComponent<Props, Events> = component<Props, Events>(
                       element(
                         "option",
                         { key: language, value: language },
-                        language,
+                        language === "zh-CN" ? "简体中文" : language === "en" ? "English" : language,
                       ),
                     ),
                   ),
@@ -345,9 +346,8 @@ const ThreadComposer: StudioComponent<Props, Events> = component<Props, Events>(
           : null,
         error.value
           ? element(
-              "p",
-              { role: "alert", className: classes("notice error") },
-              t(error.value),
+              ErrorNotice,
+              { source: "ThreadComposer", message: error.value },
               " ",
               element(
                 "button",

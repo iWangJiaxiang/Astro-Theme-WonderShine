@@ -1,3 +1,4 @@
+import { ErrorNotice } from "../src/components/ErrorNotice";
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../src/api';
 import { t, type Message } from '../src/i18n';
@@ -29,7 +30,7 @@ export function NativeAiSettings({ onDirty }: { onDirty?: (dirty: boolean) => vo
   }
   return <section className="settings-page native-ai-settings">
     <div className="page-heading"><h1>{t('客户端 API 设置')}</h1></div>
-    {error && <p className="notice error" role="alert">{t(error)}</p>}{notice && <p className="notice success" role="status">{t(notice)}</p>}
+    {error && <ErrorNotice source="NativeAiSettings" message={error} />}{notice && <p className="notice success" role="status">{t(notice)}</p>}
     {!settings ? loading ? <p role="status">{t('正在读取内容…')}</p> : <button onClick={() => setAttempt(value => value + 1)}>{t('重试')}</button> : <form className="card native-ai-form" onSubmit={save}>
       <fieldset disabled={busy}>
         <legend className="sr-only">{t('接口与模型')}</legend>

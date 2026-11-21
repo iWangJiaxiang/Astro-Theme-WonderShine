@@ -1,3 +1,4 @@
+import { ErrorNotice } from "./ErrorNotice";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { stringValues, taxonomyChoices } from "../../shared/choices";
@@ -258,9 +259,8 @@ const ThreadDetail: StudioComponent<Props, Events> = component<Props, Events>(
           ? element(LoadingState, { label: "正在载入文稿…" })
           : error.value
             ? element(
-                "div",
-                { role: "alert", className: classes("notice error") },
-                t(error.value),
+                ErrorNotice,
+                { source: "ThreadDetail", message: error.value },
                 " ",
                 element(
                   "button",
@@ -614,11 +614,6 @@ const ThreadDetail: StudioComponent<Props, Events> = component<Props, Events>(
                                 ),
                               )
                             : null,
-                        ),
-                        element(
-                          "p",
-                          { className: classes("muted small") },
-                          t("网站内容将在下次部署后更新"),
                         ),
                       ),
                       element(

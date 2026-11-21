@@ -1,7 +1,7 @@
 import { english, chinese } from './messages.js';
 export type Locale = 'en' | 'zh-CN';
 export type MessageParams = Record<string, string | number>;
-export type Message = string | { key: string; params?: MessageParams };
+export type Message = string | { key: string; params?: MessageParams; diagnostic?: { request?: string; status?: number; type: string; at: string } };
 export const defaultLocale: Locale = 'en';
 export const localeStorageKey = 'studio-language';
 export function resolveLocale(languages: readonly string[] = []): Locale {

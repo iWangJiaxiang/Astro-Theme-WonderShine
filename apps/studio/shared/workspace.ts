@@ -11,6 +11,8 @@ export interface WorkspaceStatus {
   remoteHead: string | null;
   lastSync: string | null;
   canSync?: boolean;
+  canPublish?: boolean;
+  canMerge?: boolean;
   managedChanges?: string[];
   /** Present only on explicit createReview(), never status/commit/sync responses. */
   confirmation?: string;
@@ -19,6 +21,7 @@ export interface WorkspaceStatus {
 
 /** Save, local commit, and remote synchronization are distinct operations. */
 export interface WorkspaceControl {
+  publish?(message: string, confirmation: string): Promise<void>;
   saveBranch?(key: string, files: BranchFile[]): Promise<BranchSave>;
   status(): Promise<WorkspaceStatus>;
   /** Explicit user review; captures exact managed bytes under the workspace lock. */
@@ -27,6 +30,8 @@ export interface WorkspaceControl {
    * Validate the supplied disk snapshot under the lock; never create a token during mutation.
    * Commit returns no token. Sync after committing requires a separate explicit review. */
   commit(message: string, confirmation?: string): Promise<WorkspaceStatus>;
+  /** The next explicit review will read post-commit status under a new lock. */
+  commitForReview?(message: string, confirmation: string): Promise<void>;
   /** Same internal-only omission policy as commit; user-facing callers must supply confirmation. */
   sync(confirmation?: string): Promise<WorkspaceStatus>;
 }
