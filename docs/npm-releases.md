@@ -14,7 +14,7 @@
 
 `npm view @wondershine/theme dist-tags --json` 可查看当前三个渠道的版本。安装命令会将当时选中的具体版本写入依赖。提交博客的 `package.json` 和 `package-lock.json`，部署时用 `npm ci` 复现。跟进新版或切回稳定版时，重新执行表中对应命令并验证博客；回退可恢复上一次通过验证的两个依赖文件。
 
-通过 Studio 跟随或固定渠道，请参阅[部署设置](deployment.md#用-studio-选择主题版本)。
+使用新版 Starter 或已接入 Studio 构建前脚本的博客，生产构建会按站点 `config.toml` 选择主题，表中的安装命令用于设置初始依赖。切换部署渠道、固定或回退到具体版本，请参阅[部署设置](deployment.md#用-studio-选择主题版本)。
 
 ## 触发与验证
 
