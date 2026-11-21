@@ -77,6 +77,8 @@ npm run dev
 
 浏览器打开终端打印的地址，通常为 `http://127.0.0.1:4321/`；端口被占用时以实际输出为准。按 `Ctrl+C` 停止预览。
 
+Starter 在生产构建时默认跟随 `latest`。要更换渠道或固定主题版本，请查看[Studio 主题版本设置](deployment.md#用-studio-选择主题版本)。
+
 主题已经由 `astro.config.mjs` 接入，无需自己建立首页路由：
 
 ```js

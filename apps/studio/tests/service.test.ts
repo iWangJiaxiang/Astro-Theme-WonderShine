@@ -114,3 +114,38 @@ test('date clearing keeps optional fields valid and prevents removing required p
   assert.equal(Object.hasOwn((await content.document(article.path)).metadata, 'updated'), false);
   await assert.rejects(() => content.saveDocument('content/articles/invalid/index.md', { title: 'Invalid', date: '2026-02-30' }, '', null), /有效的日期/);
 });
+
+test('theme settings pin an exact npm version and persist across Studio sessions', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'studio-theme-pin-'));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
+  await writeFile(join(root, 'config.toml'), 'title="Keep"\n');
+  const repo = new LocalRepository(root);
+  const calls: string[] = [];
+  const content = new ContentService(repo, undefined, async url => {
+    calls.push(String(url));
+    if (String(url).endsWith('dist-tags')) return Response.json({ next: '1.2.0-beta.3', canary: '1.3.0-canary.10' });
+    if (String(url).endsWith('/0.2.1')) return Response.json({ name: '@wondershine/theme', version: '0.2.1' });
+    return new Response(null, { status: 404 });
+  });
+  const save = async (changes: Record<string, string | boolean>) =>
+    content.saveSettings('appearance', changes, (await content.settings('appearance')).revision);
+  const channel = 'extra.theme.channel', pin = 'extra.theme.pinned', version = 'extra.theme.version';
+  assert.equal((await content.settings('appearance')).values[pin], false);
+  await save({ [channel]: 'next' });
+  assert.equal(calls.length, 0);
+  assert.equal((await save({ [pin]: true })).pinnedThemeVersion, '1.2.0-beta.3');
+  assert.equal((await new ContentService(repo).settings('appearance')).values[version], '1.2.0-beta.3');
+  await save({ 'extra.style.universe': false });
+  assert.equal(calls.length, 1);
+  assert.equal((await save({ [channel]: 'canary' })).pinnedThemeVersion, '1.3.0-canary.10');
+  assert.equal((await save({ [version]: '0.2.1' })).pinnedThemeVersion, '0.2.1');
+  const snapshot = await repo.read('config.toml');
+  await assert.rejects(save({ [version]: '4.0.0' }), /尚未发布/);
+  await assert.rejects(save({ [version]: '^1.2.0' }), /完整的主题版本号/);
+  await assert.rejects(save({ [channel]: 'custom' }), /主题渠道/);
+  assert.deepEqual(await repo.read('config.toml'), snapshot);
+  assert.equal((await save({ [pin]: false })).pinnedThemeVersion, null);
+  const config = parse(await readFile(join(root, 'config.toml'), 'utf8'));
+  assert.equal(config.title, 'Keep');
+  assert.deepEqual((config.extra as any).theme, { channel: 'canary', pinned: false });
+});

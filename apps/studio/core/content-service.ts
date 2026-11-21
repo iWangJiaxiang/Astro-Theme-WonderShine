@@ -1,3 +1,4 @@
+import { channelPath, pinPath, versionPath, themePin } from './theme-channel.js';
 import { saveBatch, validateSaveMode } from './save.js';
 import { translationReviewChanges } from './translation-review.js';
 import { posix } from './portable.js';
@@ -44,7 +45,7 @@ function validateChanges(changes: unknown, fields: Field[]): asserts changes is 
 }
 function documentPath(path: string) { validatePath(path); if (!path.startsWith('content/')) throw new StudioError(400, '请选择文章或页面路径'); }
 export class ContentService {
-  constructor(private repository: Repository, private now: () => Date = () => new Date()) {}
+  constructor(private repository: Repository, private now: () => Date = () => new Date(), private themeFetch: typeof fetch = fetch) {}
   async settings(id: string, language?: string): Promise<Settings> {
     const schema = allSettingsSchemas.find(s => s.id === id);
     if (!schema) throw new StudioError(404, '未找到配置分组');
@@ -60,10 +61,20 @@ export class ContentService {
     const source = await settingsSource(this.repository, schema, language);
     if ((source.revision || null) !== (revision || null)) throw new StudioError(409, '文件已更新，请重新加载并合并修改');
     const mapped = Object.fromEntries(Object.entries(changes).map(([path, value]) => [source.mapPath(path), value]));
+    let pinnedThemeVersion: string | null | undefined;
+    let original = source.file?.text ?? '';
+    if (id === 'appearance' && [channelPath, pinPath, versionPath].some(path => Object.hasOwn(changes, path))) {
+      pinnedThemeVersion = await themePin(source.data, changes, this.themeFetch);
+      if (pinnedThemeVersion) mapped[versionPath] = pinnedThemeVersion;
+      else {
+        delete mapped[versionPath];
+        original = removeTomlFields(original, [versionPath]);
+      }
+    }
     const text = source.path.endsWith('.json') ? JSON.stringify({ ...(source.file ? JSON.parse(source.file.text) : {}), ...mapped }, null, 2) + '\n'
-      : patchToml(source.file?.text ?? '', mapped);
+      : patchToml(original, mapped);
     const saved = await saveBatch(this.repository, [{ path: source.path, text, expectedRevision: source.file?.revision ?? null }], source.guard, saveMode);
-    return { ...saved, revision: await source.revisionAfter(saved.revision) };
+    return { ...saved, ...(pinnedThemeVersion !== undefined && { pinnedThemeVersion }), revision: await source.revisionAfter(saved.revision) };
   }
   async languages() {
     const file = await this.repository.read('config.toml');
