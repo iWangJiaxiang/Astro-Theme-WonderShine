@@ -234,8 +234,9 @@ export class NativeGitEngine implements WorkspaceControl {
         singleBranch: true, onAuth: this.credentials });
     } catch (error) { checkAuthError(error); throw new StudioError(502, '暂时无法连接 Git 远端，本地文件和提交已保留'); }
   }
-  checkRemote() {
-    return withWorkspaceLock(this.root, async () => {
+  get checkRemote() {
+    if (!this.profile.url.startsWith('https://')) return undefined;
+    return () => withWorkspaceLock(this.root, async () => {
       await this.openUnlocked();
       await this.fetchRemote();
       const { ahead, behind } = await this.branchStatus({});

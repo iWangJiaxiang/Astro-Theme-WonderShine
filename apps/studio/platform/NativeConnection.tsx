@@ -70,6 +70,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
   }
   async function deleteRecord(item: SavedWorkspace) {
     if (!confirm(t('删除「{name}」的连接记录？文件、草稿和本地提交会保留在设备上，重新添加时可能无法找回原草稿。', { name: item.label }))) return;
+    setBusy(true);
     try {
       if (item.source !== 'service' && item.url.startsWith('https://')) await forgetGitGrant(item);
       const next = records.filter(record => record.id !== item.id);
@@ -79,6 +80,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
       }
       setError('');
     } catch (reason) { setError((reason as Error).message); }
+    finally { setBusy(false); }
   }
   const [profile, setProfile] = useState<WorkspaceProfile>(() => (folderAvailable ? profiles[0] : profiles.find(item => item.source !== 'local')) || blank());
   const [connection, setConnection] = useState<Connection>(() => folderAvailable && (profiles[0]?.source === 'local' || !profiles.length) ? 'local' : 'clone');

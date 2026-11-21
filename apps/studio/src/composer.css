@@ -164,17 +164,6 @@
 }
 .thread-composer .composer-recovery .text-button { padding: 5px 8px; min-height: 32px; border-radius: 6px; border: 1px solid var(--form-rule); color: var(--wjx-fontcolor); background: var(--studio-card); }
 .thread-composer .composer-recovery .text-button:first-of-type { background: var(--wjx-fontcolor); color: var(--studio-card); }
-.studio-preferences { margin: 12px 0; }
-.studio-preferences summary { padding: 8px; cursor: pointer; }
-.studio-preferences > :is(button, label, .language-switcher) { display: flex; align-items: center; gap: 8px; margin: 6px 8px; }
-.quick-sync { position: relative; }
-.quick-sync [aria-busy=true] svg { animation: sync-rotate 1s linear infinite; }
-@keyframes sync-rotate { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .quick-sync [aria-busy=true] svg { animation: none; opacity: .6; } }
-.quick-sync [data-updates]::after { content: ""; position: absolute; inset: 3px 3px auto auto; width: 7px; height: 7px; background: var(--wjx-theme); border-radius: 50%; }
-.quick-sync-progress { margin: auto; width: min(360px, calc(100vw - 32px)); padding: 18px; border: 1px solid var(--form-rule); border-radius: 8px; background: var(--studio-card); box-shadow: 0 4px 16px #0002; z-index: 2; }
-.quick-sync-progress li + li { margin-top: 6px; }
-.quick-sync-progress ol { padding-inline-start: 20px; margin: 0; }
 @media (max-width: 480px) {
   .thread-composer .composer-recovery { display: flex; flex-flow: row wrap; align-items: center; gap: 0 8px; margin-inline: 12px; }
   .thread-composer .composer-recovery > span { flex: 1 1 9em; }

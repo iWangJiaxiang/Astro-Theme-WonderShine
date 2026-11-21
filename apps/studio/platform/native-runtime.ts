@@ -66,9 +66,9 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
     try { summaryStore = createNativeSummaryStore(files, state, base); }
     catch { /* Optional preview storage must not prevent opening a workspace. */ }
   }
+  if (httpsRemote && token) await credential.persistInitial();
   const runtime = createSummaryRuntime(repository, { scope: summaryScope, store: summaryStore });
   const ai = new NativeAiController(runtime.repository, (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }), localStorage, profile.id);
-  if (httpsRemote && token) await credential.persistInitial();
   if (httpsRemote) nativeGitCredential.current = credential;
   let disposed = false;
   const dispose = () => { if (disposed) return; disposed = true; diagnostics.dispose(); ai.dispose(); runtime.dispose(); credential.dispose(); if (nativeGitCredential.current === credential) delete nativeGitCredential.current; setMediaResolver(); setApiTransport(); };

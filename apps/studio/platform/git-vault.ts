@@ -19,6 +19,7 @@ export async function forgetGitGrant(profile: WorkspaceProfile) {
 export function workspaceCredential(profile: WorkspaceProfile, initial?: GitGrant) {
   const account = accountKey(profile), lifecycle = new AbortController();
   let current = initial, loaded = !!initial;
+  let rotated: GitGrant | undefined;
   let queue = Promise.resolve();
   function run<T>(action: () => Promise<T>) {
     const result = queue.then(() => { lifecycle.signal.throwIfAborted(); return action(); });
@@ -28,16 +29,18 @@ export function workspaceCredential(profile: WorkspaceProfile, initial?: GitGran
   async function store(grant: GitGrant) {
     lifecycle.signal.throwIfAborted();
     await vault('set_passwords', { entries: [{ account: await account, secret: JSON.stringify(grant) }] });
-    current = grant; loaded = true;
+    lifecycle.signal.throwIfAborted();
+    current = grant; loaded = true; rotated = undefined;
   }
   return {
     id: profile.id, hasToken: () => !!current?.token,
     set: (token: string) => run(async () => {
       if (token) await store({ token });
-      else { await forgetGitGrant(profile); current = undefined; loaded = true; }
+      else { await forgetGitGrant(profile); current = rotated = undefined; loaded = true; }
     }),
     persistInitial: () => run(async () => { if (initial && current) await store(current); initial = undefined; }),
     password: () => run(async () => {
+      if (rotated) await store(rotated);
       if (!loaded) {
         const [saved] = await vault<(string | null)[]>('get_passwords', { accounts: [await account] });
         if (saved) current = JSON.parse(saved) as GitGrant;
@@ -50,10 +53,12 @@ export function workspaceCredential(profile: WorkspaceProfile, initial?: GitGran
         const renewed = await renewGitGrant(provider, current, providerFetch, lifecycle.signal).catch(error => {
           throw new StudioError(403, error instanceof Error ? error.message : '授权已过期，请重新登录');
         });
+        // Keep a rotated grant available if the system store is temporarily locked.
+        rotated = renewed;
         await store(renewed);
       }
       return current.token;
     }),
-    dispose() { lifecycle.abort(); current = initial = undefined; },
+    dispose() { lifecycle.abort(); current = initial = rotated = undefined; },
   };
 }

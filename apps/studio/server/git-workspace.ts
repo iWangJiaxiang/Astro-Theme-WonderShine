@@ -52,7 +52,7 @@ export class GitWorkspaceRepository implements Repository {
       }),
       checkRemote: () => this.run(async () => {
         await this.fetchRemote();
-        const { ahead, behind } = await this.status();
+        const { ahead, behind } = await this.branchStatus({});
         return { ahead, behind };
       }),
       status: () => this.run(() => this.status()),
@@ -147,10 +147,7 @@ export class GitWorkspaceRepository implements Repository {
     await nodeWorkspaceReviews(this.root).validateReview(confirmation, review, nodeReviewSource(this.root));
   }
   private async status(): Promise<WorkspaceStatus> { return (await this.inspect()).status; }
-  private async inspect(): Promise<{ status: WorkspaceStatus; review: ReviewState }> {
-    // In isomorphic-git 1.44.4, logs populate only the pack cache. Share it with
-    // one final matrix, then discard: never carry its index cache across mutations.
-    const cache = {};
+  private async branchStatus(cache: object) {
     const head = await git.resolveRef({ ...this.gitOptions, ref: 'HEAD' });
     let remoteHead: string | null = null;
     try { remoteHead = await git.resolveRef({ ...this.gitOptions, ref: this.remoteRef }); } catch { /* A local branch may not have a remote tip yet. */ }
@@ -161,6 +158,13 @@ export class GitWorkspaceRepository implements Repository {
       ahead = [...localHistory].filter(oid => !remoteHistory.has(oid)).length;
       behind = [...remoteHistory].filter(oid => !localHistory.has(oid)).length;
     }
+    return { head, remoteHead, ahead, behind };
+  }
+  private async inspect(): Promise<{ status: WorkspaceStatus; review: ReviewState }> {
+    // In isomorphic-git 1.44.4, logs populate only the pack cache. Share it with
+    // one final matrix, then discard: never carry its index cache across mutations.
+    const cache = {};
+    const { head, remoteHead, ahead, behind } = await this.branchStatus(cache);
     let lastSync: string | null = null;
     try { lastSync = await readFile(join(this.root, '.git', 'wondershine-last-sync'), 'utf8'); } catch { /* Never synchronized yet. */ }
     const rows = await this.rows(cache);

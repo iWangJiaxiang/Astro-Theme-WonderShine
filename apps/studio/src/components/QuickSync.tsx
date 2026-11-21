@@ -11,7 +11,7 @@ import { ErrorNotice } from './ErrorNotice';
 type Counts = Pick<WorkspaceStatus, 'ahead' | 'behind'>;
 const check = () => api<Counts>('/workspace/check', 'POST');
 
-export function QuickSync({ editing, onManage }: { editing: () => boolean; onManage: () => void }) {
+export default function QuickSync({ editing, onManage }: { editing: () => boolean; onManage: () => void }) {
   useSignals();
   const owner = useRef(0), running = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -34,6 +34,7 @@ export function QuickSync({ editing, onManage }: { editing: () => boolean; onMan
     running.current = true;
     clearTimeout(timer.current);
     setBusy(true); setSteps([]); setError(''); setHint('同步 Git');
+    let attemptedSync = false;
     try {
       const { ahead, behind } = await check();
       if (active !== owner.current) return;
@@ -46,15 +47,18 @@ export function QuickSync({ editing, onManage }: { editing: () => boolean; onMan
       if (review.dirty || editing()) throw new Error('请先保存编辑并提交工作区更改，再同步 Git。');
       if (!review.confirmation) throw new Error('工作区已变化，请刷新并重新确认提交范围');
       setSteps(current => [...current, { key: '正在同步分支 {branch}…', params: { branch: review.branch } }]);
+      attemptedSync = true;
       await api('/workspace/sync', 'POST', { confirmation: review.confirmation });
       if (active !== owner.current) return;
       setSteps(current => [...current, ...(behind ? ['已合入远端更新'] : []), ...(ahead ? ['已推送本地提交'] : []), '分支已同步']); setUpdates(false); setHint('分支已同步');
-      notifyWorkspaceChanged();
       timer.current = setTimeout(() => setSteps([]), 1800);
     } catch (reason) {
       if (active === owner.current) { setError(errorMessage(reason)); setVisible(true); }
     } finally {
-      if (active === owner.current) { running.current = false; setBusy(false); }
+      if (active === owner.current) {
+        running.current = false; setBusy(false);
+        if (attemptedSync) notifyWorkspaceChanged();
+      }
     }
   }
   return <div className="quick-sync">

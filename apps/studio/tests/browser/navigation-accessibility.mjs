@@ -244,11 +244,7 @@ async function checkTouchNavigation(page, screenshots) {
     await waitForDrawer(phone, true);
     if (!await phone.$eval('.studio-preferences', el => el.open)) await phone.tap('.studio-preferences summary');
     await phone.tap('.theme-switch');
-    await phone.tap('.navigation-close');
-    await waitForDrawer(phone, false);
     await phone.select('.studio-preferences select', 'zh-CN');
-    await phone.tap('.mobile-menu');
-    await waitForDrawer(phone, true);
     await phone.$eval('.sidebar nav[aria-label="站点设置"]', nav => [...nav.querySelectorAll('button')].find(button => button.textContent.trim() === '站点信息').click());
     await phone.waitForSelector('.settings-card input');
     for (const [width, height] of [[390, 844], [768, 900], [1180, 768]]) {

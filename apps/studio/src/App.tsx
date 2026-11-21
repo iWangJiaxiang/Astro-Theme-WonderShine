@@ -1,4 +1,4 @@
-import { QuickSync } from "./components/QuickSync";
+import QuickSync from "./components/QuickSync";
 import { ErrorDetails, ErrorNotice } from "./components/ErrorNotice";
 import { LegacyRecovery } from "../platform/LegacyRecovery";
 import { configureSaving } from "./save-preferences";

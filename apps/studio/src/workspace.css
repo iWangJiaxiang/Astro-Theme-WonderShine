@@ -11,7 +11,7 @@
    block size must follow both rows, including tablet widths above the drawer. */
 .topbar { height: auto; min-height: 64px; row-gap: 12px; }
 .topbar { min-height: 64px; padding-inline: max(32px, calc((100% - 1510px) / 2 + 32px)); }
-.language-short, .workspace-switch > svg, .visit-site > svg { display: none; }
+.language-short, .visit-site > svg { display: none; }
 .main-content { padding: 28px 32px; }
 .page-heading { margin-bottom: 20px; }
 .page-heading > div:first-child { min-width: 0; }
@@ -143,28 +143,18 @@ h1 { font-size: 26px; margin-bottom: 8px; }
   .topbar > .row:first-child { flex: 1; gap: 4px; }
   .topbar > .row:first-child { padding-inline-start: 4px; font-size: 15px; font-weight: 600; }
   .topbar .topbar-actions { gap: 2px; }
-  .topbar :is(.workspace-switch, .visit-site) {
+  .topbar .visit-site {
     display: inline-flex; align-items: center; justify-content: center;
     min-width: 44px; min-height: 44px; padding: 8px; border: 0; color: inherit;
   }
-  .topbar :is(.workspace-switch, .visit-site) > svg { display: block; }
-  .topbar :is(.workspace-switch, .visit-site) > span {
+  .topbar .visit-site > svg { display: block; }
+  .topbar .visit-site > span {
     position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
   .stat-card { display: flex; align-items: center; padding: 12px; }
   .stat-card .stat-icon { flex: none; margin-bottom: 0; }
   .stat-card .muted { font-size: 12px; overflow-wrap: anywhere; }
 }
-@media (max-width: 480px) {
-  .topbar .language-switcher { position: relative; }
-  .topbar .language-short {
-    display: grid; place-items: center; min-width: 44px; min-height: 44px;
-    color: var(--wjx-theme); font-size: 13px; font-weight: 600;
-  }
-  .topbar .language-switcher select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
-  .topbar .language-switcher:focus-within { outline: 2px solid var(--wjx-theme); border-radius: 6px; }
-}
-
 /* Keep field actions readable when nested settings narrow the available space. */
 .advanced-field > .row { flex-wrap: nowrap; }
 .advanced-field > .row > input { flex: 1; width: 0; min-width: 0; }
@@ -245,3 +235,15 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 .publish-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 .publish-dialog > .publish-actions { margin-top: 4px; }
 .publish-actions button { min-height: 44px; }
+
+.studio-preferences { margin: 12px 0; }
+.studio-preferences summary { padding: 8px; cursor: pointer; }
+.studio-preferences > :is(button, label, .language-switcher) { display: flex; align-items: center; gap: 8px; margin: 6px 8px; }
+.quick-sync { position: relative; }
+.quick-sync [aria-busy=true] svg { animation: sync-rotate 1s linear infinite; }
+@keyframes sync-rotate { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .quick-sync [aria-busy=true] svg { animation: none; opacity: .6; } }
+.quick-sync [data-updates]::after { content: ""; position: absolute; inset: 3px 3px auto auto; width: 7px; height: 7px; background: var(--wjx-theme); border-radius: 50%; }
+.quick-sync-progress { margin: auto; width: min(360px, calc(100vw - 32px)); padding: 18px; border: 1px solid var(--form-rule); border-radius: 8px; background: var(--studio-card); box-shadow: 0 4px 16px #0002; z-index: 2; }
+.quick-sync-progress li + li { margin-top: 6px; }
+.quick-sync-progress ol { padding-inline-start: 20px; margin: 0; }

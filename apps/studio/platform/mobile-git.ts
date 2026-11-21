@@ -73,7 +73,14 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
   }
   return {
     async open(progress?: ProgressCallback, allowClone = true) {
-      profile.branch = await run(null, () => command<string>('open', { clone: allowClone }, progress));
+      profile.branch = await run(null, async () => {
+        let clone = allowClone;
+        if (clone) {
+          try { await files.lstat(root + '/.git'); clone = false; }
+          catch (error) { if (!missingFile(error)) throw error; }
+        }
+        return command<string>('open', { clone }, progress);
+      });
     },
     // FileRepository already holds the workspace lock.
     assertWritable: () => command<void>('guard'),
