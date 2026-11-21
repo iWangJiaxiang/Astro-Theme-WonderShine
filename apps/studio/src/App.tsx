@@ -22,6 +22,7 @@ import {
 } from "./react-component";
 import ViewTransition from "./components/ViewTransition";
 import LoadingState from "./components/LoadingState";
+import { installNavigationSwipe } from "./navigation-swipe";
 import { navigationPosition } from "./navigation-position";
 import { mediaUploading } from "./media-store";
 import { subscribeWorkspaceChanged } from "./workspace-events";
@@ -385,11 +386,40 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       );
     }
     const viewportPosition = navigationPosition();
-    watch(session, () => viewportPosition.clear());
+    const previousViews = ref<string[]>([]);
+    watch(session, () => { viewportPosition.clear(); previousViews.value = []; });
+    const canSwipeBack = () => !!document.value || previousViews.value.length > 0;
+    let removeSwipe = () => {};
+    onMounted(() => {
+      removeSwipe = installNavigationSwipe(
+        () => !!session.value && !reauthentication.value && mobileNavigation.value,
+        canSwipeBack,
+        action => {
+          if (action === "close") { menuOpen.value = false; return; }
+          if (action === "back") {
+            if (document.value?.mode === "edit") editorBack();
+            else if (document.value) navigate(view.value);
+            else {
+              const previous = previousViews.value.at(-1);
+              if (previous && navigate(previous, true)) previousViews.value.pop();
+            }
+            return;
+          }
+          const index = primaryNavigation.findIndex(item => item.id === view.value);
+          const next = primaryNavigation[index + (action === "next" ? 1 : -1)];
+          if (index >= 0 && next) navigate(next.id);
+        },
+      );
+    });
+    onBeforeUnmount(() => removeSwipe());
     onBeforeUnmount(() => viewportPosition.dispose());
     function positionKey() { return document.value ? `document:${document.value.path}:${document.value.mode}` : `view:${view.value}`; }
-    function navigate(next: string) {
-      if (!leave()) return;
+    function navigate(next: string, back = false) {
+      if (!leave()) return false;
+      if (!back && next !== view.value) {
+        if (next === "home") previousViews.value = [];
+        else previousViews.value = [...previousViews.value.slice(-31), view.value];
+      }
       const returning = !!document.value && next === view.value;
       viewportPosition.remember(positionKey());
       document.value = null;
@@ -398,6 +428,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       menuOpen.value = false;
       viewportPosition.enter(positionKey(), returning);
       if (next === "home") void loadArticles();
+      return true;
     }
     function open(
       path: string,
@@ -493,6 +524,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                 {
                   inert: reauthentication.value,
                   className: classes("studio-shell"),
+                  "data-swipe-back": mobileNavigation.value && canSwipeBack() ? "" : undefined,
                 },
                 menuOpen.value
                   ? element("button", {

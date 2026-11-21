@@ -65,7 +65,7 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
   }
   const runtime = createSummaryRuntime(repository, { scope: summaryScope, store: summaryStore });
   const ai = new NativeAiController(runtime.repository, (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }), localStorage, profile.id);
-  const credential = { id: profile.id, set: (value: string) => { token = value; } };
+  const credential = { id: profile.id, hasToken: () => !!token, set: (value: string) => { token = value; } };
   if (httpsRemote) nativeGitCredential.current = credential;
   let disposed = false;
   const dispose = () => { if (disposed) return; disposed = true; diagnostics.dispose(); ai.dispose(); runtime.dispose(); token = ''; if (nativeGitCredential.current === credential) delete nativeGitCredential.current; setMediaResolver(); setApiTransport(); };

@@ -168,3 +168,7 @@ body:has(.mobile-tabbar:not([hidden])) { padding-bottom: var(--tabbar-height); }
 @media (max-height: 500px) and (pointer: coarse) {
   .settings-page > .page-heading { position: static; }
 }
+
+/* Studio handles back only while there is an in-app destination. */
+html:has(.studio-shell[data-swipe-back]), html:has(.sidebar.open) { overscroll-behavior-x: contain; }
+.mobile-tabbar, .sidebar.open { touch-action: pan-y pinch-zoom; }

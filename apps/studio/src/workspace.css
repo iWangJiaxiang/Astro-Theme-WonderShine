@@ -170,8 +170,12 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 .advanced-field > .row > input { flex: 1; width: 0; min-width: 0; }
 .advanced-field > .row > button { flex-shrink: 0; white-space: nowrap; }
 @media (max-width: 760px) {
-  .editor-page > .page-heading > .row > button { flex: 1 0 auto; white-space: nowrap; }
-  .editor-page > .page-heading > .row > .autosave-control { flex-basis: 100%; }
+  .editor-page > .page-heading { gap: 6px; }
+  .editor-page > .page-heading > .editor-save-actions { justify-content: flex-start; }
+  .editor-page > .page-heading > .editor-save-actions > button { flex: 0 1 auto; }
+  .editor-save-actions > .save-button { margin-inline-start: auto; }
+  .metadata-card .date-inputs > .field { min-inline-size: 0; }
+  .metadata-card .date-inputs input { box-sizing: border-box; appearance: none; }
 }
 
 .writing-card > .title-field { grid-template-columns: auto minmax(0, 1fr); }

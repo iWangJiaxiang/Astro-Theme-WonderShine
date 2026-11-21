@@ -223,6 +223,7 @@ export const english: Record<string, string> = {
   "暂时无法连接 Git 远端，本地文件和提交已保留": "The Git remote is unavailable. Local files and commits are preserved.",
   "无法自动合并，请在 Git 工具中处理；双方提交均已保留": "Automatic merge could not complete. Resolve the changes in a Git tool. Both histories are preserved.",
   "同步时会合并远端更新。如有冲突，双方提交都会保留。": "Sync will merge remote changes. If they conflict, both histories will be preserved.",
+  "重新登录并复核同步": "Sign in again and review sync",
   "Git 远端认证失败，请检查当前会话的访问令牌和仓库权限": "Git authentication failed. Check the access token for this session and your repository permissions.",
   "Git 远端证书验证失败，请检查仓库地址和设备信任设置": "Git certificate verification failed. Check the repository URL and the device’s certificate trust settings.",
   "Git 远端拒绝了推送，请检查分支保护规则和写入权限；本地提交已保留": "The remote rejected the push. Check branch protection and write permissions. Your local commits are preserved.",

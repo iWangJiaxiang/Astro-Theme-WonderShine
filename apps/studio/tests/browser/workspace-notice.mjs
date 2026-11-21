@@ -8,11 +8,14 @@ export async function checkWorkspaceNotice(browser) {
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { WorkspacePanel } from './platform/WorkspacePanel';
-import { setApiTransport } from './src/api';
+import { nativeGitCredential } from './platform/git-credential';
+import { setApiTransport, session } from './src/api';
 import { locale } from './src/i18n';
 locale.value = 'zh-CN';
 let status = { branch: 'main', dirty: true, changes: 1, managedChanges: ['content/a.md'], ahead: 1, behind: 1, diverged: true, canMerge: true };
-let finish;
+let finish, credential = '';
+session.value = { identity: { id: 'local-fixture', method: 'password', name: 'Fixture' }, csrf: 'test', expires: 1 };
+nativeGitCredential.current = { id: 'local-fixture', hasToken: () => !!credential, set: value => { credential = value; } };
 window.reviewCalls = 0;
 window.syncCalls = 0;
 setApiTransport(async (path, init) => {
@@ -34,6 +37,11 @@ setApiTransport(async (path, init) => {
   if (path === '/workspace/sync') {
     window.syncCalls++;
     if (JSON.parse(init.body).confirmation !== 'committed') throw new Error('Wrong sync token');
+    if (window.syncCalls === 2) return new Response(JSON.stringify({ error: 'Git 远端认证失败，请检查当前会话的访问令牌和仓库权限', params: { gitDetail: 'libgit2 fetch Callback/Auth' } }), {status: 409});
+    if (window.syncCalls === 3) {
+      if (credential !== 'replacement-fixture' || init.body.includes(credential)) throw new Error('Incorrect credential handoff');
+      return new Response(JSON.stringify(status));
+    }
     await new Promise((resolve, reject) => { finish = () => {
       // The push succeeds, but its response is lost; cached status is not proof of failure.
       reject(new Error('Lost sync response'));
@@ -70,6 +78,19 @@ Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { wri
     assert.match(await page.$eval('[role="status"]', node => node.textContent), /本地提交已保留/);
     assert.doesNotMatch(await page.$eval('[role="status"]', node => node.textContent), /尚未推送|已与 Git/);
     await page.waitForFunction(() => !document.querySelector('.workspace-panel .page-heading button').disabled);
+    await page.click('.workspace-panel .page-heading button');
+    await page.waitForSelector('.workspace-sync-actions');
+    await page.click('.workspace-sync-actions button:nth-child(2)');
+    await page.waitForSelector('[role=group] .publish-actions');
+    await page.click('[role=group] .primary');
+    const retry = '.workspace-panel > button.secondary';
+    await page.waitForSelector(retry);
+    await page.click(retry);
+    await page.waitForSelector('[role=group] details[open] input');
+    assert.equal(await page.evaluate(() => window.syncCalls), 2);
+    await page.type('[role=group] details input', 'replacement-fixture');
+    await page.click('[role=group] .primary');
+    await page.waitForFunction(() => document.querySelector('[role=status]')?.textContent.includes('已与 Git 远端同步'));
     await page.evaluate(() => window.openPublish());
     await page.waitForFunction(() => document.querySelector('.publish-actions .primary')?.textContent === '确认发布');
     await page.click('.publish-actions .primary');

@@ -27,9 +27,8 @@
 .thread-composer .markdown-source:focus { box-shadow: inset 3px 0 color-mix(in srgb,var(--wjx-theme) 36%,transparent); }
 .thread-composer .markdown-preview { padding: 18px 26px; min-height: 142px; }
 .thread-composer .composer-recovery { margin: 6px 24px; padding: 8px 11px; border: 0; border-radius: 6px; gap: 12px; font-size: 11px; color: var(--studio-muted); background: var(--form-surface); }
-.thread-composer .composer-recovery::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: var(--wjx-theme); }
 .thread-composer .composer-recovery .text-button { font-size: 11px; padding: 1px 3px; }
-.thread-composer .composer-recovery .text-button:last-child { color: var(--studio-muted); margin-left: auto; }
+.thread-composer .composer-recovery .text-button:last-child { color: var(--studio-muted); }
 .thread-composer .language-versions { padding: 5px 24px 8px; background: transparent; }
 .thread-composer .language-version-tabs button { padding: 5px 9px; }
 .thread-composer .language-version-bar { gap: 7px; }
@@ -181,4 +180,10 @@
   }
   .thread-composer .composer-tools .choice-trigger > span:not(.choice-count) { max-width: 100%; margin-inline: 0; }
   .thread-composer .composer-tools .choice-trigger:not(:has(.choice-count)) > span { white-space: normal; }
+}
+
+@media (max-width: 480px) {
+  .thread-composer .composer-recovery { display: flex; flex-flow: row wrap; align-items: center; gap: 0 8px; margin-inline: 12px; }
+  .thread-composer .composer-recovery > span { flex: 1 1 9em; }
+  .thread-composer .composer-recovery > .text-button { flex: 0 0 auto; }
 }

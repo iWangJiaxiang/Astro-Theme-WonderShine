@@ -171,8 +171,22 @@ async function checkTouchNavigation(page, screenshots) {
     phone.once('dialog', dialog => dialog.accept());
     await phone.tap(tab('article'));
     await active('article');
-    await phone.tap(tab('thread'));
+    const swipe = async (from, to, y) => {
+      const touch = await phone.touchscreen.touchStart(from, y);
+      await touch.move(Math.round((from + to) / 2), y);
+      await touch.move(to, y);
+      await touch.end();
+    };
+    const tabY = await phone.$eval(tab('article'), node => node.getBoundingClientRect().top + 20);
+    await swipe(220, 100, tabY);
     await active('thread');
+    await swipe(8, 135, 200);
+    await active('article');
+    await phone.tap('.mobile-menu');
+    await waitForDrawer(phone, true);
+    await swipe(210, 70, 160);
+    await waitForDrawer(phone, false);
+    await active('article');
     await phone.tap(tab('media'));
     await active('media');
     await phone.waitForSelector('.media-card');

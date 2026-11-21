@@ -1164,7 +1164,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                         "composer-recovery": props.embedded,
                       }),
                     },
-                    t("发现本地草稿备份。"),
+                    element("span", null, t("发现本地草稿备份。")),
                     element(
                       "button",
                       {
