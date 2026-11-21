@@ -102,7 +102,7 @@ export function createApp(options: AppOptions) {
   app.get('/api/bootstrap', async c => {
     if (c.req.query('refresh') === '1') runtime.invalidate();
     const [site, appearance] = await Promise.all([content.settings('site'), content.settings('appearance')]);
-    return c.json({ site: site.values, appearance: appearance.values, saveScope: await scopeHash(options.repository.saveScope ?? options.config.origin), saveCapabilities: saveCapabilities(options.repository), mode: options.repository.mode, workspace: !!options.repository.workspace,
+    return c.json({ site: site.values, appearance: appearance.values, saveScope: await scopeHash(options.repository.saveScope ?? options.config.origin), saveCapabilities: saveCapabilities(options.repository), mode: options.repository.mode, workspace: !!options.repository.workspace, quickSync: !!options.repository.workspace?.checkRemote,
       groups: settingsSchemas.map(({ id, title, description }) => ({ id, title, description })) });
   });
   const workspace = () => {
@@ -110,6 +110,11 @@ export function createApp(options: AppOptions) {
     return options.repository.workspace;
   };
   app.get('/api/workspace', async c => c.json(await workspace().status()));
+  app.post('/api/workspace/check', async c => {
+    const control = workspace();
+    if (!control.checkRemote) throw new StudioError(404, '当前连接未启用本地 Git 工作区');
+    return c.json(await control.checkRemote());
+  });
   app.post('/api/workspace/review', async c => c.json(await workspace().createReview()));
   app.post('/api/workspace/commit', async c => {
     const input = await c.req.json<{ message: string; confirmation?: string }>();

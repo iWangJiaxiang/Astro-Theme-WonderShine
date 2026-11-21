@@ -62,10 +62,13 @@ export function createContentTransport(repository: Repository, options: ContentT
       };
       if (path === '/api/bootstrap' && method === 'GET') {
         const [site, appearance] = await Promise.all([content.settings('site'), content.settings('appearance')]);
-        return json({ site: site.values, appearance: appearance.values, saveScope: session.identity.id, saveCapabilities: saveCapabilities(repository), mode: repository.mode, workspace: !!repository.workspace, nativeAi: !!options.ai,
+        return json({ site: site.values, appearance: appearance.values, saveScope: session.identity.id, saveCapabilities: saveCapabilities(repository), mode: repository.mode, workspace: !!repository.workspace, quickSync: !!repository.workspace?.checkRemote, nativeAi: !!options.ai,
           groups: settingsSchemas.map(({ id, title, description }) => ({ id, title, description })) });
       }
       if (path === '/api/workspace' && method === 'GET' && repository.workspace) return json(await repository.workspace.status());
+      if (path === '/api/workspace/check' && method === 'POST' && repository.workspace?.checkRemote) {
+        return json(await repository.workspace.checkRemote());
+      }
       if (path === '/api/workspace/review' && method === 'POST' && repository.workspace) {
         await readUploadBody(request, 1024 * 1024);
         return json(await repository.workspace.createReview());

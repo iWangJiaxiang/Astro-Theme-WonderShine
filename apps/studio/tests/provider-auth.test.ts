@@ -19,7 +19,7 @@ for (const provider of ['github', 'cnb'] as const) {
     assert.equal(grant.verificationUrl, verify);
     const token = await completeDeviceLogin(provider, 'public-id', grant, fetcher, signal(), async ms => { intervals.push(ms); });
     assert.deepEqual(intervals, [5000, 5000, 10000]);
-    const account = await loadAccount(provider, token, fetcher, signal());
+    const account = await loadAccount(provider, token.token, fetcher, signal());
     const result = await listRepositories(account, 1, fetcher, signal());
     assert.equal(result.repositories.length, 1); assert.equal(result.repositories[0].url, `${origin}/writer/blog.git`);
     assert.equal(result.repositories[0].branch, provider === 'github' ? 'main' : '');
@@ -105,7 +105,7 @@ test('CNB pending 400 keeps polling at the prescribed interval; unknown 428 is n
     assert.equal(init?.body, 'client_id=public-id&device_code=device-fixture&grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code');
     return ++requests === 1 ? response({ error: 'authorization_pending' }, 400) : response({ access_token: 'token-fixture', token_type: 'Bearer' });
   }, signal(), async ms => { waits.push(ms); });
-  assert.equal(token, 'token-fixture');
+  assert.equal(token.token, 'token-fixture');
   assert.deepEqual(waits, [5000, 5000]);
   let unexpected = 0;
   await assert.rejects(completeDeviceLogin('cnb', 'public-id', grant, async () => { unexpected++; return response({ error: 'authorization_pending' }, 428); }, signal(), async () => {}), error => error instanceof ProviderAuthError && error.diagnostics === 'stage=token; HTTP=428');

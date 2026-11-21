@@ -1,5 +1,16 @@
 // Application copy only. Site content and stored configuration values are never translated.
 export const english: Record<string, string> = {
+  "引用": "Reference",
+  "界面设置": "Interface settings",
+  "无法打开主站，请检查系统浏览器。": "Could not open the site. Check your default browser.",
+  "分支已同步": "Branch is up to date",
+  "有提交待同步": "Commits ready to sync",
+  "待拉取 {behind} 个提交，待推送 {ahead} 个提交": "{behind} incoming commits, {ahead} outgoing commits",
+  "正在同步分支 {branch}…": "Synchronizing {branch}…",
+  "请先保存编辑并提交工作区更改，再同步 Git。": "Save your edits and commit workspace changes before syncing.",
+  "保存到系统凭据存储": "Saved in your system credential store",
+  "无法访问系统凭据存储，请解锁设备后重试。": "Cannot access saved credentials. Unlock your device and try again.",
+  "仓库授权失败，请重新登录或更新访问令牌": "Repository authorization failed. Sign in again or replace the access token.",
   "当前会话或连接已更换，此设置页已停用。": "The session or connection has changed. This settings page is no longer active.",
   "返回工作台": "Back to dashboard",
   "登录信息已更新，请重新加载设置。": "Your sign-in details changed. Reload settings to continue.",

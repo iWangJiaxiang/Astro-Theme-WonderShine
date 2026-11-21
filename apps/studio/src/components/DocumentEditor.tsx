@@ -1564,7 +1564,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       }),
                     },
                     element(Icon, { name: "image", size: 17 }),
-                    t("插入图片"),
+                    t("图片"),
                   ),
                   element(ChoiceSelect, {
                     compact: true,
@@ -1593,7 +1593,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       choicesLoading.value ||
                       !!choicesError.value,
                     name: "extra.topics",
-                    label: t("关联话题"),
+                    label: t("话题"),
                     onUpdateModelValue: (($event) => {
                       values.value["extra.topics"] = $event;
                     }) satisfies EventHandler<
@@ -1624,7 +1624,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       }),
                     },
                     element(Icon, { name: "sliders", size: 16 }),
-                    t(threadAdvanced.value ? "收起设置" : "更多选项"),
+                    t(threadAdvanced.value ? "收起设置" : "更多"),
                   ),
                 ) : null,
                 element(

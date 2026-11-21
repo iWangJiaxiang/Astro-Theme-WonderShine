@@ -46,12 +46,12 @@ export default function AccountLogin({ onSelect, disabled }: { onSelect: (accoun
       setGrant(device);
       // A visible button retries opening if the OS declines the initial handoff.
       void openUrl(device.verificationUrl).catch(() => {});
-      const token = await completeDeviceLogin(next, clientIds[next], device, providerFetch, request.signal);
+      const credentials = await completeDeviceLogin(next, clientIds[next], device, providerFetch, request.signal);
       if (request.signal.aborted) return;
       setGrant(null);
-      const user = await loadAccount(next, token, providerFetch, request.signal);
+      const user = await loadAccount(next, credentials.token, providerFetch, request.signal);
       if (request.signal.aborted) return;
-      setAccount(user);
+      setAccount({ ...user, ...credentials });
       const result = await listRepositories(user, 1, providerFetch, request.signal);
       if (request.signal.aborted) return;
       setRepos(result.repositories); setMore(result.more); setPage(1);

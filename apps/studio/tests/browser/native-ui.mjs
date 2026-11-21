@@ -37,6 +37,8 @@ let releaseDownload = () => {}, releaseCheckout = () => {};
 let downloadGate = Promise.resolve(), checkoutGate = Promise.resolve();
 let writeGate = Promise.resolve(), releaseWrite = () => {};
 const requests = new Map(), responses = new Map(), fileHandles = new Map();
+const keyring = new Map();
+let openedSite = false;
 let nextResource = 1, worktreeScans = 0, gitInspections = 0;
 try {
   await fs.mkdir(root, { recursive: true }); await fs.mkdir(screenshots, { recursive: true });
@@ -170,7 +172,11 @@ try {
           case 'stat': case 'lstat': value = fileInfo(await fs[operation](path)); break;
           default: throw new Error('Unsupported fixture FS command: ' + command);
         }
-      } else if (allowOAuthHttp && command === 'plugin:opener|open_url') {
+      } else if (command === 'plugin:keyring-store|get_passwords') value = args.accounts.map(key => keyring.get(key) ?? null);
+      else if (command === 'plugin:keyring-store|set_passwords') { for (const { account, secret } of args.entries) keyring.set(account, secret); }
+      else if (command === 'plugin:keyring-store|delete_passwords') { for (const key of args.accounts) keyring.delete(key); }
+      else if (command === 'plugin:opener|open_url' && args.url === 'https://example.com/') openedSite = true;
+      else if (allowOAuthHttp && command === 'plugin:opener|open_url') {
         assert.ok(/^https:\/\/(github.com\/login\/device|cnb.cool\/oauth2\/device)/.test(args.url));
       } else if (allowOAuthHttp && command === 'cnb_account_get') {
         assert.equal(args.token, 'oauth-fixture-token');
@@ -701,12 +707,15 @@ try {
   await heading('今天，写点什么？');
   await page.waitForSelector('.thread-composer textarea');
   assert.equal(await page.$('.native-connect'), null, 'A cold phone launch reopens the last checkout offline');
+  await page.click('.visit-site');
+  await page.waitForFunction(() => !!document.querySelector('.quick-sync button:not(:disabled)'));
+  assert.equal(openedSite, true, 'The site opens through the native URL handler');
   await screenshot('phone-composer', false);
   assert.ok(await page.$eval('.composer-tools .choice-compact .choice-trigger', button => {
     const icon = button.querySelector('svg').getBoundingClientRect();
     const label = button.querySelector('span[id]').getBoundingClientRect();
-    return Math.abs(icon.left + icon.width / 2 - label.left - label.width / 2) < 2;
-  }), 'The mobile tag label is centered beneath its icon');
+    return icon.right <= label.left + 1 && Math.abs(icon.top + icon.height / 2 - label.top - label.height / 2) < 2;
+  }), 'The mobile tag label is aligned to the right of its icon');
   await page.type('.thread-composer textarea', 'Phone publication fixture');
   const inspectionsBeforeReview = gitInspections;
   await page.evaluate(() => {
@@ -750,6 +759,12 @@ try {
   assert.equal(worktreeScans - scansBeforePublish, 1, 'An uninterrupted mobile publish visits unrelated tracked assets only during initial discovery');
   console.log('Mobile publish worktree scans:', worktreeScans - scansBeforePublish);
   await click('完成');
+  const phoneRepo = join(appData, 'workspaces', saved[0].id, 'repo');
+  execFileSync('git', ['-C', phoneRepo, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.org', 'commit', '--allow-empty', '-m', 'Quick sync fixture']);
+  await page.click('.quick-sync button');
+  await page.waitForFunction(() => document.querySelector('.quick-sync-progress')?.textContent.includes('分支已同步'));
+  assert.equal(execFileSync('git', [...remoteArgs, 'log', '-1', '--format=%s', 'release/blog']).toString().trim(), 'Quick sync fixture');
+  await page.waitForSelector('.quick-sync-progress', { hidden: true });
   await click('切换工作区'); await heading('连接创作工作区');
   assert.equal(await page.$('.studio-shell'), null, 'Explicit switching leaves the chooser open');
   await click('添加工作区');

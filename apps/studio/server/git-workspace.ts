@@ -50,6 +50,11 @@ export class GitWorkspaceRepository implements Repository {
         });
         return commitBranchSnapshot({ ...this.gitOptions, author: { name: this.options.name, email: this.options.email } }, key, files);
       }),
+      checkRemote: () => this.run(async () => {
+        await this.fetchRemote();
+        const { ahead, behind } = await this.status();
+        return { ahead, behind };
+      }),
       status: () => this.run(() => this.status()),
       createReview: () => this.run(() => this.createReview()),
       commit: (message, confirmation) => this.run(() => this.commit(message, confirmation)),
@@ -186,14 +191,18 @@ export class GitWorkspaceRepository implements Repository {
     return this.status();
   }
 
+  private async fetchRemote() {
+    try {
+      await git.fetch({ ...this.gitOptions, http: this.http, url: this.options.url, remote: 'origin', ref: this.options.branch, singleBranch: true, onAuth: this.auth });
+    } catch { throw new StudioError(502, '暂时无法连接 Git 远端，本地文件和提交已保留'); }
+  }
+
   private async sync(confirmation?: string): Promise<WorkspaceStatus> {
     await this.mutable();
     await this.assertGitIdle();
     if (confirmation !== undefined) await this.validateReview(confirmation);
     if ((await this.rows()).length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
-    try {
-      await git.fetch({ ...this.gitOptions, http: this.http, url: this.options.url, remote: 'origin', ref: this.options.branch, singleBranch: true, onAuth: this.auth });
-    } catch { throw new StudioError(502, '暂时无法连接 Git 远端，本地文件和提交已保留'); }
+    await this.fetchRemote();
     let status = await this.status();
     if (status.behind && status.remoteHead) {
       const target = status.diverged && status.head

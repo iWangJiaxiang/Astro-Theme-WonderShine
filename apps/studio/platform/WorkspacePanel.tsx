@@ -80,7 +80,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
           const credential = nativeGitCredential.current;
           setAuthFailed(false);
           if (credential && credential.id === session.value?.identity.id && tokenInput.current?.value) {
-            credential.set(tokenInput.current.value.trim());
+            await credential.set(tokenInput.current.value.trim());
             tokenInput.current.value = '';
           }
           syncing = true;
@@ -100,7 +100,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       else if (committed && kind === 'commit-sync') setNotice('已提交到设备，尚未推送。请刷新状态后重新确认同步。');
       const failure = errorMessage(reason);
       setError(failure);
-      setAuthFailed(syncing && typeof failure === 'object' && /\/Auth$/.test(String(failure.params?.gitDetail)));
+      setAuthFailed(syncing && typeof failure === 'object' && (/\/Auth$/.test(String(failure.params?.gitDetail)) || /授权|重新登录/.test(failure.key)));
       setStatus(null);
     }
     finally {
@@ -115,7 +115,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
   const credentialField = canSignIn && (pending === 'sync' || pending === 'publish') &&
     <details className="publish-credential" open={authFailed || !credential.hasToken()}>
       <summary>{t('仓库登录')}</summary>
-      <label className="field">{t('访问令牌')}<input ref={tokenInput} type="password" disabled={busy} autoComplete="off" placeholder={t('仅当前会话')} /></label>
+      <label className="field">{t('访问令牌')}<input ref={tokenInput} type="password" disabled={busy} autoComplete="off" placeholder={t('保存到系统凭据存储')} /></label>
     </details>;
   if (publishPath) {
     const blocked = status?.canSync === false ? 'App 同步需要 HTTPS 远端；本地保存和提交仍可使用'

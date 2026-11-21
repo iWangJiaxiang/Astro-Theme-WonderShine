@@ -25,14 +25,15 @@ function gitError(reason: unknown) {
 }
 
 export function mobileGit(files: WorkspaceFiles, root: string, state: string, profile: WorkspaceProfile,
-  password: () => string, reviews: WorkspaceReviewAdapter) {
+  password: () => string | Promise<string>, reviews: WorkspaceReviewAdapter) {
   const owner = {};
   let handoff: { after: 'review' | 'commit'; paths: string[] } | undefined;
   async function command<T>(action: string, args: Record<string, unknown> = {}, progress?: ProgressCallback): Promise<T> {
     const channel = progress && new Channel<GitProgressEvent>(progress);
+    const secret = action === 'checkRemote' || action === 'publish' || action === 'sync' || action === 'open' && args.clone ? await password() : null;
     try {
       return await invoke<T>('mobile_git', { profile, job: { action, ...args }, progress: channel ?? null,
-        password: action === 'publish' || action === 'sync' || action === 'open' && args.clone ? password() : null });
+        password: secret });
     } catch (reason) { throw gitError(reason); }
   }
   const inspect = (paths?: string[], writable = false) => command<Inspection>('inspect', { paths, writable });
@@ -76,6 +77,7 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
     },
     // FileRepository already holds the workspace lock.
     assertWritable: () => command<void>('guard'),
+    checkRemote: () => run(null, () => command<{ ahead: number; behind: number }>('checkRemote')),
     status: () => run(null, async () => status(await inspect())),
     createReview: () => run('commit', async paths => {
       const current = await inspect(paths, true);

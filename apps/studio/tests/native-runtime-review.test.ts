@@ -32,6 +32,7 @@ const exportsByModule: Record<string, string[]> = {
   './mobile-git': ['mobileGit'],
   './git-http': ['createGitHttp'],
   './git-credential': ['nativeGitCredential'],
+  './git-vault': ['workspaceCredential'],
   './hosting': ['validateProfile', 'validateRemote'],
   './local-workspace': ['inspectLocalRepository'],
   './load-diagnostics': ['createLoadDiagnostics'],
@@ -115,6 +116,7 @@ async function fixture(appData = base + '/', holdState = false) {
     } },
     './git-http': { createGitHttp: () => ({}) },
     './git-credential': { nativeGitCredential: {} },
+    './git-vault': { workspaceCredential: () => ({ password: async () => '', persistInitial: async () => {}, dispose() {} }) },
     './hosting': { validateProfile() {}, validateRemote() {} },
     './local-workspace': { inspectLocalRepository: async () => {
       events.push('local:inspect'); return { branch: 'main', url: 'https://git.example/site.git' };

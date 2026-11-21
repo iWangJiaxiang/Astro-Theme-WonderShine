@@ -188,11 +188,16 @@ pub(super) fn clone_into(
     Ok(())
 }
 
-pub(super) fn sync(repo: &Repository, p: &Profile, state: &Path, password: &str) -> std::result::Result<bool, Value> {
+pub(super) fn fetch_current(repo: &Repository, p: &Profile, state: &Path, password: &str) -> std::result::Result<(), Value> {
     #[cfg(target_os = "android")]
     android_roots(state)?;
     let no_progress = |_: &str, _: usize, _: usize| {};
-    fetch(repo, p, password, &p.branch, &no_progress, CONNECT)?;
+    fetch(repo, p, password, &p.branch, &no_progress, CONNECT)
+}
+
+pub(super) fn sync(repo: &Repository, p: &Profile, state: &Path, password: &str) -> std::result::Result<bool, Value> {
+    let no_progress = |_: &str, _: usize, _: usize| {};
+    fetch_current(repo, p, state, password)?;
     let before = head(repo)?;
     let target = remote_tip(repo, &p.branch)?.ok_or(CONNECT)?;
     let (ahead, behind) = counts(repo, before, Some(target))?;

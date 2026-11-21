@@ -160,7 +160,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
               }),
             },
             props.compact ? element(Icon, { name: "link", size: 16 }) : null,
-            t("引用文章"),
+            t(props.compact ? "引用" : "引用文章"),
             " ",
             !props.compact
               ? element("span", { "aria-hidden": "true" }, "＋")

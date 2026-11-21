@@ -51,7 +51,7 @@ let loggingOut = false;
 let mutationsIdle = Promise.resolve();
 let finishMutations: (() => void) | undefined;
 export async function api<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
-  const mutation = method !== 'GET';
+  const mutation = method !== 'GET' && path !== '/workspace/check';
   const logout = path === '/auth/logout';
   if (loggingOut || (logout && pendingMutations.value > 0)) throw new ApiError('正在保存或生成译文，请稍候。', 409);
   if (logout) loggingOut = true;

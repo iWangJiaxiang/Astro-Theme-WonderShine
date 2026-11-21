@@ -11,6 +11,8 @@ import { t, type Message } from '../src/i18n';
 import { errorMessage } from '../src/api';
 import { useSignals } from '../src/reactivity';
 import './native.css';
+import { forgetGitGrant } from './git-vault';
+import type { GitGrant } from './provider-auth';
 import AccountLogin from './AccountLogin';
 import { matchWorkspace, readWorkspaces, writeWorkspaces, serviceAddress, type SavedWorkspace, type ServiceWorkspace } from './workspace-registry';
 function savedProfiles(): { records: SavedWorkspace[]; error: string } {
@@ -66,9 +68,10 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
     try { persist(records.map(record => record.id === item.id ? { ...record, archived: true } : record)); setToken(''); setShowForm(false); }
     catch (reason) { setError((reason as Error).message); }
   }
-  function deleteRecord(item: SavedWorkspace) {
+  async function deleteRecord(item: SavedWorkspace) {
     if (!confirm(t('删除「{name}」的连接记录？文件、草稿和本地提交会保留在设备上，重新添加时可能无法找回原草稿。', { name: item.label }))) return;
     try {
+      if (item.source !== 'service' && item.url.startsWith('https://')) await forgetGitGrant(item);
       const next = records.filter(record => record.id !== item.id);
       persist(next);
       if (profile.id === item.id || service?.id === item.id || !next.length) {
@@ -80,7 +83,9 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
   const [profile, setProfile] = useState<WorkspaceProfile>(() => (folderAvailable ? profiles[0] : profiles.find(item => item.source !== 'local')) || blank());
   const [connection, setConnection] = useState<Connection>(() => folderAvailable && (profiles[0]?.source === 'local' || !profiles.length) ? 'local' : 'clone');
   const [address, setAddress] = useState('');
-  const [token, setToken] = useState('');
+  const [token, updateToken] = useState('');
+  const login = useRef<{ grant: GitGrant; url: string; provider: string; username: string } | null>(null);
+  function setToken(value: string) { login.current = null; updateToken(value); }
   const [busy, setBusy] = useState(false), [error, setError] = useState<Message>('');
   const [progress, setProgress] = useState<GitProgressEvent | null>(null);
   const progressLabel = progress ? progressLabels[progress.phase] || '下载仓库' : '正在连接仓库';
@@ -112,7 +117,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
       if (match?.archived) throw new Error('此工作区已归档，请先从已归档工作区恢复记录。');
       if (match && match.id !== item.id) {
         if (match.source !== 'service' && item.source !== 'service') {
-          item = { ...match, username: item.username || match.username,
+          item = { ...match, provider: item.provider, username: item.username || match.username,
             authorName: item.authorName || match.authorName, authorEmail: item.authorEmail || match.authorEmail };
         } else item = match;
       }
@@ -125,7 +130,9 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
           item = { ...item, authorName: 'WonderShine Studio', authorEmail: 'studio@localhost' };
         }
         const { connectNativeWorkspace } = await import('./native-runtime');
-        dispose = await connectNativeWorkspace(item, credential, onDisconnect, progress => { if (mounted.current) setProgress(progress); }, undefined, !resume);
+        const selected = login.current;
+        const grant = selected && selected.url === item.url && selected.provider === item.provider && selected.username === item.username && selected.grant.token === credential ? selected.grant : undefined;
+        dispose = await connectNativeWorkspace(item, credential, onDisconnect, progress => { if (mounted.current) setProgress(progress); }, undefined, !resume, grant);
       }
       if (!mounted.current) { dispose(); return; }
       try { if (!resume) persist([item, ...records.filter(record => record.id !== item.id)]); }
@@ -186,7 +193,10 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
     {showForm && <>
     {connection === 'clone' && <AccountLogin disabled={busy} onSelect={(account, repository) => {
       setProfile({ ...blank(), provider: account.provider, url: repository.url, branch: repository.branch, label: repository.name, username: account.username, authorName: account.name, authorEmail: account.email });
-      setToken(account.token); setError('');
+      setToken(account.token);
+      const { token, refreshToken, expiresAt, refreshExpiresAt, clientId } = account;
+      login.current = { grant: { token, refreshToken, expiresAt, refreshExpiresAt, clientId }, url: repository.url, provider: account.provider, username: account.username };
+      setError('');
     }} />}
     <form onSubmit={connect}><fieldset disabled={busy} className="connection-form-fields">
       {connection === 'remote' ? <label className="field"><span>{t('创作中心地址')}</span><input type="url" required placeholder="https://studio.example.com" value={address} readOnly={!!service} onChange={event => setAddress(event.target.value)} /></label> : <>
@@ -199,7 +209,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
         {(!local || profile.localPath) && <details className="connection-options"><summary>{t('连接与提交设置')}</summary><div className="connection-option-fields">
           <div className="connection-fields"><label className="field"><span>{t('工作区名称')}</span><input value={profile.label} onChange={e => field('label', e.target.value)} /></label><label className="field"><span>{t('分支')}</span><input required={existing || local} placeholder={t('自动识别默认分支')} readOnly={existing || local} value={profile.branch} onChange={e => field('branch', e.target.value)} /></label></div>
           {!local && <label className="field"><span>{t('Git 服务')}</span><select value={profile.provider} onChange={e => field('provider', e.target.value as HostingKind)}>{hostingProviders.map(item => <option key={item.id} value={item.id}>{t(item.label)}</option>)}</select></label>}
-          <div className="connection-fields"><label className="field"><span>{t('Git 用户名')}</span><input autoComplete="username" value={profile.username} onChange={e => field('username', e.target.value)} /></label><label className="field"><span>{t('访问令牌')}</span><input type="password" autoComplete="off" placeholder={t('仅当前会话')} value={token} onChange={e => setToken(e.target.value)} /></label></div>
+          <div className="connection-fields"><label className="field"><span>{t('Git 用户名')}</span><input autoComplete="username" value={profile.username} onChange={e => field('username', e.target.value)} /></label><label className="field"><span>{t('访问令牌')}</span><input type="password" autoComplete="off" placeholder={t('保存到系统凭据存储')} value={token} onChange={e => setToken(e.target.value)} /></label></div>
           <div className="connection-fields"><label className="field"><span>{t('提交者名称')}</span><input value={profile.authorName} onChange={e => field('authorName', e.target.value)} /></label><label className="field"><span>{t('提交者邮箱')}</span><input type="email" value={profile.authorEmail} onChange={e => field('authorEmail', e.target.value)} /></label></div>
         </div></details>}
       </>}

@@ -82,8 +82,8 @@ try {
  await capture('new-article-editor',{expand:true});
  await click('动态');await page.waitForSelector('.thread-composer textarea');await capture('threads',{expand:true});
  await page.click('.thread-composer button[name="extra.topics"]');await page.waitForSelector('dialog[open]');await capture('select-topics');await page.type('dialog[open] input[type=search]', '新话题');await capture('create-topic-inline');await closeDialog();
- await click('引用文章');await page.waitForSelector('dialog[open]');await capture('reference-internal');await click('外部文章');await capture('reference-external');await closeDialog();
- await click('更多选项');
+ await click('引用');await page.waitForSelector('dialog[open]');await capture('reference-internal');await click('外部文章');await capture('reference-external');await closeDialog();
+ await page.click('.composer-tools > button[aria-expanded]');
  await page.waitForSelector('.thread-properties-heading', {visible:true});await capture('thread-publishing');
  await page.click('.thread-composer .thread-date-trigger');await page.waitForSelector('.publication-date-dialog[open]');await capture('publication-date');await closeDialog();
  await click('详情');await page.waitForSelector('.thread-detail-page');await capture('thread-detail');await click('编辑动态');await page.waitForSelector('.thread-editor');await capture('thread-editor',{expand:true});

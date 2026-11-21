@@ -8,6 +8,9 @@
   "permissions": [
     "core:default",
     "dialog:allow-open",
+    "keyring-store:allow-get-passwords",
+    "keyring-store:allow-set-passwords",
+    "keyring-store:allow-delete-passwords",
     "fs:allow-read-file",
     "fs:allow-write-file",
     "fs:allow-open",
@@ -54,21 +57,8 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        {
-          "url": "https://github.com/*/*/releases/tag/studio-v*"
-        },
-        {
-          "url": "https://apps.apple.com/*"
-        },
-        {
-          "url": "https://testflight.apple.com/*"
-        },
-        {
-          "url": "https://github.com/login/device*"
-        },
-        {
-          "url": "https://cnb.cool/*"
-        }
+        { "url": "https://*" },
+        { "url": "http://*" }
       ]
     }
   ]

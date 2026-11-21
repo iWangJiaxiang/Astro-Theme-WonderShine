@@ -13,6 +13,8 @@ import { setMediaResolver } from '../shared/media';
 import { setApiTransport } from '../src/api';
 import { tauriFiles } from './tauri-filesystem';
 import { FileRepository } from './file-repository';
+import { workspaceCredential } from './git-vault';
+import type { GitGrant } from './provider-auth';
 import { nativeGitCredential } from './git-credential';
 import { createGitHttp } from './git-http';
 import { validateProfile, validateRemote, type WorkspaceProfile } from './hosting';
@@ -20,7 +22,7 @@ import { createLoadDiagnostics } from './load-diagnostics';
 import { nativeReviewSource, openNativeWorkspaceReviews } from './review-store';
 import { ensureDirectory } from './filesystem';
 
-export async function connectNativeWorkspace(profile: WorkspaceProfile, token: string, onDisconnect: () => void, onProgress?: ProgressCallback, summaryStore?: SummaryIndexStore, allowClone = true): Promise<() => void> {
+export async function connectNativeWorkspace(profile: WorkspaceProfile, token: string, onDisconnect: () => void, onProgress?: ProgressCallback, summaryStore?: SummaryIndexStore, allowClone = true, grant?: GitGrant): Promise<() => void> {
   validateProfile(profile, { allowAutomaticBranch: true });
   const base = (await appDataDir()).replace(/\\/g, '/').replace(/\/$/, '');
   const files = tauriFiles(base, profile.source === 'local' ? [profile.localPath!] : []);
@@ -46,10 +48,11 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
   await ensureDirectory(files, state);
   const reviewStore = await openNativeWorkspaceReviews(state, base);
   const reviews = { store: reviewStore, source: nativeReviewSource(root) };
+  const credential = workspaceCredential(profile, grant || (token ? { token } : undefined));
   const git = typeof document !== 'undefined' && document.documentElement.dataset.nativeMobile
-    ? (await import('./mobile-git')).mobileGit(files, root, state, profile, () => token, reviews)
+    ? (await import('./mobile-git')).mobileGit(files, root, state, profile, credential.password, reviews)
     : new (await import('./git-engine')).NativeGitEngine(files, root, state, profile, http,
-      () => ({ username: profile.username || 'oauth2', password: token }), reviews);
+      async () => ({ username: profile.username || 'oauth2', password: await credential.password() }), reviews);
   const diagnostics = createLoadDiagnostics(localStorage);
   const progress = diagnostics.progress(onProgress);
   try { await diagnostics.measure('git-open', () => git.open(progress.onProgress, allowClone)); }
@@ -65,10 +68,10 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
   }
   const runtime = createSummaryRuntime(repository, { scope: summaryScope, store: summaryStore });
   const ai = new NativeAiController(runtime.repository, (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }), localStorage, profile.id);
-  const credential = { id: profile.id, hasToken: () => !!token, set: (value: string) => { token = value; } };
+  if (httpsRemote && token) await credential.persistInitial();
   if (httpsRemote) nativeGitCredential.current = credential;
   let disposed = false;
-  const dispose = () => { if (disposed) return; disposed = true; diagnostics.dispose(); ai.dispose(); runtime.dispose(); token = ''; if (nativeGitCredential.current === credential) delete nativeGitCredential.current; setMediaResolver(); setApiTransport(); };
+  const dispose = () => { if (disposed) return; disposed = true; diagnostics.dispose(); ai.dispose(); runtime.dispose(); credential.dispose(); if (nativeGitCredential.current === credential) delete nativeGitCredential.current; setMediaResolver(); setApiTransport(); };
   const transport = createContentTransport(repository, { runtime, ai, themeFetch: (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }), aiUsesObservedRepository: true, identity: { id: profile.id, name: profile.authorName || profile.label }, onLogout: () => {
     dispose(); onDisconnect();
   } });

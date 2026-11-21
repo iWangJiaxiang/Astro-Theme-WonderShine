@@ -23,6 +23,7 @@ export interface WorkspaceStatus {
 export interface WorkspaceControl {
   publish?(message: string, confirmation: string): Promise<void>;
   saveBranch?(key: string, files: BranchFile[]): Promise<BranchSave>;
+  checkRemote?(): Promise<Pick<WorkspaceStatus, 'ahead' | 'behind'>>;
   status(): Promise<WorkspaceStatus>;
   /** Explicit user review; captures exact managed bytes under the workspace lock. */
   createReview(): Promise<WorkspaceStatus>;

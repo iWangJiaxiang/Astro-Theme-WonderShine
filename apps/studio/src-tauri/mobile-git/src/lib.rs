@@ -41,6 +41,7 @@ pub enum Job {
         clone: bool,
     },
     Guard,
+    CheckRemote,
     Inspect {
         paths: Option<Vec<String>>,
         writable: bool,
@@ -391,6 +392,11 @@ pub fn execute(
     }
     match job {
         Job::Open { .. } => Ok(json!(branch)),
+        Job::CheckRemote => {
+            network::fetch_current(&repo, p, &state, password)?;
+            let (ahead, behind) = counts(&repo, head(&repo)?, remote_tip(&repo, branch)?)?;
+            Ok(json!({"ahead": ahead, "behind": behind}))
+        }
         Job::Guard => Ok(Value::Null),
         Job::Inspect { paths, .. } => Ok(inspect(&repo, branch, paths.as_deref())?),
         Job::Commit {

@@ -1,3 +1,4 @@
+import { QuickSync } from "./components/QuickSync";
 import { ErrorDetails, ErrorNotice } from "./components/ErrorNotice";
 import { LegacyRecovery } from "../platform/LegacyRecovery";
 import { configureSaving } from "./save-preferences";
@@ -59,6 +60,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       appearance: Record<string, Json>;
       mode: string;
       workspace?: boolean;
+      quickSync?: boolean;
       saveScope: string;
       saveCapabilities: SaveCapabilities;
       nativeAi?: boolean;
@@ -125,7 +127,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         if (reauthentication.value || !mobileNavigation.value || !menuOpen.value) return;
         if (event.key === 'Escape') { event.preventDefault(); menuOpen.value = false; }
         if (event.key !== 'Tab') return;
-        const items = [...window.document.querySelectorAll<HTMLElement>('.sidebar button:not(:disabled), .sidebar a[href], .sidebar summary')].filter(node => node.getClientRects().length);
+        const items = [...window.document.querySelectorAll<HTMLElement>('.sidebar button:not(:disabled), .sidebar a[href], .sidebar summary, .sidebar select')].filter(node => node.getClientRects().length);
         const first = items[0], last = items.at(-1);
         if (event.shiftKey && window.document.activeElement === first) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && window.document.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -202,7 +204,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
     const siteUrl = computed(() => {
       try {
         const url = new URL(String(data.value?.site.base_url));
-        return ["https:", "http:"].includes(url.protocol) ? url.href : null;
+        return ["https:", "http:"].includes(url.protocol) && !url.username && !url.password ? url.href : null;
       } catch {
         return null;
       }
@@ -239,6 +241,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
           scheme === "dark" ||
           (scheme === "system" &&
             matchMedia("(prefers-color-scheme: dark)").matches);
+        try { const saved = localStorage.getItem("studio-theme"); if (saved) dark.value = saved === "dark"; } catch {}
         applyTheme();
       } catch (e) {
         if (isCurrent()) error.value = errorMessage(e);
@@ -648,6 +651,14 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                         ),
                       ),
                     ),
+                    <details className="studio-preferences"><summary>{t("界面设置")}</summary>
+                      <LanguageSwitcher />
+                      <button className="theme-switch" aria-pressed={dark.value} onClick={() => {
+                        dark.value = !dark.value;
+                        try { localStorage.setItem("studio-theme", dark.value ? "dark" : "light"); } catch {}
+                      }}><Icon name={dark.value ? "sun" : "moon"} />{t("切换明暗模式")}</button>
+                      {props.workspaceSwitcher && <button disabled={pendingMutations.value > 0} onClick={() => void logout()}><Icon name="switchWorkspace" />{t("切换工作区")}</button>}
+                    </details>,
                   ),
                   element(LegacyRecovery, null),
                   element(
@@ -725,13 +736,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                     element(
                       "div",
                       { className: classes("row topbar-actions") },
-                      props.workspaceSwitcher ? element("button", {
-                        className: classes("workspace-switch"),
-                        title: t("切换工作区"),
-                        onClick: domEvent(() => { void logout(); }),
-                        disabled: pendingMutations.value > 0,
-                      }, element(Icon, { name: "switchWorkspace" }), element("span", null, t("切换工作区"))) : null,
-                      element(LanguageSwitcher, null),
+                      data.value?.quickSync ? <QuickSync key={session.value.identity.id} editing={() => dirty.value || !!editorView.value?.isBusy?.()} onManage={() => navigate("workspace")} /> : null,
                       data.value
                         ? element(
                             "span",
@@ -744,22 +749,18 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                               : t("本地站点"),
                           )
                         : null,
-                      element(
-                        "button",
-                        {
-                          "aria-label": t("切换明暗模式"),
-                          className: classes("icon-button"),
-                          onClick: domEvent(($event: Event) => {
-                            dark.value = !dark.value;
-                          }),
-                        },
-                        element(Icon, { name: dark.value ? "sun" : "moon" }),
-                      ),
                       siteUrl.value
                         ? element(
                             "a",
                             {
                               href: siteUrl.value,
+                              "aria-label": t("访问主站 ↗"),
+                              onClick: domEvent((event: Event) => {
+                                if (!("__TAURI_INTERNALS__" in window) || !siteUrl.value) return;
+                                event.preventDefault();
+                                const url = siteUrl.value;
+                                void import("@tauri-apps/plugin-opener").then(opener => opener.openUrl(url)).catch(() => { error.value = "无法打开主站，请检查系统浏览器。"; });
+                              }),
                               target: "_blank",
                               rel: "noopener noreferrer",
                               className: classes("visit-site"),

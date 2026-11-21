@@ -19,11 +19,17 @@ function managed(path: string): boolean {
   try { validateMediaPath(path); return true; } catch { return false; }
 }
 
+function checkAuthError(error: unknown) {
+  if (error instanceof StudioError) throw error;
+  const status = (error as { data?: { statusCode?: number } })?.data?.statusCode;
+  if (status === 401 || status === 403) throw new StudioError(403, '仓库授权失败，请重新登录或更新访问令牌');
+}
+
 /** Persistent Git operations with injected filesystem/network; no embedded Node runtime. */
 export class NativeGitEngine implements WorkspaceControl {
   constructor(private files: WorkspaceFiles, private root: string, private stateRoot: string,
     private profile: WorkspaceProfile, private http: HttpClient,
-    private credentials: () => { username: string; password: string },
+    private credentials: () => { username: string; password: string } | Promise<{ username: string; password: string }>,
     private reviews?: WorkspaceReviewAdapter) {
     validateProfile(profile, { allowAutomaticBranch: true });
     if (!root || root === '/' || root.endsWith('/') || root.split('/').some(part => part === '.' || part === '..')
@@ -82,7 +88,8 @@ export class NativeGitEngine implements WorkspaceControl {
         // Keep partial downloads outside the selected workspace until clone fully succeeds.
         await this.files.rename(staging, this.root);
         this.profile.branch = detectedBranch!;
-      } catch {
+      } catch (error) {
+        checkAuthError(error);
         throw new StudioError(502, '首次下载 Git 工作区失败，请检查连接；已有文件未被替换');
       } finally { await this.removeTree(staging); }
     }
@@ -220,16 +227,29 @@ export class NativeGitEngine implements WorkspaceControl {
     await git.commit({ ...this.options, message: message.trim(), author: { name: this.profile.authorName, email: this.profile.authorEmail } });
   }
 
+  private async fetchRemote() {
+    validateRemote(this.profile.url);
+    try {
+      await git.fetch({ ...this.options, http: this.http, url: this.profile.url, remote: 'origin', ref: this.profile.branch,
+        singleBranch: true, onAuth: this.credentials });
+    } catch (error) { checkAuthError(error); throw new StudioError(502, '暂时无法连接 Git 远端，本地文件和提交已保留'); }
+  }
+  checkRemote() {
+    return withWorkspaceLock(this.root, async () => {
+      await this.openUnlocked();
+      await this.fetchRemote();
+      const { ahead, behind } = await this.branchStatus({});
+      return { ahead, behind };
+    });
+  }
+
   sync(confirmation?: string): Promise<WorkspaceStatus> {
     return withWorkspaceLock(this.root, async () => {
       await this.openUnlocked(); await this.assertWritable();
       try { validateRemote(this.profile.url); } catch { throw new StudioError(400, 'App 同步需要 HTTPS 远端；本地保存和提交仍可使用'); }
       const rows = await this.checkedRows(confirmation);
       if (rows.length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
-      try {
-        await git.fetch({ ...this.options, http: this.http, url: this.profile.url, remote: 'origin', ref: this.profile.branch,
-          singleBranch: true, onAuth: this.credentials });
-      } catch { throw new StudioError(502, '暂时无法连接 Git 远端，本地文件和提交已保留'); }
+      await this.fetchRemote();
       const status = await this.branchStatus({});
       if (status.behind && status.remoteHead) {
         const target = status.diverged && status.head
@@ -247,7 +267,7 @@ export class NativeGitEngine implements WorkspaceControl {
           const pushed = await git.push({ ...this.options, http: this.http, url: this.profile.url, remote: 'origin', ref: this.profile.branch,
             force: false, onAuth: this.credentials });
           if (!pushed.ok) throw new Error('Push rejected');
-        } catch { throw new StudioError(409, 'Git 推送未确认，请重试同步以核对远端；本地提交已保留'); }
+        } catch (error) { checkAuthError(error); throw new StudioError(409, 'Git 推送未确认，请重试同步以核对远端；本地提交已保留'); }
       }
       await this.files.writeFile(this.stateRoot + '/last-sync', new Date().toISOString());
       // Fetch/push change refs only. Reinspect files after a checkout or in an externally editable folder.

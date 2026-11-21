@@ -2,7 +2,8 @@
 export type AccountProvider = 'github' | 'cnb';
 export type ProviderFetch = (url: string, init?: RequestInit) => Promise<Response>;
 export interface DeviceGrant { deviceCode: string; userCode: string; verificationUrl: string; interval: number; expiresAt: number }
-export interface ProviderAccount { provider: AccountProvider; token: string; username: string; name: string; email: string }
+export interface GitGrant { token: string; refreshToken?: string; expiresAt?: number; refreshExpiresAt?: number; clientId?: string }
+export interface ProviderAccount extends GitGrant { provider: AccountProvider; token: string; username: string; name: string; email: string }
 export interface AccountRepository { id: string; name: string; url: string; branch: string; private: boolean }
 const providers = {
   github: { origin: 'https://github.com', api: 'https://api.github.com', device: '/login/device/code', token: '/login/oauth/access_token' },
@@ -100,7 +101,7 @@ export function delay(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 export async function completeDeviceLogin(provider: AccountProvider, clientId: string, grant: DeviceGrant, fetcher: ProviderFetch, signal: AbortSignal,
-  wait: typeof delay = delay): Promise<string> {
+  wait: typeof delay = delay): Promise<GitGrant> {
   let interval = grant.interval;
   const config = providers[provider];
   while (Date.now() < grant.expiresAt) {
@@ -112,7 +113,7 @@ export async function completeDeviceLogin(provider: AccountProvider, clientId: s
     const data = object(result.data, result.failure('平台返回了无效响应'));
     if (result.ok && text(data.access_token)) {
       if (text(data.token_type).toLowerCase() !== 'bearer') throw result.failure('平台返回了无效响应');
-      return text(data.access_token);
+      return readGrant(data, clientId);
     }
     switch (data.error) {
       case 'authorization_pending': break;
@@ -124,6 +125,24 @@ export async function completeDeviceLogin(provider: AccountProvider, clientId: s
   }
   signal.throwIfAborted();
   throw new ProviderAuthError('token', undefined, '授权已过期，请重新登录');
+}
+function readGrant(data: Record<string, unknown>, clientId: string): GitGrant {
+  const expires = (seconds: unknown) => seconds != null && Number.isFinite(Number(seconds)) ? Date.now() + Number(seconds) * 1000 : undefined;
+  return { token: text(data.access_token), clientId, refreshToken: text(data.refresh_token) || undefined,
+    expiresAt: expires(data.expires_in), refreshExpiresAt: expires(data.refresh_token_expires_in) };
+}
+export async function renewGitGrant(provider: AccountProvider, grant: GitGrant, fetcher: ProviderFetch, signal: AbortSignal): Promise<GitGrant> {
+  const expired = '授权已过期，请重新登录';
+  if (!grant.refreshToken || !grant.clientId || (grant.refreshExpiresAt != null && grant.refreshExpiresAt <= Date.now())) throw new Error(expired);
+  const config = providers[provider];
+  const result = await json(fetcher, config.origin + config.token, {
+    method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: grant.clientId, refresh_token: grant.refreshToken, grant_type: 'refresh_token' }).toString(),
+  }, signal, 'token');
+  const data = object(result.data);
+  if (!result.ok || !text(data.access_token) || text(data.token_type).toLowerCase() !== 'bearer') throw new Error(expired);
+  const next = readGrant(data, grant.clientId);
+  return { ...next, refreshToken: next.refreshToken || grant.refreshToken, refreshExpiresAt: next.refreshExpiresAt ?? grant.refreshExpiresAt };
 }
 async function api(provider: AccountProvider, token: string, pathname: string, fetcher: ProviderFetch, signal: AbortSignal, stage: 'account' | 'repos') {
   return json(fetcher, providers[provider].api + pathname, { headers: {

@@ -105,7 +105,7 @@ async function checkBreakpointFocus(page) {
 
 async function checkWorkspaceLayout(page, screenshots) {
   const sizes = [[320, 568], [390, 844], [768, 1024], [844, 390], [1024, 768], [1440, 900], [1920, 1080]];
-  await page.select('.topbar select', 'en');
+  await page.select('.studio-preferences select', 'en');
   try {
     for (const [width, height] of sizes) {
       await page.setViewport({ width, height });
@@ -140,7 +140,7 @@ async function checkWorkspaceLayout(page, screenshots) {
       await page.screenshot({ path: `${screenshots}/workspace-${width}x${height}-en.png` });
     }
   } finally {
-    await page.select('.topbar select', 'zh-CN');
+    await page.select('.studio-preferences select', 'zh-CN');
   }
 }
 
@@ -222,7 +222,12 @@ async function checkTouchNavigation(page, screenshots) {
     await waitForDrawer(phone, false);
     assert.equal(await phone.$eval('.mobile-menu', node => node.getAttribute('aria-current')), 'true');
     await phone.tap(tab('article'));
-    await phone.tap('.topbar .icon-button');
+    await phone.tap('.mobile-menu');
+    await waitForDrawer(phone, true);
+    if (!await phone.$eval('.studio-preferences', el => el.open)) await phone.tap('.studio-preferences summary');
+    await phone.tap('.theme-switch');
+    await phone.tap('.navigation-close');
+    await waitForDrawer(phone, false);
     await phone.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
     await phone.screenshot({ path: `${screenshots}/phone-navigation-dark.png` });
     await phone.setViewport({ width: 844, height: 390, isMobile: true, hasTouch: true, isLandscape: true });
@@ -235,8 +240,13 @@ async function checkTouchNavigation(page, screenshots) {
     await phone.tap(tab('article'));
     await active('article');
     await phone.screenshot({ path: `${screenshots}/phone-navigation-landscape.png` });
-    await phone.tap('.topbar .icon-button');
-    await phone.select('.topbar select', 'zh-CN');
+    await phone.tap('.mobile-menu');
+    await waitForDrawer(phone, true);
+    if (!await phone.$eval('.studio-preferences', el => el.open)) await phone.tap('.studio-preferences summary');
+    await phone.tap('.theme-switch');
+    await phone.tap('.navigation-close');
+    await waitForDrawer(phone, false);
+    await phone.select('.studio-preferences select', 'zh-CN');
     await phone.tap('.mobile-menu');
     await waitForDrawer(phone, true);
     await phone.$eval('.sidebar nav[aria-label="站点设置"]', nav => [...nav.querySelectorAll('button')].find(button => button.textContent.trim() === '站点信息').click());
@@ -249,11 +259,11 @@ async function checkTouchNavigation(page, screenshots) {
       await phone.waitForFunction(() => scrollY > 24);
       const pinned = await phone.evaluate(() => {
         const header = document.querySelector('.topbar').getBoundingClientRect();
-        const theme = document.querySelector('.topbar .icon-button').getBoundingClientRect();
+        const theme = document.querySelector('.topbar .visit-site').getBoundingClientRect();
         const bar = document.querySelector('.mobile-tabbar').getBoundingClientRect();
         return {
           top: header.top, height: header.height,
-          canTap: !!document.elementFromPoint(theme.x + theme.width / 2, theme.y + theme.height / 2)?.closest('.topbar .icon-button'),
+          canTap: !!document.elementFromPoint(theme.x + theme.width / 2, theme.y + theme.height / 2)?.closest('.topbar .visit-site'),
           actionsTop: document.querySelector('.settings-page > .page-heading').getBoundingClientRect().top,
           bottom: bar.height ? bar.bottom : null,
         };

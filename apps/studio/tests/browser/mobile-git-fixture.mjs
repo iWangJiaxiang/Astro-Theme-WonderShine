@@ -88,6 +88,9 @@ export async function mobileGitFixture(base, appData, studio) {
     run(peer,'pull','--ff-only','origin',profile.branch);
     await advancePeer('Manual edit between publications', 'README.md');
     const manualTip = remoteHead();
+    assert.deepEqual(await invoke({ profile: { ...profile, username: 'oauth2' }, password: token, job: { action: 'checkRemote' } }), { ahead: 0, behind: 1 });
+    assert.equal(local(), firstTip);
+    assert.equal(remoteHead(), manualTip);
     const second = await publishThread('second-thread');
     assert.equal(remoteHead(), local());
     assert.equal(run(remote, 'rev-parse', profile.branch + '^1^1'), firstTip);
