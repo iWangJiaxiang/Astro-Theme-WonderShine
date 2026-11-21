@@ -100,6 +100,9 @@ pub fn native_review_owner(
 #[cfg(test)]
 mod tests {
     use super::*;
+    // A concurrently spawned child can retain another test's flock FD until exec.
+    // Isolate fixtures, but keep each fixture's threads and process probes intact.
+    static PROCESS_TEST_GATE: Mutex<()> = Mutex::new(());
     fn directory() -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!("studio-owner-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         fs::create_dir(&path).unwrap(); path
@@ -119,6 +122,7 @@ mod tests {
     }
     #[test]
     fn recovery_once_and_reload_requires_process_restart() {
+        let _isolation = PROCESS_TEST_GATE.lock().unwrap();
         let base = directory();
         let mut owner = Owner::default();
         assert_eq!(owner.authorize(&base, ID, EPOCH, true), Ok(true));
@@ -136,11 +140,13 @@ mod tests {
     }
     #[test]
     fn child_owner_probe() {
+        let _isolation = PROCESS_TEST_GATE.lock().unwrap();
         let Ok(base) = std::env::var("STUDIO_OWNER_TEST_PATH") else { return; };
         assert!(acquire(Path::new(&base)).is_ok() == (std::env::var("STUDIO_OWNER_TEST_FREE").unwrap() == "yes"));
     }
     #[test]
     fn invalid_request_never_acquires_or_creates_files() {
+        let _isolation = PROCESS_TEST_GATE.lock().unwrap();
         let base = directory();
         let mut owner = Owner::default();
         assert_eq!(owner.authorize(&base, "../state", EPOCH, true), Err(INVALID));
@@ -151,6 +157,7 @@ mod tests {
     }
     #[test]
     fn concurrent_claims_grant_recovery_once() {
+        let _isolation = PROCESS_TEST_GATE.lock().unwrap();
         let base = directory();
         let owner = std::sync::Arc::new(ReviewOwnership::default());
         let handles: Vec<_> = (0..8).map(|_| {
@@ -167,6 +174,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn symlink_owner_file_is_rejected() {
+        let _isolation = PROCESS_TEST_GATE.lock().unwrap();
         let base = directory();
         let lock = acquire(&base).unwrap();
         drop(lock);
@@ -178,6 +186,7 @@ mod tests {
     }
     #[test]
     fn child_owner_until_process_exit() {
+        let _isolation = PROCESS_TEST_GATE.lock().unwrap();
         use std::io::{Read, Write};
         let Ok(base) = std::env::var("STUDIO_OWNER_EXIT_TEST_PATH") else { return; };
         let _held = acquire(Path::new(&base)).unwrap();
@@ -192,6 +201,7 @@ mod tests {
     fn actual_process_exit_allows_fresh_owner_and_recovery() {
         use std::io::{BufRead, BufReader, Write};
         use std::process::{Command, Stdio};
+        let _isolation = PROCESS_TEST_GATE.lock().unwrap();
         let base = directory();
         let mut child = Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "native_review::tests::child_owner_until_process_exit", "--nocapture"])
@@ -214,6 +224,7 @@ mod tests {
     }
     #[test]
     fn process_handoff_releases_os_lock() {
+        let _isolation = PROCESS_TEST_GATE.lock().unwrap();
         let base = directory();
         let held = acquire(&base).unwrap();
         let probe = |free: &str| std::process::Command::new(std::env::current_exe().unwrap())

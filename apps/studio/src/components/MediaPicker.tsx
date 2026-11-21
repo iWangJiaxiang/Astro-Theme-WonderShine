@@ -1,5 +1,5 @@
 import type { MediaItem, MediaMode } from "../../shared/media";
-import { reauthentication } from "../api";
+import { createBusinessModal } from "../modal-layer";
 import { t } from "../i18n";
 import {
   mediaError,
@@ -39,13 +39,16 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
       }>();
     const id = useId();
     let previousFocus: HTMLElement | null = null;
+    let wantsOpen = true;
+    const modal = createBusinessModal(() => dialog.value, () => wantsOpen);
     onMounted(() => {
       previousFocus = document.activeElement as HTMLElement;
-      dialog.value?.showModal();
+      modal.open();
     });
-    function close(force = false) {
-      if (mediaUploading.value && !force) return;
-      dialog.value?.close();
+    function close() {
+      if (mediaUploading.value) return;
+      wantsOpen = false;
+      modal.close();
       emit("close");
     }
     function confirm() {
@@ -68,11 +71,9 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
       )
         pending.value = undefined;
     });
-    watch(reauthentication, (value) => {
-      if (value) close(true);
-    });
     onBeforeUnmount(() => {
-      dialog.value?.close();
+      wantsOpen = false;
+      modal.dispose();
       if (previousFocus?.isConnected) previousFocus.focus();
     });
     return () =>
@@ -87,6 +88,7 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
               "aria-labelledby": id,
               className: classes("media-dialog"),
               onCancel: domEvent(($event: Event) => {
+                if ($event.target !== dialog.value) return;
                 $event.preventDefault();
                 close();
               }),
@@ -120,7 +122,8 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
                 element(MediaBrowser, {
                   mode: props.mode,
                   documentPath: props.documentPath,
-                  selected: pending.value?.item.path || props.selected,
+                  selected: pending.value?.item.path || "",
+                  current: props.selected,
                   svgOnly: props.svgOnly,
                   onSelect: ((item, value) =>
                     (pending.value = { item, value })) satisfies EventHandler<
@@ -137,7 +140,9 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
                   { className: classes("muted media-pending") },
                   pending.value
                     ? t("将填写：{p0}", { p0: pending.value.value })
-                    : t("选中图片后确认，取消不会修改表单"),
+                    : props.selected
+                      ? t("尚未更改；选择图片后确认")
+                      : t("选中图片后确认，取消不会修改表单"),
                 ),
                 element(
                   "button",

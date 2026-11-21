@@ -8,6 +8,7 @@ import {
   type MediaItem,
   type MediaMode,
 } from "../../shared/media";
+import { session } from "../api";
 import { t } from "../i18n";
 import {
   loadMedia,
@@ -22,22 +23,24 @@ import {
   classes,
   component,
   domEvent,
+  domRef,
   element,
   renderList,
   type EventHandler,
   type StudioComponent,
 } from "../react-component";
-import { computed, onMounted, ref, watch } from "../reactivity";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "../reactivity";
 import Icon from "./Icon";
 import LoadingState from "./LoadingState";
 import MediaDirectoryNode from "./MediaDirectoryNode";
-import MediaUpload from "./MediaUpload";
+import MediaUpload, { type MediaUploadFeedback } from "./MediaUpload";
 import SelectionField from "./SelectionField";
 
 type Props = {
   mode: MediaMode;
   documentPath: string;
   selected: string;
+  current?: string;
   svgOnly: boolean;
 };
 type Events = { select: [item: MediaItem, value: string] };
@@ -59,6 +62,38 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
     );
     const tree = computed(() => mediaDirectoryTree(eligible.value));
     const uploadExpanded = ref(false);
+    const uploadFeedback = ref<MediaUploadFeedback>();
+    watch(
+      () =>
+        [session.value, session.value?.identity.id, session.value?.identity.method] as const,
+      () => {
+        uploadFeedback.value = undefined;
+      },
+    );
+    // This browser is client-only. Reset the default only when crossing the
+    // layout breakpoint, so manual disclosure choices survive ordinary renders.
+    const narrowLayout = window.matchMedia("(max-width: 760px)");
+    const browseExpanded = ref(!narrowLayout.matches);
+    const browseDisclosure = ref<HTMLDetailsElement>();
+    function layoutChanged(event: MediaQueryListEvent) {
+      const disclosure = browseDisclosure.value;
+      if (event.matches && disclosure?.contains(document.activeElement))
+        disclosure.querySelector("summary")?.focus({ preventScroll: true });
+      if (disclosure) disclosure.open = !event.matches;
+      browseExpanded.value = !event.matches;
+    }
+    narrowLayout.addEventListener("change", layoutChanged);
+    onBeforeUnmount(() => {
+      narrowLayout.removeEventListener("change", layoutChanged);
+    });
+    const browseDisclosureProps = () => ({
+      ref: domRef(browseDisclosure),
+      open: browseExpanded.value,
+      onToggle: domEvent(($event: Event) => {
+        if ($event.target !== $event.currentTarget) return;
+        browseExpanded.value = ($event.currentTarget as HTMLDetailsElement).open;
+      }),
+    });
     const folders = computed(() => [
       { value: "", label: t("全部文件夹") },
       ...[...new Set(eligible.value.map((item) => item.directory))]
@@ -107,6 +142,51 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
       const value = mediaValue(item, props.mode, props.documentPath);
       if (value !== null) emit("select", item, value);
     }
+    function uploadStatus() {
+      const feedback = uploadFeedback.value;
+      return element(
+        "div",
+        {
+          role: "status",
+          "aria-atomic": true,
+          className: classes("media-upload-feedback"),
+        },
+        feedback?.validation
+          ? element("p", null, t(feedback.validation))
+          : null,
+        feedback && feedback.total > 0
+          ? element(
+              "p",
+              null,
+              feedback.validation ? t("上次上传") + " · " : "",
+              element(
+                "strong",
+                null,
+                feedback.active
+                  ? t("正在处理上传")
+                  : feedback.paused
+                    ? t("上传已暂停")
+                    : t("上传处理结束"),
+              ),
+              " · ",
+              t("已处理 {completed}/{total}，已上传 {uploaded}，失败 {failed}，未尝试 {skipped}", {
+                completed: feedback.completed,
+                total: feedback.total,
+                uploaded: feedback.uploaded,
+                failed: feedback.failed,
+                skipped: feedback.skipped,
+              }),
+            )
+          : null,
+        feedback && feedback.uploaded > 0
+          ? element(
+              "p",
+              { className: classes("muted") },
+              t("已上传的图片已保存到仓库，选用后仍需保存表单。"),
+            )
+          : null,
+      );
+    }
     function choose(item: MediaItem) {
       const value = mediaValue(item, props.mode, props.documentPath);
       if (value !== null && !mediaLoading.value && !mediaError.value)
@@ -128,54 +208,62 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
           },
           props.mode === "library"
             ? element(
-                "nav",
+                "details",
                 {
-                  "aria-label": t("图片目录"),
-                  className: classes("media-directory-tree"),
+                  ...browseDisclosureProps(),
+                  className: classes("media-directory-disclosure"),
                 },
                 element(
-                  "div",
-                  { className: classes("media-tree-heading") },
-                  element("strong", null, t("图片目录")),
-                ),
-                element(
-                  "button",
-                  {
-                    className: classes("directory-all", {
-                      active: !folder.value,
-                    }),
-                    onClick: domEvent(($event: Event) => {
-                      folder.value = "";
-                    }),
-                  },
-                  t("全部图片"),
-                  element("small", null, eligible.value.length),
-                ),
-                element(
-                  "ul",
+                  "summary",
                   null,
-                  renderList(tree.value).map((node) =>
-                    element(MediaDirectoryNode, {
-                      key: node.path,
-                      node: node,
-                      selected: folder.value,
-                      depth: 0,
-                      onSelect: (($event) => {
-                        folder.value = $event;
-                      }) satisfies EventHandler<
-                        typeof MediaDirectoryNode,
-                        "onSelect"
-                      >,
-                    }),
-                  ),
+                  element("strong", null, t("图片目录")),
+                  element("span", null, folder.value || t("全部图片")),
                 ),
-                !tree.value.length
-                  ? element(
-                      "p",
-                      { className: classes("muted small") },
-                      t("上传后显示图片目录"),
-                    )
-                  : null,
+                element(
+                  "nav",
+                  {
+                    "aria-label": t("图片目录"),
+                    className: classes("media-directory-tree"),
+                  },
+                  element(
+                    "button",
+                    {
+                      className: classes("directory-all", {
+                        active: !folder.value,
+                      }),
+                      onClick: domEvent(($event: Event) => {
+                        folder.value = "";
+                      }),
+                    },
+                    t("全部图片"),
+                    element("small", null, eligible.value.length),
+                  ),
+                  element(
+                    "ul",
+                    null,
+                    renderList(tree.value).map((node) =>
+                      element(MediaDirectoryNode, {
+                        key: node.path,
+                        node: node,
+                        selected: folder.value,
+                        depth: 0,
+                        onSelect: (($event) => {
+                          folder.value = $event;
+                        }) satisfies EventHandler<
+                          typeof MediaDirectoryNode,
+                          "onSelect"
+                        >,
+                      }),
+                    ),
+                  ),
+                  !tree.value.length
+                    ? element(
+                        "p",
+                        { className: classes("muted small") },
+                        t("上传后显示图片目录"),
+                      )
+                    : null,
+                ),
               )
             : null,
           element(
@@ -202,12 +290,17 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                 documentPath: props.documentPath,
                 svgOnly: props.svgOnly,
                 preferredDirectory: folder.value,
+                feedbackMode: "external",
+                onFeedback: (($event) => {
+                  uploadFeedback.value = $event;
+                }) satisfies EventHandler<typeof MediaUpload, "onFeedback">,
                 onUploaded: uploaded satisfies EventHandler<
                   typeof MediaUpload,
                   "onUploaded"
                 >,
               }),
             ),
+            uploadStatus(),
             element(
               "div",
               { className: classes("media-toolbar") },
@@ -244,38 +337,80 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
             ),
             props.mode !== "library"
               ? element(
-                  "div",
-                  { className: classes("media-filters") },
-                  props.mode === "document"
-                    ? element(SelectionField, {
-                        modelValue: source.value,
-                        name: "media-source",
-                        label: t("图片来源"),
-                        options: [
-                          { value: "all", label: t("全部") },
-                          { value: "public", label: t("公共图片") },
-                          { value: "content", label: t("内容配图") },
-                        ],
+                  "details",
+                  {
+                    ...browseDisclosureProps(),
+                    className: classes("media-filter-disclosure"),
+                  },
+                  element(
+                    "summary",
+                    null,
+                    props.mode === "document"
+                      ? element(
+                          "span",
+                          null,
+                          element("strong", null, t("图片来源"), "："),
+                          source.value === "public"
+                            ? t("公共图片")
+                            : source.value === "content"
+                              ? t("内容配图")
+                              : t("全部"),
+                          " · ",
+                        )
+                      : null,
+                    element(
+                      "span",
+                      null,
+                      element("strong", null, t("文件夹"), "："),
+                      folder.value || t("全部文件夹"),
+                    ),
+                  ),
+                  element(
+                    "div",
+                    { className: classes("media-filters") },
+                    props.mode === "document"
+                      ? element(
+                          "div",
+                          { className: classes("media-filter-control") },
+                          element("span", { "aria-hidden": "true" }, t("图片来源")),
+                          element(SelectionField, {
+                            modelValue: source.value,
+                            name: "media-source",
+                            label: t("图片来源"),
+                            compact: true,
+                            options: [
+                              { value: "all", label: t("全部") },
+                              { value: "public", label: t("公共图片") },
+                              { value: "content", label: t("内容配图") },
+                            ],
+                            onUpdateModelValue: (($event) => {
+                              source.value = String($event);
+                            }) satisfies EventHandler<
+                              typeof SelectionField,
+                              "onUpdateModelValue"
+                            >,
+                          }),
+                        )
+                      : null,
+                    element(
+                      "div",
+                      { className: classes("media-filter-control") },
+                      element("span", { "aria-hidden": "true" }, t("文件夹")),
+                      element(SelectionField, {
+                        modelValue: folder.value,
+                        name: "media-folder",
+                        label: t("文件夹"),
+                        compact: true,
+                        options: folders.value,
                         onUpdateModelValue: (($event) => {
-                          source.value = String($event);
+                          folder.value = String($event);
                         }) satisfies EventHandler<
                           typeof SelectionField,
                           "onUpdateModelValue"
                         >,
-                      })
-                    : null,
-                  element(SelectionField, {
-                    modelValue: folder.value,
-                    name: "media-folder",
-                    label: t("文件夹"),
-                    options: folders.value,
-                    onUpdateModelValue: (($event) => {
-                      folder.value = String($event);
-                    }) satisfies EventHandler<
-                      typeof SelectionField,
-                      "onUpdateModelValue"
-                    >,
-                  }),
+                      }),
+                    ),
+                  ),
                 )
               : null,
             props.mode === "library"
@@ -363,7 +498,10 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                         key: item.path,
                         type: "button",
                         "data-media-path": item.path,
-                        "aria-label": t("选择图片：{p0}", { p0: item.path }),
+                        "aria-label":
+                          (props.current === item.path && props.selected !== item.path
+                            ? `${t("当前图片")} · `
+                            : "") + t("选择图片：{p0}", { p0: item.path }),
                         "aria-pressed": props.selected === item.path,
                         disabled:
                           !!item.unavailable ||
@@ -387,7 +525,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                               loading: "lazy",
                               decoding: "async",
                               onError: domEvent(($event: Event) => {
-                                failed.value.add(item.path);
+                                failed.value = new Set([...failed.value, item.path]);
                               }),
                             })
                           : element(
@@ -408,6 +546,13 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                         { className: classes("media-name") },
                         item.name,
                       ),
+                      props.current === item.path && props.selected !== item.path
+                        ? element(
+                            "span",
+                            { className: classes("media-path") },
+                            t("当前图片"),
+                          )
+                        : null,
                       element(
                         "span",
                         { className: classes("media-path") },

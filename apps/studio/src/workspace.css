@@ -7,6 +7,9 @@
 .sidebar nav button { min-height: 36px; padding: 8px 12px; gap: 10px; }
 .sidebar nav button svg { width: 18px; height: 18px; }
 .sidebar-bottom { flex-shrink: 0; min-height: 60px; padding: 12px 8px 0; margin-top: 0; }
+/* Shared topbar rows can wrap with translations and touch-sized controls. Its
+   block size must follow both rows, including tablet widths above the drawer. */
+.topbar { height: auto; min-height: 64px; row-gap: 12px; }
 .topbar { min-height: 64px; padding-inline: max(32px, calc((100% - 1510px) / 2 + 32px)); }
 .language-short, .workspace-switch > svg, .visit-site > svg { display: none; }
 .main-content { padding: 28px 32px; }
@@ -79,7 +82,6 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 .structured .compact-object { column-gap: 16px; }
 .settings-card .compact-object > .field-inline { grid-template-columns: auto minmax(0,1fr); gap: 8px; }
 .settings-card .compact-object > .value-number { flex: 0 1 130px; }
-.choice-trigger > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 @media (min-width: 1181px) {
   .editor-page > .page-heading > div:first-child { flex: 1; }
   .editor-page > .page-heading > .row { max-width: 48%; }
@@ -174,6 +176,23 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 
 .writing-card > .title-field { grid-template-columns: auto minmax(0, 1fr); }
 
+/* Keep the primary row readable before giving repeated-item actions their own
+   gutter. This covers every structured list, including nested page settings. */
+@media (max-width: 480px) {
+  .structured .collapsible-item { grid-template-columns: minmax(0, 1fr); }
+  .collapsible-item > .item-actions { justify-content: flex-end; flex-wrap: wrap; }
+  .collapsible-item > .structured-body { margin-left: 0; padding-inline: 0; border-left: 0; }
+  .structured .compact-object > .field-inline { grid-template-columns: minmax(0, 1fr); }
+  .structured-toggle { width: 100%; }
+  .editor-page > .page-heading > .row { justify-content: flex-start; }
+}
+
+/* A short screen should not inherit a desktop-sized empty writing canvas.
+   Use viewport units rather than the zoomed visual viewport's height. */
+@media (max-width: 760px), (max-height: 500px) {
+  .editor-page:not(.embedded-editor) .markdown-source { min-height: clamp(240px, 52dvh, 430px); }
+  .editor-page:not(.embedded-editor) .vditor { max-height: max(280px, 65dvh); }
+}
 /* The four dashboard totals form a single navigation list. */
 .stats-grid { gap: 0; border-block: 1px solid var(--studio-line); }
 .stats-grid .stat-card { border: 0; border-radius: 0; background: transparent; box-shadow: none; }

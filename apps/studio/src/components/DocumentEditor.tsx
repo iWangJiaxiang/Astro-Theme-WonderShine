@@ -88,6 +88,7 @@ type Events = {
   dirty: [value: boolean];
   working: [value: boolean];
   back: [];
+  exit: [];
   deleted: [path: string];
   saved: [path: string];
   open: [path: string, initial?: Record<string, Json>, initialBody?: string];
@@ -1279,6 +1280,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                             layout: savedTemplate.value,
                             body: originalBody.value,
                             language: documentLanguage.value,
+                            onExit: (() => emit("exit")) satisfies EventHandler<typeof PageSettings, "onExit">,
                             onDirty: (($event) => {
                               settingsDirty.value = $event;
                             }) satisfies EventHandler<

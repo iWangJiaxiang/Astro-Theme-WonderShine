@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { parse } from 'smol-toml';
 import { splitDocument } from '../../server/content.ts';
+import { revealField } from './controls.mjs';
+import { openImagePicker } from './image-picker.mjs';
 
 export async function checkUploads({ page, base, theme, screenshots, click, heading, fill }) {
   const source = base + '/upload-fixtures'; await mkdir(source);
@@ -9,14 +11,172 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await writeFile(source + '/invalid.webp', 'not an image');
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNwinr/HwAE+AKLJh4rzQAAAABJRU5ErkJggg==', 'base64');
   await writeFile(source + '/cover-upload.png', png);
-  const upload = async files => { const input = await page.$('.upload-file-input'); await input.uploadFile(...files.map(file => source + '/' + file)); };
+  const revealUpload = async () => {
+    await revealField(page, '.media-upload .upload-actions button');
+    await page.waitForSelector('.media-upload-disclosure[open] .upload-actions', { visible: true });
+  };
+  const upload = async files => {
+    await revealUpload();
+    // Exercise the visible upload action rather than injecting files into a
+    // closed disclosure's native input, which is intentionally display:none.
+    const [chooser] = await Promise.all([
+      page.waitForFileChooser(),
+      page.locator('.media-upload-disclosure[open] .upload-actions button').click(),
+    ]);
+    await chooser.accept(files.map(file => source + '/' + file));
+  };
   const finished = () => page.waitForFunction(() => !document.querySelector('.upload-progress') && document.querySelector('.upload-results li'));
   const selected = () => page.$eval('.media-card.selected', el => el.dataset.mediaPath);
+  const disclosureState = async (selector, open) => {
+    await page.waitForFunction(({ selector, open }) => document.querySelector(selector)?.open === open, {}, { selector, open });
+    assert.equal(await page.$eval(`${selector} > summary`, node => {
+      const minimum = document.documentElement.dataset.nativePlatform === 'android' ? 48 : 44;
+      const box = node.getBoundingClientRect();
+      return !!node.textContent.trim() && box.height >= minimum && box.width >= minimum;
+    }), true, 'disclosure has a meaningful name and the platform touch target');
+  };
+  const initialPreview = async root => {
+    await page.waitForFunction(root => {
+      const browser = document.querySelector(root);
+      // A cached offscreen image can finish before the initial row. Wait for the
+      // first preview's resource, never for geometry/hit success or a test scroll.
+      const first = browser?.querySelector('.media-thumbnail img');
+      const loaded = browser?.getAttribute('aria-busy') === 'false' && first?.complete && first.naturalWidth > 0;
+      const sidebar = document.querySelector('.sidebar');
+      const sidebarReady = !!sidebar && sidebar.getBoundingClientRect().right <= 0 && sidebar.inert && !sidebar.classList.contains('open') && !document.querySelector('.sidebar-backdrop');
+      return loaded && sidebarReady;
+    }, {}, root);
+    if (root.startsWith('.media-library')) {
+      const context = await page.evaluate(() => ({
+        windowX: window.scrollX, windowY: window.scrollY,
+        rootX: document.scrollingElement.scrollLeft, rootY: document.scrollingElement.scrollTop,
+      }));
+      assert.deepEqual(context, { windowX: 0, windowY: 0, rootX: 0, rootY: 0 }, 'initial library preview is measured at the actual unscrolled window/root context, without a test scroll reset');
+    }
+    const preview = await page.$eval(root, browser => {
+      const body = browser.closest('.media-dialog-body');
+      const footer = browser.closest('dialog')?.querySelector('.selection-footer');
+      const clip = body?.getBoundingClientRect();
+      const footerTop = footer?.getBoundingClientRect().top ?? innerHeight;
+      const top = Math.max(0, clip?.top ?? 0);
+      const bottom = Math.min(innerHeight, clip?.bottom ?? innerHeight, footerTop);
+      const images = [];
+      // Failure-only geometry from this single sample; no text, paths or resampling.
+      const result = status => ({ status, viewport: [innerWidth, innerHeight],
+        body: clip ? [clip.left, clip.top, clip.right, clip.bottom] : null,
+        footerTop, images });
+      const candidates = [...browser.querySelectorAll('.media-thumbnail img')].filter(image => image.complete && image.naturalWidth > 0);
+      let meaningfulPreview = false;
+      let loadedInViewport = false;
+      let nonzeroThumbnail = false;
+      const unobscuredPreview = candidates.some(image => {
+        const box = image.getBoundingClientRect();
+        if (images.length < 8) images.push([box.left, box.top, box.right, box.bottom]);
+        const left = Math.max(0, box.left), right = Math.min(innerWidth, box.right);
+        const visibleTop = Math.max(top, box.top), visibleBottom = Math.min(bottom, box.bottom);
+        // Show at least a square half-thumbnail region, not a one-pixel sliver.
+        const meaningful = Math.min(box.width, box.height) / 2;
+        if (meaningful > 0) nonzeroThumbnail = true;
+        if (right > left && visibleBottom > visibleTop) loadedInViewport = true;
+        if (meaningful <= 0 || right - left < meaningful || visibleBottom - visibleTop < meaningful) return false;
+        meaningfulPreview = true;
+        const hit = document.elementFromPoint((left + right) / 2, (visibleTop + visibleBottom) / 2);
+        return image.closest('.media-card').contains(hit);
+      });
+      if (!meaningfulPreview) {
+        if (!nonzeroThumbnail) return result('preview-geometry-zero-size');
+        if (!loadedInViewport) return result('preview-geometry-outside');
+        return result('preview-geometry-insufficient');
+      }
+      if (!unobscuredPreview) return result('preview-obscured');
+      if (body && body.scrollTop !== 0) return result('preview-initial-scroll');
+      return result('visible');
+    });
+    if (preview.status !== 'visible') console.error('Initial preview geometry: ' + JSON.stringify(preview));
+    assert.equal(preview.status, 'visible', 'initial 320x568 view shows a meaningful loaded image preview, unobscured by the footer, without scrolling');
+  };
+  const retainUploadAcrossBrowseToggle = async disclosure => {
+    const handles = await Promise.all(['.media-upload', '.upload-file-input', '.upload-results'].map(selector => page.$(selector)));
+    const before = await page.$eval('.upload-results', node => node.textContent);
+    try {
+      for (const open of [false, true]) {
+        await page.locator(`${disclosure} > summary`).click();
+        await disclosureState(disclosure, open);
+        for (const [index, selector] of ['.media-upload', '.upload-file-input', '.upload-results'].entries()) {
+          assert.equal(await handles[index].evaluate((node, selector) => node.isConnected && node === document.querySelector(selector), selector), true, `${selector} is retained across browsing disclosure toggles`);
+        }
+        assert.equal(await page.$eval('.upload-results', node => node.textContent), before, 'completed upload results and per-file errors survive browsing disclosure toggles');
+      }
+    } finally {
+      await Promise.all(handles.map(handle => handle.dispose()));
+    }
+  };
+  const checkResponsiveChooserClose = async (name, candidate) => {
+    const picker = 'dialog.media-dialog[open]', disclosure = `${picker} .media-filter-disclosure`;
+    const trigger = `${picker} button[name="${name}"]`, chooser = '.selection-dialog[open]';
+    const parentState = () => page.$eval(picker, dialog => ({
+      selected: [...dialog.querySelectorAll('.media-card.selected')].map(node => node.dataset.mediaPath),
+      pending: dialog.querySelector('.media-pending').textContent,
+    }));
+    const before = await parentState();
+    for (const confirm of [false, true]) {
+      await page.setViewport({ width: 1440, height: 1000 });
+      await disclosureState(disclosure, true);
+      const current = await page.$eval(trigger, node => node.textContent);
+      await page.locator(trigger).click();
+      await page.waitForSelector(chooser, { visible: true });
+      await page.locator(`${chooser} input[value="${candidate}"]`).click();
+      assert.equal(await page.$eval(`${chooser} input[value="${candidate}"]`, node => node.checked), true, 'chooser candidate is pending');
+      assert.equal(await page.$eval(trigger, node => node.textContent), current, 'candidate does not publish before confirmation');
+      await page.setViewport({ width: 390, height: 844 });
+      await disclosureState(disclosure, false);
+      assert.equal(await page.$eval(chooser, node => node.open && node.matches(':modal')), true, 'responsive folding leaves the portaled chooser open');
+      assert.deepEqual(await parentState(), before, 'pending chooser candidate does not alter parent image selection');
+      if (confirm) await page.locator(`${chooser} .selection-footer button.primary`).click();
+      else await page.keyboard.press('Escape');
+      await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
+      assert.equal(await page.$eval(picker, node => node.open && node.matches(':modal')), true, 'responsive chooser close leaves the outer media dialog modal');
+      assert.equal(await page.$eval(`${disclosure} > summary`, node => {
+        const box = node.getBoundingClientRect();
+        const x = box.left + box.width / 2, y = box.top + box.height / 2;
+        return node === document.activeElement && box.width > 0 && box.height >= 44 && x >= 0 && x < innerWidth && y >= 0 && y < innerHeight && node.contains(document.elementFromPoint(x, y));
+      }), true, 'closing the chooser focuses the visible, hit-testable summary instead of its folded trigger');
+      assert.deepEqual(await parentState(), before, 'responsive chooser cancel/confirm preserves parent image selection');
+      const published = await page.$eval(trigger, node => node.textContent);
+      if (confirm) assert.notEqual(published, current, 'confirmation publishes the chosen filter');
+      else assert.equal(published, current, 'Escape preserves the current filter');
+    }
+  };
+  await page.setViewport({ width: 1440, height: 1000 });
   await click('媒体库'); await heading('媒体库');
   await page.waitForFunction(() => !document.querySelector('.upload-file-input').disabled);
+  const libraryDisclosure = '.media-library .media-directory-disclosure';
+  await disclosureState(libraryDisclosure, true);
+  await page.$eval(`${libraryDisclosure} .directory-all`, node => node.focus({ preventScroll: true }));
+  await page.setViewport({ width: 320, height: 568 });
+  await disclosureState(libraryDisclosure, false);
+  assert.equal(await page.$eval(`${libraryDisclosure} > summary`, node => node === document.activeElement), true, 'crossing to mobile moves focus from the folding tree to its summary');
+  await initialPreview('.media-library .media-browser');
+  await page.screenshot({ path: screenshots + '/media-library-initial-320x568.png' });
+  await page.locator(`${libraryDisclosure} > summary`).click();
+  await disclosureState(libraryDisclosure, true);
+  await page.locator(`${libraryDisclosure} > summary`).click();
+  await disclosureState(libraryDisclosure, false);
+  await fill('.media-library [aria-label="搜索仓库图片"]', 'public/');
+  await disclosureState(libraryDisclosure, false);
+  await fill('.media-library [aria-label="搜索仓库图片"]', '');
+  await page.setViewport({ width: 1440, height: 1000 });
+  await disclosureState(libraryDisclosure, true);
+  await page.locator(`${libraryDisclosure} .directory-choice[title="public"]`).click();
+  await page.waitForFunction(() => document.querySelector('.media-directory-row.active .directory-choice')?.title === 'public');
+  assert.ok(await page.$$eval('.media-library .media-card', nodes => nodes.length > 0 && nodes.every(node => node.dataset.mediaPath.startsWith('public/')) && nodes.some(node => node.dataset.mediaPath.slice('public/'.length).includes('/'))), 'library directory selection still includes descendant directories');
+  assert.match(await page.$eval(`${libraryDisclosure} > summary`, node => node.textContent), /public/, 'directory summary shows the active path');
+  await page.locator(`${libraryDisclosure} .directory-all`).click();
+  await page.waitForSelector(`${libraryDisclosure} .directory-all.active`);
   await upload(['上传 配图.webp', 'invalid.webp']); await finished();
   assert.equal(await page.$$eval('.upload-results li', nodes => nodes.length), 2);
   assert.match(await page.$eval('.upload-error', el => el.textContent), /格式不匹配/);
+  await retainUploadAcrossBrowseToggle(libraryDisclosure);
   assert.equal(await selected(), 'public/uploads/上传 配图.webp');
   assert.deepEqual(await readFile(base + '/site/public/uploads/上传 配图.webp'), await readFile(source + '/上传 配图.webp'));
   await upload(['上传 配图.webp']); await finished();
@@ -37,23 +197,261 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   const original = await page.$eval('[name="extra.site.logo"]', el => el.value);
   await page.select('.language-switcher select', 'en');
   await heading('Site information');
-  await page.setViewport({ width: 390, height: 844 });
+  await page.setViewport({ width: 320, height: 568 });
   await page.waitForFunction(() => document.querySelector('.sidebar').getBoundingClientRect().right <= 0);
-  await page.click('[data-image-field="extra.site.logo"] .secondary');
-  await page.waitForSelector('dialog.media-dialog[open]');
-  await upload(['cover-upload.png']); await finished();
+  await openImagePicker(page, 'extra.site.logo');
+  const filterDisclosure = 'dialog.media-dialog[open] .media-filter-disclosure';
+  await disclosureState(filterDisclosure, false);
+  assert.match(await page.$eval(`${filterDisclosure} > summary`, node => node.textContent), /Folder.*All folders/, 'closed picker summary describes its current filter');
+  await initialPreview('dialog.media-dialog[open] .media-browser');
+  await page.screenshot({ path: screenshots + '/media-picker-initial-320x568-en.png' });
+  await page.setViewport({ width: 390, height: 844 });
+  await disclosureState(filterDisclosure, false);
+  // Hold this one real upload before sending it, to observe a stable pending
+  // queue while the separate filter disclosure is opened and closed.
+  const heldHandles = [], heldErrors = [];
+  try {
+    await page.evaluate(() => {
+      const original = window.fetch;
+      let release;
+      const gate = new Promise(resolve => { release = resolve; });
+      window.__uploadDisclosureGate = { release, restore: () => { window.fetch = original; } };
+      window.fetch = async (...args) => {
+        if (String(args[0]).startsWith('/api/media/upload?')) await gate;
+        return original(...args);
+      };
+    });
+    const queuedUpload = await page.$('dialog.media-dialog[open] .media-upload');
+    if (queuedUpload) heldHandles.push(queuedUpload);
+    assert.ok(queuedUpload, 'held upload has its mounted upload node');
+    const queuedInput = await page.$('dialog.media-dialog[open] .upload-file-input');
+    if (queuedInput) heldHandles.push(queuedInput);
+    assert.ok(queuedInput, 'held upload has its original file input');
+    await upload(['cover-upload.png']);
+    const progress = await page.waitForSelector('dialog.media-dialog[open] .upload-progress', { visible: true });
+    if (progress) heldHandles.push(progress);
+    assert.ok(progress, 'held upload exposes progress');
+    const queue = await progress.evaluate(node => node.textContent);
+    for (const open of [true, false, true]) {
+      await page.locator(`${filterDisclosure} > summary`).click();
+      await disclosureState(filterDisclosure, open);
+      assert.equal(await queuedUpload.evaluate(node => node.isConnected && node === document.querySelector('dialog.media-dialog[open] .media-upload')), true, 'filter disclosure keeps the mounted upload node');
+      assert.equal(await queuedInput.evaluate(node => node.isConnected && node === document.querySelector('dialog.media-dialog[open] .upload-file-input')), true, 'filter disclosure keeps the original file input');
+      assert.equal(await progress.evaluate(node => node.isConnected && node === document.querySelector('dialog.media-dialog[open] .upload-progress') && node.textContent), queue, 'filter disclosure preserves the pending queue and progress');
+    }
+  } catch (error) {
+    heldErrors.push(error);
+  } finally {
+    // Each cleanup is attempted even if acquisition, evaluation or disposal
+    // failed. Preserve the original failure alongside every cleanup failure.
+    const cleanup = await Promise.allSettled([
+      () => page.evaluate(() => window.__uploadDisclosureGate?.release()),
+      () => page.evaluate(() => window.__uploadDisclosureGate?.restore()),
+      ...heldHandles.map(handle => () => handle.dispose()),
+    ].map(action => Promise.resolve().then(action)));
+    for (const result of cleanup) if (result.status === 'rejected') heldErrors.push(result.reason);
+    const deletion = await Promise.allSettled([Promise.resolve().then(() => page.evaluate(() => { delete window.__uploadDisclosureGate; }))]);
+    for (const result of deletion) if (result.status === 'rejected') heldErrors.push(result.reason);
+  }
+  if (heldErrors.length) throw new AggregateError(heldErrors, 'Held upload disclosure check or cleanup failed');
+  await finished();
   assert.equal(await selected(), 'public/uploads/cover-upload.png');
   assert.equal(await page.$eval('[name="extra.site.logo"]', el => el.value), original, 'upload does not change a form before confirmation');
   assert.match(await page.$eval('.upload-results', el => el.textContent), /Uploaded:/);
+  await retainUploadAcrossBrowseToggle(filterDisclosure);
+  await page.focus(`${filterDisclosure} button[name="media-folder"]`);
+  await page.setViewport({ width: 1440, height: 1000 });
+  await disclosureState(filterDisclosure, true);
+  await page.setViewport({ width: 390, height: 844 });
+  await disclosureState(filterDisclosure, false);
+  assert.equal(await page.$eval(`${filterDisclosure} > summary`, node => node === document.activeElement), true, 'crossing to mobile moves focus from folded filters to their summary');
+  await page.locator(`${filterDisclosure} > summary`).click();
+  await disclosureState(filterDisclosure, true);
   assert.ok(await page.$eval('.media-dialog-body', el => el.scrollWidth <= el.clientWidth), 'upload controls fit a mobile dialog');
-  await page.screenshot({ path: screenshots + '/upload-picker-mobile-en.png' });
+  const picker = 'dialog.media-dialog[open]', body = `${picker} .media-dialog-body`;
+  const layoutUploadRequests = [];
+  const trackLayoutUpload = request => { if (new URL(request.url()).pathname === '/api/media/upload') layoutUploadRequests.push(request.url()); };
+  page.on('request', trackLayoutUpload);
+  try {
+    for (const width of [320, 390]) {
+      await page.setViewport({ width, height: 844 });
+      // Match the overlay's resize-listener inputs before the single measurement,
+      // not its geometry outcome. Never poll fitsViewport or repair scroll/styles.
+      await page.waitForFunction(width => {
+        const view = window.visualViewport, root = document.documentElement.style;
+        return innerWidth === width && innerHeight === 844 &&
+          (!view || (view.width === width && view.height === 844 && view.scale === 1 && view.offsetLeft === 0 && view.offsetTop === 0)) &&
+          parseFloat(root.getPropertyValue('--studio-visible-width')) === (view?.width ?? innerWidth) &&
+          parseFloat(root.getPropertyValue('--native-visible-height')) === (view?.height ?? innerHeight) &&
+          parseFloat(root.getPropertyValue('--studio-visible-left')) === (view?.offsetLeft ?? 0) &&
+          parseFloat(root.getPropertyValue('--native-visible-top')) === (view?.offsetTop ?? 0);
+      }, { timeout: 5000 }, width);
+      await disclosureState(filterDisclosure, true);
+      const layout = await page.$eval(picker, dialog => {
+        const rect = selector => dialog.querySelector(selector).getBoundingClientRect().toJSON();
+        const rendered = node => {
+          if (!node) return false;
+          const box = node.getBoundingClientRect();
+          if (box.width <= 0 || box.height <= 0) return false;
+          for (let ancestor = node; ancestor; ancestor = ancestor.parentElement) {
+            const style = getComputedStyle(ancestor);
+            if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0 || ancestor.hidden) return false;
+          }
+          return true;
+        };
+        const compact = selector => {
+          const control = dialog.querySelector(selector), label = control.querySelector(':scope > span');
+          const field = control.querySelector(':scope > .choice-compact'), trigger = field?.querySelector(':scope > button.choice-trigger');
+          const innerLabel = field?.querySelector(':scope > .sr-only');
+          return {
+            label: label?.textContent, visibleLabel: rendered(label), trigger: rendered(trigger),
+            accessibleLabel: !!innerLabel && trigger?.getAttribute('aria-labelledby')?.split(' ').includes(innerLabel.id),
+            fullWidth: !!trigger && Math.abs(trigger.getBoundingClientRect().width - control.getBoundingClientRect().width) <= 2,
+            wraps: !!trigger && getComputedStyle(trigger.querySelector('.choice-value')).whiteSpace !== 'nowrap',
+            singleCount: trigger?.querySelectorAll('.choice-count').length,
+            chevron: !!trigger?.querySelector('.choice-trailing[aria-hidden="true"] > svg'),
+            valueAtStart: !!trigger && (() => {
+              const style = getComputedStyle(trigger), value = trigger.querySelector('.choice-value');
+              return !!value && Math.abs(value.getBoundingClientRect().left - trigger.getBoundingClientRect().left - parseFloat(style.borderLeftWidth) - parseFloat(style.paddingLeft)) <= 2;
+            })(),
+            flatOptions: control.querySelectorAll('.choice-options').length,
+          };
+        };
+        return {
+          toolbar: rect('.media-toolbar'), search: rect('.media-search input'), refresh: rect('.media-toolbar > button'),
+          touchControls: [...dialog.querySelectorAll('.media-search input, .media-toolbar > button, .upload-actions > button, .upload-directory-control .choice-trigger, .media-filter-control .choice-trigger')]
+            .map(node => ({ name: node.getAttribute('name') || node.type, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })),
+          directory: compact('.upload-directory-control'), folder: compact('.media-filter-control'),
+          folderValue: (() => {
+            const trigger = dialog.querySelector('button[name="media-folder"]');
+            return { text: trigger.textContent, name: trigger.getAttribute('aria-labelledby').split(/\s+/).map(id => document.getElementById(id)?.textContent.trim()).join(' ') };
+          })(),
+          filters: dialog.querySelectorAll('.media-filter-control').length,
+          duplicateHeadings: dialog.querySelectorAll('.upload-actions strong').length,
+          results: rendered(dialog.querySelector('.upload-results li button')), note: rendered(dialog.querySelector('.upload-note')),
+          fitsViewport: dialog.getBoundingClientRect().left >= 0 && dialog.getBoundingClientRect().right <= innerWidth && document.documentElement.scrollWidth <= innerWidth,
+        };
+      });
+      assert.ok(layout.search.width >= layout.toolbar.width - 2, `${width}px search uses the full toolbar row`);
+      assert.ok(Math.abs(layout.search.left - layout.toolbar.left) <= 2 && Math.abs(layout.search.right - layout.toolbar.right) <= 2, `${width}px search aligns with toolbar edges`);
+      assert.ok(layout.refresh.top >= layout.search.bottom, `${width}px refresh moves below search`);
+      assert.ok(Math.abs(layout.refresh.right - layout.toolbar.right) <= 2, `${width}px refresh aligns right on its own row`);
+      for (const control of layout.touchControls) assert.ok(control.width >= 44 && control.height >= 44, `${width}px ${control.name} has a nonzero 44px touch target`);
+      assert.equal(layout.touchControls.length, 5, 'search, refresh, upload, directory and folder controls are measured');
+      for (const [control, label] of [[layout.directory, 'Save to'], [layout.folder, 'Folder']]) {
+        assert.equal(control.label, label);
+        assert.ok(control.visibleLabel && control.trigger && control.accessibleLabel && control.fullWidth && control.wraps, `${width}px ${label} stays a labelled full-width compact trigger with wrapping text`);
+        assert.equal(control.flatOptions, 0, `${label} does not render an inline option grid`);
+        assert.equal(control.singleCount, 0, `${width}px ${label} single selection has no multi-selection count`);
+        assert.ok(control.chevron && control.valueAtStart, `${width}px ${label} keeps its value at the start and a separate trailing expand affordance`);
+      }
+      assert.match(layout.folderValue.text, /All folders/, `${width}px empty folder selection displays its matched option label`);
+      assert.equal(layout.folderValue.name, 'Folder All folders', `${width}px folder accessible name resolves both label and selected value IDs`);
+      assert.equal(layout.filters, 1, 'public-image picker has the folder filter');
+      assert.equal(layout.duplicateHeadings, 0, 'upload disclosure does not repeat its heading inside the actions');
+      assert.ok(layout.results && layout.note, `${width}px uploaded result and save reminder remain rendered, not CSS-hidden`);
+      assert.ok(layout.fitsViewport, `${width}px dialog and page fit the viewport`);
+      assert.ok(await page.$eval(body, el => el.scrollWidth <= el.clientWidth), `${width}px upload controls fit without horizontal overflow`);
+      await page.screenshot({ path: screenshots + (width === 390 ? '/upload-picker-mobile-en.png' : '/upload-picker-mobile-en-320.png') });
+
+      // Existing fixture images plus the expanded upload panel must overflow.
+      // Wheel in the body's padding, not over nested upload-results scrolling.
+      const target = await page.$eval(body, node => {
+        const box = node.getBoundingClientRect(), style = getComputedStyle(node);
+        const x = box.left + node.clientLeft + parseFloat(style.paddingLeft) / 2;
+        const y = (Math.max(0, box.top) + Math.min(innerHeight, box.bottom)) / 2;
+        return { x, y, top: node.scrollTop, max: node.scrollHeight - node.clientHeight,
+          height: node.clientHeight, overflow: node.scrollHeight > node.clientHeight,
+          scrollable: /^(auto|scroll)$/.test(style.overflowY), safePoint: document.elementFromPoint(x, y) === node };
+      });
+      assert.ok(target.height > 0 && target.overflow && target.scrollable, `${width}px fixture guarantees an overflowing media dialog body`);
+      assert.ok(target.max > target.top + 1 && target.safePoint, `${width}px wheel starts in body padding with room to scroll down`);
+      await page.mouse.move(target.x, target.y);
+      await page.mouse.wheel({ deltaY: 160 });
+      await page.waitForFunction(({ body, top }) => document.querySelector(body).scrollTop > top + 1, {}, { body, top: target.top });
+      const down = await page.$eval(body, node => node.scrollTop);
+      assert.ok(down > target.top + 1, `${width}px browser wheel actually scrolls the media body down`);
+      await page.mouse.wheel({ deltaY: -160 });
+      await page.waitForFunction(({ body, top }) => document.querySelector(body).scrollTop < top - 1, {}, { body, top: down });
+      assert.ok(await page.$eval(body, node => node.scrollTop) < down - 1, `${width}px browser wheel actually scrolls the media body up`);
+    }
+
+    const directoryTrigger = `${picker} button[name="upload-directory"]`;
+    const folderTrigger = `${picker} button[name="media-folder"]`;
+    const chooser = '.selection-dialog[open]';
+    await revealField(page, folderTrigger);
+    await disclosureState(filterDisclosure, true);
+    const defaultDestination = await page.$eval(`${picker} .upload-destination`, el => el.textContent);
+    assert.match(defaultDestination, /public\/uploads$/, 'public picker keeps the default upload destination');
+    const pending = await page.$eval(`${picker} .media-pending`, el => el.textContent);
+    const assertParentSelection = async () => {
+      assert.equal(await page.$eval(picker, dialog => dialog.open && dialog.matches(':modal')), true, 'nested chooser leaves the parent media dialog open and modal');
+      assert.equal(await selected(), 'public/uploads/cover-upload.png');
+      assert.equal(await page.$eval(`${picker} .media-pending`, el => el.textContent), pending);
+      assert.equal(await page.$eval(`${picker} .upload-destination`, el => el.textContent), defaultDestination);
+    };
+    await page.locator(directoryTrigger).click();
+    await page.waitForSelector(chooser, { visible: true });
+    await page.locator(`${chooser} input[value="public/img"]`).click();
+    assert.equal(await page.$eval(`${chooser} input[value="public/img"]`, el => el.checked), true);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
+    assert.equal(await page.$eval(directoryTrigger, el => document.activeElement === el), true, 'directory cancel restores trigger focus');
+    await assertParentSelection();
+    await page.locator(directoryTrigger).click();
+    await page.waitForSelector(chooser, { visible: true });
+    assert.equal(await page.$eval(`${chooser} input[value="public/uploads"]`, el => el.checked), true, 'cancelled directory candidate was not retained');
+    await page.locator(`${chooser} .selection-footer button.primary`).click();
+    await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
+    assert.equal(await page.$eval(directoryTrigger, el => document.activeElement === el), true, 'directory confirm restores trigger focus');
+    await assertParentSelection();
+
+    await checkResponsiveChooserClose('media-folder', 'public/uploads');
+    await assertParentSelection();
+    await revealField(page, folderTrigger);
+    await page.locator(folderTrigger).click();
+    await page.waitForSelector(chooser, { visible: true });
+    await page.locator(`${chooser} input[value="public/uploads"]`).click();
+    await page.locator(`${chooser} .selection-footer button.primary`).click();
+    await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
+    assert.equal(await page.$eval(folderTrigger, el => document.activeElement === el), true, 'folder confirm restores trigger focus');
+    assert.ok(await page.$$eval(`${picker} .media-card`, nodes => nodes.length > 0 && nodes.every(node => node.dataset.mediaPath.slice(0, node.dataset.mediaPath.lastIndexOf('/')) === 'public/uploads')), 'picker folder filter still matches the exact directory, not its subtree');
+    assert.match(await page.$eval(`${filterDisclosure} > summary`, node => node.textContent), /Folder.*public\/uploads/, 'filter summary shows the active full directory path');
+    await assertParentSelection();
+    await page.locator(folderTrigger).click();
+    await page.waitForSelector(chooser, { visible: true });
+    await page.locator(`${chooser} input[type="radio"][value=""]`).click();
+    await page.locator(`${chooser} .selection-footer button.primary`).click();
+    await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
+    assert.ok(await page.$$eval(`${picker} .media-card`, nodes => nodes.some(node => !node.dataset.mediaPath.startsWith('public/uploads/'))), 'clearing the folder restores other fixture images');
+    await assertParentSelection();
+
+    const fileInput = await page.$(`${picker} .upload-file-input`);
+    const results = await page.$(`${picker} .upload-results`);
+    try {
+      await page.locator(`${picker} .media-upload-disclosure > summary`).click();
+      await page.waitForFunction(selector => !document.querySelector(selector).open, {}, `${picker} .media-upload-disclosure`);
+      assert.equal(await fileInput.evaluate(node => node.isConnected && node.ownerDocument.defaultView === window && node === document.querySelector('dialog.media-dialog[open] .upload-file-input')), true, 'collapse retains the same file input in the same window');
+      await page.locator(`${picker} .media-upload-disclosure > summary`).click();
+      await page.waitForSelector(`${picker} .media-upload-disclosure[open] .upload-actions`, { visible: true });
+      assert.equal(await fileInput.evaluate(node => node.isConnected && node.ownerDocument.defaultView === window && node === document.querySelector('dialog.media-dialog[open] .upload-file-input')), true, 'reopen retains the original file input node without reading its value');
+      assert.equal(await results.evaluate(node => node.isConnected && node === document.querySelector('dialog.media-dialog[open] .upload-results') && node.getBoundingClientRect().height > 0), true, 'reopen retains and renders the original upload results');
+      await assertParentSelection();
+    } finally {
+      await fileInput.dispose();
+      await results.dispose();
+    }
+    assert.deepEqual(layoutUploadRequests, [], 'layout, nested choosers and disclosure toggles do not upload again');
+  } finally {
+    page.off('request', trackLayoutUpload);
+  }
   await page.keyboard.press('Escape');
   assert.equal(await page.$eval('[name="extra.site.logo"]', el => el.value), original, 'cancel leaves the form unchanged');
   assert.deepEqual(await readFile(base + '/site/public/uploads/cover-upload.png'), png, 'cancel retains the uploaded image');
   await page.setViewport({ width: 1440, height: 1000 });
   await page.select('.language-switcher select', 'zh-CN');
-  await page.click('[data-image-field="extra.site.logo"] .secondary');
-  await page.waitForSelector('dialog.media-dialog[open]');
+  await openImagePicker(page, 'extra.site.logo');
+  await disclosureState(filterDisclosure, true);
   await fill('dialog.media-dialog[open] [aria-label="搜索仓库图片"]', 'cover-upload.png');
   await page.waitForSelector('[data-media-path="public/uploads/cover-upload.png"]');
   await page.click('[data-media-path="public/uploads/cover-upload.png"]'); await click('使用这张图片');
@@ -64,8 +462,9 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await page.waitForSelector('[data-path="content/articles/studio-browser-test/index.md"]');
   await page.click('[data-path="content/articles/studio-browser-test/index.md"]');
   await page.waitForSelector('.markdown-source');
-  await page.locator('[data-image-field="extra.cover"] .secondary').click();
-  await page.waitForSelector('dialog.media-dialog[open]');
+  await openImagePicker(page, 'extra.cover');
+  await revealUpload();
+  await page.waitForSelector('.upload-destination', { visible: true });
   assert.equal(await page.$eval('.upload-destination', el => el.textContent), '文件位置：content/articles/studio-browser-test');
   await upload(['cover-upload.png']); await finished();
   assert.equal(await selected(), 'content/articles/studio-browser-test/cover-upload.png');
@@ -73,6 +472,28 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   assert.equal(await page.$eval('[name="extra.cover"]', el => el.value), 'cover-upload.png');
   await page.$eval('.markdown-source', el => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); });
   await click('插入图片'); await page.waitForSelector('dialog.media-dialog[open]');
+  await disclosureState(filterDisclosure, true);
+  await revealField(page, 'dialog.media-dialog[open] button[name="media-source"]');
+  assert.match(await page.$eval(`${filterDisclosure} > summary`, node => node.textContent), /图片来源.*全部.*文件夹.*全部文件夹/, 'document picker summary describes both active source and folder');
+  assert.deepEqual(await page.$$eval('dialog.media-dialog[open] .media-filter-control', controls => controls.map(control => {
+    const label = control.querySelector(':scope > span'), field = control.querySelector(':scope > .choice-compact');
+    const trigger = field?.querySelector(':scope > button.choice-trigger'), innerLabel = field?.querySelector(':scope > .sr-only');
+    return { label: label?.textContent, visible: !!label && label.getBoundingClientRect().width > 0 && label.getBoundingClientRect().height > 0 && getComputedStyle(label).visibility === 'visible',
+      compact: !!trigger && !!innerLabel && trigger.getAttribute('aria-labelledby')?.split(' ').includes(innerLabel.id),
+      flatOptions: control.querySelectorAll('.choice-options').length };
+  })), [
+    { label: '图片来源', visible: true, compact: true, flatOptions: 0 },
+    { label: '文件夹', visible: true, compact: true, flatOptions: 0 },
+  ], 'document picker source and folder filters both use labelled compact triggers');
+  await checkResponsiveChooserClose('media-source', 'public');
+  await revealField(page, 'dialog.media-dialog[open] button[name="media-source"]');
+  await page.locator('dialog.media-dialog[open] button[name="media-source"]').click();
+  await page.waitForSelector('.selection-dialog[open]', { visible: true });
+  await page.locator('.selection-dialog[open] input[value="all"]').click();
+  await page.locator('.selection-dialog[open] .selection-footer button.primary').click();
+  await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
+  assert.equal(await page.$eval('dialog.media-dialog[open] button[name="media-source"]', node => node === document.activeElement), true, 'ordinary source confirmation still restores its visible trigger');
+  await page.setViewport({ width: 1440, height: 1000 });
   await upload(['上传 配图.webp']); await finished();
   assert.equal(await selected(), 'content/articles/studio-browser-test/上传 配图.webp');
   await click('使用这张图片'); await click('本地保存'); await page.waitForSelector('.editor-page > .notice.success');
@@ -94,6 +515,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
     };
   });
   await click('刷新仓库');
+  await revealUpload();
   await page.waitForFunction(() => document.querySelector('.upload-actions')?.textContent.includes('4 MB'));
   await writeFile(source + '/cloud-too-large.png', Buffer.alloc(4 * 1024 * 1024 + 1));
   const uploadRequests = [];
@@ -106,5 +528,5 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await page.evaluate(() => { window.fetch = window.originalUploadTestFetch; delete window.originalUploadTestFetch; });
   await click('刷新仓库');
   await page.waitForFunction(() => document.querySelector('.upload-actions')?.textContent.includes('20 MB'));
-  console.log('PASS: batch and drag uploads, mixed failures, duplicate renaming, public and bundle paths, picker cancel/confirm, English mobile controls and saved cover/Markdown.');
+  console.log('PASS: batch and drag uploads, mixed failures, duplicate renaming, public and bundle paths, picker cancel/confirm, responsive directory/filter disclosure defaults and focus, meaningful initial 320x568 previews, upload queue/node/result retention, 320/390px English layout, bidirectional browser wheel scrolling, nested compact chooser cancel/confirm and focus, and saved cover/Markdown.');
 }

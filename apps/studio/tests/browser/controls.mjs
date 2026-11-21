@@ -27,10 +27,10 @@ export function chooser(page) {
     const trigger = `${root} > .choice-trigger`;
     if (await page.$(trigger)) {
       await page.locator(trigger).click();
-      await page.waitForSelector('dialog[open]');
-      await page.waitForSelector(`dialog[open] input[value="${value}"]`);
-      await page.click(`dialog[open] input[value="${value}"]`);
-      await page.click('dialog[open] .selection-footer button');
+      await page.waitForSelector('.selection-dialog[open]');
+      await page.waitForSelector(`.selection-dialog[open] input[value="${value}"]`);
+      await page.click(`.selection-dialog[open] input[value="${value}"]`);
+      await page.click('.selection-dialog[open] .selection-footer button');
       await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
     } else {
       await page.waitForSelector(`${root} input[value="${value}"]`);
@@ -94,10 +94,17 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await heading('外观样式');
   await page.waitForSelector('button[name="extra.style.font_family"]');
   assert.equal(await page.$('[data-field="extra.style.font_family"] fieldset'), null, 'six values use a modal, including existing custom value');
-  await page.click('button[name="extra.style.font_family"]'); await page.waitForSelector('dialog[open]');
-  assert.equal(await page.$eval('dialog[open] .selection-results', el => el.querySelectorAll('input').length), 6);
-  assert.equal(await page.$eval('dialog[open] input[value="Custom Font"]', el => el.checked), true, 'legacy values are retained');
-  await page.click('dialog[open] input[value="system-ui"]');
+  await page.click('button[name="extra.style.font_family"]'); await page.waitForSelector('.selection-dialog[open]');
+  assert.equal(await page.$eval('.selection-dialog[open] .selection-results', el => el.querySelectorAll('input').length), 6);
+  assert.equal(await page.$eval('.selection-dialog[open] input[value="Custom Font"]', el => el.checked), true, 'legacy values are retained');
+  assert.ok(await page.$eval('.selection-field-panel > .selection-results', node => {
+    const last = [...node.querySelectorAll('.choice-tile')].at(-1);
+    const style = getComputedStyle(node);
+    if (!last) return false;
+    const gap = node.getBoundingClientRect().bottom - last.getBoundingClientRect().bottom;
+    return gap >= -1 && gap <= parseFloat(style.paddingBottom) + 2 && node.scrollHeight <= node.clientHeight + 1;
+  }), 'short option lists fit their content without a fixed-height blank results area');
+  await page.click('.selection-dialog[open] input[value="system-ui"]');
   await click('取消');
   assert.ok(await page.$eval('button[name="extra.style.font_family"]', el => el.textContent.includes('Custom Font')));
   await choose('extra.style.font_family', 'PingFang SC');
@@ -108,10 +115,67 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   const name = 'menu.nav_menu.0.menus.0.icon';
   await page.waitForSelector(`button[name="${name}"]`);
   await revealField(page, `button[name="${name}"]`);
-  await page.click(`button[name="${name}"]`); await page.waitForSelector('dialog[open]');
-  await fill('dialog[open] input[type=search]', 'github');
-  await page.click('dialog[open] input[value="icon-github"]');
-  await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('dialog[open]'));
+  await page.click(`button[name="${name}"]`); await page.waitForSelector('.selection-dialog[open]');
+  assert.ok(await page.$eval('.selection-field-panel', panel => {
+    const results = panel.querySelector('.selection-results'), footer = panel.querySelector('.selection-footer');
+    const view = window.visualViewport;
+    const bottom = (view?.offsetTop ?? 0) + (view?.height ?? innerHeight);
+    return results.clientHeight > 0 && results.scrollHeight > results.clientHeight && footer.getBoundingClientRect().bottom <= bottom;
+  }), 'long option lists scroll within the visible viewport and keep confirmation reachable');
+  for (const width of [1440, 390]) {
+    const height = width === 390 ? 844 : 1000;
+    await page.setViewport({ width, height });
+    // CDP acknowledges the resize before the page's resize listeners necessarily
+    // publish the matching overlay constraints. Establish readiness before the
+    // one-shot target snapshot; never poll geometry/hit validity or replay input.
+    await page.waitForFunction(({ width, height }) => {
+      const view = window.visualViewport, root = document.documentElement.style;
+      return innerWidth === width && innerHeight === height &&
+        (!view || (view.width === width && view.height === height && view.scale === 1 && view.offsetLeft === 0 && view.offsetTop === 0)) &&
+        parseFloat(root.getPropertyValue('--studio-visible-width')) === (view?.width ?? innerWidth) &&
+        parseFloat(root.getPropertyValue('--native-visible-height')) === (view?.height ?? innerHeight) &&
+        parseFloat(root.getPropertyValue('--studio-visible-left')) === (view?.offsetLeft ?? 0) &&
+        parseFloat(root.getPropertyValue('--native-visible-top')) === (view?.offsetTop ?? 0);
+    }, { timeout: 5000 }, { width, height });
+    const selector = '.selection-dialog[open] .selection-results';
+    const target = await page.$eval(selector, (node, expected) => {
+      const rect = node.getBoundingClientRect();
+      const target = { x:rect.left + rect.width / 2, y:rect.top + rect.height / 2, top:node.scrollTop };
+      const view = window.visualViewport, root = document.documentElement.style;
+      const hit = document.elementFromPoint(target.x, target.y);
+      target.validity = {
+        unique: document.querySelectorAll(expected.selector).length === 1,
+        connected: node.isConnected,
+        viewportMatches: innerWidth === expected.width && innerHeight === expected.height &&
+          (!view || (view.width === expected.width && view.height === expected.height && view.scale === 1 && view.offsetLeft === 0 && view.offsetTop === 0)),
+        trackerMatches: parseFloat(root.getPropertyValue('--studio-visible-width')) === (view?.width ?? innerWidth) &&
+          parseFloat(root.getPropertyValue('--native-visible-height')) === (view?.height ?? innerHeight) &&
+          parseFloat(root.getPropertyValue('--studio-visible-left')) === (view?.offsetLeft ?? 0) &&
+          parseFloat(root.getPropertyValue('--native-visible-top')) === (view?.offsetTop ?? 0),
+        finitePoint: Number.isFinite(target.x) && Number.isFinite(target.y),
+        pointInViewport: target.x >= 0 && target.x < innerWidth && target.y >= 0 && target.y < innerHeight,
+        hitInResults: !!hit && node.contains(hit),
+        downwardRange: node.scrollHeight > node.clientHeight && node.scrollTop < node.scrollHeight - node.clientHeight,
+      };
+      return target;
+    }, { selector, width, height: width === 390 ? 844 : 1000 });
+    // Fail before dispatch; never repair, clamp or retry an invalid input target.
+    assert.deepEqual(target.validity, {
+      unique:true, connected:true, viewportMatches:true, trackerMatches:true,
+      finitePoint:true, pointInViewport:true, hitInResults:true, downwardRange:true,
+    }, 'Icon chooser wheel target invalid or viewport/layout snapshot mismatched');
+    await page.mouse.move(target.x, target.y);
+    await page.mouse.wheel({ deltaY:160 });
+    await page.waitForFunction(({selector,top}) => document.querySelector(selector).scrollTop > top + 1, {}, {selector,top:target.top});
+    const down = await page.$eval(selector, node => node.scrollTop);
+    await page.mouse.wheel({ deltaY:-160 });
+    await page.waitForFunction(({selector,top}) => document.querySelector(selector).scrollTop < top - 1, {}, {selector,top:down});
+    await page.screenshot({ path: screenshots + `/form-icon-scroll-${width}.png` });
+  }
+  await page.setViewport({ width:1440, height:1000 });
+  await fill('.selection-dialog[open] input[type=search]', 'github');
+  await page.click('.selection-dialog[open] input[value="icon-github"]');
+  await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
   assert.equal(await page.evaluate(name => document.activeElement?.getAttribute('name') === name, name), true, 'Escape restores focus');
   assert.equal(await page.$eval('.settings-page .page-heading .primary', e => e.disabled), true, 'cancel must not change form');
   await choose(name, 'icon-github');
