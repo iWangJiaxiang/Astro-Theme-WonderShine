@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { getVersion } from '@tauri-apps/api/app';
 import { fetch as nativeFetch } from '@tauri-apps/plugin-http';
 import { openUrl } from '@tauri-apps/plugin-opener';
@@ -12,7 +12,7 @@ const storeUrl = import.meta.env.VITE_STUDIO_IOS_UPDATE_URL || '';
 const skippedKey = `studio.update.skipped:${repository}`;
 const interval = 6 * 60 * 60 * 1000;
 
-export function NativeUpdates() {
+export function NativeUpdates({ children }: { children?: (controls: ReactNode) => ReactNode }) {
   useSignals();
   const [version, setVersion] = useState('');
   const [busy, setBusy] = useState(false);
@@ -67,14 +67,15 @@ export function NativeUpdates() {
       await openUrl(updateDestination(release, repository, ios, storeUrl));
     } catch { setMessage('无法打开下载页面，请稍后重试'); }
   }
+  const controls = <div className="native-update-controls">
+    <span>Studio{version && ` ${version}`}</span>
+    <button type="button" disabled={busy} onClick={() => void check(true)}>{t(busy ? '正在检查更新' : '检查更新')}</button>
+    {message && <span role="status">{t(message)}</span>}
+  </div>;
   return <>
-    <footer className="native-update-footer">
-      <span>Studio{version && ` ${version}`}</span>
-      <button type="button" disabled={busy} onClick={() => void check(true)}>{t(busy ? '正在检查更新' : '检查更新')}</button>
-      {message && <span role="status">{t(message)}</span>}
-    </footer>
+    {children ? children(controls) : controls}
     {release && <aside className="native-update-notice" aria-label={t('App 更新')}>
-      <div role="status"><strong>{t('Studio {version} 可更新', { version: release.version })}</strong></div>
+      <div role="status"><strong>{t('Studio {version} 可更新', { version: release.version })}</strong>{message && <p>{t(message)}</p>}</div>
       <button type="button" className="primary" onClick={() => void download()}>{t('查看更新')}</button>
       <button type="button" onClick={() => dismiss(false)}>{t('稍后')}</button>
       <button type="button" className="native-update-skip" onClick={() => dismiss(true)}>{t('跳过此版本')}</button>

@@ -1541,6 +1541,89 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       : t(revision.value ? "已保存" : "尚未保存"),
                   ),
                 ),
+                props.embedded ? element(
+                  "div",
+                  {
+                    "aria-label": t("动态设置"),
+                    className: classes("composer-tools"),
+                  },
+                  element(
+                    "button",
+                    {
+                      disabled: busy.value || mode.value !== "source",
+                      title:
+                        mode.value !== "source"
+                          ? t("切换到 Markdown 源码后插入图片")
+                          : t("从仓库选择图片插入正文"),
+                      className: classes("composer-tool"),
+                      onClick: domEvent(($event: Event) => {
+                        chooseImage();
+                      }),
+                    },
+                    element(Icon, { name: "image", size: 17 }),
+                    t("插入图片"),
+                  ),
+                  element(ChoiceSelect, {
+                    compact: true,
+                    icon: "tag",
+                    modelValue: values.value["taxonomies.tags"] || [],
+                    options: choices.value["taxonomies.tags"] || [],
+                    disabled: busy.value || choicesLoading.value,
+                    name: "taxonomies.tags",
+                    label: t("标签"),
+                    onUpdateModelValue: (($event) => {
+                      values.value["taxonomies.tags"] = $event;
+                    }) satisfies EventHandler<
+                      typeof ChoiceSelect,
+                      "onUpdateModelValue"
+                    >,
+                  }),
+                  element(SelectionField, {
+                    ...topicSelection.value,
+                    multiple: true,
+                    compact: true,
+                    icon: "hash",
+                    modelValue: values.value["extra.topics"] || [],
+                    options: topicChoices.value,
+                    disabled:
+                      busy.value ||
+                      choicesLoading.value ||
+                      !!choicesError.value,
+                    name: "extra.topics",
+                    label: t("关联话题"),
+                    onUpdateModelValue: (($event) => {
+                      values.value["extra.topics"] = $event;
+                    }) satisfies EventHandler<
+                      typeof SelectionField,
+                      "onUpdateModelValue"
+                    >,
+                  }),
+                  element(ArticleReferences, {
+                    compact: true,
+                    modelValue: values.value["extra.references"],
+                    items: topicItems.value,
+                    language: documentLanguage.value,
+                    disabled: busy.value || choicesLoading.value,
+                    onUpdateModelValue: (($event) => {
+                      values.value["extra.references"] = $event;
+                    }) satisfies EventHandler<
+                      typeof ArticleReferences,
+                      "onUpdateModelValue"
+                    >,
+                  }),
+                  element(
+                    "button",
+                    {
+                      "aria-expanded": threadAdvanced.value,
+                      className: classes("composer-tool"),
+                      onClick: domEvent(($event: Event) => {
+                        threadAdvanced.value = !threadAdvanced.value;
+                      }),
+                    },
+                    element(Icon, { name: "sliders", size: 16 }),
+                    t(threadAdvanced.value ? "收起设置" : "更多选项"),
+                  ),
+                ) : null,
                 element(
                   "aside",
                   {
@@ -1649,23 +1732,6 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                               },
                               element("i", { "aria-hidden": "true" }),
                               t(values.value.draft ? "草稿" : "已发布"),
-                            ),
-                            element(
-                              "button",
-                              {
-                                type: "button",
-                                "aria-expanded": threadAdvanced.value,
-                                className: classes("text-button"),
-                                onClick: domEvent(($event: Event) => {
-                                  threadAdvanced.value = !threadAdvanced.value;
-                                }),
-                              },
-                              t(threadAdvanced.value ? "收起设置" : "展开设置"),
-                              element(
-                                "span",
-                                { "aria-hidden": "true" },
-                                threadAdvanced.value ? "⌃" : "⌄",
-                              ),
                             ),
                           ),
                           element(
@@ -2069,89 +2135,6 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                 ? element(
                     "div",
                     { className: classes("composer-footer") },
-                    element(
-                      "div",
-                      {
-                        "aria-label": t("动态设置"),
-                        className: classes("composer-tools", { expanded: threadAdvanced.value }),
-                      },
-                      element(
-                        "button",
-                        {
-                          disabled: busy.value || mode.value !== "source",
-                          title:
-                            mode.value !== "source"
-                              ? t("切换到 Markdown 源码后插入图片")
-                              : t("从仓库选择图片插入正文"),
-                          className: classes("composer-tool"),
-                          onClick: domEvent(($event: Event) => {
-                            chooseImage();
-                          }),
-                        },
-                        element(Icon, { name: "image", size: 17 }),
-                        t("插入图片"),
-                      ),
-                      element(ChoiceSelect, {
-                        compact: true,
-                        icon: "tag",
-                        modelValue: values.value["taxonomies.tags"] || [],
-                        options: choices.value["taxonomies.tags"] || [],
-                        disabled: busy.value || choicesLoading.value,
-                        name: "taxonomies.tags",
-                        label: t("标签"),
-                        onUpdateModelValue: (($event) => {
-                          values.value["taxonomies.tags"] = $event;
-                        }) satisfies EventHandler<
-                          typeof ChoiceSelect,
-                          "onUpdateModelValue"
-                        >,
-                      }),
-                      element(SelectionField, {
-                        ...topicSelection.value,
-                        multiple: true,
-                        compact: true,
-                        icon: "hash",
-                        modelValue: values.value["extra.topics"] || [],
-                        options: topicChoices.value,
-                        disabled:
-                          busy.value ||
-                          choicesLoading.value ||
-                          !!choicesError.value,
-                        name: "extra.topics",
-                        label: t("关联话题"),
-                        onUpdateModelValue: (($event) => {
-                          values.value["extra.topics"] = $event;
-                        }) satisfies EventHandler<
-                          typeof SelectionField,
-                          "onUpdateModelValue"
-                        >,
-                      }),
-                      element(ArticleReferences, {
-                        compact: true,
-                        modelValue: values.value["extra.references"],
-                        items: topicItems.value,
-                        language: documentLanguage.value,
-                        disabled: busy.value || choicesLoading.value,
-                        onUpdateModelValue: (($event) => {
-                          values.value["extra.references"] = $event;
-                        }) satisfies EventHandler<
-                          typeof ArticleReferences,
-                          "onUpdateModelValue"
-                        >,
-                      }),
-                      element(
-                        "button",
-                        {
-                          "aria-expanded": threadAdvanced.value,
-                          className: classes("composer-tool"),
-                          onClick: domEvent(($event: Event) => {
-                            threadAdvanced.value = !threadAdvanced.value;
-                          }),
-                        },
-                        element(Icon, { name: "sliders", size: 16 }),
-                        t(threadAdvanced.value ? "收起设置" : "更多选项"),
-                      ),
-                    ),
                     element(
                       "div",
                       { className: classes("composer-publish") },

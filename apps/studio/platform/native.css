@@ -9,7 +9,13 @@
 .workspace-chooser { display:grid;gap:.75rem;margin:1rem 0 }
 .workspace-record { display:grid;gap:.5rem;padding:.75rem;border:1px solid var(--border,#ddd);border-radius:.75rem;min-width:0 }
 .workspace-record small { overflow-wrap:anywhere;color:var(--text-secondary,#777) }
-.workspace-record .row { flex-wrap:wrap }
+.workspace-record .row { flex-wrap:wrap; gap:6px }
+.workspace-record strong { overflow-wrap:anywhere }
+.workspace-record button, .workspace-chooser > .secondary, .connection-footer .connection-service { padding:6px 12px; border:1px solid var(--studio-line); border-radius:6px; font-size:13px; background:var(--studio-card); }
+.workspace-record .secondary, .workspace-chooser > .secondary { color:var(--wjx-theme); background:var(--form-surface); }
+.workspace-record .danger { color:var(--wjx-danger, #b73443); }
+.archived-workspaces > summary, .connection-about > summary { align-content:center; min-height:36px; }
+.connection-about[open] .native-update-controls { justify-content:flex-start; }
 .workspace-record button { min-height:44px }
 .native-connect form { display:grid;gap:1rem;margin-top:1.5rem }
 .native-connect .connection-fields { display:grid;grid-template-columns:1fr 1fr;gap:1rem }

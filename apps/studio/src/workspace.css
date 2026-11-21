@@ -45,12 +45,12 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 .editor-page > .localized-context { margin-bottom: 14px; }
 .writing-card > .field { margin: 18px 20px; }
 .title-field input { font-size: 19px; }
-.metadata-card { padding: 18px; gap: 16px; }
+.metadata-card { padding: clamp(12px, 2vw, 18px); gap: 10px; }
 .metadata-card .date-field { grid-template-columns: minmax(0, 1fr); }
 .metadata-card .date-field > :nth-child(n) { grid-column: 1; grid-row: auto; }
-.metadata-card .date-inputs { display: grid; grid-template-columns: 1fr; }
-.metadata-card .date-inputs > .field { display: grid; grid-template-columns: 58px minmax(0, 1fr); align-items: center; gap: 8px; }
-.metadata-card .date-inputs input { padding-inline: 8px; }
+.metadata-card .date-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: 6px; }
+.metadata-card .date-inputs > .field { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 3px; }
+.metadata-card .date-inputs input { width: 100%; min-width: 0; max-width: 100%; padding-inline: 8px; }
 .metadata-card .choice-field > small { grid-column: 1 / -1; }
 .page-editor-tabs { margin-bottom: 12px; gap: 4px; }
 .page-editor-tabs button, .settings-group-tabs button { padding: 8px 12px; }
@@ -73,7 +73,7 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 .structured-summary strong { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
 .structured-summary small { color: var(--studio-muted); font-size: 11px; }
 .collapsible-item > .item-actions { margin: 0; }
-.collapsible-item > .structured-body { grid-column: 1 / -1; min-width: 0; padding: 14px 12px 10px; border-left: 2px solid var(--form-rule); margin: 4px 0 8px 12px; }
+.collapsible-item > .structured-body { grid-column: 1 / -1; min-width: 0; padding: 6px 0; margin: 0; }
 .structured-body { min-width: 0; }
 .structured .compact-item { padding-block: 10px; }
 .structured .compact-object { column-gap: 16px; }
@@ -196,8 +196,7 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 @container structured-list (max-width: 30rem) {
   .structured .compact-item { grid-template-columns: minmax(0, 1fr); }
   .compact-item > .item-actions { grid-column: 1; grid-row: 2; }
-  .collapsible-item > .structured-body { margin-inline-start: 0; padding-inline: 8px 0; }
-  .structured.nested { padding-inline-start: 8px; }
+
   .object-fields .field-inline, .object-fields .image-field {
     display: flex;
     flex-direction: column;

@@ -101,7 +101,7 @@ export { Child as LegacyRecovery, Child as NativeAiSettings, Child as WorkspaceP
     await pending('/content-preview');
     await resolve('/content-preview', 'Cached first');
     await page.waitForSelector('[data-dashboard-preview]');
-    assert.match(await page.$eval('[data-dashboard-preview]', node => node.textContent), /可能已过期/);
+    assert.match(await page.$eval('[data-dashboard-preview]', node => node.textContent), /正在检查远程内容是否有更新/);
     assert.match(await recent(), /Cached first.*缓存摘要/);
     assert.doesNotMatch(await recent(), /已发布/);
     assert.equal(await page.$eval('.stat-card strong', node => node.textContent), '1');

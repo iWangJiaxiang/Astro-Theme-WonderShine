@@ -629,7 +629,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                         title: t("切换工作区"),
                         onClick: domEvent(() => { void logout(); }),
                         disabled: pendingMutations.value > 0,
-                      }, element(Icon, { name: "folder" }), element("span", null, t("切换工作区"))) : null,
+                      }, element(Icon, { name: "switchWorkspace" }), element("span", null, t("切换工作区"))) : null,
                       element(LanguageSwitcher, null),
                       data.value
                         ? element(
@@ -826,7 +826,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                     "p",
                                     { role: "status", className: classes("notice"), "data-dashboard-preview": true },
                                     t(loadingArticles.value
-                                      ? "显示上次缓存的摘要，可能已过期；正在读取最新内容…"
+                                      ? "正在检查远程内容是否有更新"
                                       : "显示上次缓存的摘要，可能已过期；最新内容读取失败，请重试。"),
                                   )
                                 : null,
@@ -1028,15 +1028,6 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                   ),
                                 ),
                               ),
-                              element(
-                                "p",
-                                {
-                                  className: classes(
-                                    "muted small workspace-note",
-                                  ),
-                                },
-                                t("已发布的内容会在下次网站部署后上线。"),
-                              ),
                             )
                           : view.value === "thread" || view.value === "topic"
                             ? element(LocalizedContentLibrary, {
@@ -1130,7 +1121,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                         })}
                     </ViewTransition>,
                   ),
-                  element(
+                  !props.workspaceSwitcher && element(
                     "footer",
                     { className: classes("studio-footer") },
                     t("Wonder Shine · 创作中心"),

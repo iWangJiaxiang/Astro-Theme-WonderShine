@@ -314,16 +314,21 @@ try {
   for (const id of ['a6347560-bbe9-4c35-9d89-b0429108882b', profile.id]) {
     await recordAction(id, '归档记录');
     await page.waitForSelector(`.archived-workspaces [data-workspace-id="${id}"]`);
-    assert.equal(await page.$(`.workspace-record[data-workspace-id="${id}"]`), null);
+    assert.equal(await page.$(`.workspace-chooser > .workspace-record[data-workspace-id="${id}"]`), null);
     await page.reload({waitUntil:'networkidle0'});
     await page.click('.archived-workspaces summary');
     await recordAction(id, '恢复记录');
-    await page.waitForSelector(`.workspace-record[data-workspace-id="${id}"]`);
+    await page.waitForSelector(`.workspace-chooser > .workspace-record[data-workspace-id="${id}"]`);
   }
   assert.equal(await page.evaluate(key => JSON.parse(localStorage.getItem(key)).body, recoveryKey), 'Archive recovery fixture', 'archive/restore retains the original draft identity');
   assert.ok(await fs.stat(root), 'archive/restore retains the original checkout');
   const restored = await page.evaluate(() => JSON.parse(localStorage.getItem('wondershine.native.workspaces.v1')));
   assert.deepEqual(restored.find(record => record.id === profile.id), profile, 'restore preserves the complete original record and recovery ID');
+  await page.click('.connection-about summary');
+  await page.waitForSelector('.connection-about .native-update-controls button', { visible: true });
+  await page.click('.connection-about summary');
+  await recordAction('a6347560-bbe9-4c35-9d89-b0429108882b', '删除记录');
+  await page.waitForFunction(() => !document.querySelector('[data-workspace-id="a6347560-bbe9-4c35-9d89-b0429108882b"]'));
   await screenshot('connection-git-desktop'); await auditNativePage('git'); await noOverflow('desktop connection');
   await click('本地文件夹'); await screenshot('connection-folder-desktop'); await auditNativePage('folder');
   await page.click('.folder-picker');
@@ -552,19 +557,13 @@ try {
     const layout = await page.evaluate(() => {
       const main = document.querySelector('.native-connect');
       const card = document.querySelector('.connection-card').getBoundingClientRect();
-      const footer = document.querySelector('.native-update-footer').getBoundingClientRect();
+      const footer = document.querySelector('footer');
       const padding = parseFloat(getComputedStyle(main).paddingTop);
-      return { top: card.top, padding, footerBottom: footer.bottom, height: document.documentElement.scrollHeight, viewport: innerHeight };
+      return { top: card.top, padding, hasFooter: !!footer, height: document.documentElement.scrollHeight, viewport: innerHeight };
     });
     assert.ok(Math.abs(layout.top - layout.padding) <= 1, name + ': connection card starts at safe-area padding, without a centering gap');
-    if (height >= 844) {
-      assert.ok(layout.height <= layout.viewport + 1, name + ': first launch does not add a footer beyond the viewport');
-      assert.ok(layout.footerBottom <= layout.viewport + 1, name + ': updates stay visible without scrolling');
-    } else {
-      await page.$eval('.native-update-footer button', node => node.scrollIntoView({ block: 'end' }));
-      assert.ok(await page.$eval('.native-update-footer button', node => node.getBoundingClientRect().bottom <= innerHeight + 1), name + ': short screens retain access to updates');
-      await page.evaluate(() => scrollTo(0, 0));
-    }
+    assert.equal(layout.hasFooter, false, name + ': the native connection page has no footer');
+    if (height >= 844) assert.ok(layout.height <= layout.viewport + 1, name + ': first launch fits the viewport');
     await screenshot('connection-first-launch-' + name); await noOverflow(name + ' first launch');
   }
   await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });

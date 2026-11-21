@@ -72,19 +72,19 @@ try {
   await page.click('.native-update-skip');
   await page.reload();
   await page.waitForFunction(() => window.updateFixture?.calls === 1);
-  await page.waitForFunction(() => !document.querySelector('.native-update-footer button').disabled);
+  await page.waitForFunction(() => !document.querySelector('.native-update-controls button').disabled);
   assert.equal(await page.$('.native-update-notice'), null, 'Skipped version must stay dismissed across launches');
-  await page.click('.native-update-footer button');
+  await page.click('.native-update-controls button');
   await page.waitForSelector('.native-update-notice');
   await page.evaluate(() => { window.updateFixture.available = false; });
-  await page.waitForFunction(() => !document.querySelector('.native-update-footer button').disabled);
-  await page.click('.native-update-footer button');
+  await page.waitForFunction(() => !document.querySelector('.native-update-controls button').disabled);
+  await page.click('.native-update-controls button');
   await page.waitForFunction(() => !document.querySelector('.native-update-notice'));
-  assert.match(await page.$eval('.native-update-footer [role=status]', el => el.textContent), /No update|未发现/);
+  assert.match(await page.$eval('.native-update-controls [role=status]', el => el.textContent), /No update|未发现/);
   await page.evaluate(() => { window.updateFixture.fail = true; });
-  await page.click('.native-update-footer button');
-  await page.waitForSelector('.native-update-footer [role=status]');
-  assert.match(await page.$eval('.native-update-footer [role=status]', el => el.textContent), /Could not check|暂时无法/);
+  await page.click('.native-update-controls button');
+  await page.waitForSelector('.native-update-controls [role=status]');
+  assert.match(await page.$eval('.native-update-controls [role=status]', el => el.textContent), /Could not check|暂时无法/);
   assert.deepEqual(errors, []);
 } finally {
   await browser?.close();

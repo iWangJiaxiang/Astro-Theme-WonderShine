@@ -12,5 +12,10 @@ export default function NativeShell() {
   const dispose = useRef<() => void>(() => {});
   useEffect(() => () => dispose.current(), []);
   function disconnect() { resumeOnLaunch.current = false; dispose.current(); dispose.current = () => {}; session.value = null; reauthentication.value = false; setConnected(false); }
-  return <div className={connected ? 'native-shell' : 'native-shell native-shell-connecting'}>{connected ? <>{!session.value && <button className="native-change-connection" disabled={pendingMutations.value > 0} onClick={disconnect}>{t('切换工作区')}</button>}<App workspaceSwitcher /></> : <NativeConnection resumeOnLaunch={resumeOnLaunch.current} onConnected={cleanup => { dispose.current = cleanup; setConnected(true); }} onDisconnect={disconnect} />}<NativeUpdates /></div>;
+  return <div className={connected ? 'native-shell' : 'native-shell native-shell-connecting'}>
+    <NativeUpdates>{controls => connected ? <>
+      {!session.value && <button className="native-change-connection" disabled={pendingMutations.value > 0} onClick={disconnect}>{t('切换工作区')}</button>}
+      <App workspaceSwitcher />
+    </> : <NativeConnection updateControls={controls} resumeOnLaunch={resumeOnLaunch.current} onConnected={cleanup => { dispose.current = cleanup; setConnected(true); }} onDisconnect={disconnect} />}</NativeUpdates>
+  </div>;
 }

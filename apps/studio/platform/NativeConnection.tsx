@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { GitProgressEvent } from 'isomorphic-git';
 import { open } from '@tauri-apps/plugin-dialog';
 import { hostingProviders, type HostingKind, type WorkspaceProfile } from './hosting';
@@ -10,7 +10,7 @@ import { t } from '../src/i18n';
 import { useSignals } from '../src/reactivity';
 import './native.css';
 import AccountLogin from './AccountLogin';
-import { readWorkspaces, writeWorkspaces, serviceAddress, type SavedWorkspace, type ServiceWorkspace } from './workspace-registry';
+import { matchWorkspace, readWorkspaces, writeWorkspaces, serviceAddress, type SavedWorkspace, type ServiceWorkspace } from './workspace-registry';
 function savedProfiles(): { records: SavedWorkspace[]; error: string } {
   try { return { records: readWorkspaces(localStorage), error: '' }; }
   catch { return { records: [], error: '无法读取工作区记录，请检查存储权限或恢复备份。' }; }
@@ -22,7 +22,7 @@ const progressLabels: Record<string, string> = {
   'Updating workdir': '写入本地文件', 'Analyzing workdir': '检查本地文件',
   'Counting objects': '统计仓库文件', 'Compressing objects': '准备仓库数据',
 };
-export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch }: { resumeOnLaunch: boolean; onConnected: (dispose: () => void) => void; onDisconnect: () => void }) {
+export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, updateControls }: { updateControls?: ReactNode; resumeOnLaunch: boolean; onConnected: (dispose: () => void) => void; onDisconnect: () => void }) {
   useSignals();
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -59,10 +59,21 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch }: 
     try { persist(records.map(record => record.id === item.id ? { ...record, label } : record)); }
     catch (reason) { setError((reason as Error).message); }
   }
-  function removeWorkspace(item: SavedWorkspace) {
+  function archiveWorkspace(item: SavedWorkspace) {
     if (!confirm(t('归档仅隐藏记录，保留原编号、文件和草稿，可随时恢复。确定继续吗？'))) return;
     try { persist(records.map(record => record.id === item.id ? { ...record, archived: true } : record)); setToken(''); setShowForm(false); }
     catch (reason) { setError((reason as Error).message); }
+  }
+  function deleteRecord(item: SavedWorkspace) {
+    if (!confirm(t('删除「{name}」的连接记录？文件、草稿和本地提交会保留在设备上，重新添加时可能无法找回原草稿。', { name: item.label }))) return;
+    try {
+      const next = records.filter(record => record.id !== item.id);
+      persist(next);
+      if (profile.id === item.id || service?.id === item.id || !next.length) {
+        setProfile(blank()); setService(null); setAddress(''); setToken(''); setShowForm(!next.length);
+      }
+      setError('');
+    } catch (reason) { setError((reason as Error).message); }
   }
   const [profile, setProfile] = useState<WorkspaceProfile>(() => (folderAvailable ? profiles[0] : profiles.find(item => item.source !== 'local')) || blank());
   const [connection, setConnection] = useState<Connection>(() => folderAvailable && (profiles[0]?.source === 'local' || !profiles.length) ? 'local' : 'clone');
@@ -95,7 +106,14 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch }: 
   async function openWorkspace(item: SavedWorkspace, credential: string, resume = false) {
     setBusy(true); setError(''); setProgress(null);
     try {
-      if (records.some(record => record.archived && record.id === item.id)) throw new Error('此工作区已归档，请先从已归档工作区恢复记录。');
+      const match = matchWorkspace(records, item);
+      if (match?.archived) throw new Error('此工作区已归档，请先从已归档工作区恢复记录。');
+      if (match && match.id !== item.id) {
+        if (match.source !== 'service' && item.source !== 'service') {
+          item = { ...match, username: item.username || match.username,
+            authorName: item.authorName || match.authorName, authorEmail: item.authorEmail || match.authorEmail };
+        } else item = match;
+      }
       let dispose: () => void;
       if (item.source === 'service') {
         const { connectRemoteWorkspace } = await import('./remote-runtime');
@@ -131,34 +149,41 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch }: 
       void openWorkspace({ ...profile, url: profile.url.trim(), branch: profile.branch.trim(), label: profile.label.trim() || profile.url.trim().split('/').at(-1)?.replace(/\.git$/, '') || 'Blog' }, token);
     }
   }
+  function renderRecord(item: SavedWorkspace) {
+    return <div className="workspace-record" data-workspace-id={item.id} key={item.id}>
+      <strong>{item.label}</strong>
+      <small>{item.source === 'service' ? item.address : item.source === 'local' ? item.localPath : item.url}</small>
+      <div className="row">
+        {item.archived ? <button className="secondary" disabled={busy} onClick={() => {
+          try { persist(records.map(record => record.id === item.id ? { ...record, archived: false } : record)); setError(''); }
+          catch (reason) { setError((reason as Error).message); }
+        }}>{t('恢复记录')}</button> : <>
+          <button className="secondary" disabled={busy || (item.source === 'local' && !folderAvailable)} onClick={() => selectWorkspace(item)}>{t('选择工作区')}</button>
+          <button disabled={busy} onClick={() => renameWorkspace(item)}>{t('重命名')}</button>
+          <button disabled={busy} onClick={() => archiveWorkspace(item)}>{t('归档记录')}</button>
+        </>}
+        <button className="danger" disabled={busy} onClick={() => deleteRecord(item)}>{t('删除记录')}</button>
+      </div>
+    </div>;
+  }
   if (resuming) return <main className="native-connect"><LoadingState label="正在打开工作区…" compact /></main>;
   return <main className="native-connect"><section className="card connection-card">
-    <div className="connection-brand"><span>WonderShine Studio</span><LanguageSwitcher /></div><h1>{t('连接创作工作区')}</h1>
+    <div className="connection-brand"><details className="connection-about"><summary>WonderShine Studio</summary>{updateControls}</details><LanguageSwitcher /></div><h1>{t('连接创作工作区')}</h1>
     <div className="connection-modes" role="group" aria-label={t('连接方式')}>
       {folderAvailable && <button disabled={busy} aria-pressed={local} onClick={() => switchConnection('local')}><Icon name="folder" size={19} />{t('本地文件夹')}</button>}
       <button disabled={busy} aria-pressed={connection === 'clone'} onClick={() => switchConnection('clone')}><Icon name="link" size={19} />{t('远程仓库')}</button>
     </div>
     {(error || initial.error) && <p className="notice error" role="alert">{t(error || initial.error)}</p>}
     {records.length > 0 && <section className="workspace-chooser" aria-label={t('工作区')}>
-      {records.filter(item => !item.archived).map(item => <div className="workspace-record" data-workspace-id={item.id} key={item.id}>
-        <strong>{item.label}</strong><small>{item.source === 'service' ? item.address : item.source === 'local' ? item.localPath : item.url}</small>
-        <div className="row"><button disabled={busy || (item.source === 'local' && !folderAvailable)} onClick={() => selectWorkspace(item)}>{t('选择工作区')}</button><button disabled={busy} onClick={() => renameWorkspace(item)}>{t('重命名')}</button><button disabled={busy} onClick={() => removeWorkspace(item)}>{t('归档记录')}</button></div>
-      </div>)}
+      {records.filter(item => !item.archived).map(renderRecord)}
       {records.some(item => item.archived) && <details className="archived-workspaces"><summary>{t('已归档工作区')}</summary>
-        {records.filter(item => item.archived).map(item => <div key={item.id} data-workspace-id={item.id}>
-          <strong>{item.label}</strong><small>{item.source === 'service' ? item.address : item.source === 'local' ? item.localPath : item.url}</small>
-          <button disabled={busy} onClick={() => {
-            try { persist(records.map(record => record.id === item.id ? { ...record, archived: false } : record)); setError(''); }
-            catch (reason) { setError((reason as Error).message); }
-          }}>{t('恢复记录')}</button>
-        </div>)}
+        {records.filter(item => item.archived).map(renderRecord)}
       </details>}
-      <button disabled={busy} onClick={() => { setProfile(blank()); setService(null); setAddress(''); setToken(''); setError(''); setConnection(folderAvailable ? 'local' : 'clone'); setShowForm(true); }}>{t('添加工作区')}</button>
+      <button className="secondary" disabled={busy} onClick={() => { setProfile(blank()); setService(null); setAddress(''); setToken(''); setError(''); setConnection(folderAvailable ? 'local' : 'clone'); setShowForm(true); }}>{t('添加工作区')}</button>
     </section>}
     {showForm && <>
     {connection === 'clone' && <AccountLogin disabled={busy} onSelect={(account, repository) => {
-      const previous = profiles.find(item => item.url === repository.url && item.source !== 'local');
-      setProfile(previous || { ...blank(), provider: account.provider, url: repository.url, branch: repository.branch, label: repository.name, username: account.username, authorName: account.name, authorEmail: account.email });
+      setProfile({ ...blank(), provider: account.provider, url: repository.url, branch: repository.branch, label: repository.name, username: account.username, authorName: account.name, authorEmail: account.email });
       setToken(account.token); setError('');
     }} />}
     <form onSubmit={connect}><fieldset disabled={busy} className="connection-form-fields">
@@ -183,6 +208,6 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch }: 
         <progress aria-label={t(progressLabel)} max={100} value={progressValue} />
       </div>}
     </form></>}
-    <div className="connection-footer"><button className="connection-service" disabled={busy} onClick={() => switchConnection(connection === 'remote' ? 'local' : 'remote')}>{connection === 'remote' ? t('返回仓库连接') : t('连接自建创作中心')}<Icon name="arrow" size={16} /></button></div>
+    <div className="connection-footer"><button className="secondary connection-service" disabled={busy} onClick={() => switchConnection(connection === 'remote' ? 'local' : 'remote')}>{connection === 'remote' ? t('返回仓库连接') : t('连接自建创作中心')}<Icon name="arrow" size={16} /></button></div>
   </section></main>;
 }

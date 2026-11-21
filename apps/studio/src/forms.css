@@ -81,7 +81,7 @@
 .structured-heading .count { font-size: 10px; font-weight: 500; padding: 2px 6px; background: var(--form-surface); color: var(--studio-muted); border-radius: 4px; }
 .structured .structured-item { border: 0; border-top: 1px solid var(--form-rule); border-radius: 0; margin: 0; padding: 14px 0; background: transparent; }
 .structured > .structured-item:first-of-type { border-top: 0; }
-.structured.nested { padding-left: 14px; border-left: 1px solid var(--form-rule); }
+.structured.nested > .structured-heading { padding: 6px 8px; margin: 2px 0 0; background: var(--form-surface); }
 .structured .item-actions { gap: 3px; margin-bottom: 10px; }
 .structured .compact-item > .item-actions { margin: 0; padding-top: 2px; }
 .structured .item-number { color: color-mix(in srgb, var(--studio-muted) 80%, transparent); font-size: 10px; font-variant-numeric: tabular-nums; }
