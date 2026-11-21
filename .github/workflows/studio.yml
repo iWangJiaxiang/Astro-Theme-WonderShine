@@ -32,8 +32,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: studio-${{ inputs.target || 'all' }}-${{ github.event_name == 'release' && github.event.release.tag_name || inputs.publish && format('studio-v{0}', inputs.version) || github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'release' && !inputs.publish }}
+  # Queue main pushes and signed distributions so a later push cannot cancel an upload.
+  group: ${{ (github.ref == 'refs/heads/main' && github.event_name == 'push' || inputs.publish || github.event_name == 'release') && 'studio-distribution' || format('studio-{0}-{1}', inputs.target || 'all', github.ref) }}
+  queue: ${{ (github.ref == 'refs/heads/main' && github.event_name == 'push' || inputs.publish || github.event_name == 'release') && 'max' || 'single' }}
+  cancel-in-progress: ${{ !(github.ref == 'refs/heads/main' && github.event_name == 'push' || inputs.publish || github.event_name == 'release') }}
 env:
   CARGO_TERM_COLOR: always
   VITE_STUDIO_GITHUB_CLIENT_ID: ${{ vars.STUDIO_GITHUB_CLIENT_ID }}
@@ -55,6 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
         with:
+          fetch-depth: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '0' || '1' }}
           persist-credentials: false
       - uses: actions/setup-node@v7.1.0
         with:
@@ -331,13 +334,13 @@ jobs:
       - run: node apps/studio/scripts/configure-ios.mjs
       - run: node apps/studio/scripts/release/icons.mjs ios
       - name: Simulator app (no distribution credentials)
-        if: needs.prepare.outputs.iosRelease != 'true'
+        if: github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true'
         run: npm exec -w @wondershine/studio -- tauri ios build --ci --debug --target aarch64-sim --no-sign
       - name: Inspect and launch iOS simulator app
-        if: needs.prepare.outputs.iosRelease != 'true'
+        if: github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true'
         run: node apps/studio/scripts/release/simulator-smoke.mjs
       - uses: actions/upload-artifact@v7.0.2
-        if: always() && needs.prepare.outputs.iosRelease != 'true'
+        if: always() && (github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true')
         with:
           name: studio-ios-screenshots
           path: apps/studio/test-results/ios-simulator/

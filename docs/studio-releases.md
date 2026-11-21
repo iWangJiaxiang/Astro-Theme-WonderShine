@@ -22,7 +22,7 @@ Release 标题统一为 `WonderShine Studio X.Y.Z`，例如 `WonderShine Studio 
 | macOS | Intel、Apple Silicon | `.dmg` | `.dmg`，当前未配置 Developer ID 签名及公证 |
 | Linux | x64、ARM64 | `.deb`、`.rpm`、`.AppImage` | 同左 |
 | Android | ARM64、ARMv7、x86、x64 | debug APK | 固定密钥签名的 APK、AAB |
-| iOS | Apple Silicon 模拟器 / 真机 ARM64 | 未签名模拟器 `.app.tar.gz` | App Store 签名 IPA；可选上传 TestFlight |
+| iOS | Apple Silicon 模拟器 / 真机 ARM64 | 模拟器验收；启用自动 TestFlight 时另产签名 IPA | App Store 签名 IPA；可选上传 TestFlight |
 
 桌面未签名安装包可能被系统拦截；当前工作流没有声称它们已经获得 Windows/macOS 签名或 macOS 公证。移动正式发行不会退化成 unsigned/debug 包。iOS 模拟器包不能装在真机，App Store IPA 也不能像 APK 一样公开侧载。
 
@@ -31,6 +31,8 @@ GitHub Releases 是当前桌面/Android 的部署入口；Google Play 上架需�
 ## 构建与发布边界
 
 Studio 支持全平台构建和独立 iOS 构建。独立 iOS 的 TestFlight 上传只依赖 Studio 验证和 iOS 构建，不依赖桌面或 Android，也不创建 GitHub Release。全平台发行仍要求全部平台成功；其中启用的 TestFlight 上传可在其他平台完成前执行。
+
+仓库变量 `STUDIO_UPLOAD_TESTFLIGHT=true` 启用自动内测。每次推送到 `main`，CI 比较本次推送前后的提交；`apps/studio/` 中除 Markdown 文档和 `tests/` 目录以外的文件发生变更时，构建签名 IPA。Studio 验证、模拟器启动和 IPA 检查都通过后，CI 上传同一提交的 IPA，并查询 Apple 处理状态。版本号取自 Studio 包，build 号取自工作流运行序号和重试次数。PR 和功能分支仅验证，测试组沿用 App Store Connect 配置。
 
 签名和上传凭据仅通过 GitHub Secrets 注入。签名产物自身仍可能包含 Apple Team ID，Secret 配置不意味着产物匿名化。
 
