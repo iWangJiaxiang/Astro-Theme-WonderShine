@@ -52,7 +52,7 @@ export async function checkLanguages({ browser, origin, screenshots, base }) {
     await click('Discard changes and reload');
     await page.waitForFunction(original => document.querySelector('[name=title]')?.value === original, {}, originalTitle);
 
-    for (const name of ['Navigation', 'Tags & categories', 'Featured content', 'About settings', 'Appearance', 'Friend links', 'Site information']) {
+    for (const name of ['Navigation', 'Tags & categories', 'Featured content', 'About settings', 'Theme maintenance', 'Friend links', 'Site information']) {
       await click(name); await heading(name);
       const untranslatedLabels = await page.$$eval('.settings-card .field > label, .settings-card .field > span, .settings-card label.field', nodes => nodes.map(el => el.textContent.trim()).filter(text => /[\u3400-\u9fff]/.test(text)));
       assert.deepEqual(untranslatedLabels, [], name + ' field labels must be localized');

@@ -59,6 +59,7 @@ test('a standalone npm build follows moved tags and honors a pin without Studio'
   await writeFile(join(site, 'config.toml'), '[extra.theme]\nchannel="next"\n');
   assert.equal(await build(), preview);
   tags.next = newer;
+  await writeFile(join(site, 'config.toml'), '# WonderShine Studio theme rebuild: next 2026-11-22T04:00:00.000Z\n[extra.theme]\nchannel="next"\n');
   assert.equal(await build(), newer);
   await npm('ci');
   await writeFile(join(site, 'config.toml'), '[extra.theme]\nchannel="next"\npinned=true\nversion="1.0.0"\n');

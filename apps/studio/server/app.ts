@@ -21,7 +21,8 @@ import { StudioError } from './errors.js';
 import { settingsSchemas } from '../shared/settings.js';
 import { MAX_UPLOAD_SIZE } from '../shared/media.js';
 import { readUploadBody } from './media-upload.js';
-export interface AppOptions { config: StudioConfig; repository: Repository; state: StateStore; mediaLimit?: number; translationFetch?: typeof fetch; aiFetch?: typeof fetch; oidcDiscover?: () => Promise<Configuration>; summaryRuntime?: SummaryRuntime; summaryStore?: SummaryIndexStore; summaryScope?: string }
+import { applyThemeUpdate, checkThemeUpdate } from '../core/theme-update.js';
+export interface AppOptions { config: StudioConfig; repository: Repository; state: StateStore; mediaLimit?: number; translationFetch?: typeof fetch; aiFetch?: typeof fetch; themeFetch?: typeof fetch; oidcDiscover?: () => Promise<Configuration>; summaryRuntime?: SummaryRuntime; summaryStore?: SummaryIndexStore; summaryScope?: string }
 export function createApp(options: AppOptions) {
   const app = new Hono<{ Variables: { session: Session } }>();
   const auth = new Authentication(options.config, options.state);
@@ -35,7 +36,8 @@ export function createApp(options: AppOptions) {
   // All services and workspace sync share exactly one observed repository.
   options = { ...options, repository: runtime.repository };
   const translation = new TranslationService(options.repository, options.config.translation, options.translationFetch);
-  const content = new ContentService(options.repository);
+  const themeFetch = options.themeFetch ?? fetch;
+  const content = new ContentService(options.repository, undefined, themeFetch);
   const mediaLimit = Math.min(options.mediaLimit ?? MAX_UPLOAD_SIZE, MAX_UPLOAD_SIZE);
   const ai = new AiService(options.config.translation, options.config.imageGeneration, options.aiFetch, mediaLimit);
   // Per-instance protection supplements the mandatory edge login rate-limit rule.
@@ -126,6 +128,11 @@ export function createApp(options: AppOptions) {
     const input = body ? JSON.parse(body) as { confirmation?: string } : undefined;
     return c.json(await control.sync(requireWorkspaceConfirmation(input?.confirmation)));
   });
+  app.get('/api/theme-update', async c => {
+    options.repository.clearReadCache?.();
+    return c.json(await checkThemeUpdate(options.repository, themeFetch));
+  });
+  app.post('/api/theme-update', async c => c.json(await applyThemeUpdate(options.repository, themeFetch, new Date(), await c.req.json())));
   app.get('/api/settings/:id', async c => c.json(await content.settings(c.req.param('id'), c.req.query('language'))));
   app.put('/api/settings/:id', async c => {
     const input = await c.req.json<{ revision: string | null; changes: unknown; saveMode?: unknown }>();

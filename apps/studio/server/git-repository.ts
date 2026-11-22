@@ -117,7 +117,7 @@ export class GitRepository implements Repository {
         if (text === null) await git.remove({ fs, dir, filepath: path });
         else await git.add({ fs, dir, filepath: path });
       }
-      const commit = await git.commit({ fs, dir, message: `docs(content): ${entries[0].text === null ? 'remove' : 'update'} ${entries[0].path}`,
+      const commit = await git.commit({ fs, dir, message: entries[0].commitMessage ?? `docs(content): ${entries[0].text === null ? 'remove' : 'update'} ${entries[0].path}`,
         author: { name: this.options.name, email: this.options.email } });
       try {
         const pushed = await git.push({ fs, http: this.http, dir, remote: 'origin', ref: this.options.branch,

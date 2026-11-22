@@ -39,23 +39,40 @@ export function chooser(page) {
   };
 }
 
-export async function checkControls({ page, click, heading, fill, base, screenshots, choose }) {
+export async function checkControls({ page, click, heading, fill, base, screenshots, choose, mockThemeCheck }) {
   const { readFile, writeFile, mkdir } = await import('node:fs/promises');
   const { patchToml, splitDocument } = await import('../../server/content.ts');
   const { parse } = await import('smol-toml');
-  const appearanceResponse = method => page.waitForResponse(response =>
-    new URL(response.url()).pathname === '/api/settings/appearance' && response.request().method() === method);
-  async function saveAppearance(expectedRevision) {
-    const [response] = await Promise.all([appearanceResponse('PUT'), click('本地保存')]);
+  const configFile = base + '/site/config.toml';
+  const themeResponse = method => page.waitForResponse(response =>
+    new URL(response.url()).pathname === '/api/settings/theme' && response.request().method() === method);
+  async function saveTheme(expectedRevision) {
+    const [response] = await Promise.all([themeResponse('PUT'), click('本地保存')]);
     const submitted = JSON.parse(response.request().postData());
     if (expectedRevision !== undefined) assert.equal(submitted.revision, expectedRevision, 'save submits the revision returned by the fresh settings GET');
-    assert.equal(response.status(), 200, 'appearance save must succeed directly, without conflict retries');
+    assert.equal(response.status(), 200, 'blog theme save must succeed directly, without conflict retries');
     await page.waitForFunction(() => {
       const button = document.querySelector('.settings-page .page-heading .primary');
       return button?.disabled && document.querySelector('.settings-page .notice.success') && !document.querySelector('.settings-page .notice.error');
     });
+    return response.json();
   }
+  await page.$eval('.studio-preferences', node => { node.open = true; });
+  const beforeAppearance = await readFile(configFile, 'utf8');
   await click('外观样式'); await heading('外观样式');
+  assert.equal(await page.$('[data-field="extra.theme.channel"]'), null);
+  assert.equal(await page.$('[data-field="extra.style.universe"]'), null);
+  await choose('extra.style.color_scheme', 'dark');
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+  assert.equal(await readFile(configFile, 'utf8'), beforeAppearance);
+  await page.screenshot({ path: screenshots + '/studio-appearance-desktop.png' });
+  await page.setViewport({ width: 390, height: 844 });
+  await page.waitForFunction(() => document.querySelector('#studio-navigation').getBoundingClientRect().right <= 1);
+  await page.screenshot({ path: screenshots + '/studio-appearance-mobile.png' });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.setViewport({ width: 1440, height: 1000 });
+  await click('恢复站点默认外观');
+  await click('主题维护'); await heading('主题维护');
   assert.equal(await page.$$eval('[data-field="extra.style.color_scheme"] input[type=radio]', nodes => nodes.length), 3);
   assert.equal(await page.$$eval('[data-field="extra.style.font_family"] input[type=radio]', nodes => nodes.length), 5, 'exactly five values remain flat');
   const themeChannel = '[data-field="extra.theme.channel"]';
@@ -78,20 +95,37 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await fill('[aria-label="选择浅色主题色"]', '#3355aa');
   assert.equal(await page.$eval('[name="extra.style.theme_light_skin"]', e => e.value), '#3355aa');
   assert.equal(await page.$eval('[data-field="extra.style.theme_light_skin"] .color-swatch', e => getComputedStyle(e).backgroundColor), 'rgb(51, 85, 170)');
-  await saveAppearance();
+  const saved = await saveTheme();
   assert.equal(parse(await readFile(base + '/site/config.toml', 'utf8')).extra.style.theme_light_skin, '#3355aa');
   assert.equal(parse(await readFile(base + '/site/config.toml', 'utf8')).extra.theme.channel, 'canary');
   await page.screenshot({ path: screenshots + '/form-colors.png', fullPage: true });
+
+  mockThemeCheck({ revision: saved.revision, channel: 'canary', pinned: false, currentVersion: null, channelVersion: '1.2.3-canary.1', destination: 'file' });
+  await click('检查更新');
+  await page.waitForFunction(() => document.querySelector('.theme-update-controls')?.textContent.includes('1.2.3-canary.1'));
+  const beforeRebuild = await readFile(configFile, 'utf8');
+  await page.screenshot({ path: screenshots + '/theme-update-result-desktop.png' });
+  await page.setViewport({ width: 390, height: 844 });
+  await page.waitForFunction(() => document.querySelector('#studio-navigation').getBoundingClientRect().right <= 1);
+  await page.screenshot({ path: screenshots + '/theme-update-result-mobile.png' });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.setViewport({ width: 1440, height: 1000 });
+  const [rebuild] = await Promise.all([page.waitForResponse(response => new URL(response.url()).pathname === '/api/theme-update' && response.request().method() === 'POST'), click('请求重新构建')]);
+  assert.equal(rebuild.status(), 200);
+  const rebuiltText = await readFile(configFile, 'utf8');
+  assert.match(rebuiltText, /^# WonderShine Studio theme rebuild: canary /);
+  assert.deepEqual(parse(rebuiltText), parse(beforeRebuild));
+  mockThemeCheck(undefined);
+  await page.waitForSelector('.settings-page .notice.success');
   await click('工作台'); await heading('今天，写点什么？');
-  const configFile = base + '/site/config.toml';
   await writeFile(configFile, patchToml(await readFile(configFile, 'utf8'), { 'extra.style.font_family': 'Custom Font' }));
-  const [freshResponse] = await Promise.all([appearanceResponse('GET'), click('外观样式')]);
+  const [freshResponse] = await Promise.all([themeResponse('GET'), click('主题维护')]);
   assert.equal(freshResponse.status(), 200);
   const freshAppearance = await freshResponse.json();
   assert.equal(freshAppearance.values['extra.style.font_family'], 'Custom Font');
   assert.equal(typeof freshAppearance.revision, 'string');
   assert.ok(freshAppearance.revision);
-  await heading('外观样式');
+  await heading('主题维护');
   await page.waitForSelector('button[name="extra.style.font_family"]');
   assert.equal(await page.$('[data-field="extra.style.font_family"] fieldset'), null, 'six values use a modal, including existing custom value');
   await page.click('button[name="extra.style.font_family"]'); await page.waitForSelector('.selection-dialog[open]');
@@ -108,7 +142,7 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await click('取消');
   assert.ok(await page.$eval('button[name="extra.style.font_family"]', el => el.textContent.includes('Custom Font')));
   await choose('extra.style.font_family', 'PingFang SC');
-  await saveAppearance(freshAppearance.revision);
+  await saveTheme(freshAppearance.revision);
   assert.equal(parse(await readFile(configFile, 'utf8')).extra.style.font_family, 'PingFang SC');
 
   await click('导航菜单'); await heading('导航菜单');

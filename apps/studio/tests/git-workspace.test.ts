@@ -13,6 +13,7 @@ import { LocalRepository } from '../server/repository.js';
 import { createApp } from '../server/app.js';
 import { FileState } from '../server/state.js';
 import { hashPassword } from '../server/password.js';
+import { applyThemeUpdate, checkThemeUpdate } from '../core/theme-update.js';
 
 test('persistent workspaces retain offline edits, recover on reopen and synchronize without overwriting conflicts', async t => {
   const root = await mkdtemp(join(tmpdir(), 'studio-git-'));
@@ -120,6 +121,24 @@ test('persistent workspaces retain offline edits, recover on reopen and synchron
   run(['checkout', themeCommit], join(directory, 'themes/wondershine'));
   run(['submodule', 'absorbgitdirs'], directory);
   assert.equal((await reopened.workspace.status()).dirty, false, 'initialized theme submodule remains outside content changes');
+
+  const registry: typeof fetch = async () => Response.json({ latest: '1.2.3' });
+  const theme = await checkThemeUpdate(reopened, registry);
+  assert.equal(theme.destination, 'workspace');
+  const originalArticle = (await reopened.read(articlePath))!;
+  const draft = await reopened.write(articlePath, originalArticle.text + '\nUnrelated draft', originalArticle.revision);
+  const rebuild = await applyThemeUpdate(reopened, registry, new Date('2026-11-22T04:00:00Z'), theme);
+  assert.ok(rebuild.commit);
+  assert.equal(run(['diff-tree', '--no-commit-id', '--name-only', '-r', rebuild.commit], directory), 'config.toml');
+  assert.equal(run(['--git-dir=repo.git', 'rev-parse', 'main']), synced.head, 'local theme commit waits for a reviewed sync');
+  assert.match((await reopened.read(articlePath))!.text, /Unrelated draft/);
+  await reopened.write(articlePath, originalArticle.text, draft.revision);
+  offline = true;
+  await assert.rejects(reopened.workspace.sync((await reopened.workspace.createReview()).confirmation), /本地文件和提交已保留/);
+  assert.equal((await reopened.workspace.status()).head, rebuild.commit);
+  offline = false;
+  await reopened.workspace.sync((await reopened.workspace.createReview()).confirmation);
+  assert.equal(run(['--git-dir=repo.git', 'rev-parse', 'main']), rebuild.commit);
 
   // A second device changes the remote. Fetch then checkout must retain the configured branch.
   run(['pull', '--ff-only', '../repo.git', 'main'], join(root, 'seed'));
@@ -241,7 +260,7 @@ test('workspace status requires authentication and commits/sync require CSRF', a
   } });
   const config = { origin: 'http://localhost:5173', secureCookies: false, sessionSecret: 'x'.repeat(32), sessionSeconds: 3600, username: 'owner', passwordHash: await hashPassword('workspace-test-password') };
   const app = createApp({ config, repository, state: new FileState(join(root, '.state')) });
-  for (const [url, method] of [['/api/workspace', 'GET'], ['/api/workspace/commit', 'POST'], ['/api/workspace/sync', 'POST']]) {
+  for (const [url, method] of [['/api/workspace', 'GET'], ['/api/workspace/commit', 'POST'], ['/api/workspace/sync', 'POST'], ['/api/theme-update', 'GET'], ['/api/theme-update', 'POST']]) {
     assert.equal((await app.request(url, { method })).status, 401);
   }
   const login = await app.request('/api/auth/login', { method: 'POST', headers: { origin: config.origin, 'content-type': 'application/json' }, body: JSON.stringify({ username: 'owner', password: 'workspace-test-password' }) });
@@ -249,7 +268,7 @@ test('workspace status requires authentication and commits/sync require CSRF', a
   const cookie = login.headers.get('set-cookie')!.split(';')[0];
   const headers = { cookie, origin: config.origin, 'x-csrf-token': session.csrf, 'content-type': 'application/json' };
   assert.deepEqual(await (await app.request('/api/workspace', { headers })).json(), status);
-  for (const endpoint of ['/api/workspace/commit', '/api/workspace/sync']) {
+  for (const endpoint of ['/api/workspace/commit', '/api/workspace/sync', '/api/theme-update']) {
     assert.equal((await app.request(endpoint, { method: 'POST', headers: { cookie, origin: config.origin }, body: '{}' })).status, 403);
     assert.equal((await app.request(endpoint, { method: 'POST', headers: { ...headers, origin: 'https://evil.example' }, body: '{}' })).status, 403);
   }

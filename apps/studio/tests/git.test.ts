@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { StudioError } from '../server/errors.js';
 import { ContentService } from '../server/content-service.js';
 import { GitRepository } from '../server/git-repository.js';
+import { applyThemeUpdate, checkThemeUpdate } from '../core/theme-update.js';
 
 test('HTTPS Git adapter clones, pushes only edited paths and rejects stale revisions via smart HTTP', async t => {
   const root = await mkdtemp(join(tmpdir(), 'studio-git-'));
@@ -136,4 +137,15 @@ test('HTTPS Git adapter clones, pushes only edited paths and rejects stale revis
   assert.equal(mainFile.text, otherFile.text);
   assert.notEqual(mainFile.revision, otherFile.revision, 'identical blobs on distinct branches have distinct scopes');
   await assert.rejects(otherBranch.write(first.path, 'wrong branch token', mainFile.revision), /已更新/);
+
+  const configBeforePin = (await otherBranch.read('config.toml'))!;
+  await otherBranch.write('config.toml', configBeforePin.text + '[extra.theme]\npinned=true\nversion="1.0.0"\n', configBeforePin.revision);
+  const registry: typeof fetch = async () => Response.json({ latest: '1.2.3' });
+  const check = await checkThemeUpdate(otherBranch, registry);
+  assert.equal(check.destination, 'remote');
+  const update = await applyThemeUpdate(otherBranch, registry, new Date(), check);
+  assert.ok(update.commit);
+  assert.equal(run(['--git-dir=repo.git', 'rev-parse', 'other']), update.commit);
+  assert.equal(run(['--git-dir=repo.git', 'diff-tree', '--no-commit-id', '--name-only', '-r', update.commit]), 'config.toml');
+  assert.match(run(['--git-dir=repo.git', 'show', 'other:config.toml']), /version="1.2.3"/);
 });

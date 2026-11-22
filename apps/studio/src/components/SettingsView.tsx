@@ -35,9 +35,12 @@ import {
 import FormField from "./FormField";
 import LoadingState from "./LoadingState";
 import ValueEditor from "./ValueEditor";
+import type { ThemeUpdateCheck, ThemeUpdateResult } from "../../shared/theme-update";
+import { notifyWorkspaceChanged } from "../workspace-events";
 
-type Props = { group: string; embedded?: boolean; language?: string };
+type Props = { group: string; embedded?: boolean; language?: string; manageWorkspace?: () => void };
 type Events = { dirty: [value: boolean]; saved: []; exit: [] };
+const themeFields = ["extra.theme.channel", "extra.theme.pinned", "extra.theme.version"];
 const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
   "SettingsView",
   (props, emit, expose) => {
@@ -47,12 +50,14 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       initialGroup = props.group,
       initialLanguage = props.language;
     const endpoint = `/settings/${initialGroup}${initialLanguage ? `?language=${encodeURIComponent(initialLanguage)}` : ""}`;
-    const storageKey = `studio-settings:${initialIdentity?.method}:${initialIdentity?.id}:${initialGroup}:${initialLanguage || "default"}`;
+    const storageKey = `studio-settings:${initialIdentity?.method}:${initialIdentity?.id}:${initialGroup === "theme" ? "appearance" : initialGroup}:${initialLanguage || "default"}`;
     let alive = true, observedAuthenticationEpoch = authenticationEpoch.value;
     const retired = ref(initialIdentity === null), mainNeedsReload = ref(false),
       relationsNeedsRetry = ref(false), unknownSaveObligation = ref(false);
     const ready = ref(false), busy = ref(false),
       error = ref<Message>(""), message = ref<Message>("");
+    const themeCheck = shallowRef<ThemeUpdateCheck | null>(null);
+    const themeOperation = ref<"check" | "apply" | null>(null), themeNeedsSync = ref(false);
     let requestId = 0, mainPending = false;
     let relationsRequestId = 0, relationsRefreshPending = false,
       relationsAuthenticationEpoch = observedAuthenticationEpoch;
@@ -79,6 +84,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
         if (abandonedMain) mainNeedsReload.value = true;
         if (relationsLoading.value) relationsNeedsRetry.value = true;
         relationsLoading.value = false;
+        themeCheck.value = null;
         if (activeSave?.initiated) unknownSaveObligation.value = true;
       });
     }
@@ -222,10 +228,10 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           ],
         },
       ],
-      appearance: [
-        { title: "主题版本", paths: ["extra.theme.channel", "extra.theme.pinned", "extra.theme.version"] },
+      theme: [
+        { title: "主题版本", paths: themeFields },
         {
-          title: "主题与字体",
+          title: "博客样式",
           paths: [
             "extra.style.theme_light_skin",
             "extra.style.theme_dark_skin",
@@ -315,6 +321,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       ),
     );
     const dirty = computed(() => Object.keys(changes.value).length > 0);
+    const themeDirty = computed(() => themeFields.some(path => Object.hasOwn(changes.value, path)));
     watch(() => dirty.value || branchPending.value || unknownSaveObligation.value, () => {
       reconcileBoundary();
       const obligation = dirty.value || branchPending.value || unknownSaveObligation.value;
@@ -349,6 +356,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
         error.value = "";
         settings.value = null;
         message.value = "";
+        themeCheck.value = null;
         mainNeedsReload.value = false;
       });
       try {
@@ -429,6 +437,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
         busy.value = true;
         error.value = "";
         message.value = "";
+        themeCheck.value = null;
       });
       try {
         if (!current()) return;
@@ -466,6 +475,90 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           busy.value = false;
         }
       }
+    }
+    async function updateTheme(apply: boolean) {
+      if (!canInteract() || !ready.value || !settings.value || busy.value || themeDirty.value || branchPending.value || unknownSaveObligation.value) return;
+      const check = themeCheck.value;
+      if (apply && (!check || (check.revision ?? "") !== settings.value.revision)) return;
+      if (!apply) themeCheck.value = null;
+      const operation = { authentication: authenticationEpoch.value, initiated: false };
+      const current = () => ownsInstance() && operation.authentication === authenticationEpoch.value && activeSave === operation;
+      activeSave = operation;
+      batch(() => {
+        busy.value = true;
+        themeOperation.value = apply ? "apply" : "check";
+        error.value = "";
+        message.value = "";
+      });
+      try {
+        if (!current()) return;
+        if (!check || !apply) {
+          const result = await api<ThemeUpdateCheck>("/theme-update");
+          if (!current()) return;
+          if ((result.revision ?? "") !== settings.value?.revision) {
+            error.value = "主题设置已变化，请重新加载后检查更新";
+          } else themeCheck.value = result;
+          return;
+        }
+        operation.initiated = true;
+        const result = await api<ThemeUpdateResult>("/theme-update", "POST", { revision: check.revision, channelVersion: check.channelVersion });
+        if (!current()) return;
+        operation.initiated = false;
+        batch(() => {
+          settings.value = { ...settings.value!, revision: result.revision };
+          if (result.pinnedThemeVersion) {
+            const path = "extra.theme.version";
+            if (!themeDirty.value) values.value[path] = result.pinnedThemeVersion;
+            baseline.value[path] = result.pinnedThemeVersion;
+          }
+          themeCheck.value = null;
+          themeNeedsSync.value = check.destination === "workspace";
+          if (result.localCommitPending) error.value = result.message;
+          else message.value = result.message;
+        });
+        if (current() && check.destination === "workspace") notifyWorkspaceChanged();
+      } catch (reason) {
+        if (current()) {
+          operation.initiated = false;
+          error.value = errorMessage(reason);
+          themeCheck.value = null;
+        }
+      } finally {
+        reconcileBoundary();
+        if (alive && activeSave === operation) {
+          activeSave = null;
+          busy.value = false;
+          themeOperation.value = null;
+        }
+      }
+    }
+    function themeUpdateControls() {
+      const check = themeCheck.value;
+      const disabled = busy.value || themeDirty.value || branchPending.value || unknownSaveObligation.value;
+      const sameVersion = check?.pinned && check.currentVersion === check.channelVersion;
+      return <div className="full-width theme-update-controls">
+        <div className="row">
+          <button className="secondary" type="button" disabled={disabled} onClick={() => void updateTheme(false)}>
+            {t(themeOperation.value === "check" ? "正在检查更新" : "检查更新")}
+          </button>
+          {check && !sameVersion && <button className="primary" type="button" disabled={disabled} onClick={() => void updateTheme(true)}>
+            {t(themeOperation.value === "apply" ? "正在应用主题更新…" : check.pinned ? "更新到此版本" : "请求重新构建")}
+          </button>}
+          {themeNeedsSync.value && props.manageWorkspace && <button className="secondary" type="button" disabled={busy.value} onClick={() => {
+            if (canInteract()) props.manageWorkspace?.();
+          }}>
+            {t("前往工作区同步")}
+          </button>}
+        </div>
+        {themeDirty.value ? <p className="muted small">{t("保存版本设置后可检查更新。")}</p> : check && <div role="status" className="small">
+          {check.pinned && check.currentVersion && <p>{t("已固定版本 {version}", { version: check.currentVersion })}</p>}
+          <p>{t("渠道当前版本 {version}", { version: check.channelVersion })}</p>
+          <p className="muted">{t(sameVersion ? "已是该渠道当前版本" : !check.pinned ? "已部署版本未知。重新构建时会使用渠道当时的版本。"
+            : check.destination === "remote" ? "确认后将提交并推送版本变更。" : check.destination === "workspace" ? "确认后将提交版本变更，随后可在工作区同步。" : "确认后将写入版本设置。")}</p>
+          {!check.pinned && <p className="muted">{t(check.destination === "remote" ? "确认后将提交并推送重建请求。"
+            : check.destination === "workspace" ? "确认后将提交重建请求，随后可在工作区同步。" : "确认后将写入重建注释，供你提交。")}</p>}
+        </div>}
+      </div>;
     }
     const exitControl = () => element("button", {
       className: classes("text-button settings-exit"),
@@ -655,6 +748,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                               }),
                         ),
                       ),
+                      initialGroup === "theme" && section.title === "主题版本" ? themeUpdateControls() : null,
                     ),
                   ),
                 ),

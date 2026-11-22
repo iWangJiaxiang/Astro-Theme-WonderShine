@@ -1,4 +1,7 @@
 import { mergeTarget } from './merge-target.js';
+import { assertThemeCommit } from './theme-commit.js';
+import { themeConfigPath } from '../core/theme-update.js';
+import type { ThemeCommit } from '../shared/theme-update.js';
 import { commitBranchSnapshot, assertBranchSnapshot } from './branch-save.js';
 import type { BranchFile, BranchSave } from '../shared/save.js';
 import './buffer.js';
@@ -208,23 +211,31 @@ export class NativeGitEngine implements WorkspaceControl {
     });
   }
   commitForReview(message: string, confirmation: string): Promise<void> {
-    return withWorkspaceLock(this.root, () => this.commitUnlocked(message, confirmation));
+    return withWorkspaceLock(this.root, async () => { await this.commitUnlocked(message, confirmation); });
   }
-  private async commitUnlocked(message: string, confirmation?: string) {
+  commitTheme(change: ThemeCommit): Promise<string> {
+    return withWorkspaceLock(this.root, () => this.commitUnlocked(change.message, undefined, change));
+  }
+  private async commitUnlocked(message: string, confirmation?: string, theme?: ThemeCommit) {
     await this.openUnlocked(); await this.assertWritable();
     if (!this.profile.authorName.trim() || !this.profile.authorEmail.trim()) throw new StudioError(400, '请在连接设置中填写提交者名称和邮箱');
     if (typeof message !== 'string' || !message.trim() || message.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)) throw new StudioError(400, '请输入不超过 500 字的提交说明');
     const rows = await this.checkedRows(confirmation);
     if ((await git.listFiles(this.options)).some(internal)) throw new StudioError(409, 'Git 暂存区包含创作中心备份文件，请先在 Git 工具中处理');
-    if (rows.some(([path, head, , stage]) => !managed(path) && head !== stage)) throw new StudioError(409, '暂存区含有创作中心以外的文件，请先在 Git 工具中处理');
-    const entries = rows.filter(([path]) => managed(path));
+    const included = (path: string) => theme ? path === themeConfigPath : managed(path);
+    if (rows.some(([path, head, , stage]) => (theme || !included(path)) && head !== stage)) throw new StudioError(409, '暂存区含有创作中心以外的文件，请先在 Git 工具中处理');
+    const entries = rows.filter(([path]) => included(path));
     if (!entries.length) throw new StudioError(409, '没有可提交的内容修改');
     for (const [path] of entries) await this.safeFile(path);
+    if (theme) {
+      const bytes = await this.files.readFile(this.root + '/' + themeConfigPath);
+      await assertThemeCommit(this.options, theme, typeof bytes === 'string' ? new TextEncoder().encode(bytes) : bytes);
+    }
     for (const [path, , worktree] of entries) {
       if (worktree) await git.add({ ...this.options, filepath: path });
       else await git.remove({ ...this.options, filepath: path });
     }
-    await git.commit({ ...this.options, message: message.trim(), author: { name: this.profile.authorName, email: this.profile.authorEmail } });
+    return git.commit({ ...this.options, message: message.trim(), author: { name: this.profile.authorName, email: this.profile.authorEmail } });
   }
 
   private async fetchRemote() {
