@@ -22,33 +22,33 @@
   "checks": [
     {
       "area": "code",
-      "checked_at": "2026-11-21",
-      "result": "Tasks 2,5: checked five issues and comments, no open PRs; inspected CSS subprocess and routes. New main commit b04f230 resolves #18; commented with evidence and close recommendation.",
-      "follow_up": "Retain #13 remote-validation prerequisite and #15 branch review; #18 can be closed after reviewing evidence."
-    },
-    {
-      "area": "performance",
-      "checked_at": "2026-11-21",
-      "result": "Inspected responsive image encoder and manifest: recipe cache, promise deduplication, four workers and copied set present. No measured new optimization; no benchmark run.",
-      "follow_up": "Retain #13 remote-validation prerequisite and #15 branch review; #18 can be closed after reviewing evidence."
+      "checked_at": "2026-11-22",
+      "result": "Tasks 3,5,2: verified all five open issues/comments and no PRs; reviewed CSS subprocess and routes. No new human activity. #13 remains unfixed; #15 existing branch awaits review; #18 already has closure evidence.",
+      "follow_up": "#13 requires remote build/test capability before a validated fix PR; no local execution permitted."
     },
     {
       "area": "build",
-      "checked_at": "2026-11-21",
-      "result": "Task 9: inspected image safety/cache/error tests, npm release tests and tgz consumer. Manual dispatch now cannot publish; CSS failure-path gap remains #13. No tests run.",
-      "follow_up": "Retain #13 remote-validation prerequisite and #15 branch review; #18 can be closed after reviewing evidence."
+      "checked_at": "2026-11-22",
+      "result": "Fallback Task 9: inspected release assertions and tgz consumer; CSS null-status failure-path gap already tracked in #13. No tests executed.",
+      "follow_up": "Avoid duplicate proposals; remote validation unavailable."
     },
     {
-      "area": "ci",
-      "checked_at": "2026-11-21",
-      "result": "Inspected ci.yml and npm-publish.yml. No remote dispatch write tool; no local install/build/test. Scheduled assessment completed with #18 resolution guidance; no new PR.",
-      "follow_up": "Retain #13 remote-validation prerequisite and #15 branch review; #18 can be closed after reviewing evidence."
+      "area": "performance",
+      "checked_at": "2026-11-22",
+      "result": "Fallback Task 8: inspected image recipe cache, digest promise deduplication, copied set and four workers; no new measured opportunity. No benchmarks executed.",
+      "follow_up": "Require measurements for performance changes."
     },
     {
       "area": "docs",
-      "checked_at": "2026-11-21",
-      "result": "Tasks 4,5,3 and fallbacks reviewed CSS build, CI, routes, image tests/encoder, backlog and docs. No new human comments or PRs. Prepared #14 duplicate-body cleanup preserving history and pending actions.",
-      "follow_up": "#13 needs fix and remote CI; #15 awaits branch review; #18 closure guidance posted. No builds/tests run."
+      "checked_at": "2026-11-22",
+      "result": "Fallbacks 10,7: reviewed actionable backlog, releasing and getting-started docs. Starter mismatch already addressed by #15 branch; monthly issue has one body and no new maintainer checkoffs.",
+      "follow_up": "Await review of existing branch; no duplicate comment or activity update."
+    },
+    {
+      "area": "ci",
+      "checked_at": "2026-11-22",
+      "result": "Fallback Task 4: inspected ci.yml and package validation commands. No remote dispatch tool; no local install/build/test or release attempted.",
+      "follow_up": "#13 implementation/validation remains blocked by required remote execution."
     }
   ],
   "completed_actions": [],
