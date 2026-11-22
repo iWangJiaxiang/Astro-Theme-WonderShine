@@ -192,6 +192,13 @@
 #sidebar-menus[data-home-drawer] .home-drawer-close:not(:focus-visible) {
   clip-path: inset(50%);
 }
+#nav[data-home-nav] .menus_items :is(.menus_item,.recursion_menus_item):focus-within > .menus_item_child {
+  display: block;
+}
+#nav[data-home-nav] .nav-item:focus-visible {
+  outline: 2px solid var(--wjx-theme);
+  outline-offset: 2px;
+}
 #nav[data-home-nav] .back-home-button:focus-within .back-menu-list-groups {
   pointer-events: auto;
   top: 55px;

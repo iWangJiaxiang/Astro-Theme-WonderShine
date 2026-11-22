@@ -192,6 +192,7 @@ export async function checkBrowser(options = demo) {
           await page.waitForFunction(() => location.pathname === '/threads/');
           await settled();
           await page.goBack();
+          await page.waitForSelector(drawer);
           await settled();
           assert.equal(await page.evaluate(() => window.__homeDrawerNavigationProbe), true);
           await page.click(trigger);
