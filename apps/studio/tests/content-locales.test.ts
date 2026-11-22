@@ -141,3 +141,26 @@ test('series chapters can be referenced across languages while album tracks and 
   const chapter = await content.document('content/collections/column/series/chapter.en.md');
   await assert.rejects(content.removeDocument(chapter.path, chapter.revision), /引用/);
 });
+
+test('deleting all languages requires the complete reviewed revisions and preserves referenced articles', async t => {
+  const { content, repo } = await fixture(t);
+  const path = 'content/articles/bilingual/index.md', english = 'content/articles/bilingual/index.en.md';
+  const preview = async () => Object.fromEntries((await content.documentVersions(path)).map(file => [file.path, file.revision]));
+  await content.saveDocument(path, { title: '文章' }, 'Original', null);
+  const beforeTranslation = await preview();
+  await content.saveDocument(english, { title: 'Article' }, 'English', null);
+  await assert.rejects(content.removeDocumentVersions(path, beforeTranslation), /语言版本已变化/);
+  const stale = await preview();
+  await content.saveDocument(english, {}, 'Updated', stale[english]);
+  await assert.rejects(content.removeDocumentVersions(path, stale), /语言版本已变化/);
+  const revisions = await preview();
+  assert.deepEqual(Object.keys(revisions).sort(), [english, path]);
+  const reference = 'content/threads/n_ref/index.md';
+  await content.saveDocument(reference, { ...thread, 'extra.references': [{ kind: 'internal', path: 'articles/bilingual/index.md' }] }, 'Reference', null);
+  await assert.rejects(content.removeDocumentVersions(english, revisions), /仍被.*引用/);
+  assert.deepEqual(await preview(), revisions);
+  await content.removeDocument(reference, (await content.document(reference)).revision);
+  await content.removeDocumentVersions(english, revisions);
+  assert.equal(await repo.read(path), null);
+  assert.equal(await repo.read(english), null);
+});

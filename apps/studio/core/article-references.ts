@@ -35,7 +35,7 @@ function references(file: Pick<FileSnapshot, 'path' | 'text'>, languages: Conten
   return value as ArticleReference[];
 }
 
-export async function validateArticleReferences(repository: Repository, path: string, text: string | null, languages: ContentLanguages): Promise<void> {
+export async function validateArticleReferences(repository: Repository, path: string, text: string | null, languages: ContentLanguages, deletedPaths?: ReadonlySet<string>): Promise<void> {
   if (text === null && !isArticle(path)) return;
   if (text !== null) {
     const links = references({ path, text }, languages).filter(ref => ref.kind === 'internal');
@@ -49,7 +49,7 @@ export async function validateArticleReferences(repository: Repository, path: st
     return;
   }
   const identity = translationLocation(path, languages.defaultLanguage, languages).translationKey;
-  const remaining = (await listRepositoryText(repository)).filter(file => file.path !== path);
+  const remaining = (await listRepositoryText(repository)).filter(file => file.path !== path && !deletedPaths?.has(file.path));
   if (remaining.some(file => isArticle(file.path) && translationLocation(file.path, languages.defaultLanguage, languages).translationKey === identity)) return;
   for (const file of remaining) {
     if (references(file, languages).some(ref => ref.kind === 'internal' && `content/${ref.path}` === identity)) throw new StudioError(409, '文章仍被 {path} 引用，请先移除引用再删除最后一个语言版本', { path: file.path });

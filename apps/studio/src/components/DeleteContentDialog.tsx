@@ -1,6 +1,6 @@
 import { ErrorNotice } from "./ErrorNotice";
 import { translationLocation } from "../../shared/translation";
-import type { Article, ContentLanguages } from "../../shared/types";
+import type { Article, ContentLanguages, DocumentVersion } from "../../shared/types";
 import { api, ApiError, errorMessage, session } from "../api";
 import { contentLabel } from "../content-model";
 import { forgetDeletedContent } from "../deleted-content";
@@ -31,7 +31,7 @@ type Props = {
   revision?: string | null;
   unsaved?: boolean;
 };
-type Events = { deleted: [path: string]; close: []; working: [value: boolean] };
+type Events = { deleted: [paths: string[]]; close: []; working: [value: boolean] };
 const DeleteContentDialog: StudioComponent<Props, Events> = component<
   Props,
   Events
@@ -40,7 +40,7 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
   (props, emit, expose) => {
     const id = useId(),
       dialog = ref<HTMLDialogElement>(),
-      cancelButton = ref<HTMLButtonElement>();
+      heading = ref<HTMLHeadingElement>();
     const loading = ref(true),
       deleting = ref(false),
       error = ref<Message>(""),
@@ -48,6 +48,8 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
     const language = ref(""),
       loadedTitle = ref(""),
       revision = ref<string | null>(null);
+    const allLanguages = ref(false),
+      versions = ref<DocumentVersion[]>([]);
     const path = props.path,
       expectedRevision = props.revision;
     const deletionIdentity = session.value?.identity;
@@ -58,7 +60,7 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
     let alive = true, wantsOpen = true,
       previousFocus: HTMLElement | null = null;
     const modal = createBusinessModal(() => dialog.value, () => alive && wantsOpen, () => {
-      cancelButton.value?.focus();
+      heading.value?.focus();
     });
     async function load() {
       loading.value = true;
@@ -100,6 +102,31 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
         }
       }
     }
+    async function selectScope(all: boolean) {
+      allLanguages.value = all;
+      error.value = "";
+      if (!all || busy.value || blocked.value) return;
+      versions.value = [];
+      loading.value = true;
+      emit("working", true);
+      try {
+        const result = await api<DocumentVersion[]>(`/document/versions?path=${encodeURIComponent(path)}`);
+        if (!alive) return;
+        if (result.find(version => version.path === path)?.revision !== revision.value) {
+          blocked.value = true;
+          error.value = "语言版本已变化，请重新打开删除窗口。";
+        } else {
+          versions.value = result;
+        }
+      } catch (cause) {
+        if (alive) error.value = errorMessage(cause);
+      } finally {
+        if (alive) {
+          loading.value = false;
+          emit("working", false);
+        }
+      }
+    }
     function close() {
       if (deleting.value) return;
       wantsOpen = false;
@@ -107,19 +134,26 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
       emit("close");
     }
     async function remove() {
-      if (busy.value || blocked.value || !revision.value) return;
+      if (busy.value || blocked.value || !revision.value || (allLanguages.value && !versions.value.length)) return;
       deleting.value = true;
       error.value = "";
       emit("working", true);
       try {
-        await api("/document", "DELETE", { path, revision: revision.value });
+        const paths = allLanguages.value ? versions.value.map(version => version.path) : [path];
+        if (allLanguages.value) {
+          const revisions = Object.fromEntries(versions.value.map(version => [version.path, version.revision]));
+          await api("/document/versions", "DELETE", { path, revisions });
+        } else {
+          await api("/document", "DELETE", { path, revision: revision.value });
+        }
         try {
-          if (deletionIdentity)
-            forgetDeletedContent(localStorage, deletionIdentity, path);
+          if (deletionIdentity) {
+            for (const removed of paths) forgetDeletedContent(localStorage, deletionIdentity, removed);
+          }
         } catch {
           /* localStorage itself can be inaccessible. */
         }
-        if (alive) emit("deleted", path);
+        if (alive) emit("deleted", paths);
       } catch (cause) {
         if (!alive) return;
         error.value = errorMessage(cause);
@@ -181,11 +215,19 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
                   remove();
                 }),
               },
-              element("h2", { id: `${id}-title` }, t("删除当前语言版本")),
+              element("h2", { id: `${id}-title`, ref: domRef(heading), tabIndex: -1 }, t("删除内容")),
+              <label className="field delete-content-scope">
+                <span>{t("删除范围")}</span>
+                <select value={allLanguages.value ? "all" : "current"} disabled={busy.value || blocked.value}
+                  onChange={event => void selectScope(event.currentTarget.value === "all")}>
+                  <option value="current">{t("当前语言版本")}</option>
+                  <option value="all">{t("全部语言版本")}</option>
+                </select>
+              </label>,
               element(
                 "p",
                 { id: `${id}-scope` },
-                t(
+                t(allLanguages.value ? "删除以下所有语言的内容文件，图片等资源会保留。网站将在下次构建与部署后更新。" :
                   "只删除当前语言的内容文件，其他语言版本和图片等资源会保留。网站将在下次构建与部署后更新。",
                 ),
               ),
@@ -194,13 +236,8 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
                 { className: classes("delete-content-details") },
                 element("dt", null, t("标题")),
                 element("dd", null, title.value),
-                element("dt", null, t("内容语言")),
-                element("dd", null, language.value || t("正在读取…")),
-                element("dt", null, t("文件位置")),
-                element(
-                  "dd",
-                  { className: classes("delete-content-path") },
-                  path,
+                (allLanguages.value ? versions.value : [{ language: language.value || t("正在读取…"), path }]).map(version =>
+                  <Fragment key={version.path}><dt>{version.language}</dt><dd className="delete-content-path">{version.path}</dd></Fragment>
                 ),
               ),
               props.unsaved
@@ -238,7 +275,6 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
                 element(
                   "button",
                   {
-                    ref: domRef(cancelButton),
                     type: "button",
                     disabled: deleting.value,
                     className: classes("secondary"),
@@ -252,10 +288,10 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
                   "button",
                   {
                     type: "submit",
-                    disabled: busy.value || blocked.value || !revision.value,
+                    disabled: busy.value || blocked.value || !revision.value || (allLanguages.value && !versions.value.length),
                     className: classes("delete-content-confirm"),
                   },
-                  t(deleting.value ? "正在删除…" : "确认删除当前语言"),
+                  t(deleting.value ? "正在删除…" : allLanguages.value ? "确认删除全部语言" : "确认删除当前语言"),
                 ),
               ),
             ),

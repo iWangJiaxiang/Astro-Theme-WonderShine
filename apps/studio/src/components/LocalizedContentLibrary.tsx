@@ -34,7 +34,7 @@ type Events = {
   open: [path: string];
   create: [path: string, initial: Record<string, Json>];
   dirty: [value: boolean];
-  deleted: [path: string];
+  deleted: [paths: string[]];
 };
 const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
   Props,
@@ -53,10 +53,10 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
       composerDirty.value = value;
       emit("dirty", value);
     }
-    async function deleted(path: string) {
+    async function deleted(paths: string[]) {
       pendingDelete.value = undefined;
-      await composer.value?.forget(path);
-      emit("deleted", path);
+      for (const path of paths) await composer.value?.forget(path);
+      emit("deleted", paths);
       await load();
     }
     expose({
@@ -464,7 +464,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
                         title: composerDirty.value
                           ? t("请先保存当前编辑，再删除列表中的内容。")
                           : undefined,
-                        "aria-label": t("删除{title}的当前语言版本", {
+                        "aria-label": t("删除{title}", {
                           title: item.title || t("无标题动态"),
                         }),
                         className: classes("text-button danger"),

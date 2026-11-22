@@ -54,7 +54,18 @@ async function openReader(path: string, privateEntry = false, boundary = path) {
  */
 const restart = '创作窗口已重新加载，请完全退出并重启应用后重新确认工作区';
 const ownerUnavailable = '工作区确认所有权不可用，请完全退出其他 Studio 实例后重启应用';
-// A new module/webview lifetime gets a new epoch. Never persist it across reloads.
+// sessionStorage follows this browsing context across document reloads. A different
+// window must still pass the native main-webview check and the process owner lock.
+function windowEpoch() {
+  const key = 'wondershine.native.review-window.v1';
+  const fresh = crypto.randomUUID();
+  try {
+    const previous = window.sessionStorage.getItem(key);
+    if (previous && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(previous)) return previous;
+    window.sessionStorage.setItem(key, fresh);
+  } catch { /* Keep document-only ownership when storage is unavailable. */ }
+  return fresh;
+}
 let epoch: string | undefined;
 const queues = new Map<string, Promise<unknown>>();
 function serialized<T>(id: string, action: () => Promise<T>): Promise<T> {
@@ -65,7 +76,7 @@ function serialized<T>(id: string, action: () => Promise<T>): Promise<T> {
   return next;
 }
 async function authorize(workspaceId: string, claimRecovery: boolean): Promise<boolean> {
-  epoch ??= crypto.randomUUID();
+  epoch ??= windowEpoch();
   try {
     const result = await invoke<unknown>('native_review_owner', { workspaceId, epoch, claimRecovery });
     if (typeof result !== 'boolean') throw unavailable();

@@ -341,7 +341,7 @@ export async function checkRootModals({ page, origin, password, screenshots, out
     await page.keyboard.press('Escape');
     await page.waitForSelector('.ai-assistant-dialog', { hidden: true });
 
-    await clickText(page, '.editor-page button', '删除当前语言版本');
+    await clickText(page, '.editor-page button', '删除内容');
     await page.waitForSelector('.delete-content-dialog[open] .delete-content-confirm:not(:disabled)');
     await expireSession(page);
     await page.click('.delete-content-confirm');

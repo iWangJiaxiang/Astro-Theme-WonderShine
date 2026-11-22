@@ -494,10 +494,9 @@ try {
   await click('站点信息'); await page.waitForSelector('.settings-grid');
   assert.equal(await page.$eval('.save-button-main', e => e.textContent), 'Git 分支保存', 'default persists across editors');
   await page.reload({waitUntil:'networkidle0'}); await heading('连接创作工作区'); await click('打开工作区');
-  await page.waitForSelector('.native-connect [role="alert"]');
-  assert.equal(await page.$eval('.native-connect .error-summary', node => node.textContent), reviewRestart, 'WebView reload cannot replace the live process owner');
-  assert.equal(await page.$('.studio-shell'), null, 'Reloaded WebView cannot expose workspace operations');
-  await screenshot('connection-reload-requires-restart');
+  await heading('今天，写点什么？');
+  assert.equal(reviewClaims.has(profile.id), true, 'Reload reuses the existing workspace claim');
+  await screenshot('connection-reload-restored');
   await restartNativeFixture(); await heading('连接创作工作区'); await click('打开工作区'); await heading('今天，写点什么？');
   await page.waitForSelector('.thread-composer .save-button-main');
   assert.equal(await page.$eval('.thread-composer .save-button-main', e => e.textContent), '分支保存 · 可发布', 'default persists across app restart');
@@ -719,6 +718,11 @@ try {
   await heading('今天，写点什么？');
   await page.waitForSelector('.thread-composer textarea');
   assert.equal(await page.$('.native-connect'), null, 'A cold phone launch reopens the last checkout offline');
+  const claimsBeforeReload = [...reviewClaims];
+  await page.reload({ waitUntil: 'networkidle0' });
+  await heading('今天，写点什么？');
+  await page.waitForSelector('.thread-composer textarea');
+  assert.deepEqual([...reviewClaims], claimsBeforeReload, 'Mobile reload resumes without new recovery claims');
   await page.click('.visit-site');
   await page.waitForFunction(() => !!document.querySelector('.quick-sync button:not(:disabled)'));
   await Promise.race([openedSite, new Promise((_, reject) => { const deadline = setTimeout(() => reject(new Error('Native URL handler did not receive the site URL')), 5000); deadline.unref(); })]);

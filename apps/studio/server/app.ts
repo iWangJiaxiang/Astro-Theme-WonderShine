@@ -164,6 +164,11 @@ export function createApp(options: AppOptions) {
     // Only in-flight work is shared; no completed server summary lease is assumed.
     return c.json(await (c.req.query('refresh') === '1' ? runtime.refresh() : runtime.list({ fresh: true })));
   });
+  app.get('/api/document/versions', async c => c.json(await content.documentVersions(c.req.query('path') || '')));
+  app.delete('/api/document/versions', async c => {
+    const input = await c.req.json<{ path: string; revisions: unknown }>();
+    return c.json(await content.removeDocumentVersions(input.path, input.revisions));
+  });
   app.get('/api/document', async c => c.json(await content.document(c.req.query('path') || '')));
   app.put('/api/document', async c => {
     const input = await c.req.json<{ path: string; changes: unknown; body: string; revision: string | null; saveMode?: unknown }>();

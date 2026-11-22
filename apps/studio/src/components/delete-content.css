@@ -1,6 +1,8 @@
 .delete-content-dialog { width: min(560px, calc(100vw - 40px)); max-height: calc(100dvh - 48px); padding: 0; border: 1px solid var(--studio-line); border-radius: 14px; color: var(--studio-text, inherit); background: var(--studio-card); box-shadow: 0 24px 80px #0003; overflow: auto; }
 .delete-content-dialog::backdrop { background: #10162a66; backdrop-filter: blur(3px); }
 .delete-content-panel { padding: 26px; }
+.delete-content-panel h2:focus { outline: none; }
+.delete-content-scope { margin-block: 12px; }
 .delete-content-panel > p { font-size: 13px; }
 .delete-content-details { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 18px; padding: 16px 0; border-block: 1px solid var(--studio-line); font-size: 13px; }
 .delete-content-details dt { color: var(--studio-muted); }

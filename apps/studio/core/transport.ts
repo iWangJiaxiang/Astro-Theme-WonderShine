@@ -106,6 +106,13 @@ export function createContentTransport(repository: Repository, options: ContentT
         // Serialize for each caller: Response bodies are single-use streams.
         return json(await (url.searchParams.get('refresh') === '1' ? runtime.refresh() : runtime.list()));
       }
+      if (path === '/api/document/versions') {
+        if (method === 'GET') return json(await content.documentVersions(url.searchParams.get('path') || ''));
+        if (method === 'DELETE') {
+          const body = await input<{ path: string; revisions: unknown }>();
+          return json(await content.removeDocumentVersions(body.path, body.revisions));
+        }
+      }
       if (path === '/api/document') {
         if (method === 'GET') return json(await content.document(url.searchParams.get('path') || ''));
         if (method === 'PUT') {

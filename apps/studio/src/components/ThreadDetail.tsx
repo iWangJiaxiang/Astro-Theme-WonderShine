@@ -41,7 +41,7 @@ type Events = {
   back: [];
   edit: [path: string];
   open: [path: string];
-  deleted: [path: string];
+  deleted: [paths: string[]];
 };
 const ThreadDetail: StudioComponent<Props, Events> = component<Props, Events>(
   "ThreadDetail",

@@ -9,6 +9,7 @@ export interface ArticleSummary {
   translationKey?: string; references?: ArticleReference[];
   publicPath?: string; linkWarning?: string; description?: string; render?: boolean; weight?: number;
 }
+export interface DocumentVersion { path: string; language: string; revision: string }
 export interface Article extends FileSnapshot { body: string; metadata: Record<string, Json> }
 export interface Field { path: string; label: string; hint?: string; kind: 'text' | 'textarea' | 'boolean' | 'number' | 'structured'; default: Json }
 export interface SettingsSchema { id: string; title: string; description: string; file: string; fields: Field[] }

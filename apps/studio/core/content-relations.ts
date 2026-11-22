@@ -21,14 +21,14 @@ function topicIds(file: Pick<FileSnapshot, 'path' | 'text'>): string[] {
 }
 
 // Called inside Repository.write's lock, so association writes cannot race topic mutations.
-export async function validateContentRelations(repository: Repository, path: string, text: string | null): Promise<void> {
+export async function validateContentRelations(repository: Repository, path: string, text: string | null, deletedPaths?: ReadonlySet<string>): Promise<void> {
   const configFile = await repository.read('config.toml');
   const languages = threadLanguages(configFile ? parse(configFile.text) : {});
-  await validateArticleReferences(repository, path, text, languages);
+  await validateArticleReferences(repository, path, text, languages, deletedPaths);
   if (text === null && !isTopic(path)) return;
   if (text === null) {
     const removed = topicPath(path, languages);
-    const remaining = (await listRepositoryText(repository)).filter(file => file.path !== path);
+    const remaining = (await listRepositoryText(repository)).filter(file => file.path !== path && !deletedPaths?.has(file.path));
     const sibling = remaining.find(file => isTopic(file.path) && file.path.startsWith(`content/topics/${removed.id}/`));
     if (sibling) { validateTopic(sibling, languages); return; }
     for (const file of remaining) {

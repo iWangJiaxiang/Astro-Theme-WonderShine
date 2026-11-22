@@ -76,7 +76,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       view = ref("home"),
       dirty = ref(false),
       menuOpen = ref(false),
-      dark = ref(false);
+      dark = ref(window.document.documentElement.dataset.theme === "dark");
     // Capture before the shell becomes inert, including focus inside portalled dialogs.
     const reauthenticationFocus = ref<HTMLElement | null>(null);
     watch(reauthentication, (required) => {
@@ -241,7 +241,11 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
           scheme === "dark" ||
           (scheme === "system" &&
             matchMedia("(prefers-color-scheme: dark)").matches);
-        try { const saved = localStorage.getItem("studio-theme"); if (saved) dark.value = saved === "dark"; } catch {}
+        try {
+          if (scheme === "dark" || scheme === "light" || scheme === "system") localStorage.setItem("studio-site-scheme", scheme);
+          const saved = localStorage.getItem("studio-theme");
+          if (saved === "dark" || saved === "light") dark.value = saved === "dark";
+        } catch {}
         applyTheme();
       } catch (e) {
         if (isCurrent()) error.value = errorMessage(e);
@@ -482,9 +486,9 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       }
       void loadArticles();
     }
-    function removed(path: string) {
-      previous.value = previous.value.filter(entry => entry.doc?.path !== path);
-      if (document.value?.path === path) {
+    function removed(paths: string[]) {
+      previous.value = previous.value.filter(entry => !entry.doc || !paths.includes(entry.doc.path));
+      if (document.value && paths.includes(document.value.path)) {
         document.value = null;
         dirty.value = false;
       }

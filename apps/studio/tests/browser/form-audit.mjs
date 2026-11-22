@@ -66,6 +66,19 @@ try {
   }
   await page.setViewport({width:1440,height:1000});console.log('Captured '+name);
  };
+ // Keep React unloaded while inspecting the actual production document and CSP-compatible startup script.
+ const startup = await browser.newPage();
+ await startup.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: 'light' }]);
+ await startup.evaluateOnNewDocument(() => localStorage.setItem('studio-theme', 'dark'));
+ await startup.setRequestInterception(true);
+ startup.on('request', request => request.resourceType() === 'script' && !request.url().endsWith('/appearance.js') ? request.abort() : request.continue());
+ await startup.goto(origin, { waitUntil: 'load' });
+ const darkFirstPaint = await startup.evaluate(() => document.querySelector('#app')?.childElementCount === 0
+   && document.documentElement.dataset.theme === 'dark'
+   && getComputedStyle(document.documentElement).backgroundColor === 'rgb(24, 23, 29)');
+ if (!darkFirstPaint) throw new Error('Saved dark mode must paint the canvas before React starts');
+ await startup.evaluate(() => localStorage.removeItem('studio-theme'));
+ await startup.close();
  await page.goto(origin,{waitUntil:'networkidle0'});await capture('login');
  await page.type('[name=username]','owner');await page.type('[name=password]','studio-form-test-2026');await click('进入创作中心');await page.waitForSelector('.thread-composer textarea');await capture('dashboard');
  await click('使用指南'); await page.waitForSelector('.guide-page'); await capture('guide', {expand:true});
@@ -106,7 +119,13 @@ try {
  await click('AI 摘要');await page.waitForSelector('dialog[open]');await capture('ai-summary');await click('取消');
  await click('AI 生成封面');await page.waitForSelector('dialog[open]');await capture('ai-cover');await click('取消');
  await click('选择或上传');await page.waitForSelector('dialog[open]');await capture('image-picker');await closeDialog();
- await click('删除当前语言版本');await page.waitForSelector('dialog[open],.modal');await capture('delete-content');await click('取消');
+ await click('删除内容');
+ await page.waitForSelector('.delete-content-dialog[open] .delete-content-confirm:not(:disabled)');
+ if (!await page.evaluate(() => document.activeElement === document.querySelector('.delete-content-dialog h2'))) throw new Error('Deletion must open with the heading focused');
+ await capture('delete-content');
+ await page.select('.delete-content-scope select', 'all');
+ await page.waitForSelector('.delete-content-dialog[open] .delete-content-confirm:not(:disabled)');
+ await capture('delete-all-languages');await click('取消');
  await click('合集管理');await page.waitForSelector('.section-edit');await page.click('.section-edit');await page.waitForSelector('.editor-page');await capture('collection-editor',{expand:true});
  await click('合集管理');
  for (const [path, name, ready] of [

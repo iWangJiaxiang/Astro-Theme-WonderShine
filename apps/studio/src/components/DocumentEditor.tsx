@@ -89,7 +89,7 @@ type Events = {
   working: [value: boolean];
   back: [];
   exit: [];
-  deleted: [path: string];
+  deleted: [paths: string[]];
   saved: [path: string];
   open: [path: string, initial?: Record<string, Json>, initialBody?: string];
 };
@@ -931,11 +931,11 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       flush();
       deleteDialog.value = true;
     }
-    function deleted(path: string) {
+    function deleted(paths: string[]) {
       forget();
       deleteDialog.value = false;
       busy.value = false;
-      emit("deleted", path);
+      emit("deleted", paths);
       emit("back");
     }
     function download() {
@@ -1081,7 +1081,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                                 remove();
                               }),
                             },
-                            t("删除当前语言版本"),
+                            t("删除内容"),
                           )
                         : null,
                       element(
@@ -2213,7 +2213,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                               remove();
                             }),
                           },
-                          t("删除当前语言版本"),
+                          t("删除内容"),
                         )
                       : null,
                     element(

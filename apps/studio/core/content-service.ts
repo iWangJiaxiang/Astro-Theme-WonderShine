@@ -3,7 +3,7 @@ import { saveBatch, validateSaveMode } from './save.js';
 import { translationReviewChanges } from './translation-review.js';
 import { posix } from './portable.js';
 import { parse } from 'smol-toml';
-import type { Article, ArticleSummary, Json, Settings, Field } from '../shared/types.js';
+import type { Article, ArticleSummary, DocumentVersion, Json, Settings, Field } from '../shared/types.js';
 import { settingsSchemas, documentFields } from '../shared/settings.js';
 import { getValue, patchToml, splitDocument, updateDocument, formDocumentMetadata, removeTomlFields } from './content.js';
 import { type Repository, validatePath } from '../shared/repository.js';
@@ -76,8 +76,8 @@ export class ContentService {
     const saved = await saveBatch(this.repository, [{ path: source.path, text, expectedRevision: source.file?.revision ?? null }], source.guard, saveMode);
     return { ...saved, ...(pinnedThemeVersion !== undefined && { pinnedThemeVersion }), revision: await source.revisionAfter(saved.revision) };
   }
-  async languages() {
-    const file = await this.repository.read('config.toml');
+  async languages(repository = this.repository) {
+    const file = await repository.read('config.toml');
     return threadLanguages(file ? parse(file.text) : {});
   }
   async list(): Promise<ArticleSummary[]> {
@@ -163,6 +163,34 @@ export class ContentService {
       }
       await validateContentRelations(repository, path, text);
     }, saveMode);
+  }
+  async documentVersions(path: string, repository = this.repository): Promise<DocumentVersion[]> {
+    documentPath(path);
+    const config = await this.languages(repository);
+    if (config.languages.some(language => !/^[A-Za-z0-9-]+$/.test(language))) throw new StudioError(400, '内容语言代码无效，请检查站点语言配置。');
+    const versions = await Promise.all(config.languages.map(async language => {
+      const candidate = translationLocation(path, language, config).path;
+      const file = await repository.read(candidate);
+      return file && { path: candidate, language, revision: file.revision };
+    }));
+    return versions.filter((version): version is DocumentVersion => version !== null);
+  }
+  async removeDocumentVersions(path: string, revisions: unknown) {
+    const versions = await this.documentVersions(path);
+    const conflict = () => new StudioError(409, '语言版本已变化，请重新打开删除窗口。');
+    if (!revisions || typeof revisions !== 'object' || Array.isArray(revisions)
+      || !Object.hasOwn(revisions, path) || !versions.some(version => version.path === path)) throw conflict();
+    const matches = (current: DocumentVersion[]) => current.length === Object.keys(revisions).length
+      && current.every(version => (revisions as Record<string, unknown>)[version.path] === version.revision);
+    if (!matches(versions)) throw conflict();
+    const paths = new Set(versions.map(version => version.path));
+    return this.repository.writeBatch(versions.map(version => ({
+      path: version.path, text: null, expectedRevision: version.revision,
+    })), async repository => {
+      // A new translation invalidates the preview even if all selected revisions still match.
+      if (!matches(await this.documentVersions(path, repository))) throw conflict();
+      await validateContentRelations(repository, path, null, paths);
+    });
   }
   async removeDocument(path: string, revision: string) {
     documentPath(path);

@@ -54,7 +54,7 @@ type Events = {
   open: [path: string];
   create: [path: string, metadata: Record<string, Json>];
   browse: [path: string];
-  deleted: [path: string];
+  deleted: [paths: string[]];
   working: [value: boolean];
 };
 const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
@@ -70,11 +70,11 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
       if (!listReady.value) initialEdits = { ...initialEdits, ...edits };
     }
     const deleteTarget = ref<ArticleSummary>();
-    function deleted(path: string) {
-      items.value = items.value.filter((item) => item.path !== path);
+    function deleted(paths: string[]) {
+      items.value = items.value.filter((item) => !paths.includes(item.path));
       deleteTarget.value = undefined;
       pageNumber.value = Math.min(pageNumber.value, pages.value);
-      emit("deleted", path);
+      emit("deleted", paths);
       void load(true);
     }
     const items = ref<ArticleSummary[]>([]),
@@ -794,7 +794,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 ? element(
                     "button",
                     {
-                      "aria-label": t("删除{title}的当前语言版本", {
+                      "aria-label": t("删除{title}", {
                         title: displayTitle(item),
                       }),
                       className: classes("text-button danger content-delete"),

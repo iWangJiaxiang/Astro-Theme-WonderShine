@@ -1,10 +1,15 @@
 <!doctype html>
-<html lang="en" data-theme="light">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="color-scheme" content="light dark" />
+    <style>
+      html[data-theme=dark] { color-scheme: dark; background-color: var(--wjx-background, #18171d); color: var(--wjx-fontcolor, #f7f7fa); }
+      html[data-theme=light] { color-scheme: light; background-color: var(--wjx-background, #f7f9fe); }
+    </style>
+    <script src="/appearance.js"></script>
     <title>Creator Studio · Wonder Shine</title>
   </head>
   <body><div id="app"></div><script type="module" src="/src/main.ts"></script></body>
