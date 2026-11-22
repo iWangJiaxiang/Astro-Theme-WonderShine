@@ -54,19 +54,37 @@ async function saveThumbnail(key: string, image: Blob) {
     };
   });
 }
-async function shrink(image: Blob): Promise<Blob | null> {
-  const bitmap = await createImageBitmap(image);
+async function imageSource(blob: Blob) {
+  if (typeof createImageBitmap === 'function') {
+    const bitmap = await createImageBitmap(blob).catch(() => null);
+    if (bitmap) return { source: bitmap, width: bitmap.width, height: bitmap.height, release: () => bitmap.close() };
+  }
+  const url = URL.createObjectURL(blob);
+  const release = () => URL.revokeObjectURL(url);
+  const image = new Image();
+  image.src = url;
   try {
-    if (Math.max(bitmap.width, bitmap.height) <= maxSide && image.size <= maxBytes) return image;
-    const ratio = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+    await image.decode();
+    return { source: image, width: image.naturalWidth, height: image.naturalHeight, release };
+  } catch (error) {
+    release();
+    throw error;
+  }
+}
+
+async function shrink(image: Blob): Promise<Blob | null> {
+  const { source, width, height, release } = await imageSource(image);
+  try {
+    if (Math.max(width, height) <= maxSide && image.size <= maxBytes) return image;
+    const ratio = Math.min(1, maxSide / Math.max(width, height));
     const canvas = document.createElement('canvas');
-    canvas.width = Math.max(1, Math.round(bitmap.width * ratio));
-    canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
+    canvas.width = Math.max(1, Math.round(width * ratio));
+    canvas.height = Math.max(1, Math.round(height * ratio));
     const context = canvas.getContext('2d');
     if (!context) return null;
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    context.drawImage(source, 0, 0, canvas.width, canvas.height);
     return await new Promise(resolve => canvas.toBlob(resolve, 'image/webp', .78));
-  } finally { bitmap.close(); }
+  } finally { release(); }
 }
 
 export function createNativeMediaImageLoader(files: WorkspaceFiles, root: string, scope: string, repository: Repository, managed: boolean) {

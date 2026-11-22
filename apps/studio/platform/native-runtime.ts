@@ -71,7 +71,7 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
   const gitDirectory = profile.source === 'local' ? undefined : await files.lstat(root + '/.git').catch(() => undefined);
   const managed = !!gitDirectory?.isDirectory() && !gitDirectory.isSymbolicLink();
   const scope = [profile.id, profile.source ?? 'clone', root, profile.url, profile.branch];
-  if (managed) scope.push(JSON.stringify([gitDirectory.dev, gitDirectory.ino, gitDirectory.ctimeMs]));
+  if (managed && gitDirectory) scope.push(JSON.stringify([gitDirectory.dev, gitDirectory.ino, gitDirectory.ctimeMs]));
   const summaryScope = JSON.stringify(['native-summary-v1', ...scope]);
   const media = createNativeMediaIndex(checkout, files, state, base, JSON.stringify(scope), managed);
   const { repository } = media;

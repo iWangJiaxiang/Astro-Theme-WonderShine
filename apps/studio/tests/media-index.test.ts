@@ -60,6 +60,9 @@ test('managed media lists survive reopening, keep uncommitted uploads and invali
   assert.equal(await other.preview(), null);
   await other.repository.listMedia();
   await other.repository.listMedia(true);
-  assert.equal(scans, 5);
   other.dispose();
+  const afterRefresh = open('workspace-two');
+  assert.equal((await afterRefresh.repository.listMedia()).items.length, 2);
+  assert.equal(scans, 5);
+  afterRefresh.dispose();
 });

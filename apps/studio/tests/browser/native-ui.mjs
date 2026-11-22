@@ -43,6 +43,8 @@ let siteOpened;
 const openedSite = new Promise(resolve => { siteOpened = resolve; });
 let nextResource = 1, worktreeScans = 0, gitInspections = 0;
 let mediaDirectoryReads = 0, thumbnailSourceReads = 0;
+let markMediaSnapshotWritten;
+const mediaSnapshotWritten = new Promise(resolve => { markMediaSnapshotWritten = resolve; });
 try {
   await fs.mkdir(root, { recursive: true }); await fs.mkdir(screenshots, { recursive: true });
   const git = args => execFileSync('git', args, { cwd: root, stdio: 'pipe' }).toString().trim();
@@ -143,8 +145,10 @@ try {
         if (failNextBranchWrite && path.includes('/.git/objects/')) { throw new Error('Simulated branch write failure'); }
         if (path.includes('.clone-') && path.endsWith('/config.toml')) await checkoutGate;
         await fs.writeFile(path, new Uint8Array(args));
-      } else if (command === 'plugin:fs|rename') await fs.rename(confined(args.oldPath), confined(args.newPath));
-      else if (command === 'plugin:fs|open') {
+      } else if (command === 'plugin:fs|rename') {
+        await fs.rename(confined(args.oldPath), confined(args.newPath));
+        if (args.newPath === join(root, '../state/media-list-v1/snapshot.json')) markMediaSnapshotWritten();
+      } else if (command === 'plugin:fs|open') {
         const path = confined(args.path);
         assert.ok(args.options.read || (args.options.write && args.options.createNew));
         const handle = await fs.open(path, args.options.createNew ? 'wx' : 'r', args.options.mode);
@@ -532,6 +536,12 @@ try {
       count.onerror = () => { db.close(); resolve(false); };
     };
   }));
+  let snapshotTimeout;
+  try {
+    await Promise.race([mediaSnapshotWritten, new Promise((_, reject) => {
+      snapshotTimeout = setTimeout(() => reject(new Error('Media snapshot was not persisted')), 10000);
+    })]);
+  } finally { clearTimeout(snapshotTimeout); }
   assert.ok(mediaDirectoryReads > 0 && thumbnailSourceReads > 0, 'The initial media visit scans, then reads the thumbnail source');
   const beforeMediaReopen = { directories: mediaDirectoryReads, sourceReads: thumbnailSourceReads };
   await restartNativeFixture(); await heading('连接创作工作区'); await click('打开工作区'); await heading('今天，写点什么？');
