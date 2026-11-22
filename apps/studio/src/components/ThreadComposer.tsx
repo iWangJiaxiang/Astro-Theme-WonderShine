@@ -177,8 +177,8 @@ const ThreadComposer: StudioComponent<Props, Events> = component<Props, Events>(
           /* Optional storage. */
         }
     }
-    function deleted(path: string) {
-      forget(path);
+    function deleted(paths: string[]) {
+      for (const path of paths) forget(path);
       emit("saved", "");
     }
     async function load() {
