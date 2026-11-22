@@ -1,7 +1,8 @@
 import { StudioError } from '../core/errors';
 import { invoke } from '@tauri-apps/api/core';
 import type { WorkspaceProfile } from './hosting';
-import { renewGitGrant, type GitGrant } from './provider-auth';
+import { isOAuthRemote, renewGitGrant, type GitGrant } from './provider-auth';
+import type { WorkspaceOAuthCredential } from './git-credential';
 import { providerFetch } from './provider-fetch';
 
 async function accountKey(profile: WorkspaceProfile) {
@@ -32,8 +33,17 @@ export function workspaceCredential(profile: WorkspaceProfile, initial?: GitGran
     lifecycle.signal.throwIfAborted();
     current = grant; loaded = true; rotated = undefined;
   }
+  const { provider, url, username } = profile;
+  const oauth: WorkspaceOAuthCredential | undefined = username && isOAuthRemote(provider, url) ? {
+    provider,
+    authorize: (account) => run(async () => {
+      if (account.provider !== provider || account.username !== username) throw new StudioError(403, '请使用此工作区原来的 Git 账号重新登录');
+      const { token, refreshToken, expiresAt, refreshExpiresAt, clientId } = account;
+      await store({ token, refreshToken, expiresAt, refreshExpiresAt, clientId });
+    }),
+  } : undefined;
   return {
-    id: profile.id, hasToken: () => !!current?.token,
+    id: profile.id, oauth, hasToken: () => !!current?.token,
     set: (token: string) => run(async () => {
       if (token) await store({ token });
       else { await forgetGitGrant(profile); current = rotated = undefined; loaded = true; }
@@ -48,10 +58,10 @@ export function workspaceCredential(profile: WorkspaceProfile, initial?: GitGran
       }
       if (!current) return '';
       if (current.expiresAt != null && current.expiresAt <= Date.now() + (current.refreshToken ? 60_000 : 0)) {
-        const provider = profile.provider;
         if ((provider !== 'github' && provider !== 'cnb') || !current.refreshToken) throw new StudioError(403, '授权已过期，请重新登录');
         const renewed = await renewGitGrant(provider, current, providerFetch, lifecycle.signal).catch(error => {
-          throw new StudioError(403, error instanceof Error ? error.message : '授权已过期，请重新登录');
+          lifecycle.signal.throwIfAborted();
+          throw new StudioError(403, error instanceof Error ? error.message : '授权已过期，请重新登录', { gitAuth: 1 });
         });
         // Keep a rotated grant available if the system store is temporarily locked.
         rotated = renewed;

@@ -1,9 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { translate } from '../shared/i18n.js';
-import { renewGitGrant, beginDeviceLogin, completeDeviceLogin, listRepositories, loadAccount, verificationUrl, delay, ProviderAuthError, type ProviderFetch, type ProviderAccount } from '../platform/provider-auth.js';
+import { isOAuthRemote, renewGitGrant, beginDeviceLogin, completeDeviceLogin, listRepositories, loadAccount, verificationUrl, delay, ProviderAuthError, type ProviderFetch, type ProviderAccount } from '../platform/provider-auth.js';
 const response = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status });
 const signal = () => new AbortController().signal;
+test('workspace OAuth is offered only on the configured provider origin', () => {
+  assert.equal(isOAuthRemote('cnb', 'https://cnb.cool/owner/blog.git'), true);
+  assert.equal(isOAuthRemote('github', 'https://github.com/owner/blog.git'), true);
+  for (const remote of ['https://cnb.cool.example.test/owner/blog.git', 'https://cnb.cool:2222/owner/blog.git', 'http://cnb.cool/owner/blog.git', 'https://github.com/owner/blog.git', '']) {
+    assert.equal(isOAuthRemote('cnb', remote), false);
+  }
+  assert.equal(isOAuthRemote('generic', 'https://cnb.cool/owner/blog.git'), false);
+});
 for (const provider of ['github', 'cnb'] as const) {
   test(`${provider}: public client login, pending, backoff, account and writable repositories`, async () => {
     const requests: { url: string; init?: RequestInit }[] = [], intervals: number[] = [];
