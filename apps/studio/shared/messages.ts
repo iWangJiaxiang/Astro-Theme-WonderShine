@@ -1249,8 +1249,6 @@ export const english: Record<string, string> = {
   "仅应用于此设备上的 Studio。": "Applies to Studio on this device.",
   "恢复站点默认外观": "Use site appearance defaults",
   "无法保存设备外观设置。当前会话仍可使用。": "Could not save appearance on this device. Your changes apply for this session.",
-  "检查更新": "Check for updates",
-  "正在检查更新…": "Checking for updates…",
   "正在应用主题更新…": "Applying theme update…",
   "更新到此版本": "Update to this version",
   "请求重新构建": "Request a rebuild",

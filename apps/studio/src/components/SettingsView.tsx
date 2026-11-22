@@ -539,7 +539,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       return <div className="full-width theme-update-controls">
         <div className="row">
           <button className="secondary" type="button" disabled={disabled} onClick={() => void updateTheme(false)}>
-            {t(themeOperation.value === "check" ? "正在检查更新…" : "检查更新")}
+            {t(themeOperation.value === "check" ? "正在检查更新" : "检查更新")}
           </button>
           {check && !sameVersion && <button className="primary" type="button" disabled={disabled} onClick={() => void updateTheme(true)}>
             {t(themeOperation.value === "apply" ? "正在应用主题更新…" : check.pinned ? "更新到此版本" : "请求重新构建")}
