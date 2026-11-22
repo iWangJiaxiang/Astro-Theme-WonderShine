@@ -20,7 +20,7 @@ const menuItems=[
  ['menu-music-toggle','icon-play','play_music'],['menu-music-back','icon-backward','ui_previous_track'],['menu-music-forward','icon-forward','ui_next_track'],['menu-music-copyMusicName','icon-copy','ui_copy_track_name']
 ];
 ---
-<div id="sidebar"><div id="menu-mask" hidden/><MobileNavigation site={site} lang={lang}/></div>
+<div id="sidebar"><MobileNavigation site={site} lang={lang} home={pageType==='index'} tags={tagList.map(([name,count])=>({name:tagName(name),count,url:`${localeHome(lang,site)}tags/${taxonomySlug(site,name)}/`}))}/></div>
 <div id="console">
   <button class="close-btn" onclick="wjx.hideConsole()" aria-label={tr('close')}><i class="icon-circle-xmark"/></button>
   <div class="console-card-group"><div class="console-card-group-left"><div class="console-card" id="card-newest-comments"><div class="card-content"><div class="author-content-item-tips">{tr('interaction')}</div><span class="author-content-item-title">{tr('recent_comments')}</span></div><div class="aside-list"><span>{tr('loading')}</span></div></div></div>

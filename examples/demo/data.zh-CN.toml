@@ -4,6 +4,15 @@ href = "/zh-CN/articles/"
 icon = "icon-book"
 
 [[menu.nav_menu]]
+name = "动态"
+href = "/zh-CN/threads/"
+
+[[menu.nav_menu.menus]]
+name = "时间线"
+href = "/zh-CN/timeline/"
+icon = "icon-clock"
+
+[[menu.nav_menu]]
 name = "系列"
 href = "/zh-CN/collections/"
 icon = "icon-folder"

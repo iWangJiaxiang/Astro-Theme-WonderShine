@@ -289,6 +289,10 @@ function initializeNavigation() {
     const signal = navigationEvents.signal;
     const $blogName = document.getElementById('site-name')
     const $menusEle = document.querySelector('#menus .menus_items')
+    const $navGroup = document.getElementById('nav-group')
+    const $navRight = document.getElementById('nav-right')
+    const $brand = document.getElementById('blog_name')
+    const homeNav = nextRoot?.hasAttribute('data-home-nav')
     const $searchEle = document.querySelector('#search-button')
     let blogNameWidth = $blogName && $blogName.offsetWidth
     let menusWidth = $menusEle && $menusEle.offsetWidth
@@ -303,11 +307,21 @@ function initializeNavigation() {
     }
 
     // 滚动条小于 0 的时候
-    if (document.body.scrollHeight <= innerHeight) {
+    if ($rightside && document.body.scrollHeight <= innerHeight) {
         $rightside.style.cssText = 'opacity: 1; transform: translateX(-58px)'
     }
 
     const adjustMenu = (change = false) => {
+        if (homeNav) {
+            // Reserve space on both sides of the centered menu without counting its own drawer trigger.
+            const toolsWidth = Array.from($navRight.children).reduce((width, item) =>
+                item.id !== 'toggle-menu' && item.offsetWidth
+                    ? width + item.offsetWidth + (parseFloat(getComputedStyle(item).marginLeft) || 0)
+                    : width, 0);
+            const sideWidth = Math.max($brand.offsetWidth, toolsWidth);
+            nextRoot.classList.toggle('hide-menu', innerWidth <= 768 || $menusEle.offsetWidth + 2 * (sideWidth + 24) > $navGroup.clientWidth);
+            return;
+        }
         if (change) {
             blogNameWidth = $blogName && $blogName.offsetWidth
             menusWidth = $menusEle && $menusEle.offsetWidth
@@ -331,43 +345,6 @@ function initializeNavigation() {
         document.getElementById('nav').classList.add('show')
     }
 
-    // sidebar menus
-    const sidebarFn = () => {
-        const $toggleMenu = document.getElementById('toggle-menu')
-        const $mobileSidebarMenus = document.getElementById('sidebar-menus')
-        if ($mobileSidebarMenus?.hasAttribute('data-responsive-drawer')) return;
-        const $menuMask = document.getElementById('menu-mask')
-        const $body = document.body
-
-        function openMobileSidebar() {
-            btf.sidebarPaddingR()
-            $body.style.overflow = 'hidden'
-            btf.fadeIn($menuMask, 0.5)
-            $mobileSidebarMenus.classList.add('open')
-        }
-
-        function closeMobileSidebar() {
-            $body.style.overflow = ''
-            $body.style.paddingRight = ''
-            btf.fadeOut($menuMask, 0.5)
-            $mobileSidebarMenus.classList.remove('open')
-        }
-
-        $toggleMenu.addEventListener('click', openMobileSidebar)
-
-        $menuMask.addEventListener('click', e => {
-            if ($mobileSidebarMenus.classList.contains('open')) {
-                closeMobileSidebar()
-            }
-        })
-
-        window.addEventListener('resize', e => {
-            if (!btf.isHidden($toggleMenu)) {
-                if ($mobileSidebarMenus.classList.contains('open')) closeMobileSidebar()
-            }
-        }, {signal})
-    }
-
     /**
      * 首頁top_img底下的箭頭
      */
@@ -382,14 +359,10 @@ function initializeNavigation() {
 
     // checkAvif()
 
-    const refreshNavigation = function () {
-        initAdjust();
-        sidebarFn()
-        GLOBAL_CONFIG.isHome && scrollDownInIndex()
-    }
+    initAdjust()
+    if (GLOBAL_CONFIG.isHome) scrollDownInIndex()
 
-    refreshNavigation()
-
+    if (homeNav) document.fonts?.ready.then(() => {if (!signal.aborted) adjustMenu()});
     window.addEventListener('resize', adjustMenu, {signal})
     window.addEventListener('orientationchange', () => {
         setTimeout(() => {if (!signal.aborted) adjustMenu(true)}, 100)

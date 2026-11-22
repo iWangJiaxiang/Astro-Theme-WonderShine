@@ -18,6 +18,7 @@ document.addEventListener('astro:page-load', () => {
   const trigger=document.querySelector<HTMLButtonElement>('#toggle-menu button');
   if (!dialog || !trigger) return;
   const controller=new AbortController(), options={signal:controller.signal};
+  const homeNav=trigger.closest<HTMLElement>('[data-home-nav]');
   const viewport=matchMedia('(max-width:1023px)');
   let savedOverflow='';
   const themeButtons=[...dialog.querySelectorAll<HTMLButtonElement>('[data-theme-choice]')];
@@ -39,7 +40,11 @@ document.addEventListener('astro:page-load', () => {
     if(event.target===dialog){const bounds=dialog.getBoundingClientRect();if(event.clientX<bounds.left||event.clientX>bounds.right||event.clientY<bounds.top||event.clientY>bounds.bottom)dialog.close();}
     if(event.target instanceof Element&&event.target.closest('a[href]'))dialog.close();
   },options);
-  viewport.addEventListener('change',event=>{if(!event.matches&&dialog.open)dialog.close();},options);
+  const navObserver = homeNav && new MutationObserver(() => {
+    if (!homeNav.classList.contains('hide-menu') && dialog.open) dialog.close();
+  });
+  if (homeNav) navObserver?.observe(homeNav,{attributeFilter:['class']});
+  else viewport.addEventListener('change',event=>{if(!event.matches&&dialog.open)dialog.close();},options);
   themeButtons.forEach(button=>button.addEventListener('click',()=>{
     const choice=button.dataset.themeChoice!;
     try {if(choice==='system'){localStorage.removeItem('theme');localStorage.setItem('site-theme-system','true');}else localStorage.removeItem('site-theme-system');}catch{}
@@ -55,5 +60,5 @@ document.addEventListener('astro:page-load', () => {
   document.addEventListener('keydown',event=>{
     if(event.key==='Escape')document.querySelectorAll<HTMLDetailsElement>('.compact-more[open]').forEach(menu=>{menu.open=false;menu.querySelector<HTMLElement>('summary')?.focus();});
   },options);
-  dispose=()=>{if(dialog.open)dialog.close();controller.abort();};
+  dispose=()=>{navObserver?.disconnect();if(dialog.open)dialog.close();controller.abort();};
 });

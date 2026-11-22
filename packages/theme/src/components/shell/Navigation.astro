@@ -3,15 +3,15 @@ import MenuTree from './MenuTree.astro';
 import { siteNavigation } from '../../lib/site-navigation';
 import LeftMenu from './LeftMenu.astro';
 import { t, localizeConfig, localizeData, localizeUrl, localeHome, languageDestinations } from '../../lib/locale';
-const { site, lang, title, document: doc } = Astro.props;
+const { site, lang, title, document: doc, home=false } = Astro.props;
 const config = localizeConfig(site,lang), data = localizeData(site,lang), nav = config.extra.nav || {};
 const tr = (key: string) => t(key,lang,site);
 const secondaryPaths = new Set(nav.compact_paths || ['/friends','/about']);
 const isSecondary = (menu: any) => secondaryPaths.has((menu.href || menu.menus?.[0]?.href || '').replace(/\/$/,''));
 const menus = siteNavigation(site,lang);
-const secondaryMenus = menus.filter(isSecondary);
+const secondaryMenus = home ? [] : menus.filter(isSecondary);
 ---
-<nav class="show" id="nav"><div id="nav-group">
+<nav class="show" id="nav" data-home-nav={home ? '' : undefined}><div id="nav-group">
   <div id="blog_name">
     {nav.phone_left_menu !== false && nav.pc_left_menu !== false && <div class="back-home-button" tabindex="0"><i class="nav-icon back-home-button-icon icon-apps-fill" style="font-size:1rem" aria-hidden="true" /><LeftMenu site={site} lang={lang} data={data} /></div>}
     <a href={localeHome(lang,site)} id="site-name" class="nav-item icon-home" title={tr('home')}><span>{config.title}</span></a>
@@ -37,6 +37,6 @@ const secondaryMenus = menus.filter(isSecondary);
     {nav.right?.search && <div class="nav-button" id="search-button"><button class="site-page social-icon search nav-item" accesskey="s" title={tr('search_icon')}><i class="nav-icon icon-search--line" /></button></div>}
     {nav.right?.console_enable && <div class="nav-button" id="nav-console"><button class="site-page console_switchbutton nav-item" onclick="wjx.showConsole()" title={tr('console')}><i class="nav-icon icon-dashboard" /></button></div>}
     <div class="nav-button" id="nav-totop"><button class="totopbtn nav-item" onclick="btf.scrollToDest(0,500)" title={tr('back_top')}><i class="nav-icon icon-arrow-up" /><span id="percent">0</span></button></div>
-    <div id="toggle-menu"><button class="site-page nav-item" aria-label={tr('navigation')} aria-haspopup="dialog" aria-controls="sidebar-menus" aria-expanded="false"><i class="nav-icon icon-bars" /></button></div>
+    <div id="toggle-menu"><button class="site-page nav-item" aria-label={tr('navigation')} aria-haspopup="dialog" aria-controls="sidebar-menus" aria-expanded="false"><i class="nav-icon icon-bars" aria-hidden="true" /></button></div>
   </div>
 </div></nav>

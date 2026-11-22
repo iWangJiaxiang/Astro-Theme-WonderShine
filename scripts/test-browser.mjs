@@ -95,37 +95,89 @@ export async function checkBrowser(options = demo) {
       await settled();
       if (options === demo && ['home', 'chinese'].includes(name)) {
         const prefix = name === 'chinese' ? '/zh-CN' : '';
-        assert.equal(await page.$eval('#todayCard', link => link.pathname), prefix + '/articles/welcome/');
-        for (const width of [1440, 390]) {
+        const thread = prefix + '/threads/11111111-2222-4333-8444-555555555555/';
+        const timeline = prefix + '/timeline/';
+        const menu = '#nav .menus_item > a[href="' + prefix + '/threads/"]';
+        const submenu = menu + ' + .menus_item_child';
+        const drawer = '#sidebar-menus[data-home-drawer]';
+        const trigger = '#toggle-menu button';
+        assert.equal(await page.$eval('#home-threads-title', heading => heading.textContent), prefix ? '最新动态' : 'Latest thread');
+        assert.deepEqual(await page.$$eval('#home_top a', links => links.map(link => link.pathname)), [prefix + '/threads/', thread]);
+        assert.equal(await page.$$eval('#home_top > section', cards => cards.length), 1);
+        assert.equal(await page.$('#todayCard, #recent-top-post-group, .compact-more'), null);
+
+        for (const width of [1440, 1165]) {
           await page.setViewport({width, height:900});
+          await page.waitForSelector(menu, {visible:true});
+          assert.equal(await page.$eval(trigger, button => button.checkVisibility()), false);
+          if (width === 1440) await (await page.$(menu)).hover();
+          else await page.focus(menu);
+          await page.waitForSelector(submenu, {visible:true});
+          assert.equal(await page.$eval(submenu + ' a', link => link.pathname), timeline);
           await finishLayout();
-          const toggle = await page.$('#topGroup summary');
-          const label = () => toggle.evaluate(button => button.innerText.trim());
-          const show = name === 'chinese' ? '更多推荐' : 'More recommendations';
-          const hide = name === 'chinese' ? '收起推荐' : 'Hide recommendations';
-          assert.equal(await label(), show);
-          if (width === 390) await toggle.click();
-          else { await toggle.focus(); await page.keyboard.press('Enter'); }
-          assert.equal(await label(), hide);
-          assert.ok(await page.evaluate(() => {
-            const cover = document.querySelector('#todayCard').getBoundingClientRect();
-            const button = document.querySelector('#topGroup summary').getBoundingClientRect();
-            const row = document.querySelector('.recommendation-link').getBoundingClientRect();
-            return cover.height > 0 && cover.bottom <= button.top + 1 && row.top >= button.bottom - 1 && row.height > 0;
-          }));
-          const target = await page.$eval('#topGroup .recommendation-link', link => link.href);
-          assert.ok(new URL(target).pathname.startsWith(prefix + '/collections/'));
-          assert.equal((await fetch(target)).status, 200);
-          await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-recommendations' + (width === 390 ? '-mobile' : '') + '.png')});
-          if (width === 390) await toggle.click();
-          else await page.keyboard.press('Enter');
-          assert.equal(await label(), show);
-          assert.equal(await page.$eval('.recommendation-link', link => link.checkVisibility()), false);
-          assert.ok(await page.$eval('#todayCard', link => link.offsetWidth > 0));
-          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-          if (width === 390) await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-mobile.png')});
+          if (width === 1440) await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-submenu.png')});
+          await page.mouse.move(0,0);
+          await page.$eval(menu, link => link.blur());
         }
+
+        await page.setViewport({width:390, height:844});
+        await page.waitForSelector(trigger, {visible:true});
+        await finishLayout();
+        assert.equal(await page.$eval(menu, link => link.checkVisibility({visibilityProperty:true})), false);
+        await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-mobile.png')});
+        await page.click(trigger);
+        await page.waitForSelector(drawer + '[open]');
+        await finishLayout();
+        const open = await page.$eval(drawer, panel => {
+          const bounds = panel.getBoundingClientRect();
+          const mask = getComputedStyle(panel,'::backdrop');
+          return {edge:bounds.right, width:bounds.width, mask:mask.backdropFilter, opacity:mask.opacity,
+            duration:getComputedStyle(panel).transitionDuration, overflow:document.body.style.overflow};
+        });
+        assert.equal(open.edge, 390);
+        assert.equal(open.width, 300);
+        assert.match(open.mask, /blur\(20px\)/);
+        assert.equal(open.opacity, '1');
+        assert.match(open.duration, /0\.5s/);
+        assert.equal(open.overflow, 'hidden');
+        assert.ok(await page.$(drawer + ' a[href="' + timeline + '"]'));
+        await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-drawer.png')});
+
+        const closed = async () => {
+          await page.waitForFunction(selector => !document.querySelector(selector).open && document.body.style.overflow !== 'hidden', {}, drawer);
+          assert.equal(await page.$eval(trigger, button => button.getAttribute('aria-expanded')), 'false');
+          await finishLayout();
+        };
+        await page.mouse.click(30,300);
+        await closed();
+        await page.click(trigger);
+        await page.keyboard.press('Escape');
+        await closed();
+        assert.equal(await page.$eval(trigger, button => button === document.activeElement), true);
+        await page.click(trigger);
         await page.setViewport({width:1440,height:900});
+        await closed();
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+
+        if (!prefix) {
+          await page.emulateMediaFeatures([{name:'prefers-reduced-motion', value:'reduce'}]);
+          await page.setViewport({width:390,height:844});
+          await page.click(trigger);
+          assert.equal(await page.$eval(drawer, panel => getComputedStyle(panel).transitionDuration), '0s');
+          await page.evaluate(() => {window.__homeDrawerNavigationProbe = true;});
+          await page.click(drawer + ' a[href="/threads/"]');
+          await page.waitForFunction(() => location.pathname === '/threads/');
+          await settled();
+          await page.goBack();
+          await settled();
+          assert.equal(await page.evaluate(() => window.__homeDrawerNavigationProbe), true);
+          await page.click(trigger);
+          await page.waitForSelector(drawer + '[open]');
+          await page.keyboard.press('Escape');
+          await closed();
+          await page.emulateMediaFeatures([]);
+          await page.setViewport({width:1440,height:900});
+        }
       }
       if (options === demo && ['thread', 'threads'].includes(name)) {
         assert.equal(await page.$eval('#aside-content .card-recent-post .title', link => link.pathname), '/articles/welcome/');

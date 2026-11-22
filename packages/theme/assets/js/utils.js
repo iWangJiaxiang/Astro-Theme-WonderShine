@@ -597,10 +597,6 @@ var wjx = {
     },
 
     //隐藏今日推荐
-    hideTodayCard: function() {
-        const recommendations = document.querySelector("#topGroup details");
-        if (recommendations) recommendations.open = true;
-    },
 
     //更改主题色
     changeThemeColor: function (color) {
