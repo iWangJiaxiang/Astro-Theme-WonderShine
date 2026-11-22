@@ -16,6 +16,12 @@
       "state": "commented",
       "updated_at": "2026-11-21",
       "note": "Verified b04f230 removed manual bootstrap publication; posted evidence and recommended closing. Static review only; no tests/publication executed."
+    },
+    {
+      "number": 26,
+      "state": "commented",
+      "updated_at": "2026-11-22",
+      "note": "Explained repeated report_incomplete notification is not build failure evidence; #13/#15 remain actual tracked work. No new human activity; avoid repeating."
     }
   ],
   "fixes": [],
@@ -23,7 +29,7 @@
     {
       "area": "code",
       "checked_at": "2026-11-22",
-      "result": "Tasks 3,5,2: verified all five open issues/comments and no PRs; reviewed CSS subprocess and routes. No new human activity. #13 remains unfixed; #15 existing branch awaits review; #18 already has closure evidence.",
+      "result": "Tasks 2,1: verified six open issues, all comments, no open PRs; investigated new #26 notification, commented with #16/#13/#15 distinction. CSS null-status bug still present; no local or remote tests.",
       "follow_up": "#13 requires remote build/test capability before a validated fix PR; no local execution permitted."
     },
     {
@@ -35,7 +41,7 @@
     {
       "area": "performance",
       "checked_at": "2026-11-22",
-      "result": "Fallback Task 8: inspected image recipe cache, digest promise deduplication, copied set and four workers; no new measured opportunity. No benchmarks executed.",
+      "result": "Tasks 8 -> 9: inspected responsive image digest promises, copied set, four workers and image cache/error tests; no measured new opportunity; no execution.",
       "follow_up": "Require measurements for performance changes."
     },
     {
