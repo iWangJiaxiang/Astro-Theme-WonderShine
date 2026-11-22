@@ -6,6 +6,7 @@ import type { WorkspaceFiles } from './filesystem';
 import { mediaSource, type MediaSource } from './media-index';
 
 const maxEntries = 160, maxBytes = 160 * 1024, maxSide = 360;
+type ThumbnailData = { bytes: ArrayBuffer; type: string };
 let database: Promise<IDBDatabase | null> | undefined;
 function openThumbnails(): Promise<IDBDatabase | null> {
   return database ??= new Promise(resolve => {
@@ -19,27 +20,35 @@ function openThumbnails(): Promise<IDBDatabase | null> {
 async function getThumbnail(key: string): Promise<Blob | undefined> {
   const db = await openThumbnails();
   if (!db) return;
-  return new Promise((resolve, reject) => {
+  const stored = await new Promise<ThumbnailData | Blob | undefined>((resolve, reject) => {
     const store = db.transaction('thumbnails', 'readwrite').objectStore('thumbnails');
     const request = store.get(key);
     request.onerror = () => reject(request.error);
     request.onsuccess = () => {
-      const image = request.result?.image;
-      if (!(image instanceof Blob) || image.size > maxBytes) return resolve(undefined);
-      store.put({ key, image, usedAt: Date.now() });
-      resolve(image);
+      const { bytes, type, image } = request.result ?? {};
+      if (bytes instanceof ArrayBuffer && bytes.byteLength <= maxBytes && typeof type === 'string') {
+        store.put({ key, bytes, type, usedAt: Date.now() });
+        return resolve({ bytes, type });
+      }
+      resolve(image instanceof Blob && image.size <= maxBytes ? image : undefined);
     };
   });
+  if (!stored) return;
+  if (!(stored instanceof Blob)) return new Blob([stored.bytes], { type: stored.type });
+  const bytes = await stored.arrayBuffer();
+  void saveThumbnail(key, { bytes, type: stored.type }).catch(() => {});
+  return new Blob([bytes], { type: stored.type });
 }
-async function saveThumbnail(key: string, image: Blob) {
+async function saveThumbnail(key: string, data: ThumbnailData) {
   const db = await openThumbnails();
-  if (!db || image.size > maxBytes) return;
+  if (!db || data.bytes.byteLength > maxBytes) return;
   await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction('thumbnails', 'readwrite');
     transaction.oncomplete = () => resolve();
     transaction.onabort = () => reject(transaction.error);
     const store = transaction.objectStore('thumbnails');
-    store.put({ key, image, usedAt: Date.now() });
+    // Byte records let the WebView read independent data across cache updates.
+    store.put({ key, ...data, usedAt: Date.now() });
     const count = store.count();
     count.onsuccess = () => {
       let excess = count.result - maxEntries;
@@ -109,7 +118,9 @@ export function createNativeMediaImageLoader(files: WorkspaceFiles, root: string
     const blob = new Blob([new Uint8Array(file.data)], { type: file.mime });
     const resized = await shrink(blob).catch(() => null);
     signal.throwIfAborted();
-    if (resized && managed) void saveThumbnail(key, resized).catch(() => {});
+    if (resized && managed && resized.size <= maxBytes) {
+      void resized.arrayBuffer().then(bytes => saveThumbnail(key, { bytes, type: resized.type })).catch(() => {});
+    }
     return resized || blob;
   }
   return async (item: MediaItem, thumbnail: boolean, signal: AbortSignal, version: number): Promise<Blob | string> => {

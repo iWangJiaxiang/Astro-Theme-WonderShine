@@ -544,9 +544,12 @@ try {
     open.onsuccess = () => {
       const db = open.result;
       if (!db.objectStoreNames.contains('thumbnails')) { db.close(); resolve(false); return; }
-      const count = db.transaction('thumbnails', 'readonly').objectStore('thumbnails').count();
-      count.onsuccess = () => { db.close(); resolve(count.result > 0); };
-      count.onerror = () => { db.close(); resolve(false); };
+      const cursor = db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor();
+      cursor.onsuccess = () => {
+        db.close();
+        resolve(cursor.result?.value.bytes instanceof ArrayBuffer && cursor.result.value.bytes.byteLength > 0);
+      };
+      cursor.onerror = () => { db.close(); resolve(false); };
     };
   }));
   let snapshotTimeout;
