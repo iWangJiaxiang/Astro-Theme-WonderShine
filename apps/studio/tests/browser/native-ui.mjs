@@ -137,6 +137,17 @@ try {
           assert.ok(reviewClaims.has(args.workspaceId), 'Review operations require a prior recovery claim');
           value = false;
         }
+      } else if (command === 'native_workspace_stat') {
+        const path = confined(args.path);
+        assert.match(path.slice(appData.length), /^\/workspaces\/[0-9a-f-]{36}\/repo(?:\/|$)/);
+        if (path === join(root, 'public/uploads/example.png')) thumbnailSourceStats++;
+        const info = await fs.lstat(path).catch(error => {
+          if (error.code !== 'ENOENT') throw error;
+          return null;
+        });
+        if (info?.isSymbolicLink()) throw new Error('Private workspace path contains a symlink');
+        value = info && { ...fileInfo(info), mtimeMs: info.mtime.getTime(), ctimeMs: info.birthtime.getTime(),
+          kind: info.isFile() ? 'file' : info.isDirectory() ? 'directory' : 'other' };
       } else if (command === 'plugin:dialog|open') { value = selectedFolder; folderGranted = !!value; }
       else if (command === 'plugin:path|resolve_directory') value = appData;
       else if (command === 'plugin:fs|write_file') {

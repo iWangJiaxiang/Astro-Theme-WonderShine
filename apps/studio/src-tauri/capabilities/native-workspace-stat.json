@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "studio-native-workspace-stat",
+  "description": "Bundled main WebView only. Inspect metadata in a private Studio checkout.",
+  "local": true,
+  "webviews": ["main"],
+  "permissions": ["allow-native-workspace-stat"]
+}

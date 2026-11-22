@@ -3,6 +3,8 @@ use urlpattern::{UrlPattern, UrlPatternMatchInput};
 // Run the native transport unit/wire tests in the existing remote-CI test target.
 #[path = "../src/cnb_account.rs"]
 mod cnb_account;
+#[path = "../src/native_workspace_stat.rs"]
+mod native_workspace_stat;
 
 #[test]
 fn cnb_command_is_local_main_only_on_desktop_and_mobile() {

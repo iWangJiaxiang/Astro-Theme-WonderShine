@@ -32,9 +32,9 @@ const summaryOrder = (a: string, b: string) => summaryRoots.indexOf(a.split('/')
 export async function connectNativeWorkspace(profile: WorkspaceProfile, token: string, onDisconnect: () => void, onProgress?: ProgressCallback, summaryStore?: SummaryIndexStore, allowClone = true, grant?: GitGrant): Promise<() => void> {
   validateProfile(profile, { allowAutomaticBranch: true });
   const base = (await appDataDir()).replace(/\\/g, '/').replace(/\/$/, '');
-  const files = tauriFiles(base, profile.source === 'local' ? [profile.localPath!] : []);
   const folder = base + '/workspaces/' + profile.id;
   const root = profile.source === 'local' ? profile.localPath! : folder + '/repo', state = folder + '/state';
+  const files = profile.source === 'local' ? tauriFiles(base, [root]) : tauriFiles(base, [], root);
   const checkoutRoot = root.replace(/\\/g, '/').replace(/\/$/, '');
   if (state === checkoutRoot || state.startsWith(checkoutRoot + '/') || checkoutRoot.startsWith(state + '/')) {
     throw new Error('Git 工作区与状态目录必须分开存储');

@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import * as native from '@tauri-apps/plugin-fs';
 import { StudioError } from '../core/errors';
 import type { FileInfo, WorkspaceFiles } from './filesystem';
@@ -11,7 +12,7 @@ export function nativeFileInfo(value: native.FileInfo): FileInfo {
 }
 
 /** App-scoped filesystem only. Repository symlinks are deliberately unsupported. */
-export function tauriFiles(root: string, additionalRoots: string[] = []): WorkspaceFiles {
+export function tauriFiles(root: string, additionalRoots: string[] = [], privateCheckout?: string): WorkspaceFiles {
   const bases = [root, ...additionalRoots].map(value => value.replace(/\\/g, '/').replace(/\/$/, '')).sort((a, b) => b.length - a.length);
   function scoped(path: string): string {
     const normalized = path.replace(/\\/g, '/').split('/').filter(part => part !== '.').join('/').replace(/\/$/, '');
@@ -26,8 +27,20 @@ export function tauriFiles(root: string, additionalRoots: string[] = []): Worksp
       throw Object.assign(new Error(message), { code });
     }
   }
-  async function checked(path: string): Promise<{ path: string; info?: native.FileInfo }> {
+  async function checked(path: string): Promise<{ path: string; info?: FileInfo }> {
     const result = scoped(path);
+    if (privateCheckout && (result === privateCheckout || result.startsWith(privateCheckout + '/'))) {
+      type Metadata = Omit<FileInfo, 'isFile' | 'isDirectory' | 'isSymbolicLink'> & { kind: 'file' | 'directory' | 'other' };
+      try {
+        const metadata = await invoke<Metadata | null>('native_workspace_stat', { path: result });
+        if (!metadata) return { path: result };
+        const { kind, ...properties } = metadata;
+        return { path: result, info: { ...properties, isFile: () => kind === 'file', isDirectory: () => kind === 'directory', isSymbolicLink: () => false } };
+      } catch (error) {
+        if (error === 'Private workspace path contains a symlink') throw new StudioError(400, '不允许读写符号链接');
+        throw error;
+      }
+    }
     const base = bases.find(base => result === base || result.startsWith(base + '/'))!;
     let info = await native.lstat(base);
     if (info.isSymlink) throw new StudioError(400, '不允许读写符号链接');
@@ -38,12 +51,12 @@ export function tauriFiles(root: string, additionalRoots: string[] = []): Worksp
       catch (error) { if (/not found|no such file|os error 2/i.test(String(error))) return { path: result }; throw error; }
     }
     // Metadata lives only for this operation; never cache a safety check across calls.
-    return { path: result, info };
+    return { path: result, info: nativeFileInfo(info) };
   }
   const statChecked = (path: string) => run(async () => {
     const location = await checked(path);
     if (!location.info) throw new Error('no such file');
-    return nativeFileInfo(location.info);
+    return location.info;
   });
   return {
     revisionNamespace: 'tauri-device-filesystem-v1',
@@ -52,7 +65,7 @@ export function tauriFiles(root: string, additionalRoots: string[] = []): Worksp
       if (!Number.isSafeInteger(limit) || limit < 0) throw new Error('文件大小限制无效');
       const location = await checked(path);
       if (!location.info) throw new Error('no such file');
-      if (!location.info.isFile) throw new StudioError(400, '请选择文件');
+      if (!location.info.isFile()) throw new StudioError(400, '请选择文件');
       if (location.info.size > limit) throw new StudioError(413, '文件超过编辑或预览限制');
       const bytes = await native.readFile(location.path);
       if (bytes.byteLength > limit) throw new StudioError(413, '文件超过编辑或预览限制');
