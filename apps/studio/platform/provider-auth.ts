@@ -9,6 +9,10 @@ const providers = {
   github: { origin: 'https://github.com', api: 'https://api.github.com', device: '/login/device/code', token: '/login/oauth/access_token' },
   cnb: { origin: 'https://cnb.cool', api: 'https://api.cnb.cool', device: '/oauth2/device/auth', token: '/oauth2/token' },
 } as const;
+export function isOAuthRemote(provider: string, remote: string): provider is AccountProvider {
+  return (provider === 'github' || provider === 'cnb') && URL.canParse(remote)
+    && new URL(remote).origin === providers[provider].origin;
+}
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
 type LoginStage = 'device' | 'token' | 'account' | 'repos';
 const stageErrors: Record<LoginStage, string> = {

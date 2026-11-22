@@ -2,7 +2,8 @@ import { ErrorNotice } from "../src/components/ErrorNotice";
 import { useEffect, useRef, useState } from 'react';
 import { workspaceCommitNotice } from './workspace-notice';
 import type { WorkspaceStatus } from '../shared/workspace';
-import { nativeGitCredential } from './git-credential';
+import AccountLogin from './AccountLogin';
+import { isGitAuthFailure, nativeGitCredential } from './git-credential';
 import { api, errorMessage, session } from '../src/api';
 import { t, type Message } from '../src/i18n';
 import { useSignals } from '../src/reactivity';
@@ -78,7 +79,6 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         }
         if (kind === 'sync' || kind === 'publish') {
           const credential = nativeGitCredential.current;
-          setAuthFailed(false);
           if (credential && credential.id === session.value?.identity.id && tokenInput.current?.value) {
             await credential.set(tokenInput.current.value.trim());
             tokenInput.current.value = '';
@@ -88,6 +88,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
             await api('/workspace/publish', 'POST', { message, confirmation: current.confirmation });
             current = null;
           } else current = await api<WorkspaceStatus>('/workspace/sync', 'POST', { confirmation: current.confirmation });
+          setAuthFailed(false);
           setPushed(true);
         }
       }
@@ -100,7 +101,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       else if (committed && kind === 'commit-sync') setNotice('已提交到设备，尚未推送。请刷新状态后重新确认同步。');
       const failure = errorMessage(reason);
       setError(failure);
-      setAuthFailed(syncing && typeof failure === 'object' && (/\/Auth$/.test(String(failure.params?.gitDetail)) || /授权|重新登录/.test(failure.key)));
+      if (syncing) setAuthFailed(isGitAuthFailure(failure));
       setStatus(null);
     }
     finally {
@@ -110,9 +111,13 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
   }
   const manualMerge = status?.diverged && !status.canMerge;
   const mergeNotice = '同步时会合并远端更新。如有冲突，双方提交都会保留。';
-  const credential = nativeGitCredential.current;
-  const canSignIn = credential && credential.id === session.value?.identity.id;
-  const credentialField = canSignIn && (pending === 'sync' || pending === 'publish') &&
+  const credential = nativeGitCredential.current?.id === session.value?.identity.id ? nativeGitCredential.current : undefined;
+  const reauthorize = authFailed && !pending && credential?.oauth && <AccountLogin key={credential.id}
+    disabled={busy} reauthorize={credential.oauth} onAuthorized={() => {
+      setAuthFailed(false);
+      void review(publishPath ? 'publish' : 'sync');
+    }} />;
+  const credentialField = credential && (pending === 'sync' || pending === 'publish') &&
     <details className="publish-credential" open={authFailed || !credential.hasToken()}>
       <summary>{t('仓库登录')}</summary>
       {credential.hasToken() && <button type="button" className="text-button" disabled={busy} onClick={async () => {
@@ -129,7 +134,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       : status && status.changes !== status.managedChanges?.length ? '存在托管范围以外的修改，请先在 Git 工具中处理再同步。'
       : pending === 'sync' && status?.dirty ? '工作区已变化，请刷新并重新确认提交范围' : '';
     return <dialog ref={dialog} className="publish-dialog" aria-labelledby="publish-heading"
-      onCancel={event => { event.preventDefault(); if (!busy) onClose?.(pushed); }}>
+      onCancel={event => { if (event.target === event.currentTarget) { event.preventDefault(); if (!busy) onClose?.(pushed); } }}>
       <h2 id="publish-heading">{t(pushed ? '动态已发送到仓库' : '发布动态')}</h2>
       {status && pending && !pushed && <>
         {pending === 'publish' ? <p>{t('将 {count} 个文件发布到 {branch}。', { count: status.changes, branch: status.branch })}
@@ -143,6 +148,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       </>}
       {notice && (pushed || pending !== 'sync') && <p role="status">{t(pushed ? '网站部署后即可查看。' : notice)}</p>}
       {error && <ErrorNotice source="WorkspacePanel" message={error} />}
+      {reauthorize}
       {blocked && !pushed && <ErrorNotice source="WorkspacePanel" message={blocked} />}
       {credentialField}
       <div className="publish-actions">
@@ -156,7 +162,8 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
   return <section className="settings-page workspace-panel">
     <div className="page-heading"><div><h1>{t('工作区同步')}</h1></div><button disabled={busy || !!pending} onClick={() => void action('refresh')}>{t('刷新状态')}</button></div>
     {error && <ErrorNotice source="WorkspacePanel" message={error} />}{notice && <p role="status" className="notice success">{t(notice)}</p>}
-    {authFailed && canSignIn && !status && <button className="secondary" disabled={busy} onClick={() => void review('sync')}>{t('重新登录并复核同步')}</button>}
+    {reauthorize}
+    {authFailed && credential && !pending && <button className="secondary" disabled={busy} onClick={() => void review('sync')}>{t('使用访问令牌')}</button>}
     {busy && <p role="status" className="muted small">{t(stage)}</p>}
     {status && <div className="card workspace-sync-card"><h2>{status.branch}</h2>
       <dl className="workspace-status-grid"><div><dt>{t('本地修改')}</dt><dd>{status.changes}</dd></div><div><dt>{t('待推送提交')}</dt><dd>{status.ahead}</dd></div><div><dt>{t('远端新提交（上次获取）')}</dt><dd>{status.behind}</dd></div></dl>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, errorMessage } from '../api';
+import { api, errorMessage, session } from '../api';
 import { t, type Message } from '../i18n';
 import { useSignals } from '../reactivity';
 import { notifyWorkspaceChanged } from '../workspace-events';
@@ -7,6 +7,8 @@ import type { WorkspaceStatus } from '../../shared/workspace';
 import Icon from './Icon';
 import Modal from './Modal';
 import { ErrorNotice } from './ErrorNotice';
+import AccountLogin from '../../platform/AccountLogin';
+import { isGitAuthFailure, nativeGitCredential } from '../../platform/git-credential';
 
 type Counts = Pick<WorkspaceStatus, 'ahead' | 'behind'>;
 const check = () => api<Counts>('/workspace/check', 'POST');
@@ -17,6 +19,7 @@ export default function QuickSync({ editing, onManage }: { editing: () => boolea
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [busy, setBusy] = useState(true), [updates, setUpdates] = useState(false);
   const [visible, setVisible] = useState(false);
+  const [reconnected, setReconnected] = useState(false);
   const [steps, setSteps] = useState<Message[]>([]), [error, setError] = useState<Message>('');
   const [hint, setHint] = useState<Message>('同步 Git');
   useEffect(() => {
@@ -33,7 +36,7 @@ export default function QuickSync({ editing, onManage }: { editing: () => boolea
     const active = owner.current;
     running.current = true;
     clearTimeout(timer.current);
-    setBusy(true); setSteps([]); setError(''); setHint('同步 Git');
+    setBusy(true); setSteps([]); setError(''); setReconnected(false); setHint('同步 Git');
     let attemptedSync = false;
     try {
       const { ahead, behind } = await check();
@@ -61,11 +64,18 @@ export default function QuickSync({ editing, onManage }: { editing: () => boolea
       }
     }
   }
+  const credential = nativeGitCredential.current;
+  const oauth = credential?.id === session.value?.identity.id ? credential?.oauth : undefined;
   return <div className="quick-sync">
     <button className="icon-button" type="button" aria-label={t('同步 Git')} title={t(updates ? '有提交待同步' : hint)}
       disabled={busy} data-updates={updates || undefined} aria-busy={busy} onClick={() => void sync()}><Icon name="sync" size={20} /></button>
     {visible && (steps.length > 0 || error) && <Modal className="quick-sync-progress" label={t('同步 Git')} onCancel={() => setVisible(false)}><h2>{t('同步 Git')}</h2><ol role="status">{steps.map((step, i) => <li key={i}>{t(step)}</li>)}</ol>
-      {error && <><ErrorNotice source="QuickSync" message={error} /><button onClick={() => { setSteps([]); setError(''); onManage(); }}>{t('工作区同步')}</button> <button onClick={() => { setSteps([]); setError(''); }}>{t('关闭')}</button></>}
+      {error && <ErrorNotice source="QuickSync" message={error} />}
+      {oauth && isGitAuthFailure(error) && <AccountLogin disabled={busy} reauthorize={oauth} onAuthorized={() => {
+        setError(''); setSteps(['仓库授权已更新']); setReconnected(true); setHint('同步 Git');
+      }} />}
+      {error && <><button onClick={() => { setSteps([]); setError(''); onManage(); }}>{t('工作区同步')}</button> <button onClick={() => { setSteps([]); setError(''); }}>{t('关闭')}</button></>}
+      {reconnected && <button className="primary" type="button" disabled={busy} onClick={() => void sync()}>{t('重试同步')}</button>}
     </Modal>}
   </div>;
 }
