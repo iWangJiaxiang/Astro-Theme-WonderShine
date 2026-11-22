@@ -121,6 +121,27 @@ export async function checkBrowser(options = demo) {
           await page.$eval(menu, link => link.blur());
         }
 
+        if (!prefix) {
+          await page.setViewport({width:320,height:720});
+          assert.ok(await page.evaluate(() => {
+            const title = document.querySelector('#site-name span');
+            const toolbar = document.querySelector('#nav-right');
+            const originalTitle = title.textContent;
+            const search = document.createElement('div');
+            search.id = 'search-button';
+            search.innerHTML = '<button class="site-page nav-item" type="button">Search</button>';
+            try {
+              title.textContent = 'WonderShine: a very long site title with every navigation tool enabled';
+              toolbar.prepend(search);
+              return title.getBoundingClientRect().right <= toolbar.getBoundingClientRect().left &&
+                title.scrollWidth > title.clientWidth && document.documentElement.scrollWidth <= innerWidth;
+            } finally {
+              title.textContent = originalTitle;
+              search.remove();
+            }
+          }), 'A long site title fits beside the full mobile toolbar');
+        }
+
         await page.setViewport({width:390, height:844});
         await page.waitForSelector(trigger, {visible:true});
         await page.waitForSelector('.home-thread', {visible:true});

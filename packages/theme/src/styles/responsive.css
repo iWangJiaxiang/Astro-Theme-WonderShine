@@ -199,8 +199,9 @@
 }
 @media (max-width:768px) {
   #nav[data-home-nav] #toggle-menu { display:inline-block; }
-  #nav[data-home-nav] #blog_name { min-width:0; }
-  #nav[data-home-nav] #site-name { max-width:calc(100vw - 172px); padding-left:0; }
+  #nav[data-home-nav] #blog_name { flex:1; min-width:0; }
+  #nav[data-home-nav] #site-name { min-width:0; padding-left:0; }
+  #page-header #nav[data-home-nav] #nav-right { position:static; flex:none; margin-right:0; }
   #nav[data-home-nav] #site-name span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   #nav[data-home-nav] #nav-right .nav-language-switch > .nav-language-menu {
     position:fixed;
