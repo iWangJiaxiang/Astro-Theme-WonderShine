@@ -11,9 +11,9 @@ import MediaPreviewImage from "./MediaPreviewImage";
 
 const MediaLibrary: StudioComponent<{}, {}> = component<{}, {}>("MediaLibrary", () => {
   const selected = ref<MediaItem>();
-  const dialog = ref<HTMLDialogElement>();
-  const closeButton = ref<HTMLButtonElement>();
-  const browser = ref<HTMLElement>();
+  const dialog = ref<HTMLDialogElement | null>(null);
+  const closeButton = ref<HTMLButtonElement | null>(null);
+  const browser = ref<HTMLElement | null>(null);
   const copied = ref("");
   const copyFailed = ref(false);
   const failed = ref(false);

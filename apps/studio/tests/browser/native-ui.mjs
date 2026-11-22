@@ -42,6 +42,7 @@ const offlineRequests = [];
 let siteOpened;
 const openedSite = new Promise(resolve => { siteOpened = resolve; });
 let nextResource = 1, worktreeScans = 0, gitInspections = 0;
+let mediaDirectoryReads = 0, thumbnailSourceReads = 0;
 try {
   await fs.mkdir(root, { recursive: true }); await fs.mkdir(screenshots, { recursive: true });
   const git = args => execFileSync('git', args, { cwd: root, stdio: 'pipe' }).toString().trim();
@@ -167,8 +168,11 @@ try {
         const path = confined(args.path), operation = command.split('|')[1];
         switch (operation) {
           case 'mkdir': await fs.mkdir(path, { recursive: !!args.options?.recursive, mode: args.options?.mode }); break;
-          case 'read_file': value = [...await fs.readFile(path)]; break;
+          case 'read_file':
+            if (path === join(root, 'public/uploads/example.png')) thumbnailSourceReads++;
+            value = [...await fs.readFile(path)]; break;
           case 'read_dir':
+            if (path === join(root, 'public') || path.startsWith(join(root, 'public') + sep)) mediaDirectoryReads++;
             assert.ok(!gitInspections || !path.endsWith('/repo/assets/git-fixture'), 'Mobile Git never enumerates tracked assets via WebView IPC');
             value = (await fs.readdir(path, { withFileTypes: true })).map(item => ({ name: item.name, isFile: item.isFile(), isDirectory: item.isDirectory(), isSymlink: item.isSymbolicLink() })); break;
           case 'remove': { const stat = await fs.lstat(path); if (stat.isDirectory() && !stat.isSymbolicLink()) await fs.rmdir(path); else await fs.unlink(path); break; }
@@ -510,9 +514,39 @@ try {
   await click('可视化编辑'); await page.waitForSelector('.vditor-ir [contenteditable="true"]', { timeout: 20000 });
   assert.equal(await page.$$eval('#vditor-icon-bold', elements => elements.length), 1, 'reopening rich editor retains one icon sprite');
   await click('Markdown 源码');
-  await click('媒体库'); await page.waitForSelector('.media-browser');
-  await page.waitForFunction(() => [...document.querySelectorAll('img')].some(image => image.src.includes('/__asset') && image.complete && image.naturalWidth > 0));
+  const firstTile = '.media-card[data-media-path="public/uploads/example.png"]';
+  const mediaThumbnail = firstTile + ' img';
+  const waitForThumbnail = () => page.waitForFunction(selector => {
+    const image = document.querySelector(selector);
+    return image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:');
+  }, {}, mediaThumbnail);
+  await click('媒体库'); await waitForThumbnail();
+  await page.waitForFunction(() => new Promise(resolve => {
+    const open = indexedDB.open('wondershine-media-thumbnails', 1);
+    open.onerror = () => resolve(false);
+    open.onsuccess = () => {
+      const db = open.result;
+      if (!db.objectStoreNames.contains('thumbnails')) { db.close(); resolve(false); return; }
+      const count = db.transaction('thumbnails', 'readonly').objectStore('thumbnails').count();
+      count.onsuccess = () => { db.close(); resolve(count.result > 0); };
+      count.onerror = () => { db.close(); resolve(false); };
+    };
+  }));
+  assert.ok(mediaDirectoryReads > 0 && thumbnailSourceReads > 0, 'The initial media visit scans, then reads the thumbnail source');
+  const beforeMediaReopen = { directories: mediaDirectoryReads, sourceReads: thumbnailSourceReads };
+  await restartNativeFixture(); await heading('连接创作工作区'); await click('打开工作区'); await heading('今天，写点什么？');
+  await click('媒体库'); await waitForThumbnail();
+  assert.deepEqual({ directories: mediaDirectoryReads, sourceReads: thumbnailSourceReads }, beforeMediaReopen,
+    'Reopening the App reuses both the media metadata and thumbnail without enumerating or rereading originals');
   await screenshot('media-desktop');
+  await page.click(firstTile);
+  await page.waitForFunction(() => {
+    const image = document.querySelector('.media-details[open] img');
+    return image?.src.includes('/__asset/') && image.complete && image.naturalWidth > 0;
+  });
+  await screenshot('media-preview-desktop');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.media-details[open]', { hidden: true });
   await click('工作区同步'); await page.waitForSelector('.workspace-status-grid');
   await screenshot('workspace-desktop'); await auditNativePage('workspace'); await noOverflow('desktop workspace');
   await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('workspace-mobile'); await noOverflow('mobile workspace');
