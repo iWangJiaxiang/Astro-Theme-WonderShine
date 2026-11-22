@@ -36,6 +36,7 @@ let allowCloneHttp = false, failNextHttp = false, failNextBranchWrite = false;
 let releaseDownload = () => {}, releaseCheckout = () => {};
 let downloadGate = Promise.resolve(), checkoutGate = Promise.resolve();
 let writeGate = Promise.resolve(), releaseWrite = () => {};
+let workspaceReadGate = Promise.resolve();
 const requests = new Map(), responses = new Map(), fileHandles = new Map();
 const keyring = new Map();
 const offlineRequests = [];
@@ -187,6 +188,7 @@ try {
             if (path === join(root, 'public/uploads/example.png')) thumbnailSourceReads++;
             value = [...await fs.readFile(path)]; break;
           case 'read_dir':
+            if (path === root) await workspaceReadGate;
             if (path === join(root, 'public') || path.startsWith(join(root, 'public') + sep)) mediaDirectoryReads++;
             assert.ok(!gitInspections || !path.endsWith('/repo/assets/git-fixture'), 'Mobile Git never enumerates tracked assets via WebView IPC');
             value = (await fs.readdir(path, { withFileTypes: true })).map(item => ({ name: item.name, isFile: item.isFile(), isDirectory: item.isDirectory(), isSymlink: item.isSymbolicLink() })); break;
@@ -577,7 +579,21 @@ try {
   await screenshot('media-preview-desktop');
   await page.keyboard.press('Escape');
   await page.waitForSelector('.media-details[open]', { hidden: true });
-  await click('工作区同步'); await page.waitForSelector('.workspace-status-grid');
+  let releaseWorkspaceRead;
+  workspaceReadGate = new Promise(resolve => { releaseWorkspaceRead = resolve; });
+  try {
+    await click('工作区同步');
+    await page.waitForSelector('.workspace-panel .loading-skeleton', { visible: true });
+    assert.equal(await page.$('.workspace-status-grid'), null, 'Workspace counts are pending during the Git scan');
+    await screenshot('workspace-loading-desktop', false);
+    await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('workspace-loading-mobile', false);
+    await noOverflow('mobile workspace skeleton');
+  } finally {
+    releaseWorkspaceRead();
+    await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+  }
+  await page.waitForSelector('.workspace-status-grid');
+  await page.waitForSelector('.workspace-panel .loading-skeleton', { hidden: true });
   await screenshot('workspace-desktop'); await auditNativePage('workspace'); await noOverflow('desktop workspace');
   await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('workspace-mobile'); await noOverflow('mobile workspace');
   await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
