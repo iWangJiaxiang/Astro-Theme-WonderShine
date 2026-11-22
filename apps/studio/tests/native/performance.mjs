@@ -134,7 +134,14 @@ function observe() {
   const frameGaps = [];
   const failedImages = [];
   const nativeRequests = {};
-  const run = { frameGaps, metrics: [], nativeRequests, failedImages, activeStep: 'connection-visible' };
+  const editorScripts = [];
+  const run = { frameGaps, metrics: [], nativeRequests, failedImages, editorScripts, activeStep: 'connection-visible' };
+  // Script load fires after execution and before Vditor's load callback mounts its editor.
+  document.addEventListener('load', event => {
+    const script = event.target;
+    if (!(script instanceof HTMLScriptElement) || !script.src.includes('/vendor/vditor/')) return;
+    editorScripts.push({ path: new URL(script.src).pathname, executedAt: performance.timeOrigin + performance.now() });
+  }, true);
   const fetchOriginal = window.fetch.bind(window);
   window.fetch = (resource, options) => {
     const match = typeof resource === 'string' && /^ipc:\/\/localhost\/([\w%|-]+)$/.exec(resource);
@@ -309,6 +316,9 @@ async function session(binary, kind, tag, body) {
         ...window.studioPerformance,
         navigationAt: performance.timeOrigin,
         paints: performance.getEntriesByType('paint').map(entry => ({ name: entry.name, ms: Math.round(entry.startTime) })),
+        editorResources: performance.getEntriesByType('resource')
+          .filter(entry => /vditor|lute/.test(new URL(entry.name).pathname))
+          .map(entry => ({ path: new URL(entry.name).pathname, start: entry.startTime, responseEnd: entry.responseEnd })),
         loadDiagnostics: JSON.parse(localStorage.getItem('wondershine.native.load-diagnostics.v1') || 'null'),
       }));
       if (!sampler) return result;
