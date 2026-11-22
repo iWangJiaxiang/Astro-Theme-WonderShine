@@ -605,8 +605,8 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                       element("small", null, t("创作中心")),
                     ),
                   ),
-                  mobileNavigation.value ? null : navigationGroups(false),
-                  mobileNavigation.value ? null : accountControls(),
+                  navigationGroups(false),
+                  accountControls(),
                 ),
                 element(
                   "div",

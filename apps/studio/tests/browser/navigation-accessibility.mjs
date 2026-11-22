@@ -189,8 +189,8 @@ async function checkTouchNavigation(page, screenshots) {
     await phone.tap(tab('article'));
     await phone.tap('.mobile-menu');
     await openMore(phone);
-    if (!await phone.$eval('.studio-preferences', el => el.open)) await phone.tap('.studio-preferences summary');
-    await phone.tap('.theme-switch');
+    if (!await phone.$eval('.more-page .studio-preferences', el => el.open)) await phone.tap('.more-page .studio-preferences summary');
+    await phone.tap('.more-page .theme-switch');
     await phone.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
     await phone.screenshot({ path: `${screenshots}/phone-navigation-dark.png` });
     await phone.setViewport({ width: 844, height: 390, isMobile: true, hasTouch: true, isLandscape: true });
@@ -205,9 +205,9 @@ async function checkTouchNavigation(page, screenshots) {
     await phone.screenshot({ path: `${screenshots}/phone-navigation-landscape.png` });
     await phone.tap('.mobile-menu');
     await openMore(phone);
-    if (!await phone.$eval('.studio-preferences', el => el.open)) await phone.tap('.studio-preferences summary');
-    await phone.tap('.theme-switch');
-    await phone.select('.studio-preferences select', 'zh-CN');
+    if (!await phone.$eval('.more-page .studio-preferences', el => el.open)) await phone.tap('.more-page .studio-preferences summary');
+    await phone.tap('.more-page .theme-switch');
+    await phone.select('.more-page .studio-preferences select', 'zh-CN');
     await phone.waitForSelector('.more-page nav[aria-label="站点设置"]');
     await phone.$eval('.more-page nav[aria-label="站点设置"]', nav => [...nav.querySelectorAll('button')].find(button => button.textContent.trim() === '站点信息').click());
     await phone.waitForSelector('.settings-card input');

@@ -11,6 +11,7 @@ import MediaPreviewImage from "./MediaPreviewImage";
 
 const MediaLibrary: StudioComponent<{}, {}> = component<{}, {}>("MediaLibrary", () => {
   const selected = ref<MediaItem>();
+  const selectedPath = ref("");
   const dialog = ref<HTMLDialogElement | null>(null);
   const closeButton = ref<HTMLButtonElement | null>(null);
   const browser = ref<HTMLElement | null>(null);
@@ -31,10 +32,15 @@ const MediaLibrary: StudioComponent<{}, {}> = component<{}, {}>("MediaLibrary", 
   }
 
   watch(mediaVersion, () => {
-    if (!selected.value) return;
-    const item = mediaListing.value.items.find(item => item.path === selected.value?.path);
-    if (!item || item.unavailable) close();
-    else { selected.value = item; failed.value = false; }
+    if (!selectedPath.value) return;
+    const item = mediaListing.value.items.find(item => item.path === selectedPath.value);
+    if (!item || item.unavailable) {
+      selectedPath.value = "";
+      if (selected.value) close();
+    } else if (selected.value) {
+      selected.value = item;
+      failed.value = false;
+    }
   });
   onBeforeUnmount(modal.dispose);
 
@@ -54,7 +60,8 @@ const MediaLibrary: StudioComponent<{}, {}> = component<{}, {}>("MediaLibrary", 
     return <section className="media-library">
       <div className="page-heading"><h1>{t("媒体库")}</h1></div>
       <section className="card media-library-browser" ref={domRef(browser)} tabIndex={-1}>
-        <MediaBrowser mode="library" documentPath="" svgOnly={false} selected={item?.path ?? ""} onSelect={(image, _value, button) => {
+        <MediaBrowser mode="library" documentPath="" svgOnly={false} selected={selectedPath.value} onSelect={(image, _value, button) => {
+          selectedPath.value = image.path;
           if (!button) return;
           trigger = button;
           selected.value = image;
