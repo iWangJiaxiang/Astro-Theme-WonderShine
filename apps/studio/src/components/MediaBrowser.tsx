@@ -2,7 +2,6 @@ import { ErrorDetails, ErrorNotice } from "./ErrorNotice";
 import {
   formatBytes,
   imageExtension,
-  mediaURL,
   mediaValue,
   supportsColocatedMedia,
   type MediaItem,
@@ -10,6 +9,7 @@ import {
 } from "../../shared/media";
 import { session } from "../api";
 import { t } from "../i18n";
+import { subscribeWorkspaceChanged } from "../workspace-events";
 import {
   loadMedia,
   mediaError,
@@ -33,6 +33,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "../reactivity"
 import Icon from "./Icon";
 import LoadingState from "./LoadingState";
 import MediaDirectoryNode from "./MediaDirectoryNode";
+import MediaPreviewImage from "./MediaPreviewImage";
 import MediaUpload, { type MediaUploadFeedback } from "./MediaUpload";
 import SelectionField from "./SelectionField";
 
@@ -43,7 +44,7 @@ type Props = {
   current?: string;
   svgOnly: boolean;
 };
-type Events = { select: [item: MediaItem, value: string] };
+type Events = { select: [item: MediaItem, value: string, trigger?: HTMLButtonElement] };
 const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
   "MediaBrowser",
   (props, emit, expose) => {
@@ -134,6 +135,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
     onMounted(() => {
       void loadMedia();
     });
+    onBeforeUnmount(subscribeWorkspaceChanged(() => loadMedia()));
     function uploaded(item: MediaItem) {
       search.value = "";
       source.value = "all";
@@ -187,10 +189,10 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
           : null,
       );
     }
-    function choose(item: MediaItem) {
+    function choose(item: MediaItem, trigger: HTMLButtonElement) {
       const value = mediaValue(item, props.mode, props.documentPath);
       if (value !== null && !mediaLoading.value && !mediaError.value)
-        emit("select", item, value);
+        emit("select", item, value, trigger);
     }
     return () =>
       element(
@@ -503,6 +505,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                             ? `${t("当前图片")} · `
                             : "") + t("选择图片：{p0}", { p0: item.path }),
                         "aria-pressed": props.selected === item.path,
+                        "aria-haspopup": props.mode === "library" ? "dialog" : undefined,
                         disabled:
                           !!item.unavailable ||
                           mediaLoading.value ||
@@ -512,22 +515,15 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                           selected: props.selected === item.path,
                         }),
                         onClick: domEvent(($event: Event) => {
-                          choose(item);
+                          choose(item, $event.currentTarget as HTMLButtonElement);
                         }),
                       },
                       element(
                         "span",
                         { className: classes("media-thumbnail") },
                         !item.unavailable && !failed.value.has(item.path)
-                          ? element("img", {
-                              src: mediaURL(item.path, mediaVersion.value),
-                              alt: "",
-                              loading: "lazy",
-                              decoding: "async",
-                              onError: domEvent(($event: Event) => {
-                                failed.value = new Set([...failed.value, item.path]);
-                              }),
-                            })
+                          ? <MediaPreviewImage item={item} version={mediaVersion.value} thumbnail
+                              onError={() => { failed.value = new Set([...failed.value, item.path]); }} />
                           : element(
                               "span",
                               { className: classes("muted small") },

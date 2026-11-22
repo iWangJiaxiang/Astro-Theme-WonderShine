@@ -1,5 +1,6 @@
 mod cnb_account;
 mod native_review;
+mod native_workspace_stat;
 #[cfg(mobile)]
 mod mobile_git;
 #[cfg(all(debug_assertions, feature = "native-smoke", target_os = "macos"))]
@@ -22,9 +23,9 @@ pub fn run() {
     #[cfg(all(debug_assertions, feature = "native-smoke", target_os = "macos"))]
     let context = native_smoke::configure(context);
     #[cfg(mobile)]
-    let builder = builder.invoke_handler(tauri::generate_handler![cnb_account::cnb_account_get, native_review::native_review_owner, mobile_git::mobile_git]);
+    let builder = builder.invoke_handler(tauri::generate_handler![cnb_account::cnb_account_get, native_review::native_review_owner, native_workspace_stat::native_workspace_stat, mobile_git::mobile_git]);
     #[cfg(not(mobile))]
-    let builder = builder.invoke_handler(tauri::generate_handler![cnb_account::cnb_account_get, native_review::native_review_owner]);
+    let builder = builder.invoke_handler(tauri::generate_handler![cnb_account::cnb_account_get, native_review::native_review_owner, native_workspace_stat::native_workspace_stat]);
     let builder = builder
         .manage(native_review::ReviewOwnership::default())
         .plugin(tauri_plugin_fs::init())

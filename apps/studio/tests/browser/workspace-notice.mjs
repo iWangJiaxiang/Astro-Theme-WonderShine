@@ -58,6 +58,7 @@ window.openPublish = () => {
 };
 Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.copied = text; } } });
 ` }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false,
+    loader: { '.css': 'empty' },
   });
   const page = await browser.newPage();
   try {

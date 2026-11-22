@@ -30,6 +30,8 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   await page.waitForSelector('[aria-label="已复制的图片路径"]');
   assert.equal(await page.$eval('[aria-label="已复制的图片路径"]', el => el.value), '/img/媒体 配图.webp');
   await page.screenshot({ path: screenshots + '/media-library.png', fullPage: true });
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.media-details[open]', { hidden: true });
   await fill('[aria-label="搜索仓库图片"]', 'preview.svg');
   await page.waitForSelector('[data-media-path="public/img/preview.svg"] img');
   await page.waitForFunction(() => document.querySelector('[data-media-path="public/img/preview.svg"] img')?.naturalWidth > 0);

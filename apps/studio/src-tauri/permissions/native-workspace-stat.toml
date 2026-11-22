@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-native-workspace-stat"
+description = "Inspect ordinary paths within AppData workspaces/<id>/repo."
+commands.allow = ["native_workspace_stat"]

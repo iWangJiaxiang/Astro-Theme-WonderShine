@@ -26,6 +26,13 @@ async function fixture(run: (value: {
       await before(command, path);
       // The plugin remains the authority for desktop grants, independently of JS roots.
       if (path !== root && !path.startsWith(root + '/')) throw new Error('forbidden path: filesystem scope');
+      if (command === 'native_workspace_stat') {
+        const value = await fs.lstat(path).catch(error => {
+          if (error.code !== 'ENOENT') throw error;
+          return null;
+        });
+        return value && { kind: value.isFile() ? 'file' : 'directory', size: value.size, mtimeMs: value.mtimeMs };
+      }
       if (command === 'plugin:fs|lstat' || command === 'plugin:fs|stat') {
         const value = await (command.endsWith('|lstat') ? fs.lstat(path) : fs.stat(path));
         return { size: value.size, isFile: value.isFile(), isDirectory: value.isDirectory(), isSymlink: value.isSymbolicLink(),
@@ -53,6 +60,19 @@ async function article(root: string) {
   await fs.mkdir(root + '/content/articles/hello', { recursive: true });
   await fs.writeFile(root + '/' + path, 'hello');
 }
+
+test('private checkout checks cross the native bridge once before reading', async () => fixture(async ({ root, calls, before }) => {
+  await article(root);
+  const files = tauriFiles(root, [], root);
+  assert.equal((await files.readCheckedFile!(root + '/' + path, 32)).byteLength, 5);
+  assert.deepEqual(calls.map(call => call.command), ['native_workspace_stat', 'plugin:fs|read_file']);
+  calls.length = 0;
+  await assert.rejects(files.readCheckedFile!(root + '/missing.md', 32), { code: 'ENOENT' });
+  await assert.rejects(files.readCheckedFile!(root + '/' + path, 4), { status: 413 });
+  before(async () => { throw 'Private workspace path contains a symlink'; });
+  await assert.rejects(files.readCheckedFile!(root + '/' + path, 32), { status: 400 });
+  assert.ok(calls.every(call => call.command === 'native_workspace_stat'));
+}));
 
 test('checked content reads need one fresh path traversal and one read, not repeated stat passes', async () => fixture(async ({ root, calls, repo, files }) => {
   await article(root);

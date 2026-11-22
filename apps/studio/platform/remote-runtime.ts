@@ -12,8 +12,10 @@ export async function connectRemoteWorkspace(address: string, onDisconnect: () =
   const imageVersion = ref(0);
   let generation = 0;
   let mediaRequests = new AbortController();
+  const waiting: (() => void)[] = [];
+  let active = 0;
   let disposed = false;
-  const clear = () => { mediaRequests.abort(); mediaRequests = new AbortController(); generation++; for (const value of images.values()) if (value.startsWith('blob:')) URL.revokeObjectURL(value); images.clear(); imageVersion.value++; };
+  const clear = () => { waiting.length = 0; mediaRequests.abort(); mediaRequests = new AbortController(); generation++; for (const value of images.values()) if (value.startsWith('blob:')) URL.revokeObjectURL(value); images.clear(); imageVersion.value++; };
   const dispose = () => {
     if (disposed) return;
     disposed = true; transport.dispose(); clear(); setMediaResolver(); setApiTransport();
@@ -26,6 +28,9 @@ export async function connectRemoteWorkspace(address: string, onDisconnect: () =
   } catch (error) { transport.dispose(); throw error; }
   setApiTransport((path, init) => { if (path === '/media?refresh=1') clear(); return transport(path, init); });
   const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/%3E';
+  function pump() {
+    while (!disposed && active < 4 && waiting.length) waiting.shift()!();
+  }
   setMediaResolver(path => {
     if (disposed) return placeholder;
     void imageVersion.value;
@@ -35,12 +40,16 @@ export async function connectRemoteWorkspace(address: string, onDisconnect: () =
     images.set(path, placeholder);
     const current = generation;
     const signal = mediaRequests.signal;
-    void transport(`/media/file?path=${encodeURIComponent(path)}`, { method: 'GET', signal }).then(async response => {
-      const blob = await readRemoteMedia(response, MAX_UPLOAD_SIZE, signal);
-      if (!blob || current !== generation || disposed) return;
-      images.set(path, URL.createObjectURL(blob));
-      imageVersion.value++;
-    }).catch(() => { /* A failed image does not invalidate the editing session. */ });
+    waiting.push(() => {
+      active++;
+      void transport(`/media/file?path=${encodeURIComponent(path)}`, { method: 'GET', signal })
+        .then(response => readRemoteMedia(response, MAX_UPLOAD_SIZE, signal)).catch(() => null).then(blob => {
+          if (current !== generation || disposed) return;
+          images.set(path, blob ? URL.createObjectURL(blob) : 'data:,');
+          imageVersion.value++;
+        }).finally(() => { active--; pump(); });
+    });
+    pump();
     return placeholder;
   });
   return dispose;

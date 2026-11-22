@@ -5,7 +5,12 @@ import { createDraftBackup } from "../draft-backup";
 import { createRichEditorSync } from "../rich-editor-sync";
 import { saveContext } from "../save-preferences";
 import type { SaveMode } from "../../shared/save";
-import { prepareEditorIcons } from "../editor-assets";
+import {
+  activateEditorLanguage,
+  prepareEditorIcons,
+  prepareEditorLanguage,
+  prepareEditorLute,
+} from "../editor-assets";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import type Vditor from "vditor";
@@ -77,6 +82,14 @@ import PageSettings from "./PageSettings";
 import PublicationDateField from "./PublicationDateField";
 import SelectionField from "./SelectionField";
 
+function afterEditorPaint() {
+  return new Promise<void>((resolve) =>
+    requestAnimationFrame(() => setTimeout(resolve, 0)),
+  );
+}
+
+const richEditorError = "可视化编辑器加载失败，请重试。";
+
 type Props = {
   path: string;
   initial?: Record<string, Json>;
@@ -107,6 +120,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       message = ref<Message>("");
     const mode = ref<"source" | "rich" | "preview">("source"),
       editorElement = ref<HTMLDivElement>(),
+      richLoading = ref(false),
       recovery = ref(false),
       ready = ref(false);
     const imagePicker = ref(false),
@@ -696,6 +710,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       generation++;
       richBaseline = undefined;
       richReady = false;
+      richLoading.value = false;
       const old = editor;
       editor = undefined;
       old?.destroy();
@@ -737,10 +752,19 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         mode.value = "source";
         return;
       }
+      if (error.value === richEditorError) error.value = "";
+      richLoading.value = true;
+      const lang = locale.value === "zh-CN" ? "zh_CN" : "en_US";
       try {
-        const { default: Vditor } = await import("vditor");
-        await prepareEditorIcons();
-        await nextTick();
+        await afterEditorPaint();
+        if (!alive || instance !== generation) return;
+        const [{ default: Vditor }, messages] = await Promise.all([
+          import("vditor"),
+          prepareEditorLanguage(lang),
+          prepareEditorLute(),
+          prepareEditorIcons(),
+        ]);
+        await afterEditorPaint();
         if (
           !alive ||
           instance !== generation ||
@@ -753,8 +777,9 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
           cdn: `${location.origin}/vendor/vditor`,
           mode: "ir",
           value: source,
-          height: props.embedded ? 180 : isThread ? 360 : 560,
-          lang: locale.value === "zh-CN" ? "zh_CN" : "en_US",
+          height: richEditorHeight,
+          lang,
+          i18n: activateEditorLanguage(messages),
           cache: { enable: false },
           counter: { enable: false },
           theme:
@@ -795,11 +820,14 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
               // Vditor can normalize Markdown even before the first edit.
               richBaseline = { source, serialized: editor.getValue() };
               richReady = true;
+              richLoading.value = false;
             });
           },
         });
-      } catch (e) {
-        error.value = errorMessage(e);
+      } catch {
+        if (!alive || instance !== generation) return;
+        destroyEditor(false);
+        error.value = richEditorError;
         mode.value = "source";
       }
     }
@@ -960,6 +988,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
     watch(locale, () => {
       if (mode.value === "rich") void changeMode("rich");
     });
+    const richEditorHeight = props.embedded ? 180 : isThread ? 360 : 560;
     onBeforeUnmount(() => {
       removeBackupListeners();
       flush();
@@ -1498,15 +1527,26 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                         }),
                       })
                     : mode.value === "rich"
-                      ? element("div", {
-                          ref: domRef(editorElement),
-                          onInput: domEvent(($event: Event) => {
-                            readRichSoon();
+                      ? element(
+                          "div",
+                          null,
+                          richLoading.value
+                            ? element("div", {
+                                className: "rich-editor-loading",
+                                style: { height: richEditorHeight },
+                              }, element(LoadingState, { label: "正在加载可视化编辑器…" }))
+                            : null,
+                          element("div", {
+                            ref: domRef(editorElement),
+                            "aria-busy": richLoading.value,
+                            onInput: domEvent(($event: Event) => {
+                              readRichSoon();
+                            }),
+                            onClick: domEvent(($event: Event) => {
+                              readRichSoon();
+                            }),
                           }),
-                          onClick: domEvent(($event: Event) => {
-                            readRichSoon();
-                          }),
-                        })
+                        )
                       : element(
                           "div",
                           null,

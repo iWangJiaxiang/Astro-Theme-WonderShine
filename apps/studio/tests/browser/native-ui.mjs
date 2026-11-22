@@ -39,12 +39,16 @@ let allowCloneHttp = false, failNextHttp = false, failNextBranchWrite = false;
 let releaseDownload = () => {}, releaseCheckout = () => {};
 let downloadGate = Promise.resolve(), checkoutGate = Promise.resolve();
 let writeGate = Promise.resolve(), releaseWrite = () => {};
+let workspaceReadGate = Promise.resolve();
 const requests = new Map(), responses = new Map(), fileHandles = new Map();
 const keyring = new Map();
 const offlineRequests = [];
 let siteOpened;
 const openedSite = new Promise(resolve => { siteOpened = resolve; });
 let nextResource = 1, worktreeScans = 0, gitInspections = 0;
+let mediaDirectoryReads = 0, thumbnailSourceReads = 0, thumbnailSourceStats = 0;
+let markMediaSnapshotWritten;
+const mediaSnapshotWritten = new Promise(resolve => { markMediaSnapshotWritten = resolve; });
 try {
   await fs.mkdir(root, { recursive: true }); await fs.mkdir(screenshots, { recursive: true });
   const git = args => execFileSync('git', args, { cwd: root, stdio: 'pipe' }).toString().trim();
@@ -137,6 +141,17 @@ try {
           assert.ok(reviewClaims.has(args.workspaceId), 'Review operations require a prior recovery claim');
           value = false;
         }
+      } else if (command === 'native_workspace_stat') {
+        const path = confined(args.path);
+        assert.match(path.slice(appData.length), /^\/workspaces\/[0-9a-f-]{36}\/repo(?:\/|$)/);
+        if (path === join(root, 'public/uploads/example.png')) thumbnailSourceStats++;
+        const info = await fs.lstat(path).catch(error => {
+          if (error.code !== 'ENOENT') throw error;
+          return null;
+        });
+        if (info?.isSymbolicLink()) throw new Error('Private workspace path contains a symlink');
+        value = info && { ...fileInfo(info), mtimeMs: info.mtime.getTime(), ctimeMs: info.birthtime.getTime(),
+          kind: info.isFile() ? 'file' : info.isDirectory() ? 'directory' : 'other' };
       } else if (command === 'plugin:dialog|open') { value = selectedFolder; folderGranted = !!value; }
       else if (command === 'plugin:path|resolve_directory') value = appData;
       else if (command === 'plugin:fs|write_file') {
@@ -145,8 +160,10 @@ try {
         if (failNextBranchWrite && path.includes('/.git/objects/')) { throw new Error('Simulated branch write failure'); }
         if (path.includes('.clone-') && path.endsWith('/config.toml')) await checkoutGate;
         await fs.writeFile(path, new Uint8Array(args));
-      } else if (command === 'plugin:fs|rename') await fs.rename(confined(args.oldPath), confined(args.newPath));
-      else if (command === 'plugin:fs|open') {
+      } else if (command === 'plugin:fs|rename') {
+        await fs.rename(confined(args.oldPath), confined(args.newPath));
+        if (args.newPath === join(root, '../state/media-list-v1/snapshot.json')) markMediaSnapshotWritten();
+      } else if (command === 'plugin:fs|open') {
         const path = confined(args.path);
         assert.ok(args.options.read || (args.options.write && args.options.createNew));
         const handle = await fs.open(path, args.options.createNew ? 'wx' : 'r', args.options.mode);
@@ -170,12 +187,18 @@ try {
         const path = confined(args.path), operation = command.split('|')[1];
         switch (operation) {
           case 'mkdir': await fs.mkdir(path, { recursive: !!args.options?.recursive, mode: args.options?.mode }); break;
-          case 'read_file': value = [...await fs.readFile(path)]; break;
+          case 'read_file':
+            if (path === join(root, 'public/uploads/example.png')) thumbnailSourceReads++;
+            value = [...await fs.readFile(path)]; break;
           case 'read_dir':
+            if (path === root) await workspaceReadGate;
+            if (path === join(root, 'public') || path.startsWith(join(root, 'public') + sep)) mediaDirectoryReads++;
             assert.ok(!gitInspections || !path.endsWith('/repo/assets/git-fixture'), 'Mobile Git never enumerates tracked assets via WebView IPC');
             value = (await fs.readdir(path, { withFileTypes: true })).map(item => ({ name: item.name, isFile: item.isFile(), isDirectory: item.isDirectory(), isSymlink: item.isSymbolicLink() })); break;
           case 'remove': { const stat = await fs.lstat(path); if (stat.isDirectory() && !stat.isSymbolicLink()) await fs.rmdir(path); else await fs.unlink(path); break; }
-          case 'stat': case 'lstat': value = fileInfo(await fs[operation](path)); break;
+          case 'stat': case 'lstat':
+            if (path === join(root, 'public/uploads/example.png')) thumbnailSourceStats++;
+            value = fileInfo(await fs[operation](path)); break;
           default: throw new Error('Unsupported fixture FS command: ' + command);
         }
       } else if (command === 'plugin:keyring-store|get_passwords') value = args.accounts.map(key => keyring.get(key) ?? null);
@@ -521,10 +544,67 @@ try {
   await click('可视化编辑'); await page.waitForSelector('.vditor-ir [contenteditable="true"]', { timeout: 20000 });
   assert.equal(await page.$$eval('#vditor-icon-bold', elements => elements.length), 1, 'reopening rich editor retains one icon sprite');
   await click('Markdown 源码');
-  await click('媒体库'); await page.waitForSelector('.media-browser');
-  await page.waitForFunction(() => [...document.querySelectorAll('img')].some(image => image.src.includes('/__asset') && image.complete && image.naturalWidth > 0));
+  const firstTile = '.media-card[data-media-path="public/uploads/example.png"]';
+  const mediaThumbnail = firstTile + ' img';
+  const waitForThumbnail = () => page.waitForFunction(selector => {
+    const image = document.querySelector(selector);
+    return image?.complete && image.naturalWidth > 0 && image.src.startsWith('blob:');
+  }, {}, mediaThumbnail);
+  await click('媒体库'); await waitForThumbnail();
+  await page.waitForFunction(() => new Promise(resolve => {
+    const open = indexedDB.open('wondershine-media-thumbnails', 1);
+    open.onerror = () => resolve(false);
+    open.onsuccess = () => {
+      const db = open.result;
+      if (!db.objectStoreNames.contains('thumbnails')) { db.close(); resolve(false); return; }
+      const cursor = db.transaction('thumbnails', 'readonly').objectStore('thumbnails').openCursor();
+      cursor.onsuccess = () => {
+        db.close();
+        resolve(cursor.result?.value.bytes instanceof ArrayBuffer && cursor.result.value.bytes.byteLength > 0);
+      };
+      cursor.onerror = () => { db.close(); resolve(false); };
+    };
+  }));
+  let snapshotTimeout;
+  try {
+    await Promise.race([mediaSnapshotWritten, new Promise((_, reject) => {
+      snapshotTimeout = setTimeout(() => reject(new Error('Media snapshot was not persisted')), 10000);
+    })]);
+  } finally { clearTimeout(snapshotTimeout); }
+  assert.ok(mediaDirectoryReads > 0 && thumbnailSourceReads > 0 && thumbnailSourceStats > 0,
+    'The initial media visit scans, checks and reads the thumbnail source');
+  const beforeMediaReopen = { directories: mediaDirectoryReads, sourceReads: thumbnailSourceReads };
+  await restartNativeFixture(); await heading('连接创作工作区'); await click('打开工作区'); await heading('今天，写点什么？');
+  const beforeMediaVisit = thumbnailSourceStats;
+  await click('媒体库'); await waitForThumbnail();
+  assert.deepEqual({ directories: mediaDirectoryReads, sourceReads: thumbnailSourceReads }, beforeMediaReopen,
+    'Reopening the App reuses the media metadata and thumbnail without enumerating or reading the original');
+  assert.equal(thumbnailSourceStats, beforeMediaVisit, 'The cached thumbnail does not check the original');
   await screenshot('media-desktop');
-  await click('工作区同步'); await page.waitForSelector('.workspace-status-grid');
+  await page.click(firstTile);
+  await page.waitForFunction(() => {
+    const image = document.querySelector('.media-details[open] img');
+    return image?.src.includes('/__asset/') && image.complete && image.naturalWidth > 0;
+  });
+  assert.ok(thumbnailSourceStats > beforeMediaVisit, 'Opening the original still checks the current file');
+  await screenshot('media-preview-desktop');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.media-details[open]', { hidden: true });
+  let releaseWorkspaceRead;
+  workspaceReadGate = new Promise(resolve => { releaseWorkspaceRead = resolve; });
+  try {
+    await click('工作区同步');
+    await page.waitForSelector('.workspace-panel .loading-skeleton', { visible: true });
+    assert.equal(await page.$('.workspace-status-grid'), null, 'Workspace counts are pending during the Git scan');
+    await screenshot('workspace-loading-desktop', false);
+    await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('workspace-loading-mobile', false);
+    await noOverflow('mobile workspace skeleton');
+  } finally {
+    releaseWorkspaceRead();
+    await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+  }
+  await page.waitForSelector('.workspace-status-grid');
+  await page.waitForSelector('.workspace-panel .loading-skeleton', { hidden: true });
   await screenshot('workspace-desktop'); await auditNativePage('workspace'); await noOverflow('desktop workspace');
   await setViewport({ width: 390, height: 844, deviceScaleFactor: 1 }); await screenshot('workspace-mobile'); await noOverflow('mobile workspace');
   await setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });

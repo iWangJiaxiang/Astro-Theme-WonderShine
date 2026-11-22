@@ -1,13 +1,13 @@
-// Limit horizontal navigation to the screen edge, drawer and bottom navigation.
+// Limit horizontal navigation to the screen edge and bottom navigation.
 // Fields and scrolling content keep their normal selection, zoom and pan gestures.
-type Swipe = 'back' | 'close' | 'previous' | 'next';
+type Swipe = 'back' | 'previous' | 'next';
 
 export function installNavigationSwipe(
   enabled: () => boolean,
   canGoBack: () => boolean,
   navigate: (action: Swipe) => void,
 ) {
-  let start: { x: number; y: number; id: number; area: 'edge' | 'drawer' | 'tabs' } | undefined;
+  let start: { x: number; y: number; id: number; area: 'edge' | 'tabs' } | undefined;
   const reset = () => { start = undefined; };
   const available = () => enabled() && (window.visualViewport?.scale ?? 1) === 1 &&
     !document.querySelector('dialog[open], .save-mode-menu');
@@ -18,9 +18,7 @@ export function installNavigationSwipe(
     if (!target.closest('.studio-shell') || target.closest('input, select, textarea, [contenteditable=true], .vditor')) return;
     if (window.getSelection()?.isCollapsed === false) return;
     const touch = event.touches[0];
-    const drawer = document.querySelector('.sidebar.open');
-    const area = drawer ? (drawer.contains(target) ? 'drawer' : undefined)
-      : target.closest('.mobile-tabbar') ? 'tabs'
+    const area = target.closest('.mobile-tabbar') ? 'tabs'
       : touch.clientX <= 24 && canGoBack() ? 'edge' : undefined;
     if (area) start = { x: touch.clientX, y: touch.clientY, id: touch.identifier, area };
   }
@@ -41,7 +39,6 @@ export function installNavigationSwipe(
     const dx = touch.clientX - origin.x, dy = touch.clientY - origin.y;
     if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 2) return;
     const action = origin.area === 'tabs' ? (dx < 0 ? 'next' : 'previous')
-      : origin.area === 'drawer' && dx < 0 ? 'close'
       : origin.area === 'edge' && dx > 0 && canGoBack() ? 'back' : undefined;
     if (!action) return;
     if (event.cancelable) event.preventDefault();

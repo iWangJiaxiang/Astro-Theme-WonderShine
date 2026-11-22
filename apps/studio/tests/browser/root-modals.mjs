@@ -276,6 +276,10 @@ export async function checkRootModals({ page, origin, password, screenshots, out
     await tabBoundary(page, creation, '.card-heading button', 'button.primary.wide');
     if (screenshots) await page.screenshot({ path: `${screenshots}/root-modal-creation.png` });
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+    await page.waitForFunction(selector => {
+      const rect = document.querySelector(selector)?.getBoundingClientRect();
+      return rect && rect.left >= 0 && rect.right <= innerWidth && rect.top >= 0 && rect.bottom <= innerHeight;
+    }, {}, creation);
     await containsFocus(page, creation);
     await tabBoundary(page, creation, '.card-heading button', 'button.primary.wide');
     await tabContained(page, creation);

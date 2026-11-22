@@ -29,11 +29,14 @@ on:
         description: 'Publish: all → GitHub Release; ios → TestFlight only'
         type: boolean
         default: false
+      performance_runs:
+        description: 'Profile the Linux App from one or two Studio CI run IDs, comma separated'
+        type: string
 permissions:
   contents: read
 concurrency:
   # Queue main pushes and signed distributions so a later push cannot cancel an upload.
-  group: ${{ (github.ref == 'refs/heads/main' && github.event_name == 'push' || inputs.publish || github.event_name == 'release') && 'studio-distribution' || format('studio-{0}-{1}', inputs.target || 'all', github.ref) }}
+  group: ${{ inputs.performance_runs != '' && format('studio-performance-{0}', github.run_id) || (github.ref == 'refs/heads/main' && github.event_name == 'push' || inputs.publish || github.event_name == 'release') && 'studio-distribution' || format('studio-{0}-{1}', inputs.target || 'all', github.ref) }}
   queue: ${{ (github.ref == 'refs/heads/main' && github.event_name == 'push' || inputs.publish || github.event_name == 'release') && 'max' || 'single' }}
   cancel-in-progress: ${{ !(github.ref == 'refs/heads/main' && github.event_name == 'push' || inputs.publish || github.event_name == 'release') }}
 env:
@@ -43,8 +46,61 @@ env:
   VITE_STUDIO_RELEASE_REPOSITORY: ${{ github.repository }}
   VITE_STUDIO_IOS_UPDATE_URL: ${{ vars.STUDIO_IOS_UPDATE_URL }}
 jobs:
+  native-performance:
+    if: github.event_name == 'workflow_dispatch' && inputs.performance_runs != '' && !inputs.publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+      - name: Install Linux App measurement tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y webkit2gtk-driver libayatana-appindicator3-1 xvfb xauth dbus-x11 ffmpeg openbox
+      - name: Download Linux packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STUDIO_PERFORMANCE_RUNS: ${{ inputs.performance_runs }}
+        run: |
+          [[ "$STUDIO_PERFORMANCE_RUNS" =~ ^[0-9]+(,[0-9]+)?$ ]]
+          IFS=, read -ra runs <<< "$STUDIO_PERFORMANCE_RUNS"
+          for run in "${runs[@]}"; do
+            directory="temp/studio-performance-packages/$run"
+            gh run download "$run" --name studio-app-linux-x64 --dir "$directory"
+            (
+              cd "$directory"
+              jq -r '.files[] | "\(.sha256)  \(.name)"' linux-x64.json | sha256sum --check
+              dpkg-deb -x ./*.deb app
+              rm ./*.deb
+              rm -f ./*.rpm ./*.AppImage
+            )
+          done
+      - name: Run the native Core Flow
+        env:
+          STUDIO_PERFORMANCE_RUNS: ${{ inputs.performance_runs }}
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+        run: |
+          xvfb-run -a -s '-screen 0 1440x1000x24' dbus-run-session -- bash -e -c '
+            openbox > temp/openbox.log 2>&1 &
+            node apps/studio/tests/native/performance.mjs
+          '
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: studio-native-performance
+          path: |
+            temp/studio-native-performance/
+            temp/openbox.log
+          retention-days: 7
   prepare:
-    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'studio-v')
+    if: inputs.performance_runs == '' && (github.event_name != 'release' || startsWith(github.event.release.tag_name, 'studio-v'))
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.context.outputs.version }}

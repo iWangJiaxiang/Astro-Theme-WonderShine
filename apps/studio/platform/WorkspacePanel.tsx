@@ -1,4 +1,5 @@
 import { ErrorNotice } from "../src/components/ErrorNotice";
+import LoadingState from '../src/components/LoadingState';
 import { useEffect, useRef, useState } from 'react';
 import { workspaceCommitNotice } from './workspace-notice';
 import type { WorkspaceStatus } from '../shared/workspace';
@@ -164,7 +165,9 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
     {error && <ErrorNotice source="WorkspacePanel" message={error} />}{notice && <p role="status" className="notice success">{t(notice)}</p>}
     {reauthorize}
     {authFailed && credential && !pending && <button className="secondary" disabled={busy} onClick={() => void review('sync')}>{t('使用访问令牌')}</button>}
-    {busy && <p role="status" className="muted small">{t(stage)}</p>}
+    {busy && (status
+      ? <p role="status" className="muted small">{t(stage)}</p>
+      : <div className="card"><LoadingState label={stage} compact={false} /></div>)}
     {status && <div className="card workspace-sync-card"><h2>{status.branch}</h2>
       <dl className="workspace-status-grid"><div><dt>{t('本地修改')}</dt><dd>{status.changes}</dd></div><div><dt>{t('待推送提交')}</dt><dd>{status.ahead}</dd></div><div><dt>{t('远端新提交（上次获取）')}</dt><dd>{status.behind}</dd></div></dl>
         {status.diverged && status.canMerge && <p>{t(mergeNotice)}</p>}

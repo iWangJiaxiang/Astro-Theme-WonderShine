@@ -1,7 +1,8 @@
 import { ref, shallowRef, watch } from './reactivity';
 import type { Message } from './i18n';
-import { api, errorMessage, session } from './api';
+import { api, apiTransportGeneration, errorMessage, identityEpoch } from './api';
 import type { MediaItem, MediaListing } from '../shared/media';
+import { subscribeWorkspaceChanged } from './workspace-events';
 export const mediaListing = shallowRef<MediaListing>({ items: [], truncated: false });
 export const mediaLoading = ref(false), mediaError = ref<Message>(''), mediaVersion = ref(0);
 export const mediaUploading = ref(false);
@@ -13,20 +14,33 @@ export function addUploadedMedia(item: MediaItem) {
   mediaError.value = ''; mediaVersion.value++;
 }
 let request: Promise<void> | undefined, generation = 0, loadedAt = 0;
-watch(() => session.value?.identity.id, () => { generation++; request = undefined; loadedAt = 0; mediaListing.value = { items: [], truncated: false }; mediaError.value = ''; mediaLoading.value = false; });
+let preview: (() => Promise<MediaListing | null>) | undefined;
+export function setMediaPreviewLoader(load?: () => Promise<MediaListing | null>) { preview = load; }
+export function invalidateMediaListing() {
+  generation++; request = undefined; loadedAt = 0; mediaLoading.value = false;
+}
+subscribeWorkspaceChanged(invalidateMediaListing);
+watch([identityEpoch, apiTransportGeneration], () => {
+  invalidateMediaListing(); mediaListing.value = { items: [], truncated: false }; mediaError.value = '';
+});
 export function loadMedia(refresh = false): Promise<void> {
   if (mediaUploading.value) return request || Promise.resolve();
   if (request) return request;
   if (!refresh && loadedAt && Date.now() - loadedAt < 60_000) return Promise.resolve();
   const current = generation;
   mediaLoading.value = true; mediaError.value = '';
-  request = (async () => {
+  request = Promise.resolve().then(async () => {
     try {
+      if (!refresh && !mediaListing.value.items.length && preview) {
+        const previous = await preview().catch(() => null);
+        if (current !== generation) return;
+        if (previous) { mediaListing.value = previous; mediaVersion.value++; }
+      }
       const result = await api<MediaListing>('/media' + (refresh ? '?refresh=1' : ''));
       if (current !== generation) return;
       mediaListing.value = result; loadedAt = Date.now(); mediaVersion.value++;
     } catch (error) { if (current === generation) mediaError.value = errorMessage(error); }
     finally { if (current === generation) { mediaLoading.value = false; request = undefined; } }
-  })();
+  });
   return request;
 }
