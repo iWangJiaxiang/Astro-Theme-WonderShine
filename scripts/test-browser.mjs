@@ -53,6 +53,7 @@ export async function checkBrowser(options = demo) {
     assert.ok(executablePath, 'Set STUDIO_TEST_BROWSER to a Chrome executable');
     browser = await puppeteer.launch({ headless: true, executablePath });
     const page = await browser.newPage();
+    await page.setCacheEnabled(false);
     await page.setViewport({ width: 1440, height: 900 });
     const failures = [], errors = [], requests = [];
     page.on('request', request => requests.push(request.url()));
