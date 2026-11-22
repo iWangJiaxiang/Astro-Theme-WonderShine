@@ -183,7 +183,7 @@ async function checkTouchNavigation(page, screenshots) {
     await phone.waitForFunction(() => scrollY === 0);
     await phone.tap('.mobile-menu');
     await openMore(phone);
-    await phone.tap('.more-page nav[aria-label="内容导航"] button:first-child');
+    await phone.tap('.more-page nav:first-of-type button:first-child');
     await phone.waitForSelector('.more-page', { hidden: true });
     assert.equal(await phone.$eval('.mobile-menu', node => node.getAttribute('aria-current')), 'true');
     await phone.tap(tab('article'));
@@ -208,6 +208,7 @@ async function checkTouchNavigation(page, screenshots) {
     if (!await phone.$eval('.studio-preferences', el => el.open)) await phone.tap('.studio-preferences summary');
     await phone.tap('.theme-switch');
     await phone.select('.studio-preferences select', 'zh-CN');
+    await phone.waitForSelector('.more-page nav[aria-label="站点设置"]');
     await phone.$eval('.more-page nav[aria-label="站点设置"]', nav => [...nav.querySelectorAll('button')].find(button => button.textContent.trim() === '站点信息').click());
     await phone.waitForSelector('.settings-card input');
     for (const [width, height] of [[390, 844], [768, 900], [1180, 768]]) {
