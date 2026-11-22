@@ -38,8 +38,8 @@ import ValueEditor from "./ValueEditor";
 import type { ThemeUpdateCheck, ThemeUpdateResult } from "../../shared/theme-update";
 import { notifyWorkspaceChanged } from "../workspace-events";
 
-type Props = { group: string; embedded?: boolean; language?: string };
-type Events = { dirty: [value: boolean]; saved: []; exit: []; manageWorkspace: [] };
+type Props = { group: string; embedded?: boolean; language?: string; manageWorkspace?: () => void };
+type Events = { dirty: [value: boolean]; saved: []; exit: [] };
 const themeFields = ["extra.theme.channel", "extra.theme.pinned", "extra.theme.version"];
 const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
   "SettingsView",
@@ -544,7 +544,9 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           {check && !sameVersion && <button className="primary" type="button" disabled={disabled} onClick={() => void updateTheme(true)}>
             {t(themeOperation.value === "apply" ? "正在应用主题更新…" : check.pinned ? "更新到此版本" : "请求重新构建")}
           </button>}
-          {themeNeedsSync.value && <button className="secondary" type="button" disabled={busy.value} onClick={() => emit("manageWorkspace")}>
+          {themeNeedsSync.value && props.manageWorkspace && <button className="secondary" type="button" disabled={busy.value} onClick={() => {
+            if (canInteract()) props.manageWorkspace?.();
+          }}>
             {t("前往工作区同步")}
           </button>}
         </div>

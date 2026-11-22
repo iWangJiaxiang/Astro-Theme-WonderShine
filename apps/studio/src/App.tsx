@@ -1246,7 +1246,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                       : element(SettingsView, {
                                           key: view.value,
                                           group: view.value,
-                                          onManageWorkspace: () => navigate("workspace"),
+                                          manageWorkspace: () => navigate("workspace"),
                                           onExit: (() => navigate("home")) satisfies EventHandler<typeof SettingsView, "onExit">,
                                           onDirty: (($event) => {
                                             dirty.value = $event;
