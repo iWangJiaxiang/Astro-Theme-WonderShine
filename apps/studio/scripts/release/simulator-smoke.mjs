@@ -39,6 +39,7 @@ try {
   run(['simctl', 'status_bar', device.udid, 'override', '--time', '9:41', '--dataNetwork', 'wifi', '--wifiMode', 'active', '--wifiBars', '3', '--batteryState', 'charged', '--batteryLevel', '100']);
   run(['simctl', 'install', device.udid, app]);
   const launchArgs = ['simctl', 'launch', device.udid, plist.CFBundleIdentifier];
+  run(['simctl', 'ui', device.udid, 'appearance', 'light']);
   let launch;
   try {
     launch = run(launchArgs, 60_000);
@@ -51,27 +52,41 @@ try {
     run(['simctl', 'bootstatus', device.udid, '-b'], 240000);
     launch = run(launchArgs);
   }
-  // A booted simulator may launch the process before WKWebView paints its form.
-  const capture = join(output, 'studio-launch.png');
-  const deadline = Date.now() + 60_000;
-  let painted = false;
-  do {
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    run(['simctl', 'io', device.udid, 'screenshot', capture]);
-    const { data, info } = await sharp(capture).resize({ width: 160 }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-    // The first-run form has a wide blue submit button. Ignore icons on SpringBoard.
-    for (let y = Math.floor(info.height * 0.20); y < info.height * 0.90 && !painted; y++) {
-      let width = 0;
-      for (let x = 0; x < info.width; x++) {
-        const offset = (y * info.width + x) * info.channels;
-        const blue = data[offset + 2] - data[offset] > 75 && data[offset + 2] - data[offset + 1] > 45;
-        width = blue ? width + 1 : 0;
-        if (width > info.width * 0.55) { painted = true; break; }
-      }
+  for (const appearance of ['light', 'dark']) {
+    const dark = appearance === 'dark';
+    if (dark) {
+      run(['simctl', 'terminate', device.udid, plist.CFBundleIdentifier]);
+      run(['simctl', 'ui', device.udid, 'appearance', 'dark']);
+      run(launchArgs);
     }
-  } while (!painted && Date.now() < deadline);
-  assert.ok(painted, 'The workspace connection screen must appear after launching Studio');
-  await writeFile(join(output, 'result.json'), JSON.stringify({ identifier: plist.CFBundleIdentifier, icon: 'AppIcon', device: device.name, launch: launch.trim(), checks: ['compiled icon references', 'install', 'launch', 'screenshot'], limitation: 'Pinch, keyboard and assistive interactions still require device acceptance.' }, null, 2));
+    const capture = join(output, dark ? 'studio-launch-dark.png' : 'studio-launch.png');
+    const deadline = Date.now() + 60_000;
+    let painted = false;
+    do {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      run(['simctl', 'io', device.udid, 'screenshot', capture]);
+      const { data, info } = await sharp(capture).resize({ width: 160 }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+      // The full-width submit button distinguishes the painted form from the OS launch screen.
+      for (let y = Math.floor(info.height * 0.20); y < info.height * 0.90 && !painted; y++) {
+        let width = 0;
+        for (let x = 0; x < info.width; x++) {
+          const offset = (y * info.width + x) * info.channels;
+          const [r, g, b] = data.subarray(offset, offset + 3);
+          const accent = dark ? r - b > 75 && g - b > 45 : b - r > 75 && b - g > 45;
+          width = accent ? width + 1 : 0;
+          if (width > info.width * 0.55) { painted = true; break; }
+        }
+      }
+      if (painted && dark) {
+        // Sample the connection-page gutter, outside the card and system bars.
+        const gutter = (Math.floor(info.height / 2) * info.width + 2) * info.channels;
+        const rgb = [...data.subarray(gutter, gutter + 3)];
+        assert.ok(rgb.every(channel => channel < 55), `Dark launch painted a light background: ${rgb}`);
+      }
+    } while (!painted && Date.now() < deadline);
+    assert.ok(painted, `The workspace connection screen must appear after a ${appearance} launch`);
+  }
+  await writeFile(join(output, 'result.json'), JSON.stringify({ identifier: plist.CFBundleIdentifier, icon: 'AppIcon', device: device.name, launch: launch.trim(), checks: ['compiled icon references', 'install', 'light launch', 'dark launch', 'screenshots'], limitation: 'Pinch, keyboard and assistive interactions still require device acceptance.' }, null, 2));
 } finally {
   run(['simctl', 'shutdown', device.udid]);
 }

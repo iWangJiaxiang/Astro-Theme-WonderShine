@@ -28,7 +28,7 @@ const nativeGestureRecords = [];
 const gestureFindings = () => nativeGestureRecords.flatMap(record => (record.findings || []).map(finding => ({ name:record.name, ...finding })));
 const commands = new Set();
 const reviewClaims = new Set();
-let reviewEpoch;
+let reviewEpoch, resumeGate;
 const reviewRestart = '创作窗口已重新加载，请完全退出并重启应用后重新确认工作区';
 let allowOAuthHttp = false, oauthApproved = false, oauthFailureStage = null;
 let accountGate = Promise.resolve(), releaseAccount = () => {};
@@ -118,6 +118,7 @@ try {
     try {
       let value;
       if (command === 'native_review_owner') {
+        if (resumeGate) await resumeGate;
         // Mirror the process-lifetime Rust IPC contract, not its OS lock implementation.
         assert.deepEqual(Object.keys(args).sort(), ['claimRecovery', 'epoch', 'workspaceId']);
         const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -714,10 +715,25 @@ try {
   assert.ok([...keyring.values()].some(secret => JSON.parse(secret).token === 'fixture-token'));
   assert.ok(!await page.evaluate(() => JSON.stringify(localStorage).includes('fixture-token')));
   allowCloneHttp = false;
-  await restartNativeFixture();
+  await page.evaluate(() => localStorage.setItem('studio-appearance', JSON.stringify({ 'extra.style.color_scheme': 'dark' })));
+  let finishResume;
+  resumeGate = new Promise(resolve => { finishResume = resolve; });
+  try {
+    await restartNativeFixture();
+    await page.waitForSelector('.native-connect .loading-panel', { visible: true });
+    const backgrounds = await page.evaluate(() => ['html', '.native-shell-connecting', '.native-connect'].map(
+      selector => getComputedStyle(document.querySelector(selector)).backgroundColor));
+    assert.deepEqual(backgrounds, Array(3).fill('rgb(24, 23, 29)'), 'Every full-screen layer stays dark while the checkout opens');
+    await page.screenshot({ path: join(screenshots, 'phone-dark-workspace-resume.png') });
+  } finally {
+    finishResume();
+    resumeGate = undefined;
+  }
   await heading('今天，写点什么？');
   await page.waitForSelector('.thread-composer textarea');
+  assert.equal(await page.$eval('html', node => node.dataset.theme), 'dark', 'The restored workspace keeps the startup appearance');
   assert.equal(await page.$('.native-connect'), null, 'A cold phone launch reopens the last checkout offline');
+  await page.evaluate(() => localStorage.removeItem('studio-appearance'));
   const claimsBeforeReload = [...reviewClaims];
   await page.reload({ waitUntil: 'networkidle0' });
   await heading('今天，写点什么？');
