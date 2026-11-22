@@ -572,6 +572,7 @@ mod tests {
         assert_eq!(git(&root, &["rev-parse", branch]), saved["commit"]);
         let theme_head = git(&root, &["rev-parse", "HEAD"]);
         fs::write(root.join(path), "another unpublished edit").unwrap();
+        let remaining_changes = git(&root, &["diff", "--name-only"]);
         fs::write(root.join("config.toml"), "# Rebuild\n").unwrap();
         let commit_theme = |after: String| Job::Commit {
             head: theme_head.clone(),
@@ -584,7 +585,7 @@ mod tests {
         let after = git(&root, &["hash-object", "config.toml"]);
         assert_eq!(run(commit_theme(after)).unwrap(), git(&root, &["rev-parse", "HEAD"]));
         assert_eq!(git(&root, &["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"]), "config.toml");
-        assert_eq!(git(&root, &["diff", "--name-only"]), path);
+        assert_eq!(git(&root, &["diff", "--name-only"]), remaining_changes);
         fs::write(state.join("sync.json"), "interrupted").unwrap();
         assert_eq!(run(Job::Guard), Err(RECOVER.into()));
         assert_eq!(
