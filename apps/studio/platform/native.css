@@ -102,6 +102,7 @@ section.native-ai-settings { max-width: 960px; }
 @media (prefers-reduced-motion: reduce) { .connection-progress progress:indeterminate { animation: none; } }
 
 .account-login { margin-top: 20px; }
+.account-reauthorize { margin-block: 8px; }
 .account-login-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
 .account-login-buttons > button { flex-grow: 1; }
 .oauth-dialog { width: min(560px, calc(100vw - 24px)); padding: 0; color: var(--wjx-fontcolor); border: 1px solid var(--studio-line); border-radius: 16px; }

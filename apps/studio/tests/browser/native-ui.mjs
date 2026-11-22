@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -31,6 +32,8 @@ const reviewClaims = new Set();
 let reviewEpoch, resumeGate;
 const reviewRestart = '创作窗口已重新加载，请完全退出并重启应用后重新确认工作区';
 let allowOAuthHttp = false, oauthApproved = false, oauthFailureStage = null;
+const cnbRemote = 'https://cnb.cool/fixture-writer/blog.git';
+let reauthorizing = false, cnbUsername = 'fixture-writer';
 let accountGate = Promise.resolve(), releaseAccount = () => {};
 let allowCloneHttp = false, failNextHttp = false, failNextBranchWrite = false;
 let releaseDownload = () => {}, releaseCheckout = () => {};
@@ -190,10 +193,13 @@ try {
         assert.deepEqual(Object.keys(args).sort(), (args.resource === 'repos' ? ['page', 'resource', 'token'] : ['resource', 'token']));
         const stage = args.resource;
         if (stage === 'account') await accountGate;
-        else assert.equal(args.page, 1);
+        else {
+          assert.equal(reauthorizing, false, 'Reauthorization does not discover or replace repositories');
+          assert.equal(args.page, 1);
+        }
         const failed = oauthFailureStage === stage;
         const body = failed ? '' : JSON.stringify(stage === 'account'
-          ? {username:'fixture-writer',nickname:'Fixture Writer'}
+          ? {username:cnbUsername,nickname:'Fixture Writer'}
           : [{id:'1',path:'fixture-writer/blog',visibility_level:'Public'}]);
         value = {status:failed?403:200,headers:[['x-trace-id','0123456789abcdef']],body};
       } else if (allowOAuthHttp && command.startsWith('plugin:http|')) {
@@ -214,6 +220,7 @@ try {
           } else if (url.pathname === '/login/oauth/access_token' || url.pathname === '/oauth2/token') {
             stage = 'token';
             body = oauthApproved ? {access_token:'oauth-fixture-token',token_type:'bearer'} : {error:'authorization_pending'};
+            if (reauthorizing && oauthApproved) Object.assign(body, { expires_in: 600, refresh_token: 'oauth-fixture-refresh', refresh_token_expires_in: 7200 });
           } else {
             assert.equal(new Map(config.headers).get('authorization'), 'Bearer oauth-fixture-token');
             if (url.pathname === '/user') {
@@ -236,6 +243,10 @@ try {
         } else throw new Error('Unexpected OAuth HTTP operation');
       } else if (command === 'mobile_git') {
         if (args.job.action === 'checkRemote' && args.profile.url === mobile.url) assert.equal(args.password, 'fixture-token');
+        if (args.profile.url === cnbRemote) {
+          if (['checkRemote', 'sync', 'publish'].includes(args.job.action)) assert.equal(args.password === 'oauth-fixture-token', true, 'Git uses the replacement grant');
+          args = { ...args, profile: { ...args.profile, url: mobile.url } };
+        }
         mobile.setOnline(allowCloneHttp);
         if (args.job.action === 'open' && args.job.clone) {
           await downloadGate;
@@ -814,6 +825,95 @@ try {
   await fs.mkdir(join(appData, 'workspaces', mainProfile.id, 'state'), { recursive: true });
   await mobile.invoke({ profile: mainProfile, job: { action: 'open', clone: true } });
   await mobile.verifySync(mainProfile);
+
+  if (process.env.STUDIO_TEST_OAUTH === 'fixture') {
+    const cnb = { ...saved[0], id: crypto.randomUUID(), label: 'CNB fixture', provider: 'cnb', username: cnbUsername, url: cnbRemote };
+    const cnbRepo = join(appData, 'workspaces', cnb.id, 'repo');
+    // Keep the real mobile Git engine on the fixture remote behind the mocked IPC boundary.
+    await fs.cp(phoneRepo, cnbRepo, { recursive: true });
+    const key = 'git-' + createHash('sha256').update(JSON.stringify([cnb.id, cnb.url, cnb.provider, cnb.username])).digest('hex');
+    const expired = JSON.stringify({ token: 'expired-fixture', expiresAt: 1, clientId: 'studio-ci-cnb' });
+    const registryKey = 'wondershine.native.workspaces.v1';
+    const records = [cnb, ...saved];
+    await page.evaluate((key, records) => localStorage.setItem(key, JSON.stringify(records)), registryKey, records);
+    allowOAuthHttp = reauthorizing = true;
+    const reopenWithExpiredGrant = async () => {
+      keyring.set(key, expired);
+      await restartNativeFixture();
+      await heading('今天，写点什么？');
+      await page.waitForSelector('.quick-sync button:not(:disabled)');
+    };
+    const startReauthorization = async () => {
+      oauthApproved = false;
+      await page.waitForSelector('.account-reauthorize button:not(:disabled)', { visible: true });
+      await page.click('.account-reauthorize button');
+      await page.waitForSelector('.oauth-dialog[open] .oauth-code');
+    };
+    const finishReauthorization = async () => {
+      oauthApproved = true;
+      await page.waitForSelector('.oauth-dialog', { hidden: true });
+      const grant = JSON.parse(keyring.get(key));
+      assert.ok(grant.token === 'oauth-fixture-token' && grant.refreshToken === 'oauth-fixture-refresh');
+      assert.ok(grant.expiresAt > Date.now() && grant.refreshExpiresAt > grant.expiresAt);
+    };
+    const commitOffline = message => execFileSync('git', ['-C', cnbRepo, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', 'commit', '--allow-empty', '-m', message]);
+    const remoteHead = () => execFileSync('git', [...remoteArgs, 'log', '-1', '--format=%s', cnb.branch]).toString().trim();
+
+    await reopenWithExpiredGrant();
+    commitOffline('CNB quick sync after reauthorization');
+    await page.click('.quick-sync button');
+    await page.waitForFunction(() => document.querySelector('.quick-sync-progress [role=alert]')?.textContent.includes('授权已过期'));
+    await screenshot('cnb-quick-sync-expired', false);
+    await startReauthorization();
+    cnbUsername = 'another-fixture-account'; oauthApproved = true;
+    await page.waitForFunction(() => document.querySelector('.oauth-dialog [role=alert]')?.textContent.includes('原来的 Git 账号'));
+    assert.equal(keyring.get(key) === expired, true, 'A different account leaves the saved grant alone');
+    cnbUsername = cnb.username;
+    await click('重新登录');
+    await finishReauthorization();
+    assert.notEqual(remoteHead(), 'CNB quick sync after reauthorization', 'Signing in alone does not push');
+    await click('重试同步');
+    await page.waitForFunction(() => document.querySelector('.quick-sync-progress')?.textContent.includes('分支已同步'));
+    assert.equal(remoteHead(), 'CNB quick sync after reauthorization');
+
+    await reopenWithExpiredGrant();
+    await page.waitForSelector('.thread-composer textarea');
+    await page.type('.thread-composer textarea', 'CNB publication after reauthorization');
+    await click('发布动态');
+    await click('确认发布');
+    await page.waitForSelector('.publish-dialog .account-reauthorize button');
+    await screenshot('cnb-publish-expired', false);
+    await startReauthorization();
+    await screenshot('cnb-publish-device-authorization', false);
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.oauth-dialog', { hidden: true });
+    assert.ok(await page.$('.publish-dialog[open]'), 'Canceling OAuth leaves the publication open');
+    assert.equal(keyring.get(key) === expired, true, 'Canceling leaves the saved grant alone');
+    await startReauthorization();
+    await finishReauthorization();
+    await page.waitForFunction(() => document.querySelector('.publish-actions .primary')?.textContent === '确认发布');
+    await screenshot('cnb-publish-review-after-reauthorization', false);
+    assert.equal(remoteHead(), 'CNB quick sync after reauthorization');
+    await click('确认发布');
+    await page.waitForFunction(() => document.querySelector('.publish-dialog h2')?.textContent === '动态已发送到仓库');
+    assert.match(execFileSync('git', [...remoteArgs, 'grep', '-l', 'CNB publication after reauthorization', cnb.branch, '--', 'content/threads']).toString(), /index.*\.md/);
+    await click('完成');
+
+    await reopenWithExpiredGrant();
+    commitOffline('CNB workspace sync after reauthorization');
+    await click('工作区同步'); await page.waitForSelector('.workspace-status-grid');
+    await page.click('.workspace-sync-actions button:nth-child(2)');
+    await click('确认执行');
+    await startReauthorization();
+    await finishReauthorization();
+    await page.waitForSelector('.workspace-panel [role=group] .publish-actions .primary:not(:disabled)');
+    assert.notEqual(remoteHead(), 'CNB workspace sync after reauthorization');
+    await click('确认执行');
+    await page.waitForFunction(() => document.querySelector('.workspace-panel [role=status]')?.textContent.includes('已与 Git 远端同步'));
+    assert.equal(remoteHead(), 'CNB workspace sync after reauthorization');
+    assert.deepEqual(await page.evaluate(key => JSON.parse(localStorage.getItem(key)), registryKey), records, 'Reauthorization keeps the saved workspace and branch');
+    assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('oauth-fixture-token')), false);
+  }
   assert.deepEqual(errors, []); assert.deepEqual(cspErrors, []); assert.deepEqual(failedResources, []);
   assert.deepEqual(gestureFindings(), [], 'Native synthetic gesture findings (all reached mobile screenshot surfaces; see gesture-report.json)');
   console.log('Native UI passed: desktop/mobile connection modes, offline dashboard, source save, bundled Vditor, native asset preview, client API settings, secret redaction, configuration reopen, logout.');
@@ -854,7 +954,7 @@ try {
   }
   try {
     await fs.mkdir(screenshots, { recursive: true });
-    const report = JSON.stringify(diagnostics, null, 2).replace(/browser-fixture-secret|oauth-fixture-token|device-fixture|TEST-CODE/g, '[redacted]');
+    const report = JSON.stringify(diagnostics, null, 2).replace(/browser-fixture-secret|oauth-fixture-token|oauth-fixture-refresh|expired-fixture|device-fixture|TEST-CODE/g, '[redacted]');
     await fs.writeFile(join(screenshots, 'failure.json'), report + '\n');
     console.error(report);
   } catch (diagnosticError) { console.error('Could not write native UI failure diagnostics:', diagnosticError.message); }
