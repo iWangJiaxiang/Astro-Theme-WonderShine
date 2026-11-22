@@ -11,7 +11,7 @@
     "check": "astro check"
   },
   "dependencies": {
-    "@wondershine/theme": "0.3.0",
+    "@wondershine/theme": "0.3.1-canary.44979074215",
     "astro": "7.4.4"
   }
 }
