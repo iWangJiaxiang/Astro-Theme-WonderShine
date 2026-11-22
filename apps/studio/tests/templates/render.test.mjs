@@ -155,7 +155,7 @@ test('Studio SEO and typography settings reach Astro without replacing article o
   const service = new ContentService(new LocalRepository(fixture.root));
   for (const [id, changes] of [
     ['site', { 'extra.site.seo': 'Studio SEO & description' }],
-    ['appearance', { 'extra.style.font_family': 'Georgia, serif' }],
+    ['theme', { 'extra.style.font_family': 'Georgia, serif' }],
   ]) {
     const settings = await service.settings(id);
     await service.saveSettings(id, changes, settings.revision);

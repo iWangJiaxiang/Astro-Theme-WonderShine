@@ -68,6 +68,8 @@
 .settings-group-heading h3 { font-size: 13px; line-height: 1.5; font-weight: 600; margin: 5px 0 0; letter-spacing: .01em; }
 .settings-group-index { font-size: 10px; color: var(--studio-muted); font-variant-numeric: tabular-nums; letter-spacing: .12em; }
 .settings-form-group .settings-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, max(18rem, (100% - 24px) / 2)), 1fr)); padding: 0; gap: 16px 24px; min-width: 0; }
+.theme-update-controls { display: grid; gap: 8px; }
+.theme-update-controls p { margin: 4px 0 0; }
 .settings-card .field { gap: 5px 12px; }
 .settings-card .field-inline { grid-template-columns: minmax(76px, 92px) minmax(0, 1fr); }
 .settings-card .field input:not([type=radio]):not([type=checkbox]):not([type=color]) { min-height: 35px; padding: 7px 10px; font-size: 13px; }

@@ -1,4 +1,5 @@
 import type { BranchFile, BranchSave } from './save.js';
+import type { ThemeCommit } from './theme-update.js';
 /** Offline status reflects the last fetched remote state; it does not contact the network. */
 export interface WorkspaceStatus {
   branch: string;
@@ -21,6 +22,8 @@ export interface WorkspaceStatus {
 
 /** Save, local commit, and remote synchronization are distinct operations. */
 export interface WorkspaceControl {
+  /** Commit the confirmed theme change on the configured branch, scoped to exact config blobs. */
+  commitTheme?(change: ThemeCommit): Promise<string>;
   publish?(message: string, confirmation: string): Promise<void>;
   saveBranch?(key: string, files: BranchFile[]): Promise<BranchSave>;
   checkRemote?(): Promise<Pick<WorkspaceStatus, 'ahead' | 'behind'>>;

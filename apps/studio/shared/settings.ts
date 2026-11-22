@@ -1,6 +1,24 @@
 import type { Field, Json, SettingsSchema } from './types.js';
 const field = (path: string, label: string, value: Json = '', kind: Field['kind'] = 'text', hint?: string): Field => ({ path, label, default: value, kind, hint });
 
+export const blogStyleFields = [
+  field('extra.style.theme_light_skin', '浅色主题色', '#425AEF'), field('extra.style.theme_dark_skin', '深色主题色', '#f2b94b'),
+  field('extra.style.color_scheme', '默认颜色模式', 'system', 'text', '跟随设备设置，或固定为浅色 / 深色'),
+  field('extra.style.font_family', '字体', 'PingFang SC'),
+];
+const themeFields = [
+  ...blogStyleFields, field('extra.style.universe', '深色模式粒子效果', true, 'boolean'),
+  field('extra.theme.channel', '版本渠道', 'latest'),
+  field('extra.theme.pinned', '固定版本', false, 'boolean', '关闭时，每次部署都使用所选渠道的最新版本。'),
+  field('extra.theme.version', '指定版本', '', 'text', '例如 0.2.1。留空则固定到所选渠道当前的版本。'),
+];
+
+// Older Studio clients still read and save this settings group.
+export const legacyAppearance: SettingsSchema = {
+  id: 'appearance', title: '外观样式', description: '沿用主站的主题色、字体和明暗模式。管理中心将在保存后同步应用。',
+  file: 'config.toml', fields: themeFields,
+};
+
 export const settingsSchemas: SettingsSchema[] = [
   { id: 'site', title: '站点信息', description: '让读者认识你的站点。修改会写入 config.toml 对应字段。', file: 'config.toml', fields: [
     field('title', '站点名称'), field('description', '站点简介', '', 'textarea'), field('author', '作者'),
@@ -32,14 +50,7 @@ export const settingsSchemas: SettingsSchema[] = [
     field('extra.about.hobbies', '兴趣爱好', [], 'structured'), field('extra.about.like', '关注偏好', {}, 'structured'),
     field('extra.about.music', '音乐偏好', {}, 'structured'), field('extra.about.map', '个人信息', {}, 'structured'),
   ] },
-  { id: 'appearance', title: '外观样式', description: '沿用主站的主题色、字体和明暗模式。管理中心将在保存后同步应用。', file: 'config.toml', fields: [
-    field('extra.style.theme_light_skin', '浅色主题色', '#425AEF'), field('extra.style.theme_dark_skin', '深色主题色', '#f2b94b'),
-    field('extra.style.color_scheme', '默认颜色模式', 'system', 'text', '跟随设备设置，或固定为浅色 / 深色'),
-    field('extra.style.font_family', '字体', 'PingFang SC'), field('extra.style.universe', '深色模式粒子效果', true, 'boolean'),
-    field('extra.theme.channel', '版本渠道', 'latest'),
-    field('extra.theme.pinned', '固定版本', false, 'boolean', '关闭时，每次部署都使用所选渠道的最新版本。'),
-    field('extra.theme.version', '指定版本', '', 'text', '例如 0.2.1。留空则固定到所选渠道当前的版本。'),
-  ] },
+  { id: 'theme', title: '主题维护', description: '管理博客主题版本、样式和显示效果。', file: 'config.toml', fields: themeFields },
   { id: 'friends', title: '友链管理', description: '维护友链分组、站点介绍、地址和图标。', file: 'public/data/friends.json', fields: [
     field('groups', '友链分组', [], 'structured'),
   ] },

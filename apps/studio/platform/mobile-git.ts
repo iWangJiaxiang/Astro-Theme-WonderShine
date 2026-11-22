@@ -6,6 +6,8 @@ import { validatePath } from '../shared/repository';
 import type { BranchFile, BranchSave } from '../shared/save';
 import type { ReviewRow, WorkspaceReviewAdapter } from '../shared/workspace-confirmation';
 import type { WorkspaceStatus } from '../shared/workspace';
+import type { ThemeCommit } from '../shared/theme-update';
+import { themeConfigPath } from '../core/theme-update';
 import { missingFile, type WorkspaceFiles } from './filesystem';
 import type { WorkspaceProfile } from './hosting';
 import { withWorkspaceLock } from './queue';
@@ -94,6 +96,9 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
       return { ...view, canPublish: true, confirmation: result.confirmation, confirmationExpiresAt: result.expiresAt };
     }),
     commit: async (message: string, confirmation?: string) => (await commit(message, confirmation, false))!,
+    commitTheme: (theme: ThemeCommit) => run(null, () => command<string>('commit', {
+      head: theme.head, message: theme.message, paths: [themeConfigPath], theme: { before: theme.before, after: theme.after },
+    })),
     commitForReview: async (message: string, confirmation: string) => { await commit(message, confirmation, true); },
     publish: (message: string, confirmation: string) => run('review', async paths => {
       const current = await inspect(paths, true);

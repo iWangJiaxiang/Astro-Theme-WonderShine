@@ -61,7 +61,7 @@ export function observeRepository(repository: Repository, listener: RepositoryMu
   };
   const writeBatch: Repository['writeBatch'] = (entries, guard) => {
     // Snapshot before the first await; callers may reuse their objects while queued.
-    const changes = entries.map(({ path, text, expectedRevision }) => ({ path, text, expectedRevision }));
+    const changes = entries.map(entry => ({ ...entry }));
     return mutate('writeBatch', changes, () => repository.writeBatch(changes, guard));
   };
 

@@ -13,6 +13,7 @@ import { settingsSchemas } from '../shared/settings.js';
 import type { NativeAiGateway } from '../shared/native-ai.js';
 import type { AiTextRequest } from '../shared/ai.js';
 import { MAX_UPLOAD_SIZE } from '../shared/media.js';
+import { applyThemeUpdate, checkThemeUpdate } from './theme-update.js';
 
 export interface ContentTransportOptions {
   /** Use a workspace-specific identity to isolate local recovery drafts. */
@@ -92,6 +93,8 @@ export function createContentTransport(repository: Repository, options: ContentT
         const body = text ? JSON.parse(text) as { confirmation?: string } : undefined;
         return json(await repository.workspace.sync(requireWorkspaceConfirmation(body?.confirmation)));
       }
+      if (path === '/api/theme-update' && method === 'GET') return json(await checkThemeUpdate(repository, options.themeFetch ?? fetch));
+      if (path === '/api/theme-update' && method === 'POST') return json(await applyThemeUpdate(repository, options.themeFetch ?? fetch, new Date(), await input()));
       if (path.startsWith('/api/settings/')) {
         const id = decodeURIComponent(path.slice('/api/settings/'.length)), language = url.searchParams.get('language') ?? undefined;
         if (method === 'GET') return json(await content.settings(id, language));

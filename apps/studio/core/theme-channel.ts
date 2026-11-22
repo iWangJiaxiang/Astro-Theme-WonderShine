@@ -1,4 +1,5 @@
 import type { Json } from '../shared/types.js';
+import type { ThemeChannel } from '../shared/theme-update.js';
 import { getValue } from './content.js';
 import { StudioError } from './errors.js';
 
@@ -6,15 +7,30 @@ export const channelPath = 'extra.theme.channel';
 export const pinPath = 'extra.theme.pinned';
 export const versionPath = 'extra.theme.version';
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:beta|rc|canary)\.(0|[1-9]\d*))?$/;
+const channelSuffix = { next: /-(?:beta|rc)\.\d+$/, canary: /-canary\.\d+$/ };
+
+export function themeChannel(value: unknown): ThemeChannel {
+  const channel = value ?? 'latest';
+  if (channel !== 'latest' && channel !== 'next' && channel !== 'canary') throw new StudioError(400, '请选择有效的主题渠道');
+  return channel;
+}
+
+export function isThemeChannelVersion(channel: ThemeChannel, version: unknown): version is string {
+  return typeof version === 'string' && versionPattern.test(version)
+    && (channel === 'latest' ? !version.includes('-') : channelSuffix[channel].test(version));
+}
 
 export async function themePin(data: Record<string, unknown>, changes: Record<string, Json>, request: typeof fetch) {
-  const channel = changes[channelPath] ?? getValue(data, channelPath) ?? 'latest';
-  if (channel !== 'latest' && channel !== 'next' && channel !== 'canary') throw new StudioError(400, '请选择有效的主题渠道');
+  const channel = themeChannel(changes[channelPath] ?? getValue(data, channelPath));
   if (!(changes[pinPath] ?? getValue(data, pinPath))) return null;
   const previous = getValue(data, versionPath);
   const specified = changes[versionPath];
   if (specified !== undefined && (typeof specified !== 'string' || (specified !== '' && !versionPattern.test(specified)))) throw new StudioError(400, '请输入完整的主题版本号');
   if (specified === undefined && getValue(data, pinPath) === true && (getValue(data, channelPath) ?? 'latest') === channel && typeof previous === 'string' && versionPattern.test(previous)) return previous;
+  return resolveThemeVersion(channel, request, specified || undefined);
+}
+
+export async function resolveThemeVersion(channel: ThemeChannel, request: typeof fetch, specified?: string): Promise<string> {
   const url = specified ? 'https://registry.npmjs.org/@wondershine%2ftheme/' + specified
     : 'https://registry.npmjs.org/-/package/@wondershine%2ftheme/dist-tags';
   try {
@@ -23,8 +39,8 @@ export async function themePin(data: Record<string, unknown>, changes: Record<st
     if (response.ok) {
       const result = await response.json();
       if (specified && result.name === '@wondershine/theme' && result.version === specified) return specified;
-      const version = result[channel];
-      if (!specified && typeof version === 'string' && versionPattern.test(version)) return version;
+      const version = result?.[channel];
+      if (!specified && isThemeChannelVersion(channel, version)) return version;
     }
   } catch (error) {
     if (error instanceof StudioError) throw error;

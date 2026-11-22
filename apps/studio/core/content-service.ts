@@ -4,7 +4,7 @@ import { translationReviewChanges } from './translation-review.js';
 import { posix } from './portable.js';
 import { parse } from 'smol-toml';
 import type { Article, ArticleSummary, DocumentVersion, Json, Settings, Field } from '../shared/types.js';
-import { settingsSchemas, documentFields } from '../shared/settings.js';
+import { settingsSchemas, legacyAppearance, documentFields } from '../shared/settings.js';
 import { getValue, patchToml, splitDocument, updateDocument, formDocumentMetadata, removeTomlFields } from './content.js';
 import { type Repository, validatePath } from '../shared/repository.js';
 import { StudioError } from './errors.js';
@@ -20,7 +20,7 @@ import { localeSectionWrites } from './content-locales.js';
 import { settingsSource } from './localized-settings.js';
 import { contentSummarySteps, createContentSummaryContext, readContentSummaryFacts } from './content-summary.js';
 
-const allSettingsSchemas = [...settingsSchemas, ...pageSettingsSchemas];
+const allSettingsSchemas = [...settingsSchemas, legacyAppearance, ...pageSettingsSchemas];
 
 export const asJson = (value: unknown): Json => JSON.parse(JSON.stringify(value)) as Json;
 function validateChanges(changes: unknown, fields: Field[]): asserts changes is Record<string, Json> {
@@ -63,7 +63,7 @@ export class ContentService {
     const mapped = Object.fromEntries(Object.entries(changes).map(([path, value]) => [source.mapPath(path), value]));
     let pinnedThemeVersion: string | null | undefined;
     let original = source.file?.text ?? '';
-    if (id === 'appearance' && [channelPath, pinPath, versionPath].some(path => Object.hasOwn(changes, path))) {
+    if ((id === 'theme' || id === 'appearance') && [channelPath, pinPath, versionPath].some(path => Object.hasOwn(changes, path))) {
       pinnedThemeVersion = await themePin(source.data, changes, this.themeFetch);
       if (pinnedThemeVersion) mapped[versionPath] = pinnedThemeVersion;
       else {

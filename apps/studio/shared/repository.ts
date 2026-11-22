@@ -12,7 +12,7 @@ export function validatePath(path: string): void {
   }
 }
 export type WriteGuard = (repository: Repository) => Promise<void>;
-export interface RepositoryWrite { path: string; text: string | null; expectedRevision: string | null }
+export interface RepositoryWrite { path: string; text: string | null; expectedRevision: string | null; commitMessage?: string }
 export interface Repository {
   readonly mode: 'local' | 'git';
   readonly saveScope?: string;

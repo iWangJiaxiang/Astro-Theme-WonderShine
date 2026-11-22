@@ -35,6 +35,11 @@ impl Profile {
     }
 }
 #[derive(Deserialize)]
+pub struct ThemeBlobs {
+    before: Option<String>,
+    after: String,
+}
+#[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "camelCase")]
 pub enum Job {
     Open {
@@ -50,6 +55,7 @@ pub enum Job {
         head: String,
         paths: Vec<String>,
         message: String,
+        theme: Option<ThemeBlobs>,
     },
     Publish {
         head: String,
@@ -236,7 +242,8 @@ fn commit(
     expected: &str,
     paths: &[String],
     message: &str,
-) -> Result<()> {
+    theme: Option<&ThemeBlobs>,
+) -> Result<Oid> {
     if paths.is_empty()
         || message.trim().is_empty()
         || message.len() > 2000
@@ -254,6 +261,18 @@ fn commit(
         return Err(CHANGED);
     }
     let tree = parent.tree().map_err(|_| READ)?;
+    let config = Path::new("config.toml");
+    if let Some(theme) = theme {
+        if paths.len() != 1 || paths[0] != "config.toml" {
+            return Err(INVALID);
+        }
+        let before = tree
+            .get_name("config.toml")
+            .map(|entry| entry.id().to_string());
+        if before != theme.before {
+            return Err(CHANGED);
+        }
+    }
     let mut index = repo.index().map_err(|_| READ)?;
     if index.has_conflicts() {
         return Err(BUSY);
@@ -270,7 +289,7 @@ fn commit(
         .map_err(|_| READ)?;
     for delta in diff.deltas() {
         let path = delta.new_file().path().and_then(Path::to_str).ok_or(READ)?;
-        if !approved.contains(path) {
+        if theme.is_some() || !approved.contains(path) {
             return Err("暂存区含有创作中心以外的文件，请先在 Git 工具中处理");
         }
     }
@@ -286,6 +305,12 @@ fn commit(
             index.remove_path(Path::new(path)).map_err(|_| WRITE)?;
         }
     }
+    if let Some(theme) = theme {
+        let after = index.get_path(config, 0).ok_or(CHANGED)?.id;
+        if Oid::from_str(&theme.after).ok() != Some(after) {
+            return Err(CHANGED);
+        }
+    }
     let id = index.write_tree().map_err(|_| WRITE)?;
     let next = repo.find_tree(id).map_err(|_| READ)?;
     index.write().map_err(|_| WRITE)?;
@@ -297,8 +322,7 @@ fn commit(
         &next,
         &[&parent],
     )
-    .map_err(|_| WRITE)?;
-    Ok(())
+    .map_err(|_| WRITE)
 }
 
 pub fn execute(
@@ -403,16 +427,17 @@ pub fn execute(
             head,
             paths,
             message,
+            theme,
         } => {
-            commit(&repo, &root, p, &head, &paths, &message)?;
-            Ok(Value::Null)
+            let oid = commit(&repo, &root, p, &head, &paths, &message, theme.as_ref())?;
+            Ok(json!(oid.to_string()))
         }
         Job::Publish {
             head,
             paths,
             message,
         } => {
-            commit(&repo, &root, p, &head, &paths, &message)?;
+            commit(&repo, &root, p, &head, &paths, &message, None)?;
             // The local commit is durable even if the remote rejects the push.
             Ok(json!({"syncError": network::sync(&repo,p,&state,password).err()}))
         }
@@ -537,6 +562,7 @@ mod tests {
             head: before.clone(),
             paths: vec![path.into()],
             message: "new thread".into(),
+            theme: None,
         };
         assert!(run(commit()).is_err());
         assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
@@ -544,6 +570,21 @@ mod tests {
         run(commit()).unwrap();
         assert!(git(&root, &["ls-tree", "HEAD", "theme"]).starts_with("160000"));
         assert_eq!(git(&root, &["rev-parse", branch]), saved["commit"]);
+        let theme_head = git(&root, &["rev-parse", "HEAD"]);
+        fs::write(root.join(path), "another unpublished edit").unwrap();
+        fs::write(root.join("config.toml"), "# Rebuild\n").unwrap();
+        let commit_theme = |after: String| Job::Commit {
+            head: theme_head.clone(),
+            paths: vec!["config.toml".into()],
+            message: "chore(theme): rebuild from latest".into(),
+            theme: Some(ThemeBlobs { before: None, after }),
+        };
+        assert_eq!(run(commit_theme("wrong blob".into())), Err(CHANGED.into()));
+        assert_eq!(git(&root, &["diff", "--cached", "--name-only"]), "");
+        let after = git(&root, &["hash-object", "config.toml"]);
+        assert_eq!(run(commit_theme(after)).unwrap(), git(&root, &["rev-parse", "HEAD"]));
+        assert_eq!(git(&root, &["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"]), "config.toml");
+        assert_eq!(git(&root, &["diff", "--name-only"]), path);
         fs::write(state.join("sync.json"), "interrupted").unwrap();
         assert_eq!(run(Job::Guard), Err(RECOVER.into()));
         assert_eq!(

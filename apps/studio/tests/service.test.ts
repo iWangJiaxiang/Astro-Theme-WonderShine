@@ -10,6 +10,7 @@ import { patchToml, splitDocument } from '../server/content.js';
 import { settingsSchemas } from '../shared/settings.js';
 import { pageSettingsSchemas } from '../shared/page-settings.js';
 import { sortLibrary } from '../shared/library.js';
+import { applyThemeUpdate, checkThemeUpdate } from '../core/theme-update.js';
 test('site URL edits require an absolute web URL so Astro can build them', async t => {
   const root = await mkdtemp(join(tmpdir(), 'studio-site-url-')); t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
   await writeFile(join(root, 'config.toml'), 'base_url="https://example.test"\n');
@@ -128,7 +129,7 @@ test('theme settings pin an exact npm version and persist across Studio sessions
     return new Response(null, { status: 404 });
   });
   const save = async (changes: Record<string, string | boolean>) =>
-    content.saveSettings('appearance', changes, (await content.settings('appearance')).revision);
+    content.saveSettings('theme', changes, (await content.settings('theme')).revision);
   const channel = 'extra.theme.channel', pin = 'extra.theme.pinned', version = 'extra.theme.version';
   assert.equal((await content.settings('appearance')).values[pin], false);
   await save({ [channel]: 'next' });
@@ -148,4 +149,46 @@ test('theme settings pin an exact npm version and persist across Studio sessions
   const config = parse(await readFile(join(root, 'config.toml'), 'utf8'));
   assert.equal(config.title, 'Keep');
   assert.deepEqual({ ...(config.extra as any).theme }, { channel: 'canary', pinned: false });
+});
+
+test('theme updates recheck pins and request rebuilds without changing parsed site settings', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'studio-theme-update-'));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
+  const config = join(root, 'config.toml');
+  const original = 'title = "站点"\r\n[extra.theme]\r\nchannel = "next"\r\npinned = true\r\nversion = "1.0.0-beta.1" # authored\r\n';
+  await writeFile(config, original);
+  const repo = new LocalRepository(root);
+  const now = new Date('2026-11-22T04:00:00Z');
+  const tags = { latest: '1.0.0', next: '1.1.0-beta.1', canary: '1.2.0-canary.3' };
+  let lookups = 0;
+  const registry: typeof fetch = async () => { lookups++; return Response.json(tags); };
+  const check = await checkThemeUpdate(repo, registry);
+  assert.equal(check.currentVersion, '1.0.0-beta.1');
+  assert.equal(check.channelVersion, '1.1.0-beta.1');
+  tags.next = '1.1.0-rc.1';
+  await assert.rejects(applyThemeUpdate(repo, registry, now, check), { status: 409 });
+  assert.equal(await readFile(config, 'utf8'), original);
+  const updated = await applyThemeUpdate(repo, registry, now, await checkThemeUpdate(repo, registry));
+  assert.equal(updated.pinnedThemeVersion, tags.next);
+  assert.equal(await readFile(config, 'utf8'), original.replace('1.0.0-beta.1', tags.next));
+  assert.equal((await applyThemeUpdate(repo, registry, now, await checkThemeUpdate(repo, registry))).revision, updated.revision);
+
+  const following = original.replace('"next"', '"canary"').replace('true', 'false').replace(/version.*\r\n/, '');
+  await repo.write('config.toml', following, updated.revision);
+  await assert.rejects(applyThemeUpdate(repo, registry, now, check), { status: 409 });
+  const unpinned = await checkThemeUpdate(repo, registry);
+  assert.equal(unpinned.currentVersion, null);
+  assert.equal(unpinned.channelVersion, tags.canary);
+  const before = lookups;
+  const rebuilt = await applyThemeUpdate(repo, registry, now, unpinned);
+  assert.equal(lookups, before, 'CI resolves the follow tag later');
+  const rebuiltText = await readFile(config, 'utf8');
+  assert.equal(rebuiltText, '# WonderShine Studio theme rebuild: canary 2026-11-22T04:00:00.000Z\r\n' + following);
+  await applyThemeUpdate(repo, registry, now, { ...unpinned, revision: rebuilt.revision });
+  const repeated = await readFile(config, 'utf8');
+  assert.notEqual(repeated, rebuiltText);
+  assert.equal(repeated.split('WonderShine Studio theme rebuild').length, 2);
+  assert.deepEqual(parse(repeated), parse(following));
+  tags.canary = '1.0.0';
+  await assert.rejects(checkThemeUpdate(repo, registry), { status: 502 });
 });

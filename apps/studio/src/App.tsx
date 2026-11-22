@@ -30,10 +30,12 @@ import { subscribeWorkspaceChanged } from "./workspace-events";
 import { locale, t, type Message } from "./i18n";
 import { ref, watch, onMounted, onBeforeUnmount, computed } from "./reactivity";
 import type { Json, ArticleSummary } from "../shared/types";
+import { blogStyleFields } from "../shared/settings";
 import { api, session, reauthentication, errorMessage, pendingMutations } from "./api";
 import LoginView from "./components/LoginView";
 import Modal from "./components/Modal";
 import SettingsView from "./components/SettingsView";
+import FormField from "./components/FormField";
 import ContentLibrary from "./components/ContentLibrary";
 import ThreadComposer from "./components/ThreadComposer";
 import ThreadDetail from "./components/ThreadDetail";
@@ -52,6 +54,20 @@ import {
 
 type Props = { workspaceSwitcher?: boolean };
 type Events = {};
+const appearanceStorageKey = "studio-appearance";
+const schemePath = "extra.style.color_scheme";
+function readStudioAppearance(): Record<string, string> {
+  try {
+    const stored = localStorage.getItem(appearanceStorageKey);
+    if (stored !== null) {
+      const values = JSON.parse(stored);
+      return Object.fromEntries(blogStyleFields.flatMap(({ path }) => typeof values?.[path] === "string" ? [[path, values[path]]] : []));
+    }
+    const legacy = localStorage.getItem("studio-theme");
+    if (legacy === "light" || legacy === "dark") return { [schemePath]: legacy };
+  } catch { /* Use site defaults when device storage is unavailable. */ }
+  return {};
+}
 const App: StudioComponent<Props, Events> = component<Props, Events>(
   "App",
   (props, emit, expose) => {
@@ -77,6 +93,10 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       dirty = ref(false),
       menuOpen = ref(false),
       dark = ref(window.document.documentElement.dataset.theme === "dark");
+    const studioAppearance = ref(readStudioAppearance()), appearanceError = ref(false);
+    const systemScheme = matchMedia("(prefers-color-scheme: dark)");
+    const studioStyle = computed<Record<string, Json>>(() => Object.fromEntries(blogStyleFields.map(({ path, default: fallback }) =>
+      [path, studioAppearance.value[path] || data.value?.appearance[path] || fallback])));
     // Capture before the shell becomes inert, including focus inside portalled dialogs.
     const reauthenticationFocus = ref<HTMLElement | null>(null);
     watch(reauthentication, (required) => {
@@ -194,7 +214,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       about: "user",
       taxonomies: "tag",
       recommendations: "star",
-      appearance: "palette",
+      theme: "palette",
     };
     const contentKind = computed(() =>
       ["article", "page", "collection"].includes(view.value)
@@ -210,23 +230,28 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       }
     });
     function applyTheme() {
-      const appearance = data.value?.appearance;
-      window.document.documentElement.dataset.theme = dark.value
-        ? "dark"
-        : "light";
-      const color =
-        appearance?.[
-          dark.value
-            ? "extra.style.theme_dark_skin"
-            : "extra.style.theme_light_skin"
-        ];
+      const style = studioStyle.value;
+      const scheme = style[schemePath];
+      dark.value = scheme === "dark" || (scheme !== "light" && systemScheme.matches);
+      const root = window.document.documentElement;
+      root.dataset.theme = dark.value ? "dark" : "light";
+      const color = style[dark.value ? "extra.style.theme_dark_skin" : "extra.style.theme_light_skin"];
       if (typeof color === "string" && /^#[a-f0-9]{6}$/i.test(color))
-        window.document.documentElement.style.setProperty("--wjx-theme", color);
-      const font = appearance?.["extra.style.font_family"];
+        root.style.setProperty("--wjx-theme", color);
+      else root.style.removeProperty("--wjx-theme");
+      const font = style["extra.style.font_family"];
       if (typeof font === "string")
-        window.document.documentElement.style.fontFamily = `${font}, -apple-system, BlinkMacSystemFont, sans-serif`;
+        root.style.fontFamily = `${font}, -apple-system, BlinkMacSystemFont, sans-serif`;
     }
-    watch(dark, applyTheme);
+    function saveStudioAppearance(values: Record<string, string>) {
+      appearanceError.value = false;
+      try { localStorage.setItem(appearanceStorageKey, JSON.stringify(values)); }
+      catch { appearanceError.value = true; }
+      studioAppearance.value = values;
+      applyTheme();
+    }
+    onMounted(() => systemScheme.addEventListener("change", applyTheme));
+    onBeforeUnmount(() => systemScheme.removeEventListener("change", applyTheme));
     async function bootstrap(refresh = false) {
       const current = generation, request = ++bootstrapRequest;
       const isCurrent = () => current === generation && request === bootstrapRequest;
@@ -236,15 +261,9 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         if (!isCurrent()) return;
         configureSaving(`${session.value?.identity.id}:${result.saveScope}`, result.saveCapabilities, result.workspace);
         data.value = result;
-        const scheme = result.appearance["extra.style.color_scheme"];
-        dark.value =
-          scheme === "dark" ||
-          (scheme === "system" &&
-            matchMedia("(prefers-color-scheme: dark)").matches);
+        const scheme = result.appearance[schemePath];
         try {
           if (scheme === "dark" || scheme === "light" || scheme === "system") localStorage.setItem("studio-site-scheme", scheme);
-          const saved = localStorage.getItem("studio-theme");
-          if (saved === "dark" || saved === "light") dark.value = saved === "dark";
         } catch {}
         applyTheme();
       } catch (e) {
@@ -637,7 +656,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                     element(
                       "nav",
                       { "aria-label": t("站点设置") },
-                      renderList(data.value?.groups).map((group) =>
+                      renderList(data.value?.groups).filter(group => group.id !== "appearance").map((group) =>
                         element(
                           "button",
                           {
@@ -657,9 +676,9 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                     ),
                     <details className="studio-preferences"><summary>{t("界面设置")}</summary>
                       <LanguageSwitcher />
+                      <button type="button" aria-current={view.value === "appearance" ? "page" : undefined} onClick={() => navigate("appearance")}><Icon size={18} name="palette" />{t("外观样式")}</button>
                       <button className="theme-switch" aria-pressed={dark.value} onClick={() => {
-                        dark.value = !dark.value;
-                        try { localStorage.setItem("studio-theme", dark.value ? "dark" : "light"); } catch {}
+                        saveStudioAppearance({ ...studioAppearance.value, [schemePath]: dark.value ? "light" : "dark" });
                       }}><Icon size={18} name={dark.value ? "sun" : "moon"} />{t("切换明暗模式")}</button>
                       {props.workspaceSwitcher && <button disabled={pendingMutations.value > 0} onClick={() => void logout()}><Icon size={18} name="switchWorkspace" />{t("切换工作区")}</button>}
                     </details>,
@@ -731,9 +750,9 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                             : t(
                                 navigation.find((n) => n.id === view.value)
                                   ?.label ||
-                                  data.value?.groups.find(
+                                  (view.value === "appearance" ? "外观样式" : data.value?.groups.find(
                                     (g) => g.id === view.value,
-                                  )?.title,
+                                  )?.title),
                               ),
                       ),
                     ),
@@ -1117,8 +1136,8 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                       icon: "link",
                                     },
                                     {
-                                      id: "appearance",
-                                      name: t("外观样式"),
+                                      id: "theme",
+                                      name: t("主题维护"),
                                       icon: "palette",
                                     },
                                   ]).map((item) =>
@@ -1213,9 +1232,21 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                       })
                                     : view.value === "workspace"
                                       ? element(WorkspacePanel, {})
+                                      : view.value === "appearance"
+                                        ? <section className="settings-page" data-settings-group="appearance">
+                                            <div className="page-heading"><div><h1>{t("外观样式")}</h1><p className="muted">{t("仅应用于此设备上的 Studio。")}</p></div>
+                                              <button className="secondary" type="button" disabled={!Object.keys(studioAppearance.value).length} onClick={() => saveStudioAppearance({})}>{t("恢复站点默认外观")}</button>
+                                            </div>
+                                            {appearanceError.value && <p className="notice error" role="alert">{t("无法保存设备外观设置。当前会话仍可使用。")}</p>}
+                                            <div className="card settings-card"><div className="settings-form-group"><div className="settings-grid">
+                                              {blogStyleFields.map(field => <FormField key={field.path} name={field.path} label={field.label} modelValue={studioStyle.value[field.path]}
+                                                onUpdateModelValue={value => saveStudioAppearance({ ...studioAppearance.value, [field.path]: String(value) })} />)}
+                                            </div></div></div>
+                                          </section>
                                       : element(SettingsView, {
                                           key: view.value,
                                           group: view.value,
+                                          onManageWorkspace: () => navigate("workspace"),
                                           onExit: (() => navigate("home")) satisfies EventHandler<typeof SettingsView, "onExit">,
                                           onDirty: (($event) => {
                                             dirty.value = $event;
