@@ -87,9 +87,9 @@ document.addEventListener('astro:before-swap', event => {
   host.initializationRegistry?.clear();
   for (const cleanup of Object.values(host.globalFn?.pjax || {})) cleanup();
   if (host.globalFn) host.globalFn.pjax = {};
-  // Comment SDKs inject their stylesheet once; preserve it when the head is replaced.
-  document.head.querySelectorAll('style').forEach(style => {
-    if (/\.twikoo\b|\.tk-comment\b|\.el-input__inner\b/.test(style.textContent || '')) {
+  // Twikoo injects its own, Element UI and OwO styles once, even when loaded for recent comments.
+  document.head.querySelectorAll('style[type="text/css"]').forEach(style => {
+    if (/\.(?:twikoo\b|tk-|el-|OwO\b)/.test(style.textContent || '')) {
       incoming.head.append(style.cloneNode(true));
     }
   });

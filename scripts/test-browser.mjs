@@ -60,9 +60,21 @@ export async function checkBrowser(options = demo) {
     page.on('response', response => {
       if (response.url().startsWith(origin) && response.status() >= 400) failures.push(`${response.url()} ${response.status()}`);
     });
-    // Local assets and interactions are deterministic; external services are tested separately.
+    const twikooAPI = origin + '/__test/twikoo';
+    const emojiJSON = twikooAPI + '/emoji.json';
+    // Use the real Twikoo bundle with local responses for the service and emoji catalog.
+    const commentFixtures = new Map([
+      [twikooAPI, {data:[], config:{SHOW_EMOTION:'true', EMOTION_CDN:emojiJSON}}],
+      [emojiJSON, {Emoji:{type:'emoticon', container:[{icon:'🙂', text:'Smile'}]}}],
+    ]);
     await page.setRequestInterception(true);
-    page.on('request', request => request.url().startsWith(origin) || request.url().startsWith('data:') ? request.continue() : request.abort());
+    page.on('request', request => {
+      const url = request.url();
+      if (options === demo && commentFixtures.has(url)) {
+        return request.respond({contentType:'application/json', body:JSON.stringify(commentFixtures.get(url))});
+      }
+      return url.startsWith(origin) || url.startsWith('data:') ? request.continue() : request.abort();
+    });
     const settled = () => page.waitForFunction(() => {
       const background = document.querySelector('#loading-box .loading-bg');
       return (!background || getComputedStyle(background).visibility === 'hidden') && !document.documentElement.hasAttribute('data-astro-transition');
@@ -189,6 +201,34 @@ export async function checkBrowser(options = demo) {
       }
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
       await page.screenshot({path:path.join(screenshots,'blog-comment-jump.png')});
+      await page.setViewport({width:390, height:844});
+      await page.goto(origin, {waitUntil:'networkidle0'}); await settled();
+      await page.evaluate(async envId => {
+        await window.getScript('/libs/twikoo/twikoo.all.min.js');
+        await window.twikoo.getRecentComments({envId, pageSize:1});
+        window.__commentNavigationProbe = true;
+      }, twikooAPI);
+      await page.locator(`.home-thread[href="${thread}"]`).click();
+      for (const [index, route] of [thread, '/articles/welcome/', thread].entries()) {
+        if (index) await page.evaluate(route => window.pjax.loadUrl(route), route);
+        await page.waitForFunction(route => location.pathname === route, {}, route); await settled();
+        assert.equal(await page.evaluate(() => window.__commentNavigationProbe), true);
+        await page.evaluate(async envId => {
+          const mount = document.createElement('div');
+          mount.id = 'twikoo-wrap';
+          document.getElementById('post-comment').append(mount);
+          await window.twikoo.init({el:'#twikoo-wrap', envId});
+        }, twikooAPI);
+        const emoji = await page.waitForSelector('#twikoo .OwO-logo');
+        const width = await emoji.evaluate(node => node.querySelector('svg').getBoundingClientRect().width);
+        assert.ok(width > 0 && width <= 32, `${route}: emoji icon width is ${width}px`);
+        assert.equal(await page.$eval('#twikoo .OwO-body', node => getComputedStyle(node).display), 'none');
+        assert.equal(await page.$eval('#twikoo .tk-submit', node => getComputedStyle(node).display), 'flex');
+        await emoji.click();
+        await page.waitForSelector('#twikoo .OwO-item', {visible:true});
+        if (index === 0) await page.screenshot({path:path.join(screenshots,'blog-thread-comment-emoji-mobile.png')});
+      }
+      await page.setViewport({width:1440, height:900});
       await page.goto(origin, {waitUntil:'networkidle0'}); await settled();
       await page.evaluate(() => {window.__codeNavigationProbe = true; window.pjax.loadUrl('/code-check/');});
       await page.waitForFunction(() => location.pathname === '/code-check/');
