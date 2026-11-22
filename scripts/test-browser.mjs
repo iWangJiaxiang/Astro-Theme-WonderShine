@@ -121,37 +121,6 @@ export async function checkBrowser(options = demo) {
           await page.$eval(menu, link => link.blur());
         }
 
-        if (!prefix) {
-          await page.setViewport({width:320,height:720});
-          await page.waitForSelector(trigger, {visible:true});
-          const layout = await page.evaluate(() => {
-            const link = document.querySelector('#site-name');
-            const title = link.querySelector('span');
-            const toolbar = document.querySelector('#nav-right');
-            const originalTitle = title.textContent;
-            const search = document.createElement('div');
-            search.id = 'search-button';
-            search.innerHTML = '<button class="site-page nav-item" type="button">Search</button>';
-            try {
-              title.textContent = 'WonderShine: a very long site title with every navigation tool enabled';
-              toolbar.prepend(search);
-              return {
-                titleRight: link.getBoundingClientRect().right,
-                titleWidth: link.clientWidth,
-                titleScrollWidth: link.scrollWidth,
-                toolbarLeft: toolbar.getBoundingClientRect().left,
-                toolbarRight: toolbar.getBoundingClientRect().right,
-                viewportWidth: innerWidth,
-              };
-            } finally {
-              title.textContent = originalTitle;
-              search.remove();
-            }
-          });
-          assert.ok(layout.titleRight <= layout.toolbarLeft && layout.titleScrollWidth > layout.titleWidth &&
-            layout.toolbarRight <= layout.viewportWidth, JSON.stringify(layout));
-        }
-
         await page.setViewport({width:390, height:844});
         await page.waitForSelector(trigger, {visible:true});
         await page.waitForSelector('.home-thread', {visible:true});
@@ -191,6 +160,39 @@ export async function checkBrowser(options = demo) {
         await page.setViewport({width:1440,height:900});
         await closed();
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+
+        if (!prefix) {
+          await page.setViewport({width:320,height:720});
+          await page.waitForSelector(trigger, {visible:true});
+          const layout = await page.evaluate(() => {
+            const link = document.querySelector('#site-name');
+            const title = link.querySelector('span');
+            const toolbar = document.querySelector('#nav-right');
+            const originalTitle = title.textContent;
+            const search = document.createElement('div');
+            search.id = 'search-button';
+            search.innerHTML = '<button class="site-page nav-item" type="button">Search</button>';
+            try {
+              title.textContent = 'WonderShine: a very long site title with every navigation tool enabled';
+              toolbar.prepend(search);
+              return {
+                titleRight: link.getBoundingClientRect().right,
+                titleWidth: link.clientWidth,
+                titleScrollWidth: link.scrollWidth,
+                toolbarLeft: toolbar.getBoundingClientRect().left,
+                groupWidth: document.querySelector('#nav-group').clientWidth,
+                groupDisplay: getComputedStyle(document.querySelector('#nav-group')).display,
+                toolbarRight: toolbar.getBoundingClientRect().right,
+                viewportWidth: innerWidth,
+              };
+            } finally {
+              title.textContent = originalTitle;
+              search.remove();
+            }
+          });
+          assert.ok(layout.titleRight <= layout.toolbarLeft && layout.titleScrollWidth > layout.titleWidth &&
+            layout.toolbarRight <= layout.viewportWidth, JSON.stringify(layout));
+        }
 
         if (!prefix) {
           await page.emulateMediaFeatures([{name:'prefers-reduced-motion', value:'reduce'}]);
