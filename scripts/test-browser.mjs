@@ -109,6 +109,7 @@ export async function checkBrowser(options = demo) {
         for (const width of [1440, 1165]) {
           await page.setViewport({width, height:900});
           await page.waitForSelector(menu, {visible:true});
+          await page.waitForSelector('.home-thread', {visible:true});
           assert.equal(await page.$eval(trigger, button => button.checkVisibility()), false);
           if (width === 1440) await (await page.$(menu)).hover();
           else await page.focus(menu);
@@ -122,6 +123,7 @@ export async function checkBrowser(options = demo) {
 
         await page.setViewport({width:390, height:844});
         await page.waitForSelector(trigger, {visible:true});
+        await page.waitForSelector('.home-thread', {visible:true});
         await finishLayout();
         assert.equal(await page.$eval(menu, link => link.checkVisibility({visibilityProperty:true})), false);
         await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-mobile.png')});
