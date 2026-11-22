@@ -51,7 +51,7 @@ Summary scans and relationship guards use fresh text-only reads without populati
 
 App-managed clones keep two bounded, private snapshots per workspace. The media snapshot stores paths and file metadata. The content snapshot stores summary facts for articles, threads, pages, collections and topics. A matching snapshot skips directory discovery on reopen. Saves update the content index, uploads add media entries, and sync or publish invalidates snapshots before checkout changes. Explicit refresh rereads the checkout. Opening a document and checking a save revision continue to use current files.
 
-A desktop folder that can change outside Studio shows the last display snapshot while it reads the current files. A saved snapshot cannot prove that an external file is unchanged. The media grid requests images on approach to the viewport and creates small raster thumbnails on the device. Private clones retain a bounded thumbnail cache. Opening a card checks the image path again and shows the original in a dialog.
+A desktop folder that can change outside Studio shows the last display snapshot while it reads the current files. A saved snapshot cannot prove that an external file is unchanged. The media grid requests images on approach to the viewport and creates small raster thumbnails on the device. In private clones, the media index can serve a matching cached thumbnail without checking or reading the original. A cache miss checks the current file, as does opening the original in a dialog.
 
 Git downloads the selected branch's full history without recursively downloading submodules.
 

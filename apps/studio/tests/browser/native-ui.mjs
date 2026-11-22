@@ -42,7 +42,7 @@ const offlineRequests = [];
 let siteOpened;
 const openedSite = new Promise(resolve => { siteOpened = resolve; });
 let nextResource = 1, worktreeScans = 0, gitInspections = 0;
-let mediaDirectoryReads = 0, thumbnailSourceReads = 0;
+let mediaDirectoryReads = 0, thumbnailSourceReads = 0, thumbnailSourceStats = 0;
 let markMediaSnapshotWritten;
 const mediaSnapshotWritten = new Promise(resolve => { markMediaSnapshotWritten = resolve; });
 try {
@@ -180,7 +180,9 @@ try {
             assert.ok(!gitInspections || !path.endsWith('/repo/assets/git-fixture'), 'Mobile Git never enumerates tracked assets via WebView IPC');
             value = (await fs.readdir(path, { withFileTypes: true })).map(item => ({ name: item.name, isFile: item.isFile(), isDirectory: item.isDirectory(), isSymlink: item.isSymbolicLink() })); break;
           case 'remove': { const stat = await fs.lstat(path); if (stat.isDirectory() && !stat.isSymbolicLink()) await fs.rmdir(path); else await fs.unlink(path); break; }
-          case 'stat': case 'lstat': value = fileInfo(await fs[operation](path)); break;
+          case 'stat': case 'lstat':
+            if (path === join(root, 'public/uploads/example.png')) thumbnailSourceStats++;
+            value = fileInfo(await fs[operation](path)); break;
           default: throw new Error('Unsupported fixture FS command: ' + command);
         }
       } else if (command === 'plugin:keyring-store|get_passwords') value = args.accounts.map(key => keyring.get(key) ?? null);
@@ -542,18 +544,22 @@ try {
       snapshotTimeout = setTimeout(() => reject(new Error('Media snapshot was not persisted')), 10000);
     })]);
   } finally { clearTimeout(snapshotTimeout); }
-  assert.ok(mediaDirectoryReads > 0 && thumbnailSourceReads > 0, 'The initial media visit scans, then reads the thumbnail source');
+  assert.ok(mediaDirectoryReads > 0 && thumbnailSourceReads > 0 && thumbnailSourceStats > 0,
+    'The initial media visit scans, checks and reads the thumbnail source');
   const beforeMediaReopen = { directories: mediaDirectoryReads, sourceReads: thumbnailSourceReads };
   await restartNativeFixture(); await heading('连接创作工作区'); await click('打开工作区'); await heading('今天，写点什么？');
+  const beforeMediaVisit = thumbnailSourceStats;
   await click('媒体库'); await waitForThumbnail();
   assert.deepEqual({ directories: mediaDirectoryReads, sourceReads: thumbnailSourceReads }, beforeMediaReopen,
-    'Reopening the App reuses both the media metadata and thumbnail without enumerating or rereading originals');
+    'Reopening the App reuses the media metadata and thumbnail without enumerating or reading the original');
+  assert.equal(thumbnailSourceStats, beforeMediaVisit, 'The cached thumbnail does not check the original');
   await screenshot('media-desktop');
   await page.click(firstTile);
   await page.waitForFunction(() => {
     const image = document.querySelector('.media-details[open] img');
     return image?.src.includes('/__asset/') && image.complete && image.naturalWidth > 0;
   });
+  assert.ok(thumbnailSourceStats > beforeMediaVisit, 'Opening the original still checks the current file');
   await screenshot('media-preview-desktop');
   await page.keyboard.press('Escape');
   await page.waitForSelector('.media-details[open]', { hidden: true });

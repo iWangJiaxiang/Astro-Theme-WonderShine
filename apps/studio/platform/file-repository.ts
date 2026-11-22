@@ -4,7 +4,7 @@ import { imageMime, MAX_UPLOAD_SIZE, type MediaFile, type MediaListing, type Med
 import { isRepositoryPath } from '../shared/repository-path';
 import { StudioError } from '../core/errors';
 import { validateUpload, validateMediaPath } from '../core/media-validation';
-import { ensureDirectory, missingFile, parentPath, type WorkspaceFiles } from './filesystem';
+import { ensureDirectory, missingFile, parentPath, type FileInfo, type WorkspaceFiles } from './filesystem';
 import { withWorkspaceLock } from './queue';
 import { withSnapshotLocks } from './snapshot-queue';
 import { contentRevisions, type RevisionRegistry } from '../core/revision';
@@ -118,7 +118,7 @@ export class FileRepository implements Repository {
     }
     return snapshots;
   }
-  async listMedia(): Promise<MediaListing> {
+  async listMedia(_refresh?: boolean, onFile?: (path: string, info: FileInfo) => void): Promise<MediaListing> {
     const result: MediaListing = { items: [], truncated: false, maxFileSize: MAX_UPLOAD_SIZE };
     for (const directory of ['public', 'content']) {
       const listing = await this.walk(directory, path => { try { validateMediaPath(path); return !!imageMime(path); } catch { return false; } });
@@ -130,6 +130,7 @@ export class FileRepository implements Repository {
           try {
             const info = this.files.statChecked ? await this.files.statChecked(this.location(path)) : await this.files.stat(await this.safe(path));
             if (!info.isFile()) return;
+            onFile?.(path, info);
             return { path, directory: parentPath(path), name: path.split('/').at(-1)!, size: info.size, mime: imageMime(path)!,
               ...(info.size > MAX_UPLOAD_SIZE ? { unavailable: '图片超过 20 MB 预览限制' } : {}) };
           } catch (error) { if (!missingFile(error)) throw error; }

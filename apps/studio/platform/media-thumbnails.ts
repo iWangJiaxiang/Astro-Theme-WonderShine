@@ -3,6 +3,7 @@ import { validateMediaPath } from '../core/media-validation';
 import { MAX_UPLOAD_SIZE, type MediaItem } from '../shared/media';
 import type { Repository } from '../shared/repository';
 import type { WorkspaceFiles } from './filesystem';
+import { mediaSource, type MediaSource } from './media-index';
 
 const maxEntries = 160, maxBytes = 160 * 1024, maxSide = 360;
 let database: Promise<IDBDatabase | null> | undefined;
@@ -87,20 +88,19 @@ async function shrink(image: Blob): Promise<Blob | null> {
   } finally { release(); }
 }
 
-export function createNativeMediaImageLoader(files: WorkspaceFiles, root: string, scope: string, repository: Repository, managed: boolean) {
+export function createNativeMediaImageLoader(files: WorkspaceFiles, root: string, scope: string, repository: Repository, managed: boolean,
+  indexedSource: (path: string) => MediaSource | undefined) {
   const slots = [Promise.resolve(), Promise.resolve(), Promise.resolve()];
   let next = 0;
-  async function load(item: MediaItem, thumbnail: boolean, signal: AbortSignal, version: number): Promise<Blob | string> {
+  async function load(item: MediaItem, resize: boolean, signal: AbortSignal, version: number, indexedKey?: string): Promise<Blob | string> {
     signal.throwIfAborted();
-    validateMediaPath(item.path);
     const path = root + '/' + item.path;
     const info = await files.statChecked!(path);
     signal.throwIfAborted();
     if (!info.isFile() || info.size > MAX_UPLOAD_SIZE) throw new Error('Media file is unavailable');
-    const url = convertFileSrc(path) + '?v=' + info.mtimeMs + '-' + info.size + '-' + version;
-    if (!thumbnail || !/^image\/(jpeg|png|webp|avif|bmp)$/.test(item.mime)) return url;
-    const key = JSON.stringify([scope, item.path, info.mtimeMs, info.ctimeMs, info.size, info.ino]);
-    const cached = managed ? await getThumbnail(key).catch(() => undefined) : undefined;
+    if (!resize) return convertFileSrc(path) + '?v=' + info.mtimeMs + '-' + info.size + '-' + version;
+    const key = JSON.stringify([scope, item.path, ...mediaSource(info)]);
+    const cached = managed && key !== indexedKey ? await getThumbnail(key).catch(() => undefined) : undefined;
     signal.throwIfAborted();
     if (cached) return cached;
     const file = await repository.readMedia(item.path);
@@ -112,10 +112,20 @@ export function createNativeMediaImageLoader(files: WorkspaceFiles, root: string
     if (resized && managed) void saveThumbnail(key, resized).catch(() => {});
     return resized || blob;
   }
-  return (item: MediaItem, thumbnail: boolean, signal: AbortSignal, version: number) => {
-    if (!thumbnail) return load(item, false, signal, version);
+  return async (item: MediaItem, thumbnail: boolean, signal: AbortSignal, version: number): Promise<Blob | string> => {
+    signal.throwIfAborted();
+    validateMediaPath(item.path);
+    if (!thumbnail || !/^image\/(jpeg|png|webp|avif|bmp)$/.test(item.mime)) return load(item, false, signal, version);
+    const source = indexedSource(item.path);
+    const indexedKey = source && JSON.stringify([scope, item.path, ...source]);
+    if (indexedKey) {
+      const cached = await getThumbnail(indexedKey).catch(() => undefined);
+      signal.throwIfAborted();
+      // A refresh or checkout can invalidate the listing during the cache read.
+      if (cached && indexedSource(item.path) === source) return cached;
+    }
     const slot = next++ % slots.length;
-    const request = slots[slot].then(() => load(item, true, signal, version));
+    const request = slots[slot].then(() => load(item, true, signal, version, indexedKey));
     slots[slot] = request.then(() => {}, () => {});
     return request;
   };

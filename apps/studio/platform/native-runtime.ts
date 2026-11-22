@@ -94,7 +94,7 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
     dispose(); onDisconnect();
   } });
   setMediaResolver((path, version) => { validateMediaPath(path); return convertFileSrc(root + '/' + path) + `?v=${version}`; });
-  setMediaImageLoader(createNativeMediaImageLoader(files, root, JSON.stringify(scope), repository, managed));
+  setMediaImageLoader(createNativeMediaImageLoader(files, root, JSON.stringify(scope), repository, managed, media.thumbnailSource));
   setMediaPreviewLoader(managed ? undefined : media.preview);
   setApiTransport((path, init) => {
     if (disposed) return Promise.reject(new Error('连接已更换，请重试'));

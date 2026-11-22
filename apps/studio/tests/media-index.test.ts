@@ -20,7 +20,7 @@ test('managed media lists survive reopening, keep uncommitted uploads and invali
   let scans = 0;
   const repository = new FileRepository(files, root, state);
   const scan = repository.listMedia.bind(repository);
-  repository.listMedia = () => { scans++; return scan(); };
+  repository.listMedia = (...args) => { scans++; return scan(...args); };
   const syncError = new Error('Checkout interrupted');
   Object.assign(repository, { workspace: {
     async sync() {
@@ -32,9 +32,12 @@ test('managed media lists survive reopening, keep uncommitted uploads and invali
 
   const initial = open();
   assert.equal((await initial.repository.listMedia()).items.length, 1);
+  const firstSource = initial.thumbnailSource('public/img/first.png');
+  assert.equal(firstSource?.[2], png.length);
   initial.dispose();
   const reopened = open();
   assert.equal((await reopened.repository.listMedia()).items.length, 1);
+  assert.deepEqual(reopened.thumbnailSource('public/img/first.png'), firstSource);
   assert.equal(scans, 1);
   const saved = await reopened.repository.uploadMedia('public/img', 'new.png', png);
   reopened.dispose();
@@ -43,6 +46,7 @@ test('managed media lists survive reopening, keep uncommitted uploads and invali
   assert.ok((await afterUpload.repository.listMedia()).items.some(item => item.path === saved.item.path));
   assert.equal(scans, 1);
   await assert.rejects(afterUpload.repository.workspace!.sync(), error => error === syncError);
+  assert.equal(afterUpload.thumbnailSource('public/img/first.png'), undefined);
   afterUpload.dispose();
   const afterSync = open();
   assert.deepEqual((await afterSync.repository.listMedia()).items.map(item => item.path), [saved.item.path]);
@@ -51,6 +55,7 @@ test('managed media lists survive reopening, keep uncommitted uploads and invali
 
   const external = open('workspace-one', false);
   assert.deepEqual((await external.preview())?.items.map(item => item.path), [saved.item.path]);
+  assert.equal(external.thumbnailSource(saved.item.path), undefined);
   await fs.writeFile(join(root, 'public/img/external.png'), png);
   assert.equal((await external.repository.listMedia()).items.length, 2);
   assert.equal(scans, 3);
@@ -59,7 +64,12 @@ test('managed media lists survive reopening, keep uncommitted uploads and invali
   const other = open('workspace-two');
   assert.equal(await other.preview(), null);
   await other.repository.listMedia();
+  const beforeRefresh = other.thumbnailSource(saved.item.path);
+  const modified = new Date('2025-01-01T00:00:00Z');
+  await fs.utimes(join(root, saved.item.path), modified, modified);
   await other.repository.listMedia(true);
+  assert.equal(other.thumbnailSource(saved.item.path)?.[0], modified.getTime());
+  assert.notDeepEqual(other.thumbnailSource(saved.item.path), beforeRefresh);
   other.dispose();
   const afterRefresh = open('workspace-two');
   assert.equal((await afterRefresh.repository.listMedia()).items.length, 2);
