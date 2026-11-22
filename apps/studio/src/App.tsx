@@ -91,7 +91,6 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       error = ref<Message>(""),
       view = ref("home"),
       dirty = ref(false),
-      menuOpen = ref(false),
       dark = ref(window.document.documentElement.dataset.theme === "dark");
     const studioAppearance = ref(readStudioAppearance()), appearanceError = ref(false);
     const systemScheme = matchMedia("(prefers-color-scheme: dark)");
@@ -111,13 +110,6 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
     const navigationSize = window.matchMedia("(max-width: 760px), (max-width: 1024px) and (pointer: coarse)");
     const mobileNavigation = ref(navigationSize.matches);
     let navigationFrame = 0;
-    watch(menuOpen, (open) => {
-      window.cancelAnimationFrame(navigationFrame);
-      navigationFrame = window.requestAnimationFrame(() => {
-        const selector = open ? '.sidebar .navigation-close' : '.mobile-menu';
-        if (mobileNavigation.value) window.document.querySelector<HTMLButtonElement>(selector)?.focus();
-      });
-    });
     onMounted(() => {
       const media = navigationSize;
       const resize = () => {
@@ -125,10 +117,8 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         // Only migrate controls that this breakpoint hides or makes inert.
         const needsFocus = media.matches
           ? focused?.closest('.sidebar')
-          : focused?.closest('.mobile-tabbar, .navigation-close, .sidebar-backdrop');
+          : focused?.closest('.mobile-tabbar');
         mobileNavigation.value = media.matches;
-        menuOpen.value = false;
-        // Replace any drawer-open/close focus request with the breakpoint target.
         window.cancelAnimationFrame(navigationFrame);
         if (!needsFocus) return;
         navigationFrame = window.requestAnimationFrame(() => {
@@ -143,18 +133,8 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
           if (target && !target.closest('[inert]') && target.getClientRects().length) target.focus();
         });
       };
-      const keydown = (event: KeyboardEvent) => {
-        if (reauthentication.value || !mobileNavigation.value || !menuOpen.value) return;
-        if (event.key === 'Escape') { event.preventDefault(); menuOpen.value = false; }
-        if (event.key !== 'Tab') return;
-        const items = [...window.document.querySelectorAll<HTMLElement>('.sidebar button:not(:disabled), .sidebar a[href], .sidebar summary, .sidebar select')].filter(node => node.getClientRects().length);
-        const first = items[0], last = items.at(-1);
-        if (event.shiftKey && window.document.activeElement === first) { event.preventDefault(); last?.focus(); }
-        else if (!event.shiftKey && window.document.activeElement === last) { event.preventDefault(); first?.focus(); }
-      };
       media.addEventListener('change', resize);
-      window.document.addEventListener('keydown', keydown);
-      navigationCleanup = () => { media.removeEventListener('change', resize); window.document.removeEventListener('keydown', keydown); window.cancelAnimationFrame(navigationFrame); };
+      navigationCleanup = () => { media.removeEventListener('change', resize); window.cancelAnimationFrame(navigationFrame); };
     });
     let navigationCleanup = () => {};
     onBeforeUnmount(() => navigationCleanup());
@@ -207,6 +187,10 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       { id: "help", label: "使用指南", icon: "book" },
     ];
     const primaryNavigation = navigation.filter(item => ["home", "article", "thread", "media"].includes(item.id));
+    const tabs = [...primaryNavigation, { id: "more", label: "更多", icon: "more" }];
+    const availableNavigation = () => navigation.filter(item =>
+      (item.id !== "workspace" || data.value?.workspace) && (item.id !== "native-ai" || data.value?.nativeAi));
+    const siteGroups = () => (data.value?.groups ?? []).filter(group => group.id !== "appearance");
     const icons: Record<string, string> = {
       site: "globe",
       navigation: "menu",
@@ -449,28 +433,63 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         () => !!session.value && !reauthentication.value && mobileNavigation.value,
         canSwipeBack,
         action => {
-          if (action === "close") { menuOpen.value = false; return; }
           if (action === "back") { swipeBack(); return; }
-          const index = primaryNavigation.findIndex(item => item.id === view.value);
-          const next = primaryNavigation[index + (action === "next" ? 1 : -1)];
+          const index = tabs.findIndex(item => item.id === view.value);
+          const next = tabs[index + (action === "next" ? 1 : -1)];
           if (index >= 0 && next) navigate(next.id);
         },
       );
     });
     onBeforeUnmount(() => removeSwipe());
     onBeforeUnmount(() => viewportPosition.dispose());
+    function navigationGroups(more: boolean) {
+      function destination(id: string, title: string, icon: string) {
+        const active = view.value === id;
+        return <button key={id} type="button" aria-current={active ? "page" : undefined}
+          className={classes({ active })} onClick={() => navigate(id)}>
+          <Icon name={icon} size={18} />{t(title)}
+          {more ? <Icon name="arrow" size={16} /> : active ? <span className="nav-indicator" /> : null}
+        </button>;
+      }
+      const content = availableNavigation().filter(item => !more || !primaryNavigation.includes(item));
+      return <div className={more ? "more-groups" : "sidebar-navigation"}>
+        <p className="nav-label">{t("创作空间")}</p>
+        <nav aria-label={t("内容导航")}>{content.map(item => destination(item.id, item.label, item.icon))}</nav>
+        <p className="nav-label">{t("站点管理")}</p>
+        {loadingSite.value && !data.value && <LoadingState label="正在加载站点…" compact />}
+        <nav aria-label={t("站点设置")}>{siteGroups().map(group => destination(group.id, group.title, icons[group.id] || "file"))}</nav>
+        <details className="studio-preferences" open={more || undefined}><summary>{t("界面设置")}</summary>
+          <LanguageSwitcher />
+          <button type="button" aria-current={view.value === "appearance" ? "page" : undefined} onClick={() => navigate("appearance")}><Icon size={18} name="palette" />{t("外观样式")}</button>
+          <button type="button" className="theme-switch" aria-pressed={dark.value} onClick={() => {
+            saveStudioAppearance({ ...studioAppearance.value, [schemePath]: dark.value ? "light" : "dark" });
+          }}>{t("切换明暗模式")}</button>
+          {props.workspaceSwitcher && <button type="button" disabled={pendingMutations.value > 0} onClick={() => void logout()}><Icon size={18} name="switchWorkspace" />{t("切换工作区")}</button>}
+        </details>
+      </div>;
+    }
+    function accountControls() {
+      const identity = session.value!.identity;
+      return <Fragment>
+        <LegacyRecovery />
+        <div className="sidebar-bottom">
+          <span className="avatar">{identity.name.slice(0, 1).toUpperCase()}</span>
+          <div><strong>{identity.name}</strong><small>{t(identity.method === "oidc" ? "OIDC 管理员" : "站点管理员")}</small></div>
+          <button type="button" aria-label={t("退出登录")} className="icon-button" onClick={() => void logout()}><Icon name="logout" size={18} /></button>
+        </div>
+      </Fragment>;
+    }
     function positionKey(section = view.value, doc: Destination["doc"] = document.value) {
       return doc ? `document:${doc.path}:${doc.mode}` : `view:${section}`;
     }
     function navigate(next: string) {
       if (!leave()) return;
-      const returning = !!document.value && next === view.value;
+      const returning = (!!document.value && next === view.value) || (next === "more" && previous.value.at(-1)?.view === "more");
       rememberDestination(positionKey(next, null));
       if (next === "home") previous.value = [];
       document.value = null;
       dirty.value = false;
       view.value = next;
-      menuOpen.value = false;
       viewportPosition.enter(positionKey(), returning);
       if (next === "home") void loadArticles();
     }
@@ -567,24 +586,9 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                   className: classes("studio-shell"),
                   "data-swipe-back": mobileNavigation.value && canSwipeBack() ? "" : undefined,
                 },
-                menuOpen.value
-                  ? element("button", {
-                      "aria-label": t("关闭导航"),
-                      className: classes("sidebar-backdrop"),
-                      onClick: domEvent(($event: Event) => {
-                        menuOpen.value = false;
-                      }),
-                    })
-                  : null,
                 element(
                   "aside",
-                  { id: "studio-navigation", inert: mobileNavigation.value && !menuOpen.value, className: classes("sidebar", { open: menuOpen.value }) },
-                  element("button", {
-                    className: classes("icon-button navigation-close"),
-                    hidden: !mobileNavigation.value,
-                    "aria-label": t("关闭导航"),
-                    onClick: domEvent(() => { menuOpen.value = false; }),
-                  }, element(Icon, { name: "close" })),
+                  { id: "studio-navigation", hidden: mobileNavigation.value, className: classes("sidebar") },
                   element(
                     "div",
                     { className: classes("brand") },
@@ -601,125 +605,12 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                       element("small", null, t("创作中心")),
                     ),
                   ),
-                  element(
-                    "div",
-                    { className: classes("sidebar-navigation") },
-                    element(
-                      "p",
-                      { className: classes("nav-label") },
-                      t("创作空间"),
-                    ),
-                    element(
-                      "nav",
-                      { "aria-label": t("内容导航") },
-                      renderList(
-                        navigation.filter(
-                          (item) =>
-                            (item.id !== "workspace" ||
-                              data.value?.workspace) &&
-                            (item.id !== "native-ai" || data.value?.nativeAi),
-                        ),
-                      ).map((item) =>
-                        element(
-                          "button",
-                          {
-                            key: item.id,
-                            "aria-current": view.value === item.id ? "page" : undefined,
-                            className: classes({
-                              active: view.value === item.id,
-                            }),
-                            onClick: domEvent(($event: Event) => {
-                              navigate(item.id);
-                            }),
-                          },
-                          element(Icon, { name: item.icon }),
-                          t(item.label),
-                          view.value === item.id
-                            ? element("span", {
-                                className: classes("nav-indicator"),
-                              })
-                            : null,
-                        ),
-                      ),
-                    ),
-                    element(
-                      "p",
-                      { className: classes("nav-label") },
-                      t("站点管理"),
-                    ),
-                    loadingSite.value && !data.value
-                      ? element(LoadingState, {
-                          label: "正在加载站点…",
-                          compact: true,
-                        })
-                      : null,
-                    element(
-                      "nav",
-                      { "aria-label": t("站点设置") },
-                      renderList(data.value?.groups).filter(group => group.id !== "appearance").map((group) =>
-                        element(
-                          "button",
-                          {
-                            key: group.id,
-                            "aria-current": view.value === group.id ? "page" : undefined,
-                            className: classes({
-                              active: view.value === group.id,
-                            }),
-                            onClick: domEvent(($event: Event) => {
-                              navigate(group.id);
-                            }),
-                          },
-                          element(Icon, { name: icons[group.id] || "file" }),
-                          t(group.title),
-                        ),
-                      ),
-                    ),
-                    <details className="studio-preferences"><summary>{t("界面设置")}</summary>
-                      <LanguageSwitcher />
-                      <button type="button" aria-current={view.value === "appearance" ? "page" : undefined} onClick={() => navigate("appearance")}><Icon size={18} name="palette" />{t("外观样式")}</button>
-                      <button className="theme-switch" aria-pressed={dark.value} onClick={() => {
-                        saveStudioAppearance({ ...studioAppearance.value, [schemePath]: dark.value ? "light" : "dark" });
-                      }}><Icon size={18} name={dark.value ? "sun" : "moon"} />{t("切换明暗模式")}</button>
-                      {props.workspaceSwitcher && <button disabled={pendingMutations.value > 0} onClick={() => void logout()}><Icon size={18} name="switchWorkspace" />{t("切换工作区")}</button>}
-                    </details>,
-                  ),
-                  element(LegacyRecovery, null),
-                  element(
-                    "div",
-                    { className: classes("sidebar-bottom") },
-                    element(
-                      "span",
-                      { className: classes("avatar") },
-                      session.value.identity.name.slice(0, 1).toUpperCase(),
-                    ),
-                    element(
-                      "div",
-                      null,
-                      element("strong", null, session.value.identity.name),
-                      element(
-                        "small",
-                        null,
-                        session.value.identity.method === "oidc"
-                          ? t("OIDC 管理员")
-                          : t("站点管理员"),
-                      ),
-                    ),
-                    element(
-                      "button",
-                      {
-                        "aria-label": t("退出登录"),
-                        className: classes("icon-button"),
-                        onClick: domEvent(($event: Event) => {
-                          logout();
-                        }),
-                      },
-                      element(Icon, { name: "logout" }),
-                    ),
-                  ),
+                  mobileNavigation.value ? null : navigationGroups(false),
+                  mobileNavigation.value ? null : accountControls(),
                 ),
                 element(
                   "div",
-                  { inert: mobileNavigation.value && menuOpen.value, className: classes("main-shell") },
+                  { className: classes("main-shell") },
                   element(
                     "header",
                     { className: classes("topbar") },
@@ -748,8 +639,8 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                           : view.value === "home"
                             ? t("工作台")
                             : t(
-                                navigation.find((n) => n.id === view.value)
-                                  ?.label ||
+                                tabs.find((n) => n.id === view.value)?.label ||
+                                navigation.find((n) => n.id === view.value)?.label ||
                                   (view.value === "appearance" ? "外观样式" : data.value?.groups.find(
                                     (g) => g.id === view.value,
                                   )?.title),
@@ -798,25 +689,19 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                   element(
                     "nav",
                     { className: classes("mobile-tabbar"), hidden: !mobileNavigation.value, "aria-label": t("主导航") },
-                    primaryNavigation.map(item => element("button", {
+                    tabs.map(item => element("button", {
                       key: item.id,
                       type: "button",
+                      className: item.id === "more" ? "mobile-menu" : undefined,
+                      hidden: !mobileNavigation.value,
                       "data-destination": item.id,
-                      "aria-current": view.value === item.id ? "page" : undefined,
+                      "aria-current": view.value === item.id ? "page"
+                        : item.id === "more" && !primaryNavigation.some(tab => tab.id === view.value) ? "true" : undefined,
                       onClick: domEvent(() => {
                         if (view.value === item.id && !document.value) window.scrollTo(0, 0);
                         else navigate(item.id);
                       }),
                     }, element(Icon, { name: item.icon }), t(item.id === "media" ? "媒体" : item.label))),
-                    element("button", {
-                      type: "button",
-                      hidden: !mobileNavigation.value,
-                      className: classes("mobile-menu"),
-                      "aria-expanded": menuOpen.value,
-                      "aria-controls": "studio-navigation",
-                      "aria-current": primaryNavigation.some(item => item.id === view.value) ? undefined : "true",
-                      onClick: domEvent(() => { menuOpen.value = true; }),
-                    }, element(Icon, { name: "more" }), t("更多")),
                   ),
                   element(
                     "main",
@@ -906,7 +791,13 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                               "onBack"
                             >,
                           })
-                        : view.value === "home"
+                        : view.value === "more"
+                          ? <section className="more-page">
+                              <div className="page-heading"><h1>{t("更多")}</h1></div>
+                              {navigationGroups(true)}
+                              {accountControls()}
+                            </section>
+                          : view.value === "home"
                           ? element(
                               Fragment,
                               null,

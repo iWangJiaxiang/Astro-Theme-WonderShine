@@ -11,6 +11,7 @@ export interface WorkspaceFiles {
    * never authorization for a later read. Adapters without these retain repository checks. */
   readCheckedFile?(path: string, limit: number): Promise<Uint8Array>;
   readCheckedDirectory?(path: string): Promise<DirectoryEntry[]>;
+  statChecked?(path: string): Promise<FileInfo>;
   writeFile(path: string, data: Uint8Array | string, options?: unknown): Promise<void>;
   readdir(path: string): Promise<string[]>;
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
@@ -25,6 +26,13 @@ export interface WorkspaceFiles {
 }
 export const missingFile = (error: unknown) => !!error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT';
 export const parentPath = (path: string) => path.slice(0, path.lastIndexOf('/')) || '/';
+export function comparePathComponents(a: string, b: string): number {
+  const left = a.split('/'), right = b.split('/');
+  for (let index = 0; index < Math.min(left.length, right.length); index++) {
+    if (left[index] !== right[index]) return left[index] < right[index] ? -1 : 1;
+  }
+  return left.length - right.length;
+}
 export async function ensureDirectory(fs: WorkspaceFiles, path: string): Promise<void> {
   try { const info = await fs.lstat(path); if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('目录不可用'); }
   catch (error) { if (!missingFile(error)) throw error; await ensureDirectory(fs, parentPath(path)); await fs.mkdir(path); }

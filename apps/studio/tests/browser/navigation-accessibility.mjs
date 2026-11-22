@@ -1,20 +1,13 @@
 import assert from 'node:assert/strict';
-import { checkDrawerScroll } from './drawer-scroll.mjs';
+async function waitForMobileNavigation(page) {
+  await page.waitForFunction(() => document.querySelector('.sidebar')?.hidden &&
+    !document.querySelector('.mobile-tabbar')?.hidden &&
+    !document.querySelector('.main-shell')?.inert);
+}
 
-// Focus and inert update before the 200ms transform transition finishes. Wait for
-// both the final geometry and animation completion, including reduced-motion mode.
-async function waitForDrawer(page, open) {
-  await page.waitForFunction(open => {
-    const sidebar = document.querySelector('.sidebar');
-    const main = document.querySelector('.main-shell');
-    if (!sidebar || !main || sidebar.classList.contains('open') !== open) return false;
-    const rect = sidebar.getBoundingClientRect();
-    const settled = !sidebar.getAnimations().some(animation => animation.playState !== 'finished' && animation.playState !== 'idle');
-    const geometry = open
-      ? Math.abs(rect.left) < 0.5 && rect.right <= innerWidth && rect.width > 0
-      : rect.right <= 0 && Math.abs(rect.right) < 0.5;
-    return settled && geometry && sidebar.inert === !open && main.inert === open;
-  }, { polling: 'raf' }, open);
+async function openMore(page) {
+  await page.waitForSelector('.mobile-menu[aria-current="page"]');
+  await page.waitForSelector('.more-page h1', { visible: true });
 }
 
 async function assertFocusedControl(page, selector) {
@@ -40,11 +33,11 @@ async function assertFocusedControl(page, selector) {
 async function waitForDesktopNavigation(page) {
   await page.waitForFunction(() => {
     const sidebar = document.querySelector('.sidebar');
-    return sidebar && !sidebar.inert && !sidebar.classList.contains('open') &&
+    return sidebar && !sidebar.hidden &&
       Math.abs(sidebar.getBoundingClientRect().left) < 0.5 &&
       !document.querySelector('.main-shell')?.inert;
   });
-  // Include queued focus migration, even when no drawer state changed.
+  // Include queued focus migration after the breakpoint hides a navigation surface.
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
@@ -57,37 +50,10 @@ async function checkBreakpointFocus(page) {
     await waitForDesktopNavigation(page);
     await page.focus(current);
     await resize(mobile);
-    await waitForDrawer(page, false);
+    await waitForMobileNavigation(page);
     await page.waitForFunction(() => document.activeElement?.matches('.mobile-menu'));
     await assertFocusedControl(page, '.mobile-menu');
 
-    // A focused close button disappears when the open drawer becomes desktop navigation.
-    await page.keyboard.press('Enter');
-    await waitForDrawer(page, true);
-    await page.waitForFunction(() => document.activeElement?.matches('.navigation-close'));
-    await resize(desktop);
-    await waitForDesktopNavigation(page);
-    await assertFocusedControl(page, current);
-    await page.keyboard.press('Tab');
-    await assertFocusedControl(page, '.sidebar nav button[aria-current="page"] + button');
-
-    // A drawer navigation item stays usable on desktop and must retain focus.
-    await resize(mobile);
-    await waitForDrawer(page, false);
-    await page.waitForFunction(() => document.activeElement?.matches('.mobile-menu'));
-    await page.keyboard.press('Enter');
-    await waitForDrawer(page, true);
-    await page.waitForFunction(() => document.activeElement?.matches('.navigation-close'));
-    await page.keyboard.press('Tab');
-    await assertFocusedControl(page, current);
-    await resize(desktop);
-    await waitForDesktopNavigation(page);
-    await assertFocusedControl(page, current);
-
-    // The closed drawer trigger also disappears on desktop.
-    await resize(mobile);
-    await waitForDrawer(page, false);
-    await page.waitForFunction(() => document.activeElement?.matches('.mobile-menu'));
     await resize(desktop);
     await waitForDesktopNavigation(page);
     await assertFocusedControl(page, current);
@@ -95,7 +61,7 @@ async function checkBreakpointFocus(page) {
     // Ordinary content focus must survive both directions without being stolen.
     await page.focus(content);
     await resize(mobile);
-    await waitForDrawer(page, false);
+    await waitForMobileNavigation(page);
     await assertFocusedControl(page, content);
     await resize(desktop);
     await waitForDesktopNavigation(page);
@@ -109,7 +75,7 @@ async function checkWorkspaceLayout(page, screenshots) {
   try {
     for (const [width, height] of sizes) {
       await page.setViewport({ width, height });
-      if (width <= 760) await waitForDrawer(page, false);
+      if (width <= 760) await waitForMobileNavigation(page);
       else await waitForDesktopNavigation(page);
       const layout = await page.evaluate(() => {
         const rect = selector => document.querySelector(selector).getBoundingClientRect();
@@ -155,7 +121,7 @@ async function checkTouchNavigation(page, screenshots) {
     phone.on('request', request => request.url().startsWith(origin + '/') || request.url().startsWith('data:') ? request.continue() : request.abort());
     await phone.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
     await phone.goto(page.url());
-    await waitForDrawer(phone, false);
+    await waitForMobileNavigation(phone);
     const tab = id => `.mobile-tabbar [data-destination="${id}"]`;
     const active = id => phone.waitForSelector(tab(id) + '[aria-current="page"]');
     await active('home');
@@ -204,9 +170,8 @@ async function checkTouchNavigation(page, screenshots) {
     await swipe(8, 135, 200);
     await phone.waitForSelector(row);
     await phone.tap('.mobile-menu');
-    await waitForDrawer(phone, true);
-    await swipe(210, 70, 160);
-    await waitForDrawer(phone, false);
+    await openMore(phone);
+    await swipe(8, 135, 200);
     await active('article');
     await phone.tap(tab('media'));
     await active('media');
@@ -217,21 +182,19 @@ async function checkTouchNavigation(page, screenshots) {
     await phone.tap(tab('media'));
     await phone.waitForFunction(() => scrollY === 0);
     await phone.tap('.mobile-menu');
-    await waitForDrawer(phone, true);
-    await phone.tap('.sidebar nav button[aria-current="page"] + button');
-    await waitForDrawer(phone, false);
+    await openMore(phone);
+    await phone.tap('.more-page nav[aria-label="内容导航"] button:first-child');
+    await phone.waitForSelector('.more-page', { hidden: true });
     assert.equal(await phone.$eval('.mobile-menu', node => node.getAttribute('aria-current')), 'true');
     await phone.tap(tab('article'));
     await phone.tap('.mobile-menu');
-    await waitForDrawer(phone, true);
+    await openMore(phone);
     if (!await phone.$eval('.studio-preferences', el => el.open)) await phone.tap('.studio-preferences summary');
     await phone.tap('.theme-switch');
-    await phone.tap('.navigation-close');
-    await waitForDrawer(phone, false);
     await phone.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
     await phone.screenshot({ path: `${screenshots}/phone-navigation-dark.png` });
     await phone.setViewport({ width: 844, height: 390, isMobile: true, hasTouch: true, isLandscape: true });
-    await waitForDrawer(phone, false);
+    await waitForMobileNavigation(phone);
     await phone.tap(tab('media'));
     await active('media');
     await phone.tap('.media-search input');
@@ -241,15 +204,15 @@ async function checkTouchNavigation(page, screenshots) {
     await active('article');
     await phone.screenshot({ path: `${screenshots}/phone-navigation-landscape.png` });
     await phone.tap('.mobile-menu');
-    await waitForDrawer(phone, true);
+    await openMore(phone);
     if (!await phone.$eval('.studio-preferences', el => el.open)) await phone.tap('.studio-preferences summary');
     await phone.tap('.theme-switch');
     await phone.select('.studio-preferences select', 'zh-CN');
-    await phone.$eval('.sidebar nav[aria-label="站点设置"]', nav => [...nav.querySelectorAll('button')].find(button => button.textContent.trim() === '站点信息').click());
+    await phone.$eval('.more-page nav[aria-label="站点设置"]', nav => [...nav.querySelectorAll('button')].find(button => button.textContent.trim() === '站点信息').click());
     await phone.waitForSelector('.settings-card input');
     for (const [width, height] of [[390, 844], [768, 900], [1180, 768]]) {
       await phone.setViewport({ width, height, isMobile: true, hasTouch: true, isLandscape: width > height });
-      if (width <= 1024) await waitForDrawer(phone, false);
+      if (width <= 1024) await waitForMobileNavigation(phone);
       else await waitForDesktopNavigation(phone);
       await phone.evaluate(() => scrollTo(0, 240));
       await phone.waitForFunction(() => scrollY > 24);
@@ -274,56 +237,31 @@ async function checkTouchNavigation(page, screenshots) {
   }
 }
 
-export async function checkNavigationAccessibility({ page, screenshots, emulationOwner }) {
+export async function checkNavigationAccessibility({ page, screenshots }) {
   for (const [width, height] of [[320, 568], [320, 844], [390, 844], [760, 844]]) {
     const imageSize = height === 844 ? String(width) : `${width}x${height}`;
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
-    await waitForDrawer(page, false);
+    await waitForMobileNavigation(page);
     await page.focus('.mobile-menu');
     await page.keyboard.press('Enter');
-    await waitForDrawer(page, true);
-    await page.waitForFunction(() => document.activeElement?.classList.contains('navigation-close'));
-    await assertFocusedControl(page, '.navigation-close');
-    assert.equal(await page.$eval('.mobile-menu', node => node.getAttribute('aria-expanded')), 'true');
-    assert.equal(await page.$eval('.mobile-menu', node => node.getAttribute('aria-controls')), 'studio-navigation');
-    assert.equal(await page.$eval('.sidebar-backdrop', node => {
-      const rect = node.getBoundingClientRect();
-      return rect.left === 0 && rect.top === 0 && rect.right === innerWidth && rect.bottom === innerHeight;
-    }), true, `Backdrop must cover the viewport at ${width}`);
-    // Inert must prevent actual focus, not merely appear as an attribute.
-    await page.$eval('.mobile-menu', node => node.focus());
-    await assertFocusedControl(page, '.navigation-close');
-    await page.screenshot({ path: `${screenshots}/navigation-open-${imageSize}.png` });
-    if ((width === 320 && height === 568) || (width === 390 && height === 844)) {
-      await checkDrawerScroll({ page, screenshots, waitForDrawer, emulationOwner });
-    }
-    await page.keyboard.down('Shift');
-    try { await page.keyboard.press('Tab'); }
-    finally { await page.keyboard.up('Shift'); }
-    await assertFocusedControl(page, '.sidebar-bottom button');
-    await page.keyboard.press('Tab');
-    await assertFocusedControl(page, '.navigation-close');
-    await page.keyboard.press('Tab');
-    await assertFocusedControl(page, '.sidebar nav button');
-    await page.keyboard.press('Escape');
-    await waitForDrawer(page, false);
-    await page.waitForFunction(() => document.activeElement?.classList.contains('mobile-menu'));
-    await assertFocusedControl(page, '.mobile-menu');
-    await page.$eval('.navigation-close', node => node.focus());
-    await assertFocusedControl(page, '.mobile-menu');
-    assert.equal(await page.$eval('.mobile-menu', node => node.getAttribute('aria-expanded')), 'false');
-    assert.equal(await page.$('.sidebar-backdrop'), null);
-    await page.keyboard.press('Tab');
-    assert.equal(await page.evaluate(() => !!document.activeElement?.closest('.main-shell') && !document.activeElement.closest('[inert]')), true, 'Closed drawer must not receive Tab focus');
-    await page.focus('.mobile-menu');
+    await openMore(page);
+    await page.waitForFunction(() => document.activeElement?.matches('.more-page h1'));
+    await assertFocusedControl(page, '.more-page h1');
+    assert.equal(await page.$('dialog[open], .sidebar-backdrop'), null);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `No horizontal overflow at ${width}`);
-    await page.screenshot({ path: `${screenshots}/navigation-${imageSize}.png`, fullPage: true });
+    await page.keyboard.press('Tab');
+    await assertFocusedControl(page, '.more-page nav button:first-child');
+    await page.screenshot({ path: `${screenshots}/navigation-more-${imageSize}.png`, fullPage: true });
+    await page.click('.mobile-tabbar [data-destination="home"]');
+    await page.waitForSelector('.more-page', { hidden: true });
   }
+  await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+  await waitForDesktopNavigation(page);
   await checkTouchNavigation(page, screenshots);
   await checkWorkspaceLayout(page, screenshots);
   await checkBreakpointFocus(page);
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await waitForDesktopNavigation(page);
   assert.equal(await page.$eval('.sidebar button[aria-current="page"]', node => node.textContent.trim()), '工作台');
-  console.log('PASS: navigation drawer focus, inert isolation, keyboard containment and breakpoint focus migration.');
+  console.log('PASS: More page navigation, keyboard focus and breakpoint focus migration.');
 }

@@ -1,10 +1,8 @@
 /* Shared interaction contracts include body portals and first-run/login screens. */
-.sidebar .navigation-close { display: inline-flex; align-self: flex-end; min-width: 44px; min-height: 44px; }
-.mobile-menu { display: inline-flex; }
+.sidebar[hidden], .mobile-tabbar[hidden] { display: none; }
 /* Navigation targets are programmatically focusable, not form controls. Keep a
    visible focus cue without inheriting the browser's black input-like border. */
 .main-content h1[tabindex="-1"]:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: 4px; border-radius: 3px; }
-.sidebar .navigation-close[hidden], .mobile-menu[hidden] { display: none; }
 :root {
   --studio-overlay-gap: 12px;
   --studio-overlay-height: calc(var(--native-visible-height, 100dvh) - max(var(--studio-overlay-gap), env(safe-area-inset-top)) - max(var(--studio-overlay-gap), env(safe-area-inset-bottom)));
@@ -45,7 +43,6 @@ html[data-native-mobile] :is(input:not([type=checkbox]):not([type=radio]):not([t
   :is(.icon-button, .text-button, .save-button-toggle, .directory-disclosure) { min-width: var(--studio-touch-target) !important; }
   :is(input:not([type=checkbox]):not([type=radio]):not([type=color]), textarea, select, [contenteditable=true]) { font-size: 16px !important; }
   .thread-composer :is(.composer-mode-tabs button, .composer-tool, .reference-heading > button, .composer-recovery .text-button, .composer-publish .primary) { min-height: var(--studio-touch-target); }
-  body:has(.sidebar.open) { overflow: hidden; }
   .composer-publish { flex-wrap: wrap; }
   .selection-footer { flex-wrap: wrap; }
   .selection-footer > small { min-width: 0; overflow-wrap: anywhere; }
@@ -57,7 +54,6 @@ html[data-native-mobile] :is(input:not([type=checkbox]):not([type=radio]):not([t
   .advanced-field > summary { padding-block: 12px; }
 }
 @media (max-width: 760px) {
-  body:has(.sidebar.open) { overflow: hidden; }
   .topbar-actions { flex-wrap: wrap !important; }
 }
 /* At phone widths, let fields use the available measure instead of compressing
@@ -92,11 +88,7 @@ html[data-compact-viewport] :is(.selection-results, .media-dialog-body, .oauth-r
 }
 html[data-compact-viewport] .ai-assistant-dialog[open] { display: block; }
 html[data-compact-viewport] .ai-assistant-body { overflow: visible; }
-@media (prefers-reduced-motion: reduce) {
-  .sidebar { transition: none; }
-}
-
-/* The navigation stays in the shell so the drawer and reauthentication can isolate it. */
+/* Keep the fixed tab bar clear of the end of each page. */
 html:has(.mobile-tabbar:not([hidden])) {
   --tabbar-height: calc(3.75rem + env(safe-area-inset-bottom, 0px));
   scroll-padding-bottom: var(--tabbar-height);
@@ -123,10 +115,6 @@ body:has(.mobile-tabbar:not([hidden])) { padding-bottom: var(--tabbar-height); }
 .mobile-tabbar button:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: -3px; border-radius: 6px; }
 
 @media (max-width: 1024px) and (pointer: coarse) {
-  .sidebar { width: min(288px, 85vw); transform: translateX(-100%); }
-  .sidebar.open { transform: translateX(0); }
-  .sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 39; background: #10162a66; }
-  body:has(.sidebar.open) { overflow: hidden; }
   .main-shell { margin-left: 0; }
   .mobile-tabbar:not([hidden]) { padding-inline: max(4px, calc((100% - 720px) / 2), env(safe-area-inset-left)) max(4px, calc((100% - 720px) / 2), env(safe-area-inset-right)); }
 }
@@ -160,7 +148,6 @@ body:has(.mobile-tabbar:not([hidden])) { padding-bottom: var(--tabbar-height); }
   .topbar-actions { flex: none; }
   html:has(.settings-page > .page-heading) { scroll-padding-top: calc(var(--studio-header-height) + 6rem); }
   .settings-page > .page-heading { top: var(--studio-header-height); }
-  .media-details { top: calc(var(--studio-header-height) + 12px); }
 }
 @media (max-width: 760px), (max-width: 1024px) and (pointer: coarse) {
   html:has(.topbar) { --studio-header-height: calc(3.5rem + env(safe-area-inset-top, 0px)); }
@@ -170,5 +157,22 @@ body:has(.mobile-tabbar:not([hidden])) { padding-bottom: var(--tabbar-height); }
 }
 
 /* Studio handles back only while there is an in-app destination. */
-html:has(.studio-shell[data-swipe-back]), html:has(.sidebar.open) { overscroll-behavior-x: contain; }
-.mobile-tabbar, .sidebar.open { touch-action: pan-y pinch-zoom; }
+
+html:has(.studio-shell[data-swipe-back]) { overscroll-behavior-x: contain; }
+.mobile-tabbar { touch-action: pan-y pinch-zoom; }
+
+.more-page { max-width: 42rem; margin-inline: auto; }
+.more-groups { display: grid; gap: 8px; }
+.more-groups > .nav-label { margin: 14px 0 0; }
+.more-groups > nav { border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-card); }
+.more-groups > nav:empty { display: none; }
+.more-groups > nav > button {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  min-block-size: 48px; padding: 10px 14px; text-align: start;
+}
+.more-groups > nav > button + button { border-block-start: 1px solid var(--studio-line); }
+.more-groups > nav > button > svg { flex: none; }
+.more-groups > nav > button > svg:last-child { margin-inline-start: auto; color: var(--studio-muted); }
+.more-groups > nav > button:is(:focus-visible, :active) { background: var(--form-surface); border-radius: 8px; outline-offset: -2px; }
+.more-page .studio-preferences { margin: 14px 0; }
+.more-page .sidebar-bottom { padding-inline: 0; color: inherit; }

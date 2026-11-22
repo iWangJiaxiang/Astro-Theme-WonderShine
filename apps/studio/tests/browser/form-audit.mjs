@@ -153,6 +153,7 @@ try {
  await page.locator('[data-media-path="public/img/logo.webp"]').click();
  await page.waitForSelector('.media-details dd');
  await capture('media-details');
+ await page.locator('.media-details-close').click();
  await page.select('.language-switcher select','en');await capture('media-library-en');
  await writeFile(join(screenshots,'report.json'),JSON.stringify({records,errors},null,2));
  console.log(JSON.stringify({measurements:records.length,screenshots:records.filter(r=>r.file).length,issues:records.filter(r=>r.issues.length),errors},null,2));

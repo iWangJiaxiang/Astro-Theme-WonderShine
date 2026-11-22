@@ -40,6 +40,11 @@ export function tauriFiles(root: string, additionalRoots: string[] = []): Worksp
     // Metadata lives only for this operation; never cache a safety check across calls.
     return { path: result, info };
   }
+  const statChecked = (path: string) => run(async () => {
+    const location = await checked(path);
+    if (!location.info) throw new Error('no such file');
+    return nativeFileInfo(location.info);
+  });
   return {
     revisionNamespace: 'tauri-device-filesystem-v1',
     readFile: (path, options) => run(async () => { const bytes = await native.readFile((await checked(path)).path); return options === 'utf8' || typeof options === 'object' && options !== null && 'encoding' in options ? new TextDecoder().decode(bytes) : bytes; }),
@@ -62,12 +67,8 @@ export function tauriFiles(root: string, additionalRoots: string[] = []): Worksp
     rmdir: path => run(async () => native.remove((await checked(path)).path)),
     unlink: path => run(async () => native.remove((await checked(path)).path)),
     rename: (from, to) => run(async () => native.rename((await checked(from)).path, (await checked(to)).path)),
-    stat: path => run(async () => {
-      const location = await checked(path);
-      // A checked, non-symlink leaf already has exactly the metadata stat needs.
-      if (!location.info) throw new Error('no such file');
-      return nativeFileInfo(location.info);
-    }),
+    stat: statChecked,
+    statChecked,
     lstat: path => run(async () => nativeFileInfo(await native.lstat(scoped(path)))),
     readlink: async () => { throw new Error('工作区不支持符号链接'); },
     symlink: async () => { throw new Error('工作区不支持符号链接'); },

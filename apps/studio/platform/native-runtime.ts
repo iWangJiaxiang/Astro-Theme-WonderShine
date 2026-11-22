@@ -11,6 +11,8 @@ import { createNativeSummaryStore } from './summary-store';
 import { validateMediaPath } from '../core/media-validation';
 import { setMediaResolver } from '../shared/media';
 import { setApiTransport } from '../src/api';
+import { invalidateMediaListing, setMediaPreviewLoader } from '../src/media-store';
+import { setMediaImageLoader } from '../src/components/MediaPreviewImage';
 import { tauriFiles } from './tauri-filesystem';
 import { FileRepository } from './file-repository';
 import { workspaceCredential } from './git-vault';
@@ -20,7 +22,12 @@ import { createGitHttp } from './git-http';
 import { validateProfile, validateRemote, type WorkspaceProfile } from './hosting';
 import { createLoadDiagnostics } from './load-diagnostics';
 import { nativeReviewSource, openNativeWorkspaceReviews } from './review-store';
-import { ensureDirectory } from './filesystem';
+import { comparePathComponents, ensureDirectory } from './filesystem';
+import { createNativeMediaIndex } from './media-index';
+import { createNativeMediaImageLoader } from './media-thumbnails';
+
+const summaryRoots = ['articles', 'pages', 'collections', 'threads', 'topics'];
+const summaryOrder = (a: string, b: string) => summaryRoots.indexOf(a.split('/')[1]) - summaryRoots.indexOf(b.split('/')[1]) || comparePathComponents(a, b);
 
 export async function connectNativeWorkspace(profile: WorkspaceProfile, token: string, onDisconnect: () => void, onProgress?: ProgressCallback, summaryStore?: SummaryIndexStore, allowClone = true, grant?: GitGrant): Promise<() => void> {
   validateProfile(profile, { allowAutomaticBranch: true });
@@ -59,29 +66,46 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
   finally { progress.finish(); }
   const local = new FileRepository(files, root, state, () => git.assertWritable());
   await diagnostics.measure('recovery', () => local.recover());
-  const repository = Object.assign(local, { mode: 'git' as const, workspace: git });
+  const checkout = Object.assign(local, { mode: 'git' as const, workspace: git });
   // Bind persisted projections to the actual checkout, not merely a recent-list ID.
-  const summaryScope = JSON.stringify(['native-summary-v1', profile.id, profile.source ?? 'clone', root, profile.url, profile.branch]);
+  const managed = profile.source !== 'local';
+  const gitDirectory = managed ? await files.lstat(root + '/.git') : undefined;
+  const scope = [profile.id, profile.source ?? 'clone', root, profile.url, profile.branch];
+  if (gitDirectory) scope.push(JSON.stringify([gitDirectory.dev, gitDirectory.ino, gitDirectory.ctimeMs]));
+  const summaryScope = JSON.stringify(['native-summary-v1', ...scope]);
+  const media = createNativeMediaIndex(checkout, files, state, base, JSON.stringify(scope), managed);
+  const { repository } = media;
   if (!summaryStore) {
     try { summaryStore = createNativeSummaryStore(files, state, base); }
     catch { /* Optional preview storage must not prevent opening a workspace. */ }
   }
   if (httpsRemote && token) await credential.persistInitial();
-  const runtime = createSummaryRuntime(repository, { scope: summaryScope, store: summaryStore });
+  const runtime = createSummaryRuntime(repository, { scope: summaryScope, store: summaryStore, managedOrder: managed ? summaryOrder : undefined });
   const ai = new NativeAiController(runtime.repository, (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }), localStorage, profile.id);
   if (httpsRemote) nativeGitCredential.current = credential;
   let disposed = false;
-  const dispose = () => { if (disposed) return; disposed = true; diagnostics.dispose(); ai.dispose(); runtime.dispose(); credential.dispose(); if (nativeGitCredential.current === credential) delete nativeGitCredential.current; setMediaResolver(); setApiTransport(); };
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true; diagnostics.dispose(); ai.dispose(); runtime.dispose(); media.dispose(); credential.dispose();
+    if (nativeGitCredential.current === credential) delete nativeGitCredential.current;
+    setMediaImageLoader(); setMediaPreviewLoader(); setMediaResolver(); setApiTransport();
+  };
   const transport = createContentTransport(repository, { runtime, ai, themeFetch: (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }), aiUsesObservedRepository: true, identity: { id: profile.id, name: profile.authorName || profile.label }, onLogout: () => {
     dispose(); onDisconnect();
   } });
   setMediaResolver((path, version) => { validateMediaPath(path); return convertFileSrc(root + '/' + path) + `?v=${version}`; });
+  setMediaImageLoader(createNativeMediaImageLoader(files, root, JSON.stringify(scope), repository, managed));
+  setMediaPreviewLoader(managed ? undefined : media.preview);
   setApiTransport((path, init) => {
     if (disposed) return Promise.reject(new Error('连接已更换，请重试'));
     const request = new Request(new URL('/api' + path, 'https://studio.local'), init);
-    return request.method === 'GET' && new URL(request.url).pathname === '/api/content'
-      ? diagnostics.measure('content-request', () => transport(request))
-      : transport(request);
+    const endpoint = new URL(request.url).pathname;
+    if (request.method === 'GET' && endpoint === '/api/content') return diagnostics.measure('content-request', () => transport(request));
+    if (request.method === 'GET' && endpoint === '/api/media') return diagnostics.measure('media-request', () => transport(request));
+    if (request.method === 'POST' && ['/api/workspace/sync', '/api/workspace/publish'].includes(endpoint)) {
+      return transport(request).finally(() => { if (!disposed) invalidateMediaListing(); });
+    }
+    return transport(request);
   });
   return dispose;
 }

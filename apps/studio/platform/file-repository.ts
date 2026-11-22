@@ -123,11 +123,21 @@ export class FileRepository implements Repository {
     for (const directory of ['public', 'content']) {
       const listing = await this.walk(directory, path => { try { validateMediaPath(path); return !!imageMime(path); } catch { return false; } });
       result.truncated ||= listing.truncated;
-      for (const path of listing.paths) {
-        if (result.items.length >= 5000) { result.truncated = true; break; }
-        const info = await this.files.stat(await this.safe(path));
-        result.items.push({ path, directory: parentPath(path), name: path.split('/').at(-1)!, size: info.size, mime: imageMime(path)!,
-          ...(info.size > MAX_UPLOAD_SIZE ? { unavailable: '图片超过 20 MB 预览限制' } : {}) });
+      const paths = listing.paths.slice(0, 5000 - result.items.length);
+      result.truncated ||= paths.length < listing.paths.length;
+      for (let offset = 0; offset < paths.length; offset += 8) {
+        const batch = await Promise.allSettled(paths.slice(offset, offset + 8).map(async path => {
+          try {
+            const info = this.files.statChecked ? await this.files.statChecked(this.location(path)) : await this.files.stat(await this.safe(path));
+            if (!info.isFile()) return;
+            return { path, directory: parentPath(path), name: path.split('/').at(-1)!, size: info.size, mime: imageMime(path)!,
+              ...(info.size > MAX_UPLOAD_SIZE ? { unavailable: '图片超过 20 MB 预览限制' } : {}) };
+          } catch (error) { if (!missingFile(error)) throw error; }
+        }));
+        for (const item of batch) {
+          if (item.status === 'rejected') throw item.reason;
+          if (item.value) result.items.push(item.value);
+        }
       }
     }
     return result;

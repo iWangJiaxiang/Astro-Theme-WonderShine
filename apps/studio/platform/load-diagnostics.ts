@@ -1,7 +1,8 @@
 import type { ProgressCallback } from 'isomorphic-git';
 
 const phases = ['Receiving objects', 'Resolving deltas', 'Updating workdir', 'Analyzing workdir', 'Counting objects', 'Compressing objects'] as const;
-type Stage = 'git-open' | 'recovery' | 'content-request' | typeof phases[number];
+type RequestStage = 'git-open' | 'recovery' | 'content-request' | 'media-request';
+type Stage = RequestStage | typeof phases[number];
 const storageKey = 'wondershine.native.load-diagnostics.v1';
 
 /** Latest connection only. Never record repository identity, paths, credentials or error text. */
@@ -18,7 +19,7 @@ export function createLoadDiagnostics(storage: Pick<Storage, 'setItem'>, now = (
   // Replace the previous connection's report, including when this one fails before producing timings.
   try { storage.setItem(storageKey, JSON.stringify({ version: 1, timings })); } catch { /* Storage is optional. */ }
   return {
-    async measure<T>(stage: 'git-open' | 'recovery' | 'content-request', operation: () => Promise<T>): Promise<T> {
+    async measure<T>(stage: RequestStage, operation: () => Promise<T>): Promise<T> {
       const start = clock();
       try { return await operation(); } finally { record(stage, clock() - start); }
     },

@@ -46,19 +46,9 @@ async function headingAtTop(page, selector, text) {
 async function navigate(page, text) {
   const mobile = await page.$eval('.mobile-menu', node => !node.hidden && getComputedStyle(node).display !== 'none');
   if (mobile) {
-    await page.click('.mobile-menu');
-    await page.waitForSelector('.sidebar.open');
-    // Wait for the real drawer transition/hit target, rather than clicking an
-    // offscreen control or synthesizing a DOM click.
-    await page.waitForFunction(() => {
-      const node = document.querySelector('.sidebar.open nav button');
-      if (!node) return false;
-      const rect = node.getBoundingClientRect();
-      return rect.left >= 0 && document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)?.closest('button') === node;
-    });
-  }
-  await clickText(page, '.sidebar nav button', text);
-  if (mobile) await page.waitForSelector('.sidebar.open', { hidden: true });
+    const tab = text === '媒体库' ? '媒体' : text;
+    await clickText(page, '.mobile-tabbar button', tab);
+  } else await clickText(page, '.sidebar nav button', text);
 }
 
 async function scrollLibrary(page) {
@@ -324,27 +314,21 @@ async function mediaContext(page, width, screenshots) {
   await page.setViewport({ width, height: 844, deviceScaleFactor: 1 });
   await frames(page);
   await page.waitForSelector(`${tile}:not(:disabled)`);
+  await page.$eval(tile, node => node.scrollIntoView({ block: 'center' }));
+  const before = await page.evaluate(() => scrollY);
   await page.click(tile);
-  await page.waitForFunction(selector => {
-    const details = document.querySelector('.media-details');
-    const back = details?.querySelector('.media-details-back');
-    const rect = back?.getBoundingClientRect();
-    return document.querySelector(selector)?.getAttribute('aria-pressed') === 'true' && document.activeElement === details && rect.top >= 0 && rect.bottom <= innerHeight;
-  }, {}, tile);
+  await page.waitForSelector('.media-details[open]');
+  await page.waitForFunction(() => document.activeElement?.matches('.media-details-close'));
   await page.waitForFunction(() => {
     const img = document.querySelector('.media-details img');
     return img?.complete && img.naturalWidth > 0;
   });
-  const detailsY = await page.evaluate(() => scrollY);
-  assert.ok(detailsY > 0, `${width}px selection scrolls down to details`);
+  assert.ok(Math.abs(await page.evaluate(() => scrollY) - before) <= 2, `${width}px preview keeps the list in place`);
   if (screenshots) await page.screenshot({ path: `${screenshots}/navigation-context-media-${width}.png` });
-  await clickText(page, '.media-details-back', '返回图片列表');
-  await page.waitForFunction(selector => {
-    const node = document.querySelector(selector), rect = node?.getBoundingClientRect();
-    return node === document.activeElement && rect.top >= 0 && rect.bottom <= innerHeight;
-  }, {}, tile);
-  assert.ok(await page.evaluate(() => scrollY) < detailsY - 20, `${width}px Back scrolls up to the selected tile`);
-  assert.equal(await page.$eval(tile, node => node.getAttribute('aria-pressed')), 'true', 'Back preserves media selection');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.media-details[open]', { hidden: true });
+  await page.waitForFunction(selector => document.querySelector(selector) === document.activeElement, {}, tile);
+  assert.ok(Math.abs(await page.evaluate(() => scrollY) - before) <= 2, `${width}px closing preserves the list scroll`);
 }
 
 /** Remote-only regression, after checkRootModals on its disposable authenticated

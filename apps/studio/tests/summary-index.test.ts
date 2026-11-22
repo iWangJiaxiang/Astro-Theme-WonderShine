@@ -415,7 +415,7 @@ function memoryRepository(initial: Record<string, string>) {
     mode: 'local' as const,
     clearReadCache() { clears++; },
     async read(path: string) { const text = files.get(path); return text === undefined ? null : { path, text, revision: 'real-revision' }; },
-    async listForSummary() { summaryReads++; return [...files].filter(([path]) => path.startsWith('content/articles/')).map(([path, text]) => ({ path, text })); },
+    async listForSummary() { summaryReads++; return [...files].filter(([path]) => path.startsWith('content/')).map(([path, text]) => ({ path, text })); },
     async list() { revisionLists++; throw new Error('Revision-bearing summary scan'); },
     async write(path: string, text: string | null) {
       if (text === null) files.delete(path); else files.set(path, text);
@@ -493,4 +493,34 @@ test('observed save survives cache failures and unknown failed sync triggers fre
   await assert.rejects(observed.workspace!.sync(), error => error === syncError);
   assert.equal((await index.list())[0].title, 'Sync changed file');
   assert.equal(memory.counts().summaryReads, 3);
+});
+
+test('managed snapshot restores content facts and new summaries without a worktree scan', async () => {
+  const memory = memoryRepository({ [path]: text('Original'), 'content/threads/idea/index.md': text('Idea') });
+  let record: SummaryIndexCacheRecord | null = null;
+  let saved = deferred<SummaryIndexCacheRecord>();
+  const store: SummaryIndexStore = {
+    async load() { return record; },
+    async save(value) { record = JSON.parse(JSON.stringify(value)); saved.resolve(value); },
+    async clear() { record = null; },
+  };
+  const builder = createSummaryIndexBuilder(memory.repository, options.yieldToUI, (a, b) => a.localeCompare(b));
+  const first = new SummaryIndex({ ...options, store, builder });
+  await first.list();
+  assert.equal((await saved.promise).facts?.length, 2);
+  assert.doesNotMatch(JSON.stringify(record), /PRIVATE_BODY|revision/);
+  first.dispose();
+
+  saved = deferred<SummaryIndexCacheRecord>();
+  const reopened = new SummaryIndex({ ...options, store, builder });
+  assert.deepEqual((await reopened.list()).map(item => item.title), ['Original', 'Idea']);
+  assert.equal(memory.counts().summaryReads, 1);
+  const observed = observeRepository(memory.repository, reopened.onMutation);
+  await observed.write('content/articles/another/index.md', text('Another'), null);
+  assert.deepEqual((await reopened.list()).map(item => item.title), ['Another', 'Original', 'Idea']);
+  assert.equal(memory.counts().summaryReads, 1);
+  await saved.promise;
+  await reopened.refresh();
+  assert.equal(memory.counts().summaryReads, 2);
+  reopened.dispose();
 });

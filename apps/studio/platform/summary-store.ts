@@ -31,10 +31,16 @@ function absolutePath(value: string): string {
  * from chmod (which is a no-op on some native adapters).
  */
 export function createNativeSummaryStore(files: WorkspaceFiles, stateDirectory: string, authorizationRoot: string = stateDirectory): SummaryIndexStore {
+  return createNativeSnapshotStore(files, stateDirectory, authorizationRoot, DIRECTORY);
+}
+
+export function createNativeSnapshotStore<T>(files: WorkspaceFiles, stateDirectory: string, authorizationRoot: string, name: 'summary-preview-v1' | 'media-list-v1'): {
+  load(): Promise<unknown>; save(record: T): Promise<void>; clear(): Promise<void>;
+} {
   const state = absolutePath(stateDirectory);
   const boundary = absolutePath(authorizationRoot);
   if (state !== boundary && !state.startsWith(boundary + '/')) throw unsafe();
-  const directory = state + '/' + DIRECTORY;
+  const directory = state + '/' + name;
   const target = directory + '/' + SNAPSHOT;
 
   async function ordinary(path: string, directoryEntry: boolean): Promise<FileInfo> {

@@ -43,7 +43,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
       const first = browser?.querySelector('.media-thumbnail img');
       const loaded = browser?.getAttribute('aria-busy') === 'false' && first?.complete && first.naturalWidth > 0;
       const sidebar = document.querySelector('.sidebar');
-      const sidebarReady = !!sidebar && sidebar.getBoundingClientRect().right <= 0 && sidebar.inert && !sidebar.classList.contains('open') && !document.querySelector('.sidebar-backdrop');
+      const sidebarReady = !!sidebar?.hidden && sidebar.getBoundingClientRect().width === 0;
       return loaded && sidebarReady;
     }, {}, root);
     if (root.startsWith('.media-library')) {

@@ -7,6 +7,8 @@ export interface SummaryRuntimeOptions {
   scope: string;
   store?: SummaryIndexStore;
   yieldToUI?: () => Promise<void>;
+  /** Only app-managed clones, whose worktree mutations pass through the observer. */
+  managedOrder?: (a: string, b: string) => number;
   /** Online Git owns a bounded shared read checkout; ordinary scans may reuse it. */
   preserveReadCacheOnScan?: boolean;
 }
@@ -23,7 +25,7 @@ export function createSummaryRuntime(rawRepository: Repository, options: Summary
     },
   }) : rawRepository;
   const index = new SummaryIndex({
-    builder: createSummaryIndexBuilder(builderRepository, options.yieldToUI),
+    builder: createSummaryIndexBuilder(builderRepository, options.yieldToUI, options.managedOrder),
     scope: options.scope, store: options.store, yieldToUI: options.yieldToUI,
   });
   let pending: Promise<ArticleSummary[]> | undefined;
