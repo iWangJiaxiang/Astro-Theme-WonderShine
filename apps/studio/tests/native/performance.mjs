@@ -25,7 +25,7 @@ async function command(method, path, body) {
     ...(body && { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }),
   });
   const { value } = await response.json();
-  if (!response.ok || value?.error) throw new Error(path + ': ' + (value?.message || response.status));
+  if (!response.ok) throw new Error(path + ': ' + (value?.message || response.status));
   return value;
 }
 
@@ -132,6 +132,40 @@ async function seed(data) {
 // Executed in the installed App's WebKit. Completion is sampled on render frames.
 function observe() {
   const frameGaps = [];
+  const failedImages = [];
+  const nativeRequests = {};
+  const run = { frameGaps, metrics: [], nativeRequests, failedImages, activeStep: 'connection-visible' };
+  const fetchOriginal = window.fetch.bind(window);
+  window.fetch = (resource, options) => {
+    const match = typeof resource === 'string' && /^ipc:\/\/localhost\/([\w%|-]+)$/.exec(resource);
+    if (!match) return fetchOriginal(resource, options);
+    const commands = nativeRequests[run.activeStep] ??= {};
+    const command = decodeURIComponent(match[1]);
+    const entry = commands[command] ??= { count: 0, totalMs: 0, rejected: 0 };
+    const start = performance.now();
+    entry.count++;
+    return fetchOriginal(resource, options).then(response => {
+      entry.totalMs += Math.round(performance.now() - start);
+      return response;
+    }, error => {
+      entry.rejected++;
+      throw error;
+    });
+  };
+  window.addEventListener('error', event => {
+    const image = event.target;
+    if (!(image instanceof HTMLImageElement) || !image.closest('.media-card')) return;
+    const url = image.currentSrc || image.src;
+    const entry = { path: image.closest('.media-card').dataset.mediaPath,
+      at: performance.timeOrigin + performance.now(), source: new URL(url).protocol };
+    failedImages.push(entry);
+    if (entry.source === 'blob:') {
+      void fetchOriginal(url).then(response => response.arrayBuffer()).then(
+        bytes => { entry.blobBytes = bytes.byteLength; },
+        error => { entry.blobReadError = error.name; },
+      );
+    }
+  }, true);
   let previous = performance.now();
   function frame(at) {
     const interval = at - previous;
@@ -140,7 +174,7 @@ function observe() {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  window.studioPerformance = { frameGaps, metrics: [] };
+  window.studioPerformance = run;
   return {
     at: performance.timeOrigin + performance.now(),
     navigationAt: performance.timeOrigin,
@@ -157,6 +191,7 @@ function measure({ name, action, target, targetText, ready, readyText }, done) {
   };
   const find = (selector, text) => all(selector).find(node => visible(node) && !node.disabled && (!text || node.textContent.trim() === text));
   const started = performance.now();
+  window.studioPerformance.activeStep = name;
   const deadline = started + 60_000;
   let clicked = !action;
   let trigger = started;
@@ -177,15 +212,17 @@ function measure({ name, action, target, targetText, ready, readyText }, done) {
         }
       }
       let complete;
+      let failedPaths;
       if (ready === 'first-image') complete = all('.media-card img').some(image => image.complete && image.naturalWidth > 0);
       else if (ready === 'visible-images') {
         const tiles = all('.media-card').filter(tile => {
           const bounds = tile.getBoundingClientRect();
           return bounds.bottom > 0 && bounds.top < innerHeight;
         });
+        failedPaths = tiles.filter(tile => tile.closest('.media-error-item')).map(tile => tile.dataset.mediaPath);
         complete = tiles.length > 0 && tiles.every(tile => {
           const image = tile.querySelector('img');
-          return image?.complete && image.naturalWidth > 0;
+          return tile.closest('.media-error-item') || (image?.complete && image.naturalWidth > 0);
         });
       } else if (ready === 'original-image') {
         const image = document.querySelector('.media-details[open] img');
@@ -197,7 +234,8 @@ function measure({ name, action, target, targetText, ready, readyText }, done) {
       if (clicked && complete) {
         requestAnimationFrame(() => {
           const at = performance.now();
-          const result = { name, at: performance.timeOrigin + trigger, ms: Math.round(at - trigger), totalMs: Math.round(at - started) };
+          const result = { name, at: performance.timeOrigin + trigger, ms: Math.round(at - trigger),
+            totalMs: Math.round(at - started), ...(failedPaths?.length && { failedPaths }) };
           window.studioPerformance.metrics.push(result);
           done(result);
         });
