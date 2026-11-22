@@ -3,27 +3,31 @@ import LocalizedEmpty from './LocalizedEmpty.astro';
 import PostCards from './PostCards.astro';
 import Sidebar from './Sidebar.astro';
 import Pagination from './Pagination.astro';
-import RecentTop from './home/RecentTop.astro';
 import ContentBar from './home/ContentBar.astro';
-import {threads,plain,formatDate} from '../lib/queries';
+import {threads,plain,formatDate,activeTimestamp,timestamp} from '../lib/queries';
 import {localizeConfig,localizeUrl,t} from '../lib/locale';
 import type {Site} from '../lib/types';
 import type {Route} from '../lib/routes';
 interface Props {site:Site;route:Route;}
 const {site,route}=Astro.props;
 const {lang}=route,config=localizeConfig(site,lang);
-const activity=config.extra.activity?.enable,first=(route.page||1)===1,recent=threads(site,lang).slice(0,2);
-const tr=(key:string)=>t(key,lang,site,'activity'),url=(path:string)=>localizeUrl(path,lang,site);
+const activity=config.extra.activity?.enable && (route.page||1)===1;
+const latest=activity ? threads(site,lang)[0] : undefined;
+const latestDate=latest && (activeTimestamp(latest)>timestamp(latest.date) ? latest.updated : latest.date);
+const tr=(key:string)=>t(key,lang,site,'activity');
 ---
-<div id="home_top" class:list={{'activity-home':activity&&first}}>
-  {first&&config.extra.top.recent_top&&<RecentTop site={site} lang={lang}/>}
-  {activity&&first&&<section class="home-threads">
-    <a class="home-threads-label" href={url('/threads/')}><span class="activity-dot"/>{tr('recent')} <span>→</span></a>
-    <a class="home-threads-more" href={url('/threads/')}>{lang.startsWith('zh')?'全部动态':'View all'} →</a>
-    <div class="home-threads-items">{recent.length ? recent.map(thread=>
-      <a class="home-thread" href={thread.url}><time datetime={thread.updated||thread.date}>{formatDate(thread.updated||thread.date,lang)}</time><p>{plain(thread.html).slice(0,88)}</p></a>
-    ) : <p class="home-threads-empty">{tr('empty')}</p>}</div>
+<div id="home_top" class:list={{'activity-home':activity}}>
+  {activity&&<section class="home-threads" aria-labelledby="home-threads-title">
+    <header>
+      <h2 id="home-threads-title"><span class="activity-dot" aria-hidden="true"/>{tr('latest_thread')}</h2>
+      <a class="home-threads-more" href={localizeUrl('/threads/',lang,site)}>{tr('all_threads')} <span aria-hidden="true">→</span></a>
+    </header>
+    {latest ? <a class="home-thread" href={latest.url}>
+      {latest.title&&<strong>{latest.title}</strong>}
+      <p>{latest.description || plain(latest.html) || tr('read_thread')}</p>
+      {latestDate&&<time datetime={latestDate}>{formatDate(latestDate,lang)}</time>}
+    </a> : <p class="home-threads-empty">{tr('empty')}</p>}
   </section>}
 </div>
 <main class={`layout ${config.extra.sidebar.location}`} id="content-inner"><div class="recent-posts" id="recent-posts"><ContentBar site={site} lang={lang}/>
-{route.items?.length?<PostCards site={site} items={route.items} lang={lang} compactHome={activity&&first}/>:<LocalizedEmpty site={site} lang={lang} document={route.document}/>}<Pagination {...route} site={site}/></div>{config.extra.sidebar.location!=='hide-aside'&&<Sidebar site={site} lang={lang}/>}</main>
+{route.items?.length?<PostCards site={site} items={route.items} lang={lang} compactHome={activity}/>:<LocalizedEmpty site={site} lang={lang} document={route.document}/>}<Pagination {...route} site={site}/></div>{config.extra.sidebar.location!=='hide-aside'&&<Sidebar site={site} lang={lang}/>}</main>

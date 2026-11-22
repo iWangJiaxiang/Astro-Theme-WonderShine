@@ -6,7 +6,7 @@ const enabled=above.enable_above??above.enable;
 const greeting=config.extra.other.greeting;
 const strings=(above.typed||[]).map((item:any)=>item.realNode?.text||item.text||item).filter((item:unknown)=>typeof item==='string');
 ---
-<header class={enabled?'full_page':'not-top-img'} id="page-header"><Navigation site={site} lang={lang} title={config.title} document={document}/>
+<header class={enabled?'full_page':'not-top-img'} id="page-header"><Navigation home site={site} lang={lang} title={config.title} document={document}/>
   {greeting?.enable_greeting&&<div id="greetingBox"/>}
   {enabled&&<><link rel="stylesheet" href="/css/fullPage.css"/><div class="pl-container" style={{'--home-image':`url(${above.index_img})`,'--home-phone-image':`url(${above.phone_index_img||above.index_img})`}}>{above.enable_above_video?<video class="index-video" id="index-video" autoplay src={above.index_video} loop muted playsinline style="display:block;object-fit:cover;width:100%;height:100%;pointer-events:none"/>:<><div class="pl-img pl-blur pl-visible"/><div class="pl-img pl-visible"/></>}</div><div id="site-info"><h1 id="site-title">{config.title}</h1><div id="site-subtitle"><span id="subtitle">{strings[0]||config.description}</span><span class="typed-cursor" aria-hidden="true"/></div></div><div id="scroll-down"><i class="icon-angle-down scroll-down-effects"/></div></>}
 </header>

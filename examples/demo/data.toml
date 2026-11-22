@@ -4,6 +4,15 @@ href = "/articles/"
 icon = "icon-book"
 
 [[menu.nav_menu]]
+name = "Threads"
+href = "/threads/"
+
+[[menu.nav_menu.menus]]
+name = "Timeline"
+href = "/timeline/"
+icon = "icon-clock"
+
+[[menu.nav_menu]]
 name = "Series"
 href = "/collections/"
 icon = "icon-folder"
