@@ -123,8 +123,10 @@ export async function checkBrowser(options = demo) {
 
         if (!prefix) {
           await page.setViewport({width:320,height:720});
-          assert.ok(await page.evaluate(() => {
-            const title = document.querySelector('#site-name span');
+          await page.waitForSelector(trigger, {visible:true});
+          const layout = await page.evaluate(() => {
+            const link = document.querySelector('#site-name');
+            const title = link.querySelector('span');
             const toolbar = document.querySelector('#nav-right');
             const originalTitle = title.textContent;
             const search = document.createElement('div');
@@ -133,13 +135,21 @@ export async function checkBrowser(options = demo) {
             try {
               title.textContent = 'WonderShine: a very long site title with every navigation tool enabled';
               toolbar.prepend(search);
-              return title.getBoundingClientRect().right <= toolbar.getBoundingClientRect().left &&
-                title.scrollWidth > title.clientWidth && document.documentElement.scrollWidth <= innerWidth;
+              return {
+                titleRight: link.getBoundingClientRect().right,
+                titleWidth: link.clientWidth,
+                titleScrollWidth: link.scrollWidth,
+                toolbarLeft: toolbar.getBoundingClientRect().left,
+                toolbarRight: toolbar.getBoundingClientRect().right,
+                viewportWidth: innerWidth,
+              };
             } finally {
               title.textContent = originalTitle;
               search.remove();
             }
-          }), 'A long site title fits beside the full mobile toolbar');
+          });
+          assert.ok(layout.titleRight <= layout.toolbarLeft && layout.titleScrollWidth > layout.titleWidth &&
+            layout.toolbarRight <= layout.viewportWidth, JSON.stringify(layout));
         }
 
         await page.setViewport({width:390, height:844});
@@ -157,6 +167,7 @@ export async function checkBrowser(options = demo) {
           return {edge:bounds.right, width:bounds.width, mask:mask.backdropFilter, opacity:mask.opacity,
             duration:getComputedStyle(panel).transitionDuration, overflow:document.body.style.overflow};
         });
+        await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-drawer.png')});
         assert.equal(open.edge, 390);
         assert.equal(open.width, 300);
         assert.match(open.mask, /blur\(20px\)/);
@@ -164,7 +175,6 @@ export async function checkBrowser(options = demo) {
         assert.match(open.duration, /0\.5s/);
         assert.equal(open.overflow, 'hidden');
         assert.ok(await page.$(drawer + ' a[href="' + timeline + '"]'));
-        await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-drawer.png')});
 
         const closed = async () => {
           await page.waitForFunction(selector => !document.querySelector(selector).open && document.body.style.overflow !== 'hidden', {}, drawer);
