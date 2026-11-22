@@ -155,7 +155,7 @@ test('deleting all languages requires the complete reviewed revisions and preser
   await assert.rejects(content.removeDocumentVersions(path, stale), /语言版本已变化/);
   const revisions = await preview();
   assert.deepEqual(Object.keys(revisions).sort(), [english, path]);
-  const reference = 'content/threads/n_ref/index.md';
+  const reference = 'content/threads/n_one/index.md';
   await content.saveDocument(reference, { ...thread, 'extra.references': [{ kind: 'internal', path: 'articles/bilingual/index.md' }] }, 'Reference', null);
   await assert.rejects(content.removeDocumentVersions(english, revisions), /仍被.*引用/);
   assert.deepEqual(await preview(), revisions);
