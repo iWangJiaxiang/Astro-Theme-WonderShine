@@ -10,8 +10,9 @@ const providers = {
   cnb: { origin: 'https://cnb.cool', api: 'https://api.cnb.cool', device: '/oauth2/device/auth', token: '/oauth2/token' },
 } as const;
 export function isOAuthRemote(provider: string, remote: string): provider is AccountProvider {
-  return (provider === 'github' || provider === 'cnb') && URL.canParse(remote)
-    && new URL(remote).origin === providers[provider].origin;
+  if (provider !== 'github' && provider !== 'cnb') return false;
+  try { return new URL(remote).origin === providers[provider].origin; }
+  catch { return false; }
 }
 const text = (value: unknown): string => typeof value === 'string' ? value : '';
 type LoginStage = 'device' | 'token' | 'account' | 'repos';
