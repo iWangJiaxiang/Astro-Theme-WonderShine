@@ -46,7 +46,7 @@ export function createNativeMediaIndex(repository: Repository, files: WorkspaceF
     cached = listing;
     if (!persistent) return;
     try { await store.save({ version: 1, scope, listing }); }
-    catch { await store.clear().catch(() => { persistent = false; }); }
+    catch { persistent = false; }
   }
   async function invalidate() {
     cached = undefined;
@@ -61,7 +61,7 @@ export function createNativeMediaIndex(repository: Repository, files: WorkspaceF
     }
     if (refresh) await invalidate();
     const listing = await repository.listMedia(refresh);
-    await persist(listing);
+    void persist(listing);
     return listing;
   });
   const uploadMedia: Repository['uploadMedia'] = (directory, name, data) => serialize(async () => {

@@ -2,6 +2,7 @@ import { ref, shallowRef, watch } from './reactivity';
 import type { Message } from './i18n';
 import { api, apiTransportGeneration, errorMessage, identityEpoch } from './api';
 import type { MediaItem, MediaListing } from '../shared/media';
+import { subscribeWorkspaceChanged } from './workspace-events';
 export const mediaListing = shallowRef<MediaListing>({ items: [], truncated: false });
 export const mediaLoading = ref(false), mediaError = ref<Message>(''), mediaVersion = ref(0);
 export const mediaUploading = ref(false);
@@ -18,6 +19,7 @@ export function setMediaPreviewLoader(load?: () => Promise<MediaListing | null>)
 export function invalidateMediaListing() {
   generation++; request = undefined; loadedAt = 0; mediaLoading.value = false;
 }
+subscribeWorkspaceChanged(invalidateMediaListing);
 watch([identityEpoch, apiTransportGeneration], () => {
   invalidateMediaListing(); mediaListing.value = { items: [], truncated: false }; mediaError.value = '';
 });

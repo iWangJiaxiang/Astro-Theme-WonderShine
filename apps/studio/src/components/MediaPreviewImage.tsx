@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { mediaURL, type MediaItem } from '../../shared/media';
 import { apiTransportGeneration } from '../api';
 
-type ImageLoader = (item: MediaItem, thumbnail: boolean, signal: AbortSignal) => Promise<Blob | string>;
+type ImageLoader = (item: MediaItem, thumbnail: boolean, signal: AbortSignal, version: number) => Promise<Blob | string>;
 let loadNativeImage: ImageLoader | undefined;
 export function setMediaImageLoader(loader?: ImageLoader) { loadNativeImage = loader; }
 
@@ -36,7 +36,7 @@ export default function MediaPreviewImage({ item, version, thumbnail = false, on
     if (!loader || !visible) return;
     const controller = new AbortController();
     let objectURL: string | undefined;
-    void loader(item, thumbnail, controller.signal).then(result => {
+    void loader(item, thumbnail, controller.signal, version).then(result => {
       if (controller.signal.aborted) return;
       const url = typeof result === 'string' ? result : (objectURL = URL.createObjectURL(result));
       setResolved({ key, url });
@@ -45,7 +45,7 @@ export default function MediaPreviewImage({ item, version, thumbnail = false, on
       controller.abort();
       if (objectURL) URL.revokeObjectURL(objectURL);
     };
-  }, [key, loader, thumbnail, visible, item.path]);
+  }, [key, loader, thumbnail, visible, item.path, version]);
 
   const src = !visible ? undefined : loader
     ? (resolved?.key === key ? resolved.url : undefined)

@@ -150,6 +150,7 @@ export class SummaryIndex {
   private persistence: Promise<void> = Promise.resolve();
   private storeHealthy = true;
   private previewFlight?: Promise<SummaryIndexPreview | null>;
+  private initialRecord?: Promise<Partial<SummaryIndexCacheRecord> | undefined>;
   private readonly maxCacheRows: number;
   private readonly maxCacheBytes: number;
 
@@ -186,6 +187,7 @@ export class SummaryIndex {
     this.rows = undefined;
     this.flight = undefined;
     this.previewFlight = undefined;
+    this.initialRecord = undefined;
   }
   private discardBases() { for (const mutation of this.mutations.values()) mutation.base = undefined; }
   private releaseIdle() {
@@ -243,12 +245,18 @@ export class SummaryIndex {
     return record;
   }
 
+  private readCacheRecord(): Promise<Partial<SummaryIndexCacheRecord> | undefined> {
+    const read = () => Promise.resolve().then(() => this.options.store!.load()).then(value => this.asCacheRecord(value));
+    if (this.generation !== 0 || !this.options.builder.restore) return read();
+    return this.initialRecord ??= read();
+  }
+
   private async initialBuild(): Promise<{ snapshot: SummaryFactsSnapshot; restored?: true }> {
     const { builder, store } = this.options;
     if (this.generation === 0 && builder.restore && store && this.storeHealthy) {
-      const value = await store.load().catch(() => null);
-      const facts = this.asCacheRecord(value)?.facts;
-      if (Array.isArray(facts) && facts.length === (value as SummaryIndexCacheRecord).rows.length
+      const record = await this.readCacheRecord().catch(() => undefined);
+      const facts = record?.facts;
+      if (Array.isArray(facts) && facts.length === record?.rows?.length
         && facts.every(validFact) && new Set(facts.map(fact => fact.path)).size === facts.length) {
         return { snapshot: await builder.restore(facts), restored: true };
       }
@@ -273,6 +281,7 @@ export class SummaryIndex {
     if (!this.current(generation)) return;
     this.snapshot = owned;
     this.rows = step.value;
+    this.initialRecord = undefined;
     if (!restored && this.options.store && this.storeHealthy) {
       const record = this.cacheRecord(step.value, owned.facts);
       void this.persist(async store => {
@@ -372,9 +381,8 @@ export class SummaryIndex {
     if (!this.previewFlight) {
       this.previewFlight = this.persistence.then(async () => {
         if (!this.current(generation) || !this.storeHealthy || this.rows) return null;
-        const value = await this.options.store!.load();
+        const record = await this.readCacheRecord();
         if (!this.current(generation) || !this.storeHealthy || this.rows) return null;
-        const record = this.asCacheRecord(value);
         if (!record?.rows) return null;
         const rows: SummaryPreviewRow[] = [];
         for (const value of record.rows) {

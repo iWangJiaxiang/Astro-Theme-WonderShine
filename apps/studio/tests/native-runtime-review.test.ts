@@ -26,6 +26,10 @@ const exportsByModule: Record<string, string[]> = {
   '../core/media-validation': ['validateMediaPath'],
   '../shared/media': ['setMediaResolver'],
   '../src/api': ['setApiTransport'],
+  '../src/media-store': ['invalidateMediaListing', 'setMediaPreviewLoader'],
+  '../src/components/MediaPreviewImage': ['setMediaImageLoader'],
+  './media-index': ['createNativeMediaIndex'],
+  './media-thumbnails': ['createNativeMediaImageLoader'],
   './tauri-filesystem': ['tauriFiles'],
   './file-repository': ['FileRepository'],
   './git-engine': ['NativeGitEngine'],
@@ -37,7 +41,7 @@ const exportsByModule: Record<string, string[]> = {
   './local-workspace': ['inspectLocalRepository'],
   './load-diagnostics': ['createLoadDiagnostics'],
   './review-store': ['nativeReviewSource', 'openNativeWorkspaceReviews'],
-  './filesystem': ['ensureDirectory'],
+  './filesystem': ['ensureDirectory', 'comparePathComponents'],
 };
 let bundled: Promise<string> | undefined;
 function bundle() {
@@ -73,7 +77,7 @@ function profile(localPath?: string): WorkspaceProfile {
 }
 async function fixture(appData = base + '/', holdState = false) {
   const events: string[] = [];
-  const files = {};
+  const files = { lstat: async () => ({ dev: 0, ino: 1, ctimeMs: 0, isDirectory: () => true, isSymbolicLink: () => false }) };
   const store = {};
   const source = async () => null;
   const stateCreated = deferred<void>(), stateEntered = deferred<void>();
@@ -97,6 +101,10 @@ async function fixture(appData = base + '/', holdState = false) {
     '../core/media-validation': { validateMediaPath() {} },
     '../shared/media': { setMediaResolver: (value?: unknown) => { events.push(value ? 'media:expose' : 'media:clear'); } },
     '../src/api': { setApiTransport: (value?: unknown) => { events.push(value ? 'api:expose' : 'api:clear'); } },
+    '../src/media-store': { invalidateMediaListing() {}, setMediaPreviewLoader() {} },
+    '../src/components/MediaPreviewImage': { setMediaImageLoader() {} },
+    './media-index': { createNativeMediaIndex: (repository: unknown) => ({ repository, dispose() {} }) },
+    './media-thumbnails': { createNativeMediaImageLoader: () => () => {} },
     './tauri-filesystem': { tauriFiles: () => files },
     './file-repository': { FileRepository: class {
       constructor() { events.push('local:construct'); }
@@ -135,7 +143,7 @@ async function fixture(appData = base + '/', holdState = false) {
         events.push('owner:ready'); return value;
       },
     },
-    './filesystem': { ensureDirectory: async (adapter: unknown, path: string) => {
+    './filesystem': { comparePathComponents: (a: string, b: string) => a.localeCompare(b), ensureDirectory: async (adapter: unknown, path: string) => {
       assert.equal(adapter, files); events.push('ensure:' + path);
       if (path === state && holdState) { stateEntered.resolve(); await stateCreated.promise; }
     } },

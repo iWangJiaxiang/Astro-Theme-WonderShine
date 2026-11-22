@@ -72,14 +72,14 @@ async function shrink(image: Blob): Promise<Blob | null> {
 export function createNativeMediaImageLoader(files: WorkspaceFiles, root: string, scope: string, repository: Repository, managed: boolean) {
   const slots = [Promise.resolve(), Promise.resolve(), Promise.resolve()];
   let next = 0;
-  async function load(item: MediaItem, thumbnail: boolean, signal: AbortSignal): Promise<Blob | string> {
+  async function load(item: MediaItem, thumbnail: boolean, signal: AbortSignal, version: number): Promise<Blob | string> {
     signal.throwIfAborted();
     validateMediaPath(item.path);
     const path = root + '/' + item.path;
     const info = await files.statChecked!(path);
     signal.throwIfAborted();
     if (!info.isFile() || info.size > MAX_UPLOAD_SIZE) throw new Error('Media file is unavailable');
-    const url = convertFileSrc(path) + '?v=' + info.mtimeMs + '-' + info.size;
+    const url = convertFileSrc(path) + '?v=' + info.mtimeMs + '-' + info.size + '-' + version;
     if (!thumbnail || !/^image\/(jpeg|png|webp|avif|bmp)$/.test(item.mime)) return url;
     const key = JSON.stringify([scope, item.path, info.mtimeMs, info.ctimeMs, info.size, info.ino]);
     const cached = managed ? await getThumbnail(key).catch(() => undefined) : undefined;
@@ -94,10 +94,10 @@ export function createNativeMediaImageLoader(files: WorkspaceFiles, root: string
     if (resized && managed) void saveThumbnail(key, resized).catch(() => {});
     return resized || blob;
   }
-  return (item: MediaItem, thumbnail: boolean, signal: AbortSignal) => {
-    if (!thumbnail) return load(item, false, signal);
+  return (item: MediaItem, thumbnail: boolean, signal: AbortSignal, version: number) => {
+    if (!thumbnail) return load(item, false, signal, version);
     const slot = next++ % slots.length;
-    const request = slots[slot].then(() => load(item, true, signal));
+    const request = slots[slot].then(() => load(item, true, signal, version));
     slots[slot] = request.then(() => {}, () => {});
     return request;
   };

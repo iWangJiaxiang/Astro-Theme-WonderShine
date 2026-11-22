@@ -1,5 +1,6 @@
 import type { SummaryIndexStore } from '../core/summary-index.js';
 import { missingFile, type FileInfo, type WorkspaceFiles } from './filesystem.js';
+import { withSnapshotLocks } from './snapshot-queue.js';
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const DIRECTORY = 'summary-preview-v1';
@@ -42,6 +43,7 @@ export function createNativeSnapshotStore<T>(files: WorkspaceFiles, stateDirecto
   if (state !== boundary && !state.startsWith(boundary + '/')) throw unsafe();
   const directory = state + '/' + name;
   const target = directory + '/' + SNAPSHOT;
+  const serialize = <T>(operation: () => Promise<T>) => withSnapshotLocks(directory, [SNAPSHOT], operation);
 
   async function ordinary(path: string, directoryEntry: boolean): Promise<FileInfo> {
     if (path !== state && !path.startsWith(state + '/')) throw unsafe();
@@ -76,7 +78,7 @@ export function createNativeSnapshotStore<T>(files: WorkspaceFiles, stateDirecto
     }
   }
   return {
-    async load(): Promise<unknown> {
+    load: () => serialize(async () => {
       const info = await optionalFile(target);
       if (!info) return null;
       if (!Number.isSafeInteger(info.size) || info.size < 0 || info.size > MAX_BYTES) throw new Error('Summary preview exceeds byte limit');
@@ -90,8 +92,8 @@ export function createNativeSnapshotStore<T>(files: WorkspaceFiles, stateDirecto
       if (!Number.isSafeInteger(after.size) || after.size < 0 || after.size > MAX_BYTES) throw new Error('Summary preview exceeds byte limit');
       // Validation (including exact scope and recipe) belongs solely to the index.
       return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown;
-    },
-    async save(record): Promise<void> {
+    }),
+    save: record => serialize(async () => {
       const text = JSON.stringify(record);
       if (text.length > MAX_BYTES) throw new Error('Summary preview exceeds byte limit');
       const bytes = new TextEncoder().encode(text);
@@ -119,12 +121,10 @@ export function createNativeSnapshotStore<T>(files: WorkspaceFiles, stateDirecto
         // another worker's snapshot, history, journals or workspace files.
         if (attempted) await removeOwn(temporary);
       }
-    },
-    async clear(): Promise<void> {
+    }),
+    clear: () => serialize(async () => {
       try { await removeOwn(target); }
       catch (error) { if (!missingFile(error)) throw error; }
-      // Another worker may publish immediately afterwards. Even "clean" is stale
-      // preview only; clearing is NOT a cross-worker freshness barrier or CAS.
-    },
+    }),
   };
 }
