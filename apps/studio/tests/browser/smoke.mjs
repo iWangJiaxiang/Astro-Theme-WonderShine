@@ -97,12 +97,17 @@ try {
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.setRequestInterception(true);
   let holdDocumentWrite = false, releaseDocumentWrite, mockedThemeCheck;
+  let holdEditorEngine = false, editorEngineRequest;
   const delayNextDocumentSave = () => { holdDocumentWrite = true; return () => { holdDocumentWrite = false; releaseDocumentWrite?.(); releaseDocumentWrite = undefined; }; };
   page.on('request', request => {
     if (mockedThemeCheck && request.url() === origin + '/api/theme-update' && request.method() === 'GET') return request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify(mockedThemeCheck) });
     if (request.url() === origin + '/api/ai/config') return request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: true, image: false }) });
     if (request.url() === origin + '/api/ai/text') return request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: 'Reviewed browser summary fixture.' }) });
     if (holdDocumentWrite && request.url() === origin + '/api/document' && request.method() === 'PUT') { releaseDocumentWrite = () => request.continue(); return; }
+    if (holdEditorEngine && request.url().endsWith('/vendor/vditor/dist/js/lute/lute.min.js')) {
+      editorEngineRequest = request;
+      return;
+    }
     return request.url().startsWith(origin + '/') || request.url().startsWith('data:') ? request.continue() : request.abort();
   });
   const click = async text => { await page.waitForFunction(text => [...document.querySelectorAll('button')].some(button => button.innerText.trim() === text && !button.disabled), {}, text); const found = await page.evaluate(text => { const button = [...document.querySelectorAll('button')].find(b => b.innerText.trim() === text); if (!button) return false; button.click(); return true; }, text); assert.ok(found, `button: ${text}`); };
@@ -170,6 +175,23 @@ try {
  assert.equal(Date.parse(String(parse(splitDocument(source).header).date)), Date.parse('2026-10-27T00:30:00+08:00'));
  assert.deepEqual({ ...parse(splitDocument(source).header).taxonomies }, { tags: ['tech'], categories: ['misc'] });
  await click('正文预览');await page.waitForSelector('.markdown-preview h1');
+ holdEditorEngine = true;
+ await click('可视化编辑');
+ const richLoading = await page.waitForSelector('.rich-editor-loading .loading-skeleton', { visible: true });
+ assert.match(await page.$eval('.rich-editor-loading [role="status"]', node => node.textContent), /正在加载可视化编辑器/);
+ await page.screenshot({ path: screenshots + '/editor-loading-desktop.png' });
+ await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 1 });
+ await richLoading.evaluate(node => node.scrollIntoView({ block: 'center' }));
+ await page.screenshot({ path: screenshots + '/editor-loading-mobile.png' });
+ assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'editor skeleton must fit the phone viewport');
+ await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
+ assert.ok(editorEngineRequest, 'loading screen should paint while awaiting the editor engine');
+ holdEditorEngine = false;
+ await editorEngineRequest.abort();
+ await page.waitForSelector('.markdown-source');
+ await page.waitForSelector('.rich-editor-loading', { hidden: true });
+ assert.match(await page.$eval('.editor-page .notice.error', node => node.textContent), /可视化编辑器加载失败/);
+ assert.match(await page.$eval('.markdown-source', node => node.value), /# A new story/);
  await click('可视化编辑');await page.waitForSelector('.vditor-ir [contenteditable=true]',{timeout:15000});
  await page.screenshot({path:screenshots+'/editor-desktop.png'});
  await click('Markdown 源码');

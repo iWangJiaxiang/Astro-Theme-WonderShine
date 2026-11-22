@@ -186,8 +186,11 @@ h1 { font-size: 26px; margin-bottom: 8px; }
    Use viewport units rather than the zoomed visual viewport's height. */
 @media (max-width: 760px), (max-height: 500px) {
   .editor-page:not(.embedded-editor) .markdown-source { min-height: clamp(240px, 52dvh, 430px); }
-  .editor-page:not(.embedded-editor) .vditor { max-height: max(280px, 65dvh); }
+  .editor-page:not(.embedded-editor) :is(.vditor, .rich-editor-loading) { max-height: max(280px, 65dvh); }
 }
+.embedded-editor .rich-editor-loading .loading-panel { padding-block: 14px; }
+.embedded-editor .rich-editor-loading .loading-skeleton { gap: 10px; margin-top: 12px; }
+.embedded-editor .rich-editor-loading .skeleton-icon { width: 22px; height: 22px; }
 /* The four dashboard totals form a single navigation list. */
 .stats-grid { gap: 0; border-block: 1px solid var(--studio-line); }
 .stats-grid .stat-card { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
