@@ -246,7 +246,6 @@ export const english: Record<string, string> = {
   "工作区恢复记录无效": "Invalid workspace recovery journal.",
   "工作区正在保存或同步，请稍后重试": "The workspace is saving or syncing. Try again shortly.",
   "工作区目录已有文件，请选择空目录或匹配的 Git 仓库": "The workspace directory contains files. Choose an empty directory or a matching Git repository.",
-  "工作区需要完整 Git 历史，请先补全浅克隆历史": "The workspace requires complete Git history. Unshallow the repository first.",
   "接口地址无效": "Invalid API path.",
   "文件超过编辑或预览限制": "The file exceeds the editing or preview limit.",
   "文件路径超出工作区": "The file path is outside the workspace.",

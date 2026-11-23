@@ -76,7 +76,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
       const next = records.filter(record => record.id !== item.id);
       persist(next);
       if (profile.id === item.id || service?.id === item.id || !next.length) {
-        setProfile(blank()); setService(null); setAddress(''); setToken(''); setShowForm(!next.length);
+        setProfile(blank()); setService(null); setAddress(''); setToken(''); setIncludeSubmodules(false); setShowForm(!next.length);
       }
       setError('');
     } catch (reason) { setError((reason as Error).message); }

@@ -53,7 +53,7 @@ App-managed clones keep two bounded, private snapshots per workspace. The media 
 
 A desktop folder that can change outside Studio shows the last display snapshot while it reads the current files. A saved snapshot cannot prove that an external file is unchanged. The media grid requests images on approach to the viewport and creates small raster thumbnails on the device. In private clones, the media index can serve a matching cached thumbnail without checking or reading the original. A cache miss checks the current file, as does opening the original in a dialog.
 
-Git downloads the selected branch's full history without recursively downloading submodules.
+Git downloads the selected branch at depth 1. When creating a remote workspace, select **Download submodules** to check out its direct HTTPS submodules at the commits recorded by that branch. The option starts unchecked. Synchronization can fetch older history when needed.
 
 Old SHA-based drafts and expired/evicted baseline tokens are not silently upgraded to the latest revision. Keep the draft, reload the actual document and merge changes before saving. Draft form values alone cannot reconstruct the complete original document or inherited settings dependencies.
 

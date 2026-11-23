@@ -202,14 +202,21 @@ test('native Git persists offline commits, fast-forwards safely, preserves rejec
 
   // An interrupted fast-forward keeps a journal and blocks subsequent writes.
   const interruptedRoot = join(base, 'interrupted'), interruptedState = join(base, 'interrupted-state');
-  let failCheckout = false;
+  let failPack = false, failCheckout = false;
   const failingFiles = { ...files, writeFile: async (path: string, bytes: Uint8Array | string) => {
+    if (failPack && path.endsWith('.pack')) throw new Error('Simulated pack write failure');
     if (failCheckout && path === interruptedRoot + '/config.toml') throw new Error('Simulated disk failure');
     return files.writeFile(path, bytes);
   } };
   const interrupted = create(failingFiles, interruptedRoot, interruptedState); await interrupted.open();
+  const beforeFetch = await interrupted.status();
   run(['pull', '--ff-only', '../remote.git', 'main'], seed);
   await nodeFiles.writeFile(join(seed, 'config.toml'), 'title="Fast forward"\n'); seedCommit('fast forward');
+  failPack = true;
+  await assert.rejects(interrupted.checkRemote!(), /本地文件和提交已保留/);
+  assert.deepEqual(await interrupted.status(), beforeFetch);
+  assert.equal(run(['rev-parse', '--is-shallow-repository'], interruptedRoot), 'true');
+  failPack = false;
   failCheckout = true; await assert.rejects(interrupted.sync());
   assert.ok(await nodeFiles.stat(interruptedState + '/sync.json'));
   await assert.rejects(interrupted.assertWritable(), /上次同步中断/);
