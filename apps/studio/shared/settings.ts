@@ -36,6 +36,11 @@ export const settingsSchemas: SettingsSchema[] = [
   { id: 'taxonomies', title: '标签与分类', description: '管理站点中的标签与分类名称。删除字典条目不会自动改写文章里的已有标签。', file: 'data.toml', fields: [
     field('post.tags', '标签', [], 'structured'), field('post.categories', '分类', [], 'structured'),
   ] },
+  { id: 'activity', title: '动态页面', description: '编辑动态、话题和时间线标题下的说明。留空时使用主题默认文案。', file: 'config.toml', fields: [
+    field('extra.activity.threads_intro', '动态说明', '', 'textarea'),
+    field('extra.activity.topics_intro', '话题说明', '', 'textarea'),
+    field('extra.activity.timeline_intro', '时间线说明', '', 'textarea'),
+  ] },
   { id: 'recommendations', title: '首页推荐', description: '管理主站首页推荐内容与今日推荐卡片。', file: 'data.toml', fields: [
     field('post.recommend_posts', '推荐文章', [], 'structured'), field('post.today_recommend.post_path', '今日推荐文章'),
     field('post.today_recommend.url', '今日推荐链接'), field('post.today_recommend.title', '今日推荐标题'),

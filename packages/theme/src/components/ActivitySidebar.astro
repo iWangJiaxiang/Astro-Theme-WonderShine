@@ -1,4 +1,5 @@
 ---
+import {utcDateTitle} from '../lib/date-display';
 import {activitySummary,formatDateTime,plain} from '../lib/queries';
 import {siteFeedFilenames} from '../lib/feeds';
 import {localeHome,t} from '../lib/locale';
@@ -16,7 +17,7 @@ const tr=(key:string)=>t(key,lang,site,'activity');
     <a href={`${home}topics/`}><strong>{summary.topics.length}</strong>{tr('topics')}</a>
   </div>
   {recent.length>0&&<><h3>{tr('recent')}</h3>
-   <ul class="activity-recent">{recent.map(thread=><li><a href={thread.url}>{thread.title||plain(thread.html).slice(0,80)||tr('thread')}</a><time datetime={thread.date}>{formatDateTime(thread.date,lang)}</time></li>)}</ul></>}
+   <ul class="activity-recent">{recent.map(thread=><li><a href={thread.url}>{thread.title||plain(thread.html).slice(0,80)||tr('thread')}</a><time datetime={thread.date} title={utcDateTitle(thread.date)}>{formatDateTime(thread.date,lang)}</time></li>)}</ul></>}
   <h3>{tr('topics')}</h3>
   {summary.topics.length ? <ul class="activity-topic-counts">{summary.topics.map(({topic,count})=><li><a href={topic.url}>#{topic.title}<span>{count} {tr('entries')}</span></a></li>)}</ul> : <p>{tr('empty_topics')}</p>}
   {feeds.length>0&&<nav class="activity-subscriptions" aria-label={tr('subscribe')}>{feeds.map(name=>{

@@ -38,7 +38,7 @@ export async function settingsSource(repository: Repository, schema: SettingsSch
       },
     };
   }
-  if (!schema.id.startsWith('page-') && !['about', 'friends', 'taxonomies', 'navigation', 'recommendations'].includes(schema.id)) throw new StudioError(400, '此配置分组使用全站设置，不支持单独语言覆盖');
+  if (!schema.id.startsWith('page-') && !['about', 'friends', 'taxonomies', 'navigation', 'recommendations', 'activity'].includes(schema.id)) throw new StudioError(400, '此配置分组使用全站设置，不支持单独语言覆盖');
   const path = schema.file === 'config.toml' ? schema.file : schema.file === 'data.toml' ? `data.${language}.toml` : `public/data/friends.${language}.json`;
   const file = path === schema.file ? base : await repository.read(path);
   const overlay = schema.file === 'config.toml' ? getValue(baseData, `extra.locale.${language}`) : parseFile(file);

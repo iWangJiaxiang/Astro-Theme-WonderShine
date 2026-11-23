@@ -1,4 +1,5 @@
 ---
+import {utcDateTitle} from '../../lib/date-display';
 import { t } from '../../lib/locale';
 import type { Sponsor } from './types';
 const { site, config, lang } = Astro.props;
@@ -14,6 +15,6 @@ const pipes = ['M1 77H234.226L307.006 24H790','M0 140H233.035L329.72 71H1028','M
   </div></div>}
   {sponsors.length>0&&<div class="reward-list-all">{sponsors.map(person=><div class="reward-list-item"><div>
     {person.avatar ? <div><div class="reward-list-item-avatar"><img src={person.avatar} alt={person.name || ''} loading="lazy" /></div><div style="z-index:20;float:left" class="reward-list-item-avatar-group"><div class="reward-list-item-name">{person.name}</div></div></div> : <div class="reward-list-item-name">{person.name}</div>}
-    <div class="reward-list-bottom-group"><div class="reward-list-item-money" style={person.amount>=reward.reward_number?'background:var(--wjx-vip)':undefined}>¥ {person.amount}</div><time class="datatime reward-list-item-time">{person.date}</time></div>
+    <div class="reward-list-bottom-group"><div class="reward-list-item-money" style={person.amount>=reward.reward_number?'background:var(--wjx-vip)':undefined}>¥ {person.amount}</div><time class="datatime reward-list-item-time" title={utcDateTitle(person.date)}>{person.date}</time></div>
   </div></div>)}</div>}
 </div></div>}

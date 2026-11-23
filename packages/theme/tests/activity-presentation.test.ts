@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {activitySummary,formatDateTime} from '../src/lib/queries';
+import {utcDateTitle} from '../src/lib/date-display';
 import type {Document,Site} from '../src/lib/types';
 
 const doc=(overrides:Partial<Document>={}):Document=>({id:'source',relativePath:'threads/example/index.md',path:'/threads/example/',url:'/threads/example/',lang:'en',title:'Example',description:'',draft:false,extra:{},taxonomies:{},body:'',html:'',toc:[],aliases:[],translations:[],kind:'thread',slug:'example',weight:0,render:true,transparent:false,paginateBy:0,ancestors:[],frontmatter:{},assets:[],wordCount:0,readingTime:0,...overrides});
@@ -10,9 +11,11 @@ test('seconds use Shanghai time including midnight, without mutating source prec
   const original='2026-01-01T16:00:09.123Z';
   for(const lang of ['en','zh-CN']) {
     assert.match(formatDateTime(original,lang),/2026/);
-    assert.match(formatDateTime(original,lang),/00:00:09 \(UTC\+08:00\)$/);
+    assert.match(formatDateTime(original,lang),/00:00:09$/);
   }
-  assert.equal(original,'2026-01-01T16:00:09.123Z');
+  assert.equal(utcDateTitle(original),'2026-01-01 16:00:09 UTC');
+  assert.equal(utcDateTitle('2026-01-02T00:00:09+08:00'),'2026-01-01 16:00:09 UTC');
+  assert.equal(utcDateTitle('invalid'),undefined);
   assert.equal(formatDateTime('invalid'),'');
   assert.equal(formatDateTime(), '');
 });

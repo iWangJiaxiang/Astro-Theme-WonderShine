@@ -1,4 +1,5 @@
 ---
+import {utcDateTitle} from '../lib/date-display';
 import LocalizedEmpty from './LocalizedEmpty.astro';
 import ResponsiveImage from './ResponsiveImage.astro';
 import {descendants,cover} from '../lib/queries';
@@ -35,8 +36,8 @@ const schema={'@context':'https://schema.org','@type':content?'Article':'Collect
 </div></main> : <main class="layout right-aside collection-layout" id="content-inner">
   <div id="post" style="order:0">
     {content&&<><CollectionBreadcrumb site={site} document={doc} lang={lang}/><h1 class="post-title" id="post-title">{doc.title}</h1><div class="post-meta"><span class="collection-meta-items">
-      {doc.date&&<span class="post-meta-date"><i class="icon-calendar-days post-meta-icon"/><time datetime={doc.date}>{doc.date.slice(0,10).replaceAll('-','/')}</time></span>}
-      {(doc.updated||doc.date)&&<span class="post-meta-date"><i class="icon-pencil post-meta-icon" title={tr('updated')}/><time datetime={doc.updated||doc.date}>{(doc.updated||doc.date).slice(0,10).replaceAll('-','/')}</time></span>}
+      {doc.date&&<span class="post-meta-date"><i class="icon-calendar-days post-meta-icon"/><time datetime={doc.date} title={utcDateTitle(doc.date)}>{doc.date.slice(0,10).replaceAll('-','/')}</time></span>}
+      {(doc.updated||doc.date)&&<span class="post-meta-date"><i class="icon-pencil post-meta-icon" title={tr('updated')}/><time datetime={doc.updated||doc.date} title={utcDateTitle(doc.updated||doc.date)}>{(doc.updated||doc.date).slice(0,10).replaceAll('-','/')}</time></span>}
       <span class="collection-meta-item"><i class="icon-file-word post-meta-icon" title={tr('word_count')}/><span class="word-count">{doc.wordCount}</span></span><span class="collection-meta-item"><i class="icon-clock post-meta-icon" title={tr('reading_time')}/><span>{doc.readingTime} {tr('minutes')}</span></span><span class="post-meta-pv" title={tr('views')}><i class="icon-fire post-meta-icon"/><span id="twikoo_visitors">{doc.extra.visit||'—'}</span></span>
       {comments.enable&&!doc.extra.disable_comment&&['twikoo','artalk'].includes(comments.system)&&<a class="post-meta-commentcount" href="#post-comment" title={tr('comment_count')}><i class="icon-chat--fill post-meta-icon"/><span id={comments.system==='twikoo'?'twikoo-count':'ArtalkCount'}>—</span></a>}
     </span></div></>}

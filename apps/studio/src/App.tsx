@@ -35,6 +35,7 @@ import { api, session, reauthentication, errorMessage, pendingMutations } from "
 import LoginView from "./components/LoginView";
 import Modal from "./components/Modal";
 import SettingsView from "./components/SettingsView";
+import ActivitySettings from "./components/ActivitySettings";
 import FormField from "./components/FormField";
 import ContentLibrary from "./components/ContentLibrary";
 import ThreadComposer from "./components/ThreadComposer";
@@ -199,6 +200,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       about: "user",
       taxonomies: "tag",
       recommendations: "star",
+      activity: "thread",
       theme: "palette",
     };
     const contentKind = computed(() =>
@@ -1135,7 +1137,9 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                                 onUpdateModelValue={value => saveStudioAppearance({ ...studioAppearance.value, [field.path]: String(value) })} />)}
                                             </div></div></div>
                                           </section>
-                                      : element(SettingsView, {
+                                      : view.value === "activity"
+                                        ? <ActivitySettings onDirty={value => { dirty.value = value; }} onSaved={bootstrap} />
+                                        : element(SettingsView, {
                                           key: view.value,
                                           group: view.value,
                                           onExit: (() => navigate("home")) satisfies EventHandler<typeof SettingsView, "onExit">,
