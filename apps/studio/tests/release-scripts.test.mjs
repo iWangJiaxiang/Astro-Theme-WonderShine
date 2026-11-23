@@ -8,6 +8,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { stableVersion, releaseContext } from '../scripts/release/context.mjs';
 import { validateIOSSdk, validateIOSExportCompliance } from '../scripts/release/verify-ios-sdk.mjs';
 import { validateSigningConfiguration } from '../scripts/release/signing-preflight.mjs';
+import { nextTestFlightBuildNumber } from '../scripts/release/testflight-build-number.mjs';
 
 const script = name => fileURLToPath(new URL(`../scripts/release/${name}.mjs`, import.meta.url));
 test('only stable Studio release tags publish; pushes and PRs never publish', () => {
@@ -92,6 +93,48 @@ test('iOS signing and TestFlight preflight require only Apple credentials and ne
   assert.throws(() => validateSigningConfiguration('unknown', env), /platform/);
 });
 
+test('TestFlight build numbers are scoped to the iOS version and include pending uploads', async () => {
+  const bundle = 'studio.fixture';
+  const previous = '0.2.0';
+  const next = '0.2.1';
+  const nextPage = 'https://api.appstoreconnect.apple.com/v1/builds?cursor=second';
+  const builds = versions => ({ data: versions.map(version => ({ attributes: { version } })) });
+  const get = async (resource, params) => {
+    if (resource === 'apps') {
+      assert.equal(params['filter[bundleId]'], bundle);
+      return { data: [{ id: 'app' }] };
+    }
+    if (resource === nextPage) return builds(['299.1']);
+    if (resource === 'builds') {
+      assert.equal(params['filter[app]'], 'app');
+      assert.equal(params['filter[preReleaseVersion.platform]'], 'IOS');
+      assert.ok([previous, next].includes(params['filter[preReleaseVersion.version]']));
+      return params['filter[preReleaseVersion.version]'] === previous
+        ? { ...builds(['98', '280.9']), links: { next: nextPage } }
+        : builds([]);
+    }
+    assert.equal(resource, 'apps/app/buildUploads');
+    assert.equal(params['filter[platform]'], 'IOS');
+    assert.ok([previous, next].includes(params['filter[cfBundleShortVersionString]']));
+    return { data: [] };
+  };
+  assert.equal(await nextTestFlightBuildNumber(get, bundle, previous), '300');
+  assert.equal(await nextTestFlightBuildNumber(get, bundle, next), '1');
+  const getPending = async (resource, params) => resource === 'apps/app/buildUploads'
+    ? { data: [{ attributes: { cfBundleVersion: '300' } }] }
+    : get(resource, params);
+  assert.equal(await nextTestFlightBuildNumber(getPending, bundle, previous), '301');
+  const getUnavailable = async (resource, params) => {
+    if (resource === 'apps/app/buildUploads') throw new Error('Apple unavailable');
+    return get(resource, params);
+  };
+  await assert.rejects(nextTestFlightBuildNumber(getUnavailable, bundle, next), /Apple unavailable/);
+  await assert.rejects(nextTestFlightBuildNumber(async () => ({ data: [] }), bundle, next), /could not find/);
+  await assert.rejects(nextTestFlightBuildNumber(
+    (resource, params) => resource === 'builds' ? builds(['unexpected']) : get(resource, params), bundle, previous,
+  ), /invalid iOS build number/);
+});
+
 test('version injection changes only Studio versions in runner fixtures', async () => {
   const root = await mkdtemp(join(tmpdir(), 'studio-release-version-'));
   try {
@@ -99,10 +142,18 @@ test('version injection changes only Studio versions in runner fixtures', async 
     for (const file of ['apps/studio/package.json', 'apps/studio/src-tauri/tauri.conf.json']) await writeFile(join(root, file), JSON.stringify({ version: '0.1.0', ...(file.endsWith('tauri.conf.json') ? { bundle: { iOS: { infoPlist: 'Info.ios.plist' } } } : {}) }));
     await writeFile(join(root, 'package-lock.json'), JSON.stringify({ version: '9.9.9', packages: { 'apps/studio': { version: '0.1.0' }, 'packages/theme': { version: '9.9.9' } } }));
     for (const file of ['Cargo.toml', 'Cargo.lock']) await writeFile(join(root, 'apps/studio/src-tauri', file), 'name = "wondershine-studio"\nversion = "0.1.0"\n\nname = "other"\nversion = "2.0.0"\n');
-    execFileSync(process.execPath, [script('version')], { cwd: root, env: { ...process.env, STUDIO_VERSION: '10.2.3', GITHUB_RUN_NUMBER: '123', GITHUB_RUN_ATTEMPT: '2' } });
+    const env = { ...process.env, STUDIO_VERSION: '10.2.3', GITHUB_RUN_NUMBER: '123', GITHUB_RUN_ATTEMPT: '2' };
+    delete env.STUDIO_IOS_BUILD_NUMBER;
+    const stamp = () => execFileSync(process.execPath, [script('version')], { cwd: root, env, stdio: 'pipe' });
+    const iosConfig = async () => JSON.parse(await readFile(join(root, 'apps/studio/src-tauri/tauri.conf.json'))).bundle.iOS;
+    stamp();
     for (const file of ['apps/studio/package.json', 'apps/studio/src-tauri/tauri.conf.json']) assert.equal(JSON.parse(await readFile(join(root, file))).version, '10.2.3');
-    assert.equal(JSON.parse(await readFile(join(root, 'apps/studio/src-tauri/tauri.conf.json'))).bundle.iOS.bundleVersion, '123.2');
-    assert.equal(JSON.parse(await readFile(join(root, 'apps/studio/src-tauri/tauri.conf.json'))).bundle.iOS.infoPlist, 'Info.ios.plist');
+    assert.equal((await iosConfig()).bundleVersion, '123.2');
+    env.STUDIO_IOS_BUILD_NUMBER = '1';
+    stamp();
+    assert.deepEqual(await iosConfig(), { bundleVersion: '1', infoPlist: 'Info.ios.plist' });
+    env.STUDIO_IOS_BUILD_NUMBER = '0';
+    assert.throws(stamp, /Invalid TestFlight build number/);
     const lock = JSON.parse(await readFile(join(root, 'package-lock.json')));
     assert.equal(lock.packages['apps/studio'].version, '10.2.3');
     assert.equal(lock.packages['packages/theme'].version, '9.9.9');

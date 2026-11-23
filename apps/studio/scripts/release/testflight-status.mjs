@@ -1,27 +1,15 @@
-import { sign } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readAppMetadata } from './verify-ios-sdk.mjs';
 import { setTimeout as delay } from 'node:timers/promises';
+import { appStoreConnectClient } from './app-store-connect.mjs';
 
 // The upload has already succeeded. Query that signed build without changing tester groups.
 export async function checkTestFlight(metadata, credentials) {
   const { CFBundleIdentifier: bundle, CFBundleShortVersionString: version, CFBundleVersion: build } = metadata;
   const label = `TestFlight ${version} (${build})`;
-  const json64 = data => Buffer.from(JSON.stringify(data)).toString('base64url');
-  async function get(resource, params) {
-    const now = Math.floor(Date.now() / 1000);
-    const header = json64({ alg: 'ES256', kid: credentials.id, typ: 'JWT' });
-    const claims = json64({ iss: credentials.issuer, iat: now, exp: now + 180, aud: 'appstoreconnect-v1' });
-    const payload = header + '.' + claims;
-    const signature = sign('sha256', Buffer.from(payload), { key: credentials.pem, dsaEncoding: 'ieee-p1363' });
-    const response = await fetch('https://api.appstoreconnect.apple.com/v1/' + resource + '?' + new URLSearchParams(params), {
-      headers: { Authorization: `Bearer ${payload}.${signature.toString('base64url')}` }, redirect: 'error', signal: AbortSignal.timeout(15000),
-    });
-    if (!response.ok) throw new Error('App Store Connect status HTTP ' + response.status);
-    return response.json();
-  }
+  const get = appStoreConnectClient(credentials);
   let appId;
   const deadline = Date.now() + 8 * 60_000;
   while (Date.now() < deadline) {
@@ -32,7 +20,13 @@ export async function checkTestFlight(metadata, credentials) {
         appId = apps.data[0]?.id;
         if (!appId) { console.log(`${label}: uploaded; this key cannot see the app.`); return; }
       }
-      const result = await get('builds', { 'filter[app]': appId, 'filter[version]': build, include: 'preReleaseVersion,buildBetaDetail' });
+      const result = await get('builds', {
+        'filter[app]': appId,
+        'filter[preReleaseVersion.platform]': 'IOS',
+        'filter[preReleaseVersion.version]': version,
+        'filter[version]': build,
+        include: 'preReleaseVersion,buildBetaDetail',
+      });
       related = result.included || [];
       buildRecord = result.data.find(item => item.attributes.version === build && related.some(rel =>
         rel.type === 'preReleaseVersions' && rel.id === item.relationships?.preReleaseVersion?.data?.id && rel.attributes.version === version));

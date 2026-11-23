@@ -32,7 +32,9 @@ GitHub Releases 是当前桌面/Android 的部署入口；Google Play 上架需�
 
 Studio 支持全平台构建和独立 iOS 构建。独立 iOS 的 TestFlight 上传只依赖 Studio 验证和 iOS 构建，不依赖桌面或 Android，也不创建 GitHub Release。全平台发行仍要求全部平台成功；其中启用的 TestFlight 上传可在其他平台完成前执行。
 
-仓库变量 `STUDIO_UPLOAD_TESTFLIGHT=true` 启用自动内测。每次推送到 `main`，CI 比较本次推送前后的提交；`apps/studio/` 中除 Markdown 文档和 `tests/` 目录以外的文件发生变更时，构建签名 IPA。Studio 验证、模拟器启动和 IPA 检查都通过后，CI 上传同一提交的 IPA，并查询 Apple 处理状态。版本号取自 Studio 包，build 号取自工作流运行序号和重试次数。PR 和功能分支仅验证，测试组沿用 App Store Connect 配置。
+仓库变量 `STUDIO_UPLOAD_TESTFLIGHT=true` 启用自动内测。每次推送到 `main`，CI 比较本次推送前后的提交；`apps/studio/` 中除 Markdown 文档和 `tests/` 目录以外的文件发生变更时，构建签名 IPA。Studio 验证、模拟器启动和 IPA 检查都通过后，CI 上传同一提交的 IPA，并查询 Apple 处理状态。PR 和功能分支仅验证，测试组沿用 App Store Connect 配置。
+
+自动内测的版本号取自 Studio 包。每次 TestFlight 分发在签名前查询 App Store Connect 当前 iOS 版本的构建和上传记录。新版本从 build `1` 开始，同版本使用历史最高构建号的下一个整数，例如旧编号 `299.1` 接续为 `300`。查询失败时中止签名。若上传失败且需要重新分配构建号，请重跑整个 workflow，让 iOS job 重新查询并签名。不上传 TestFlight 的 CI 构建继续使用工作流运行序号和重试次数。
 
 签名和上传凭据仅通过 GitHub Secrets 注入。签名产物自身仍可能包含 Apple Team ID，Secret 配置不意味着产物匿名化。
 

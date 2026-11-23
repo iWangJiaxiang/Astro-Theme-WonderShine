@@ -464,6 +464,13 @@ jobs:
           key: ios-xcode26.3-selected
       - run: brew install xcodegen
       - run: npm ci
+      - name: Select the next TestFlight build number
+        if: needs.prepare.outputs.testflight == 'true'
+        run: node apps/studio/scripts/release/testflight-build-number.mjs
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
       - run: node apps/studio/scripts/release/version.mjs
       - run: npm exec -w @wondershine/studio -- tauri ios init --ci
       - run: node apps/studio/scripts/configure-ios.mjs
