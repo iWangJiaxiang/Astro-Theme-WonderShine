@@ -173,6 +173,7 @@
     #topGroup { position: relative; display: block; flex: 1 1 0; min-width: 0; }
     #bannerGroup #banners,
     #topGroup { min-height: calc(328px + .5rem); }
+    #topGroup { animation: slide-in .6s .1s backwards; }
     #bannerGroup .banners-link {
         position: absolute;
         bottom: 2rem;
@@ -244,6 +245,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+    #topGroup,
     #bannerGroup #banners,
     #bannerGroup .tags-group-wrapper { animation: none; }
     #bannerGroup .banners-link-btn,

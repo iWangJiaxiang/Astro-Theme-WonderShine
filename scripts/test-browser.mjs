@@ -106,7 +106,7 @@ export async function checkBrowser(options = demo) {
         assert.deepEqual(await page.$$eval('.home-threads a', links => links.map(link => link.pathname)), [prefix + '/threads/', thread]);
         assert.equal(await page.$$eval('#home_top > section', cards => cards.length), 1);
         assert.equal(await page.$('.compact-more'), null);
-        assert.ok(await page.$('#recent-top-post-group + .home-threads'));
+        assert.ok(await page.$('#recent-top-post-group ~ .home-threads'));
         assert.equal(await page.$eval('#todayCard', link => link.pathname), prefix + '/articles/welcome/');
         const recommendations = '#recommendations-toggle';
         const recommendationLink = '#home-recommendations .recommendation-link';
@@ -115,10 +115,12 @@ export async function checkBrowser(options = demo) {
         await page.waitForSelector(recommendations, {visible:true});
         await page.waitForSelector('#banners', {visible:true});
         assert.equal(await page.$eval(recommendationLink, link => link.checkVisibility({visibilityProperty:true})), false);
+        await finishLayout();
+        await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-featured.png')});
         await page.click(recommendations);
         await page.waitForSelector(recommendationLink, {visible:true});
         await finishLayout();
-        assert.equal(await page.$eval('#todayCard', link => link.checkVisibility({visibilityProperty:true})), false);
+        await page.waitForFunction(() => !document.querySelector('#todayCard').checkVisibility({visibilityProperty:true}));
         await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-recommendations.png')});
         await page.mouse.move(0,0);
         await page.waitForSelector(recommendations + '[aria-expanded="false"]');

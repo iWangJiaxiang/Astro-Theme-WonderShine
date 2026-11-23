@@ -34,7 +34,7 @@
 #home_top:empty {
     display: none;
 }
-#recent-top-post-group + .home-threads {
+#recent-top-post-group ~ .home-threads {
     margin-top: 1rem;
 }
 @media (max-width: 768px) {
