@@ -21,6 +21,7 @@ export interface ContentTransportOptions {
   themeFetch?: typeof fetch;
   /** True only when this gateway writes exclusively through runtime.repository. */
   aiUsesObservedRepository?: boolean;
+  externallyEditable?: boolean;
   runtime?: SummaryRuntime;
   summaryStore?: SummaryIndexStore;
   identity?: Pick<Identity, 'id' | 'name'>;
@@ -76,7 +77,7 @@ export function createContentTransport(repository: Repository, options: ContentT
       }
       if (path === '/api/workspace/publish' && method === 'POST' && repository.workspace?.publish) {
         const body = await input<{ message: string; confirmation: string }>();
-        await repository.workspace.publish(body.message, requireWorkspaceConfirmation(body.confirmation));
+        await repository.workspace.publish(body?.message, requireWorkspaceConfirmation(body?.confirmation));
         return json({ published: true });
       }
       if (path === '/api/workspace/commit' && method === 'POST' && repository.workspace) {
@@ -107,7 +108,7 @@ export function createContentTransport(repository: Repository, options: ContentT
       if (path === '/api/content-preview' && method === 'GET') return json(await runtime.preview());
       if (path === '/api/content' && method === 'GET') {
         // Serialize for each caller: Response bodies are single-use streams.
-        return json(await (url.searchParams.get('refresh') === '1' ? runtime.refresh() : runtime.list()));
+        return json(await (url.searchParams.get('refresh') === '1' ? runtime.refresh() : runtime.list({ fresh: options.externallyEditable })));
       }
       if (path === '/api/document/versions') {
         if (method === 'GET') return json(await content.documentVersions(url.searchParams.get('path') || ''));

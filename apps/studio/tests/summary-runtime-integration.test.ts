@@ -79,6 +79,15 @@ test('native preview is display-only; document authority and disposal never use 
   await assert.rejects(runtime.list(), /disposed/);
 });
 
+test('desktop folder listings reflect edits made outside Studio between requests', async t => {
+  const { repository } = await fixture(t);
+  const transport = createContentTransport(repository, { externallyEditable: true });
+  const list = async () => (await transport(new Request('https://studio.local/api/content'))).json();
+  assert.equal((await list())[0].title, 'Authoritative');
+  await repository.write(path, text('Edited externally'), (await repository.read(path))!.revision);
+  assert.equal((await list())[0].title, 'Edited externally');
+});
+
 test('injected runtime shares one observer with native AI and content transport', async t => {
   const { repository, scans } = await fixture(t);
   const runtime = createSummaryRuntime(repository, { scope });

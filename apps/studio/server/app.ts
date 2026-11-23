@@ -118,9 +118,22 @@ export function createApp(options: AppOptions) {
     return c.json(await control.checkRemote());
   });
   app.post('/api/workspace/review', async c => c.json(await workspace().createReview()));
-  app.post('/api/workspace/commit', async c => {
+  app.post('/api/workspace/publish', async c => {
+    const control = workspace();
+    if (!control.publish) throw new StudioError(404, '未找到此接口');
     const input = await c.req.json<{ message: string; confirmation?: string }>();
-    return c.json(await workspace().commit(input?.message, requireWorkspaceConfirmation(input?.confirmation)));
+    await control.publish(input?.message, requireWorkspaceConfirmation(input?.confirmation));
+    return c.json({ published: true });
+  });
+  app.post('/api/workspace/commit', async c => {
+    const control = workspace();
+    const input = await c.req.json<{ message: string; confirmation?: string; followUpReview?: boolean }>();
+    const confirmation = requireWorkspaceConfirmation(input?.confirmation);
+    if (input.followUpReview === true && control.commitForReview) {
+      await control.commitForReview(input.message, confirmation);
+      return c.json({ committed: true });
+    }
+    return c.json(await control.commit(input?.message, confirmation));
   });
   app.post('/api/workspace/sync', async c => {
     const control = workspace();

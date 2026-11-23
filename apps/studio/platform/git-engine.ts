@@ -10,7 +10,7 @@ import { StudioError } from '../core/errors.js';
 import { validateMediaPath } from '../core/media-validation.js';
 import { validatePath } from '../shared/repository.js';
 import type { WorkspaceControl, WorkspaceStatus } from '../shared/workspace.js';
-import { workspaceReviewUnavailable, type ReviewState, type WorkspaceReviewAdapter } from '../shared/workspace-confirmation.js';
+import { requireWorkspaceConfirmation, workspaceReviewUnavailable, type ReviewState, type WorkspaceReviewAdapter } from '../shared/workspace-confirmation.js';
 import { ensureDirectory, missingFile, parentPath, type WorkspaceFiles } from './filesystem.js';
 import { validateBranch, validateProfile, validateRemote, type WorkspaceProfile } from './hosting.js';
 import { withWorkspaceLock } from './queue.js';
@@ -130,7 +130,7 @@ export class NativeGitEngine implements WorkspaceControl {
       const { status, review } = await this.inspectUnlocked();
       const adapter = this.reviewAdapter();
       const result = await adapter.store.createReview(review, adapter.source);
-      return { ...status, confirmation: result.confirmation, confirmationExpiresAt: result.expiresAt };
+      return { ...status, canPublish: status.canSync, confirmation: result.confirmation, confirmationExpiresAt: result.expiresAt };
     });
   }
   private reviewAdapter(): WorkspaceReviewAdapter {
@@ -149,8 +149,10 @@ export class NativeGitEngine implements WorkspaceControl {
     if (confirmation !== undefined) {
       const adapter = this.reviewAdapter();
       await adapter.store.validateReview(confirmation, this.reviewState(await this.head(), rows), adapter.source);
-      // A user-selected desktop checkout can also be changed by an external Git client.
-      if (this.profile.source === 'local') return this.rows();
+      // Do not substitute an unreviewed path list if an external editor changes the folder.
+      if (this.profile.source === 'local' && JSON.stringify(rows) !== JSON.stringify(await this.rows())) {
+        throw new StudioError(409, '工作区已变化，请刷新并重新确认提交范围');
+      }
     }
     return rows;
   }
@@ -216,7 +218,7 @@ export class NativeGitEngine implements WorkspaceControl {
   commitTheme(change: ThemeCommit): Promise<string> {
     return withWorkspaceLock(this.root, () => this.commitUnlocked(change.message, undefined, change));
   }
-  private async commitUnlocked(message: string, confirmation?: string, theme?: ThemeCommit) {
+  private async commitUnlocked(message: string, confirmation?: string, theme?: ThemeCommit, publishing = false) {
     await this.openUnlocked(); await this.assertWritable();
     if (!this.profile.authorName.trim() || !this.profile.authorEmail.trim()) throw new StudioError(400, '请在连接设置中填写提交者名称和邮箱');
     if (typeof message !== 'string' || !message.trim() || message.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)) throw new StudioError(400, '请输入不超过 500 字的提交说明');
@@ -224,6 +226,7 @@ export class NativeGitEngine implements WorkspaceControl {
     if ((await git.listFiles(this.options)).some(internal)) throw new StudioError(409, 'Git 暂存区包含创作中心备份文件，请先在 Git 工具中处理');
     const included = (path: string) => theme ? path === themeConfigPath : managed(path);
     if (rows.some(([path, head, , stage]) => (theme || !included(path)) && head !== stage)) throw new StudioError(409, '暂存区含有创作中心以外的文件，请先在 Git 工具中处理');
+    if (publishing && rows.some(([path]) => !managed(path))) throw new StudioError(409, '存在托管范围以外的修改，请先在 Git 工具中处理再同步。');
     const entries = rows.filter(([path]) => included(path));
     if (!entries.length) throw new StudioError(409, '没有可提交的内容修改');
     for (const [path] of entries) await this.safeFile(path);
@@ -255,35 +258,45 @@ export class NativeGitEngine implements WorkspaceControl {
     });
   }
 
-  sync(confirmation?: string): Promise<WorkspaceStatus> {
+  publish(message: string, confirmation: string): Promise<void> {
     return withWorkspaceLock(this.root, async () => {
-      await this.openUnlocked(); await this.assertWritable();
-      try { validateRemote(this.profile.url); } catch { throw new StudioError(400, 'App 同步需要 HTTPS 远端；本地保存和提交仍可使用'); }
-      const rows = await this.checkedRows(confirmation);
-      if (rows.length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
-      await this.fetchRemote();
-      const status = await this.branchStatus({});
-      if (status.behind && status.remoteHead) {
-        const target = status.diverged && status.head
-          ? await mergeTarget(this.options.fs, this.root, status.head, status.remoteHead, { name: this.profile.authorName, email: this.profile.authorEmail })
-          : status.remoteHead;
-        await git.checkout({ ...this.options, ref: target, noUpdateHead: true, nonBlocking: true, batchSize: 8, dryRun: true });
-        await this.files.writeFile(this.journal + '.tmp', JSON.stringify({ before: status.head, target }));
-        await this.files.rename(this.journal + '.tmp', this.journal);
-        await git.checkout({ ...this.options, ref: target, noUpdateHead: true, nonBlocking: true, batchSize: 8 });
-        await git.writeRef({ ...this.options, ref: `refs/heads/${this.profile.branch}`, value: target, force: true });
-        await this.files.unlink(this.journal);
-      }
-      if (status.ahead) {
-        try {
-          const pushed = await git.push({ ...this.options, http: this.http, url: this.profile.url, remote: 'origin', ref: this.profile.branch,
-            force: false, onAuth: this.credentials });
-          if (!pushed.ok) throw new Error('Push rejected');
-        } catch (error) { checkAuthError(error); throw new StudioError(409, 'Git 推送未确认，请重试同步以核对远端；本地提交已保留'); }
-      }
-      await this.files.writeFile(this.stateRoot + '/last-sync', new Date().toISOString());
-      // Fetch/push change refs only. Reinspect files after a checkout or in an externally editable folder.
-      return this.statusUnlocked(status.behind || this.profile.source === 'local' ? undefined : rows);
+      validateRemote(this.profile.url);
+      await this.commitUnlocked(message, requireWorkspaceConfirmation(confirmation), undefined, true);
+      await this.syncUnlocked();
     });
+  }
+
+  sync(confirmation?: string): Promise<WorkspaceStatus> {
+    return withWorkspaceLock(this.root, () => this.syncUnlocked(confirmation));
+  }
+
+  private async syncUnlocked(confirmation?: string): Promise<WorkspaceStatus> {
+    await this.openUnlocked(); await this.assertWritable();
+    try { validateRemote(this.profile.url); } catch { throw new StudioError(400, 'App 同步需要 HTTPS 远端；本地保存和提交仍可使用'); }
+    const rows = await this.checkedRows(confirmation);
+    if (rows.length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
+    await this.fetchRemote();
+    const status = await this.branchStatus({});
+    if (status.behind && status.remoteHead) {
+      const target = status.diverged && status.head
+        ? await mergeTarget(this.options.fs, this.root, status.head, status.remoteHead, { name: this.profile.authorName, email: this.profile.authorEmail })
+        : status.remoteHead;
+      await git.checkout({ ...this.options, ref: target, noUpdateHead: true, nonBlocking: true, batchSize: 8, dryRun: true });
+      await this.files.writeFile(this.journal + '.tmp', JSON.stringify({ before: status.head, target }));
+      await this.files.rename(this.journal + '.tmp', this.journal);
+      await git.checkout({ ...this.options, ref: target, noUpdateHead: true, nonBlocking: true, batchSize: 8 });
+      await git.writeRef({ ...this.options, ref: `refs/heads/${this.profile.branch}`, value: target, force: true });
+      await this.files.unlink(this.journal);
+    }
+    if (status.ahead) {
+      try {
+        const pushed = await git.push({ ...this.options, http: this.http, url: this.profile.url, remote: 'origin', ref: this.profile.branch,
+          force: false, onAuth: this.credentials });
+        if (!pushed.ok) throw new Error('Push rejected');
+      } catch (error) { checkAuthError(error); throw new StudioError(409, 'Git 推送未确认，请重试同步以核对远端；本地提交已保留'); }
+    }
+    await this.files.writeFile(this.stateRoot + '/last-sync', new Date().toISOString());
+    // Fetch/push change refs only. Reinspect files after a checkout or in an externally editable folder.
+    return this.statusUnlocked(status.behind || this.profile.source === 'local' ? undefined : rows);
   }
 }

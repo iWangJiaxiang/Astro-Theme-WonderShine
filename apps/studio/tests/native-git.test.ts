@@ -166,10 +166,19 @@ test('native Git persists offline commits, fast-forwards safely, preserves rejec
   await assert.rejects(engine.commit('content only'), /暂存区/);
   assert.equal(run(['diff', '--cached', '--name-only'], root), 'source.ts');
   run(['reset', 'HEAD', '--', 'source.ts'], root); await nodeFiles.unlink(join(root, 'source.ts'));
-  const committed = await engine.commit('more content');
+  const publication = await engine.createReview();
+  assert.equal(publication.canPublish, true);
   const hook = join(base, 'remote.git/hooks/pre-receive'); await nodeFiles.writeFile(hook, '#!/bin/sh\nexit 1\n'); await nodeFiles.chmod(hook, 0o700);
-  await assert.rejects(engine.sync(), /本地提交已保留/); assert.equal((await engine.status()).head, committed.head);
+  await assert.rejects(engine.publish('more content', publication.confirmation!), /本地提交已保留/);
+  const pending = await engine.status();
+  assert.equal(pending.ahead, 1);
+  assert.equal(pending.dirty, false);
+  await assert.rejects(engine.publish('repeat', publication.confirmation!), /重新确认/);
   await nodeFiles.unlink(hook); await engine.sync();
+  assert.equal(run(['--git-dir=remote.git', 'rev-parse', 'main']), pending.head);
+  await nodeFiles.writeFile(join(root, article), 'Reviewed publication');
+  await engine.publish('publish content', (await engine.createReview()).confirmation!);
+  assert.equal(run(['--git-dir=remote.git', 'show', 'main:' + article]), 'Reviewed publication');
 
   // An interrupted fast-forward keeps a journal and blocks subsequent writes.
   const interruptedRoot = join(base, 'interrupted'), interruptedState = join(base, 'interrupted-state');
