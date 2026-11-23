@@ -3,6 +3,7 @@ import LocalizedEmpty from './LocalizedEmpty.astro';
 import PostCards from './PostCards.astro';
 import Sidebar from './Sidebar.astro';
 import Pagination from './Pagination.astro';
+import RecentTop from './home/RecentTop.astro';
 import ContentBar from './home/ContentBar.astro';
 import {threads,plain,formatDate,activeTimestamp,timestamp} from '../lib/queries';
 import {localizeConfig,localizeUrl,t} from '../lib/locale';
@@ -11,12 +12,14 @@ import type {Route} from '../lib/routes';
 interface Props {site:Site;route:Route;}
 const {site,route}=Astro.props;
 const {lang}=route,config=localizeConfig(site,lang);
-const activity=config.extra.activity?.enable && (route.page||1)===1;
+const first=(route.page||1)===1;
+const activity=first && config.extra.activity?.enable;
 const latest=activity ? threads(site,lang)[0] : undefined;
 const latestDate=latest && (activeTimestamp(latest)>timestamp(latest.date) ? latest.updated : latest.date);
 const tr=(key:string)=>t(key,lang,site,'activity');
 ---
-<div id="home_top" class:list={{'activity-home':activity}}>
+<div id="home_top">
+  {first&&config.extra.top.recent_top&&<RecentTop site={site} lang={lang}/>}
   {activity&&<section class="home-threads" aria-labelledby="home-threads-title">
     <header>
       <h2 id="home-threads-title"><span class="activity-dot" aria-hidden="true"/>{tr('latest_thread')}</h2>
@@ -30,4 +33,4 @@ const tr=(key:string)=>t(key,lang,site,'activity');
   </section>}
 </div>
 <main class={`layout ${config.extra.sidebar.location}`} id="content-inner"><div class="recent-posts" id="recent-posts"><ContentBar site={site} lang={lang}/>
-{route.items?.length?<PostCards site={site} items={route.items} lang={lang} compactHome={activity}/>:<LocalizedEmpty site={site} lang={lang} document={route.document}/>}<Pagination {...route} site={site}/></div>{config.extra.sidebar.location!=='hide-aside'&&<Sidebar site={site} lang={lang}/>}</main>
+{route.items?.length?<PostCards site={site} items={route.items} lang={lang}/>:<LocalizedEmpty site={site} lang={lang} document={route.document}/>}<Pagination {...route} site={site}/></div>{config.extra.sidebar.location!=='hide-aside'&&<Sidebar site={site} lang={lang}/>}</main>

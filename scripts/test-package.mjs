@@ -24,6 +24,8 @@ try {
  for(const page of ['index.html','zh-CN/index.html','articles/welcome/index.html','zh-CN/articles/welcome/index.html','threads/11111111-2222-4333-8444-555555555555/index.html','collections/field-notes/first/index.html','sitemap.xml'])assert.ok((await readFile(path.join(site,'dist',page))).length,page);
  const html=await readFile(path.join(site,'dist/index.html'),'utf8');
  const localized=await readFile(path.join(site,'dist/zh-CN/index.html'),'utf8');
+ assert.match(html,/id="recent-top-post-group"[\s\S]+id="home-threads-title"/);
+ assert.match(localized,/id="recent-top-post-group"[\s\S]+id="home-threads-title"/);
  assert.match(html,/id="home-threads-title"[^>]*>.*?Latest thread<\/h2>/);
  assert.match(localized,/id="home-threads-title"[^>]*>.*?最新动态<\/h2>/);
  assert.doesNotMatch(html,/blog\.jiaxiang\.wang|89889813571729408/);

@@ -6,6 +6,7 @@
 
 /* 布局相关 */
 @import "./pages/index/base.css";
+@import "./pages/index/recommendations.css";
 
 /* 文章卡片 */
 @import "./pages/index/home-card.css";
