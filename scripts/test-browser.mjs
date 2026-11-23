@@ -121,6 +121,24 @@ export async function checkBrowser(options = demo) {
         await page.setViewport({width:1440,height:900});
         await page.waitForSelector(recommendations, {visible:true});
         await page.waitForSelector('#banners', {visible:true});
+        if (!prefix) {
+          const heights = await page.$eval('#banners', banner => {
+            const iconGroup = document.createElement('div');
+            iconGroup.className = 'tags-group-all';
+            iconGroup.style.height = '80rem';
+            banner.prepend(iconGroup);
+            try {
+              const expected = 328 + parseFloat(getComputedStyle(document.documentElement).fontSize) / 2;
+              const row = document.querySelector('#recent-post-top').getBoundingClientRect().height;
+              return [expected, row, banner.getBoundingClientRect().height,
+                document.querySelector('#todayCard').getBoundingClientRect().height];
+            } finally {
+              iconGroup.remove();
+            }
+          });
+          const [expected, ...actual] = heights;
+          assert.ok(actual.every(height => Math.abs(height - expected) < 1), JSON.stringify(heights));
+        }
         assert.equal(await page.$eval(recommendationLink, link => link.checkVisibility({visibilityProperty:true})), false);
         await finishLayout();
         await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-featured.png')});
