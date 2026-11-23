@@ -10,9 +10,9 @@ import { contentRevisions, type RevisionRegistry, type SnapshotRevisionStrategy 
 import { DiskRevisionStore } from './revision-store.js';
 
 export const revisionOf = (text: string) => createHash('sha256').update(text).digest('hex');
-export { validatePath } from '../shared/repository.js';
+export { validatePath, validateRepositoryPath } from '../shared/repository.js';
 export type { Repository, RepositoryWrite, WriteGuard } from '../shared/repository.js';
-import { validatePath, type Repository, type RepositoryWrite, type WriteGuard } from '../shared/repository.js';
+import { validateRepositoryPath, type Repository, type RepositoryWrite, type WriteGuard } from '../shared/repository.js';
 export class LocalRepository implements Repository {
   readonly mode = 'local';
   constructor(public root: string, private snapshotRevisions?: SnapshotRevisionStrategy, private revisions?: RevisionRegistry) {
@@ -26,7 +26,7 @@ export class LocalRepository implements Repository {
       ?? (this.revisions ?? contentRevisions).revision('local:' + await realpath(resolve(this.root)), path, text);
   }
   private async safePath(path: string): Promise<string> {
-    validatePath(path);
+    validateRepositoryPath(path);
     const root = await realpath(resolve(this.root));
     let current = root;
     for (const part of path.split('/')) {

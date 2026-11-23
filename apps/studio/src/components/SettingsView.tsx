@@ -422,6 +422,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       void load(true);
       if (ownsInstance() && authentication === authenticationEpoch.value) void loadRelations(true);
     }
+    let themeBranchRevision: string | undefined;
     async function save() {
       if (!canInteract() || !ready.value || !settings.value || busy.value || unknownSaveObligation.value) return;
       const operation = { authentication: authenticationEpoch.value, initiated: false };
@@ -430,6 +431,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
         revision: settings.value.revision,
         changes: JSON.parse(JSON.stringify(changes.value)),
         saveMode: saveMode.value,
+        retryPackage: branchPending.value ? themeBranchRevision : undefined,
       };
       const current = () => ownsInstance() && operation.authentication === authenticationEpoch.value && activeSave === operation;
       activeSave = operation;
@@ -442,7 +444,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       try {
         if (!current()) return;
         operation.initiated = true;
-        const result = await api<SaveResult & { pinnedThemeVersion?: string | null }>(endpoint, "PUT", input);
+        const result = await api<SaveResult & { pinnedThemeVersion?: string | null; themeBranchRevision?: string }>(endpoint, "PUT", input);
         if (!current()) return;
         batch(() => {
           settings.value = { ...settings.value!, revision: result.revision };
@@ -454,6 +456,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
             submitted[key] = result.pinnedThemeVersion ?? "";
           }
           baseline.value = submitted;
+          themeBranchRevision = result.themeBranchRevision;
           branchPending.value = result.branchPending === true;
           savedBranch.value = result.branch || "";
           message.value = result.branchPending ? "" : result.message;
@@ -501,7 +504,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           return;
         }
         operation.initiated = true;
-        const result = await api<ThemeUpdateResult>("/theme-update", "POST", { revision: check.revision, channelVersion: check.channelVersion });
+        const result = await api<ThemeUpdateResult>("/theme-update", "POST", { revision: check.revision, packageRevision: check.packageRevision, channelVersion: check.channelVersion });
         if (!current()) return;
         operation.initiated = false;
         batch(() => {
@@ -535,14 +538,15 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
     function themeUpdateControls() {
       const check = themeCheck.value;
       const disabled = busy.value || themeDirty.value || branchPending.value || unknownSaveObligation.value;
-      const sameVersion = check?.pinned && check.currentVersion === check.channelVersion;
+      const updatesVersion = check?.pinned || !!check?.packageRevision;
+      const sameVersion = updatesVersion && check?.currentVersion === check?.channelVersion;
       return <div className="full-width theme-update-controls">
         <div className="row">
           <button className="secondary" type="button" disabled={disabled} onClick={() => void updateTheme(false)}>
             {t(themeOperation.value === "check" ? "正在检查更新" : "检查更新")}
           </button>
           {check && !sameVersion && <button className="primary" type="button" disabled={disabled} onClick={() => void updateTheme(true)}>
-            {t(themeOperation.value === "apply" ? "正在应用主题更新…" : check.pinned ? "更新到此版本" : "请求重新构建")}
+            {t(themeOperation.value === "apply" ? "正在应用主题更新…" : updatesVersion ? "更新到此版本" : "请求重新构建")}
           </button>}
           {themeNeedsSync.value && props.manageWorkspace && <button className="secondary" type="button" disabled={busy.value} onClick={() => {
             if (canInteract()) props.manageWorkspace?.();
@@ -552,10 +556,11 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
         </div>
         {themeDirty.value ? <p className="muted small">{t("保存版本设置后可检查更新。")}</p> : check && <div role="status" className="small">
           {check.pinned && check.currentVersion && <p>{t("已固定版本 {version}", { version: check.currentVersion })}</p>}
+          {!check.pinned && check.packageRevision && <p>{t("仓库主题版本 {version}", { version: check.currentVersion ?? "" })}</p>}
           <p>{t("渠道当前版本 {version}", { version: check.channelVersion })}</p>
-          <p className="muted">{t(sameVersion ? "已是该渠道当前版本" : !check.pinned ? "已部署版本未知。重新构建时会使用渠道当时的版本。"
+          <p className="muted">{t(sameVersion ? "已是该渠道当前版本" : !updatesVersion ? "已部署版本未知。重新构建时会使用渠道当时的版本。"
             : check.destination === "remote" ? "确认后将提交并推送版本变更。" : check.destination === "workspace" ? "确认后将提交版本变更，随后可在工作区同步。" : "确认后将写入版本设置。")}</p>
-          {!check.pinned && <p className="muted">{t(check.destination === "remote" ? "确认后将提交并推送重建请求。"
+          {!updatesVersion && <p className="muted">{t(check.destination === "remote" ? "确认后将提交并推送重建请求。"
             : check.destination === "workspace" ? "确认后将提交重建请求，随后可在工作区同步。" : "确认后将写入重建注释，供你提交。")}</p>}
         </div>}
       </div>;

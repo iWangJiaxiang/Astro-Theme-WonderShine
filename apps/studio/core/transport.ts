@@ -101,8 +101,8 @@ export function createContentTransport(repository: Repository, options: ContentT
         const id = decodeURIComponent(path.slice('/api/settings/'.length)), language = url.searchParams.get('language') ?? undefined;
         if (method === 'GET') return json(await content.settings(id, language));
         if (method === 'PUT') {
-          const body = await input<{ revision: string | null; changes: unknown; saveMode?: unknown }>();
-          return json(await content.saveSettings(id, body.changes, body.revision, language, body.saveMode));
+          const body = await input<{ revision: string | null; changes: unknown; saveMode?: unknown; retryPackage?: unknown }>();
+          return json(await content.saveSettings(id, body.changes, body.revision, language, body.saveMode, body.retryPackage));
         }
       }
       if (path === '/api/content-languages' && method === 'GET') return json(await content.languages());

@@ -4,6 +4,7 @@ export type ThemeChannel = 'latest' | 'next' | 'canary';
 
 export interface ThemeUpdateCheck {
   revision: string | null;
+  packageRevision?: string;
   channel: ThemeChannel;
   pinned: boolean;
   currentVersion: string | null;
@@ -18,7 +19,6 @@ export interface ThemeUpdateResult extends SaveResult {
 
 export interface ThemeCommit {
   head: string;
-  before: string | null;
-  after: string;
+  files: { path: string; before: string | null; after: string }[];
   message: string;
 }

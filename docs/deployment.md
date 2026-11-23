@@ -8,17 +8,11 @@
 
 ### 用 Studio 选择主题版本
 
-在 Studio 的「主题维护 → 主题版本」选择「最新」(`latest`)、「预览」(`next`) 或「开发」(`canary`)。默认跟随最新稳定版。关闭「固定版本」时，每次 `npm run build` 都查询所选 npm 渠道；开启后可以填写「指定版本」，例如 `0.2.1`，也可以留空使用当前渠道的版本。Studio 在保存时联网核对版本，把具体版本写入站点 `config.toml` 的 `extra.theme.version`。固定期间切换渠道，会在保存时重新固定到新渠道的当前版本。之后每次部署直接读取仓库中的配置，Studio 可以关闭。固定的版本独立于 npm 标签后续的移动。
+在 Studio 的「主题维护 → 主题版本」选择「最新」(`latest`)、「预览」(`next`) 或「开发」(`canary`)，然后保存。Studio 查询 npm，将具体版本写入博客 `package.json` 的 `dependencies["@wondershine/theme"]`，并同步已有的 npm v3 锁文件。渠道和固定偏好保存在 `config.toml`。开启「固定版本」时可以填写已发布的版本号，留空则固定到该渠道的当前版本。
 
-「检查更新」显示所选渠道当前的版本。固定模式下选择「更新到此版本」会更新版本号。跟随模式下选择「请求重新构建」会写入一行 TOML 注释，供站点 CI 在推送后重新选版。在线 Git 直接提交和推送，持久工作区先提交到当前分支，再由你审阅和同步。普通本地目录需要自行提交和推送。部署流水线需监听该分支的推送，并在使用路径筛选时包含 `config.toml`。构建结果和实际部署版本在站点部署平台查看。Studio 的「界面设置 → 外观样式」保存本机的颜色模式、主题色和字体偏好。
+「检查更新」可以比较仓库版本和 npm 渠道版本。点击「更新到此版本」后，Studio 保存新版本。发布新 canary 后，可重复此操作。在线 Git 模式会推送；持久工作区需要同步，本地目录需要自行提交并推送。CI 执行 `npm ci && npm run build`，部署平台的日志记录实际发布结果。
 
-新 Starter 已包含构建前脚本。已有的独立 npm 博客只需复制 [theme-channel.mjs](../examples/starter/scripts/theme-channel.mjs) 到站点的 `scripts/`，在站点根目录执行一次：
-
-```sh
-npm pkg set 'scripts.prebuild=node scripts/theme-channel.mjs'
-```
-
-若站点已有 `prebuild`，将 `node scripts/theme-channel.mjs` 加到现有命令前面并用 `&&` 连接。提交脚本与 `package.json`，让部署平台执行 `npm ci && npm run build`。脚本仅为这次构建选择主题版本，站点依赖清单与锁文件继续提供初始安装。源码 workspace 和显式 `file:` 主题依赖沿用本地包；独立博客要跟随渠道，请先按[安装说明](npm-releases.md#选择安装渠道)切换到 npm 依赖。配置保存后，按站点原有流程同步并部署。
+已有站点若曾添加 `scripts/theme-channel.mjs` 的 `prebuild` 钩子，请从构建命令中移除这一项，保留其他构建步骤。发布脚本应使用仓库提交的依赖。依赖树发生变化时，需要用 npm 重新生成锁文件；Studio 会在写入前提示。使用本地源码包的站点可按[安装说明](npm-releases.md#选择安装渠道)切换为独立 npm 依赖。
 
 ## Creator Studio
 

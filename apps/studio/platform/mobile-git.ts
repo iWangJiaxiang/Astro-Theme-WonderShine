@@ -2,19 +2,18 @@ import { Channel, invoke } from '@tauri-apps/api/core';
 import type { GitProgressEvent, ProgressCallback } from 'isomorphic-git';
 import { StudioError } from '../core/errors';
 import { validateMediaPath } from '../core/media-validation';
-import { validatePath } from '../shared/repository';
+import { validateRepositoryPath } from '../shared/repository';
 import type { BranchFile, BranchSave } from '../shared/save';
 import type { ReviewRow, WorkspaceReviewAdapter } from '../shared/workspace-confirmation';
 import type { WorkspaceStatus } from '../shared/workspace';
 import type { ThemeCommit } from '../shared/theme-update';
-import { themeConfigPath } from '../core/theme-update';
 import { missingFile, type WorkspaceFiles } from './filesystem';
 import type { WorkspaceProfile } from './hosting';
 import { withWorkspaceLock } from './queue';
 
 type Inspection = Pick<WorkspaceStatus, 'head' | 'remoteHead' | 'ahead' | 'behind'> & { rows: ReviewRow[] };
 function managed(path: string) {
-  try { validatePath(path); return true; } catch { /* Try media. */ }
+  try { validateRepositoryPath(path); return true; } catch { /* Try media. */ }
   try { validateMediaPath(path); return true; } catch { return false; }
 }
 
@@ -97,7 +96,7 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
     }),
     commit: async (message: string, confirmation?: string) => (await commit(message, confirmation, false))!,
     commitTheme: (theme: ThemeCommit) => run(null, () => command<string>('commit', {
-      head: theme.head, message: theme.message, paths: [themeConfigPath], theme: { before: theme.before, after: theme.after },
+      head: theme.head, message: theme.message, paths: theme.files.map(file => file.path), theme: theme.files,
     })),
     commitForReview: async (message: string, confirmation: string) => { await commit(message, confirmation, true); },
     publish: (message: string, confirmation: string) => run('review', async paths => {
@@ -119,7 +118,7 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
       return status(await inspect(checkedOut ? undefined : []));
     }),
     saveBranch: (key: string, files: BranchFile[]) => run(null, async () => {
-      validatePath(key);
+      validateRepositoryPath(key);
       const expected = [];
       for (const { path, data, onlyIfMissing } of files) {
         if (!managed(path)) throw new StudioError(400, '不允许访问此文件路径');

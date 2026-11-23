@@ -9,7 +9,7 @@ export const blogStyleFields = [
 const themeFields = [
   ...blogStyleFields, field('extra.style.universe', '深色模式粒子效果', true, 'boolean'),
   field('extra.theme.channel', '版本渠道', 'latest'),
-  field('extra.theme.pinned', '固定版本', false, 'boolean', '关闭时，每次部署都使用所选渠道的最新版本。'),
+  field('extra.theme.pinned', '固定版本', false, 'boolean', '关闭时，保存渠道或应用更新会选用该渠道的当前版本。'),
   field('extra.theme.version', '指定版本', '', 'text', '例如 0.2.1。留空则固定到所选渠道当前的版本。'),
 ];
 

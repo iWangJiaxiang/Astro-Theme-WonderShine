@@ -2,17 +2,17 @@ import './buffer.js';
 import { commit, currentBranch, readCommit, readTree, resolveRef, writeBlob, writeTree, type FsClient, type TreeEntry } from 'isomorphic-git';
 import { revisionOf } from '../core/portable.js';
 import { StudioError } from '../core/errors.js';
-import { validatePath } from '../shared/repository.js';
+import { validateRepositoryPath } from '../shared/repository.js';
 import { validateMediaPath } from '../core/media-validation.js';
 import type { BranchFile, BranchSave } from '../shared/save.js';
 
 /** Caller holds the workspace lock. This never reads the worktree or modifies the index/HEAD. */
 export async function commitBranchSnapshot(options: { fs: FsClient; dir: string; author: { name: string; email: string } }, key: string, files: BranchFile[]): Promise<BranchSave> {
-  validatePath(key);
+  validateRepositoryPath(key);
   if (!options.author.name.trim() || !options.author.email.trim()) throw new StudioError(400, '请在连接设置中填写提交者名称和邮箱');
   if (!files.length) throw new StudioError(400, '没有可提交的内容修改');
   for (const file of files) {
-    try { validatePath(file.path); } catch { validateMediaPath(file.path); }
+    try { validateRepositoryPath(file.path); } catch { validateMediaPath(file.path); }
   }
   const branch = 'studio/save-' + (await revisionOf(key)).slice(0, 24);
   if (await currentBranch(options) === branch) throw new StudioError(409, '请先切回工作区主分支，再使用分支保存');

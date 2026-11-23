@@ -1,12 +1,13 @@
-import { channelPath, pinPath, versionPath, themePin } from './theme-channel.js';
+import { checkPackageRevision, readThemePackage, themePackageWrites } from './theme-package.js';
+import { channelPath, pinPath, versionPath, themePin, themeChannel, resolveThemeVersion } from './theme-channel.js';
 import { saveBatch, validateSaveMode } from './save.js';
 import { translationReviewChanges } from './translation-review.js';
-import { posix } from './portable.js';
+import { posix, revisionOf } from './portable.js';
 import { parse } from 'smol-toml';
 import type { Article, ArticleSummary, DocumentVersion, Json, Settings, Field } from '../shared/types.js';
 import { settingsSchemas, legacyAppearance, documentFields } from '../shared/settings.js';
 import { getValue, patchToml, splitDocument, updateDocument, formDocumentMetadata, removeTomlFields } from './content.js';
-import { type Repository, validatePath } from '../shared/repository.js';
+import { type Repository, type RepositoryWrite, validatePath } from '../shared/repository.js';
 import { StudioError } from './errors.js';
 import { dateParts } from '../shared/form-fields.js';
 import { fillFieldDefaults } from '../shared/form-defaults.js';
@@ -53,7 +54,7 @@ export class ContentService {
     const values = Object.fromEntries(schema.fields.map(field => [field.path, fillFieldDefaults(field.path, asJson(getValue(source.data, field.path) ?? field.default), field.default)]));
     return { ...schema, file: source.path, values, revision: source.revision };
   }
-  async saveSettings(id: string, changes: unknown, revision: string | null, language?: string, saveMode?: unknown) {
+  async saveSettings(id: string, changes: unknown, revision: string | null, language?: string, saveMode?: unknown, retryPackage?: unknown) {
     validateSaveMode(this.repository, saveMode);
     const schema = allSettingsSchemas.find(s => s.id === id);
     if (!schema) throw new StudioError(404, '未找到配置分组');
@@ -62,9 +63,22 @@ export class ContentService {
     if ((source.revision || null) !== (revision || null)) throw new StudioError(409, '文件已更新，请重新加载并合并修改');
     const mapped = Object.fromEntries(Object.entries(changes).map(([path, value]) => [source.mapPath(path), value]));
     let pinnedThemeVersion: string | null | undefined;
+    let packages: RepositoryWrite[] = [];
     let original = source.file?.text ?? '';
-    if ((id === 'theme' || id === 'appearance') && [channelPath, pinPath, versionPath].some(path => Object.hasOwn(changes, path))) {
+    const isTheme = id === 'theme' || id === 'appearance';
+    const selecting = isTheme && [channelPath, pinPath, versionPath].some(path => Object.hasOwn(changes, path));
+    const retrying = isTheme && saveMode === 'branch' && typeof retryPackage === 'string';
+    const site = selecting || retrying ? await readThemePackage(this.repository) : null;
+    if (retrying && (!site || await revisionOf(JSON.stringify([site.file.text, site.lockFile?.text ?? null])) !== retryPackage)) {
+      throw new StudioError(409, '文件已更新，请重新加载并合并修改');
+    }
+    if (selecting) {
       pinnedThemeVersion = await themePin(source.data, changes, this.themeFetch);
+      if (site) {
+        const channel = themeChannel(changes[channelPath] ?? getValue(source.data, channelPath));
+        const target = pinnedThemeVersion ?? await resolveThemeVersion(channel, this.themeFetch);
+        packages = await themePackageWrites(site, target, this.themeFetch);
+      }
       if (pinnedThemeVersion) mapped[versionPath] = pinnedThemeVersion;
       else {
         delete mapped[versionPath];
@@ -73,8 +87,19 @@ export class ContentService {
     }
     const text = source.path.endsWith('.json') ? JSON.stringify({ ...(source.file ? JSON.parse(source.file.text) : {}), ...mapped }, null, 2) + '\n'
       : patchToml(original, mapped);
-    const saved = await saveBatch(this.repository, [{ path: source.path, text, expectedRevision: source.file?.revision ?? null }], source.guard, saveMode);
-    return { ...saved, ...(pinnedThemeVersion !== undefined && { pinnedThemeVersion }), revision: await source.revisionAfter(saved.revision) };
+    if (site && saveMode === 'branch') {
+      for (const file of [site.file, site.lockFile]) {
+        if (file && !packages.some(entry => entry.path === file.path)) packages.push({ path: file.path, text: file.text, expectedRevision: file.revision });
+      }
+    }
+    const saved = await saveBatch(this.repository, [{ path: source.path, text, expectedRevision: source.file?.revision ?? null }, ...packages], async current => {
+      await source.guard?.(current);
+      if (selecting || retrying) await checkPackageRevision(current, site);
+    }, saveMode);
+    const themeBranchRevision = saved.branchPending && site ? await revisionOf(JSON.stringify(
+      ['package.json', 'package-lock.json'].map(path => packages.find(entry => entry.path === path)?.text ?? null),
+    )) : undefined;
+    return { ...saved, themeBranchRevision, ...(pinnedThemeVersion !== undefined && { pinnedThemeVersion }), revision: await source.revisionAfter(saved.revision) };
   }
   async languages(repository = this.repository) {
     const file = await repository.read('config.toml');

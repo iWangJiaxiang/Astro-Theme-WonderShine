@@ -4,6 +4,7 @@ import { splitDocument } from './content.js';
 
 /** Parse structured values before URLs, preserving spaces and parentheses in file names. */
 export function saveMediaValues(path: string, text: string): string[] {
+  if (path === 'package.json' || path === 'package-lock.json') return [];
   const values = new Set<string>();
   function strings(value: unknown): void {
     if (typeof value === 'string') values.add(value);

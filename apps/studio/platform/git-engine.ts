@@ -1,6 +1,5 @@
 import { mergeTarget } from './merge-target.js';
 import { assertThemeCommit } from './theme-commit.js';
-import { themeConfigPath } from '../core/theme-update.js';
 import type { ThemeCommit } from '../shared/theme-update.js';
 import { commitBranchSnapshot, assertBranchSnapshot } from './branch-save.js';
 import type { BranchFile, BranchSave } from '../shared/save.js';
@@ -8,7 +7,7 @@ import './buffer.js';
 import { add, checkout, clone, commit, currentBranch, fetch, getConfig, listFiles, log, push, readCommit, remove, resolveRef, statusMatrix, writeRef, type HttpClient, type ProgressCallback, type StatusRow } from 'isomorphic-git';
 import { StudioError } from '../core/errors.js';
 import { validateMediaPath } from '../core/media-validation.js';
-import { validatePath } from '../shared/repository.js';
+import { validateRepositoryPath } from '../shared/repository.js';
 import type { WorkspaceControl, WorkspaceStatus } from '../shared/workspace.js';
 import { requireWorkspaceConfirmation, workspaceReviewUnavailable, type ReviewState, type WorkspaceReviewAdapter } from '../shared/workspace-confirmation.js';
 import { ensureDirectory, missingFile, parentPath, type WorkspaceFiles } from './filesystem.js';
@@ -18,7 +17,7 @@ const git = { add, checkout, clone, commit, currentBranch, fetch, getConfig, lis
 
 const internal = (path: string) => path === '.studio-history' || path.startsWith('.studio-history/') || path === '.studio-write-lock' || path.startsWith('.studio-write-lock/');
 function managed(path: string): boolean {
-  try { validatePath(path); return true; } catch { /* Check media next. */ }
+  try { validateRepositoryPath(path); return true; } catch { /* Check media next. */ }
   try { validateMediaPath(path); return true; } catch { return false; }
 }
 
@@ -222,16 +221,13 @@ export class NativeGitEngine implements WorkspaceControl {
     if (typeof message !== 'string' || !message.trim() || message.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)) throw new StudioError(400, '请输入不超过 500 字的提交说明');
     const rows = await this.checkedRows(confirmation);
     if ((await git.listFiles(this.options)).some(internal)) throw new StudioError(409, 'Git 暂存区包含创作中心备份文件，请先在 Git 工具中处理');
-    const included = (path: string) => theme ? path === themeConfigPath : managed(path);
+    const included = (path: string) => theme ? theme.files.some(file => file.path === path) : managed(path);
     if (rows.some(([path, head, , stage]) => (theme || !included(path)) && head !== stage)) throw new StudioError(409, '暂存区含有创作中心以外的文件，请先在 Git 工具中处理');
     if (publishing && rows.some(([path]) => !managed(path))) throw new StudioError(409, '存在托管范围以外的修改，请先在 Git 工具中处理再同步。');
     const entries = rows.filter(([path]) => included(path));
     if (!entries.length) throw new StudioError(409, '没有可提交的内容修改');
     for (const [path] of entries) await this.safeFile(path);
-    if (theme) {
-      const bytes = await this.files.readFile(this.root + '/' + themeConfigPath);
-      await assertThemeCommit(this.options, theme, typeof bytes === 'string' ? new TextEncoder().encode(bytes) : bytes);
-    }
+    if (theme) await assertThemeCommit(this.options, theme, path => this.files.readFile(this.root + '/' + path));
     for (const [path, , worktree] of entries) {
       if (worktree) await git.add({ ...this.options, filepath: path });
       else await git.remove({ ...this.options, filepath: path });

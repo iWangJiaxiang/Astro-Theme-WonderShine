@@ -149,8 +149,8 @@ export function createApp(options: AppOptions) {
   app.post('/api/theme-update', async c => c.json(await applyThemeUpdate(options.repository, themeFetch, new Date(), await c.req.json())));
   app.get('/api/settings/:id', async c => c.json(await content.settings(c.req.param('id'), c.req.query('language'))));
   app.put('/api/settings/:id', async c => {
-    const input = await c.req.json<{ revision: string | null; changes: unknown; saveMode?: unknown }>();
-    return c.json(await content.saveSettings(c.req.param('id'), input.changes, input.revision, c.req.query('language'), input.saveMode));
+    const input = await c.req.json<{ revision: string | null; changes: unknown; saveMode?: unknown; retryPackage?: unknown }>();
+    return c.json(await content.saveSettings(c.req.param('id'), input.changes, input.revision, c.req.query('language'), input.saveMode, input.retryPackage));
   });
   app.get('/api/media', async c => {
     const listing = await options.repository.listMedia(c.req.query('refresh') === '1');
