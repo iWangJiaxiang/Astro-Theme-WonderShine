@@ -1,3 +1,4 @@
+import { workspaceCapabilities } from '../shared/workspace.js';
 import { requireWorkspaceConfirmation } from '../shared/workspace-confirmation.js';
 import { saveCapabilities } from './save.js';
 import { ContentService } from './content-service.js';
@@ -21,6 +22,7 @@ export interface ContentTransportOptions {
   themeFetch?: typeof fetch;
   /** True only when this gateway writes exclusively through runtime.repository. */
   aiUsesObservedRepository?: boolean;
+  externallyEditable?: boolean;
   runtime?: SummaryRuntime;
   summaryStore?: SummaryIndexStore;
   identity?: Pick<Identity, 'id' | 'name'>;
@@ -63,7 +65,7 @@ export function createContentTransport(repository: Repository, options: ContentT
       };
       if (path === '/api/bootstrap' && method === 'GET') {
         const [site, appearance] = await Promise.all([content.settings('site'), content.settings('appearance')]);
-        return json({ site: site.values, appearance: appearance.values, saveScope: session.identity.id, saveCapabilities: saveCapabilities(repository), mode: repository.mode, workspace: !!repository.workspace, quickSync: !!repository.workspace?.checkRemote, nativeAi: !!options.ai,
+        return json({ site: site.values, appearance: appearance.values, saveScope: session.identity.id, saveCapabilities: saveCapabilities(repository), mode: repository.mode, ...workspaceCapabilities(repository.workspace), nativeAi: !!options.ai,
           groups: settingsSchemas.map(({ id, title, description }) => ({ id, title, description })) });
       }
       if (path === '/api/workspace' && method === 'GET' && repository.workspace) return json(await repository.workspace.status());
@@ -76,7 +78,7 @@ export function createContentTransport(repository: Repository, options: ContentT
       }
       if (path === '/api/workspace/publish' && method === 'POST' && repository.workspace?.publish) {
         const body = await input<{ message: string; confirmation: string }>();
-        await repository.workspace.publish(body.message, requireWorkspaceConfirmation(body.confirmation));
+        await repository.workspace.publish(body?.message, requireWorkspaceConfirmation(body?.confirmation));
         return json({ published: true });
       }
       if (path === '/api/workspace/commit' && method === 'POST' && repository.workspace) {
@@ -107,7 +109,7 @@ export function createContentTransport(repository: Repository, options: ContentT
       if (path === '/api/content-preview' && method === 'GET') return json(await runtime.preview());
       if (path === '/api/content' && method === 'GET') {
         // Serialize for each caller: Response bodies are single-use streams.
-        return json(await (url.searchParams.get('refresh') === '1' ? runtime.refresh() : runtime.list()));
+        return json(await (url.searchParams.get('refresh') === '1' ? runtime.refresh() : runtime.list({ fresh: options.externallyEditable })));
       }
       if (path === '/api/document/versions') {
         if (method === 'GET') return json(await content.documentVersions(url.searchParams.get('path') || ''));

@@ -139,7 +139,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
     const branchPending = ref(false), savedBranch = ref("");
     const publishing = ref(false);
     const saveAction = (publish = false) => {
-      const direct = publish && isThread && saveMode.value === "local" && saveContext.value.workspace;
+      const direct = publish && isThread && saveMode.value === "local" && saveContext.value.workspaceCanSync;
       const label = direct || (publish && isThread && saveMode.value === "remote") ? "发布动态"
         : saveMode.value === "branch" ? "分支保存 · 可发布"
         : saveMode.value === "remote" ? "远端保存 · 可发布" : isThread ? "保存动态" : "本地保存 · 可发布";

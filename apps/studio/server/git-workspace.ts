@@ -6,7 +6,7 @@ import { commitBranchSnapshot, assertBranchSnapshot } from '../platform/branch-s
 import fs from 'node:fs';
 import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import git from 'isomorphic-git';
+import git, { type StatusRow } from 'isomorphic-git';
 import type { Repository, RepositoryWrite, WriteGuard } from '../shared/repository.js';
 import type { WorkspaceControl, WorkspaceStatus } from '../shared/workspace.js';
 import { LocalRepository, validatePath } from './repository.js';
@@ -15,7 +15,7 @@ import { safeMediaPath, validateMediaPath } from './media-files.js';
 import { validateUpload } from './media-upload.js';
 import { gitHttp, validateGitOptions, type GitOptions } from './git-repository.js';
 import { StudioError } from './errors.js';
-import type { ReviewState } from '../shared/workspace-confirmation.js';
+import { requireWorkspaceConfirmation, type ReviewState } from '../shared/workspace-confirmation.js';
 import { nodeReviewSource, nodeWorkspaceReviews } from './review-store.js';
 
 function managed(path: string): boolean {
@@ -61,6 +61,13 @@ export class GitWorkspaceRepository implements Repository {
       status: () => this.run(() => this.status()),
       createReview: () => this.run(() => this.createReview()),
       commit: (message, confirmation) => this.run(() => this.commit(message, confirmation)),
+      commitForReview: (message, confirmation) => this.run(async () => {
+        await this.commitFiles(message, requireWorkspaceConfirmation(confirmation));
+      }),
+      publish: (message, confirmation) => this.run(async () => {
+        await this.commitFiles(message, requireWorkspaceConfirmation(confirmation), undefined, true);
+        await this.sync();
+      }),
       commitTheme: change => this.run(() => this.commitFiles(change.message, undefined, change)),
       sync: confirmation => this.run(() => this.sync(confirmation)),
     };
@@ -142,13 +149,16 @@ export class GitWorkspaceRepository implements Repository {
   }
   private async createReview(): Promise<WorkspaceStatus> {
     await this.mutable();
+    await this.assertGitIdle();
     const { status, review } = await this.inspect();
     const result = await nodeWorkspaceReviews(this.root).createReview(review, nodeReviewSource(this.root));
-    return { ...status, confirmation: result.confirmation, confirmationExpiresAt: result.expiresAt };
+    return { ...status, canPublish: true, confirmation: result.confirmation, confirmationExpiresAt: result.expiresAt };
   }
-  private async validateReview(confirmation: string): Promise<void> {
-    const { review } = await this.inspect();
+  private async validateReview(confirmation: string, rows: StatusRow[]) {
+    const head = await git.resolveRef({ ...this.gitOptions, ref: 'HEAD' });
+    const review: ReviewState = { scope: 'server:' + this.root, branch: this.options.branch, head, rows: rows.filter(([path]) => managed(path)) };
     await nodeWorkspaceReviews(this.root).validateReview(confirmation, review, nodeReviewSource(this.root));
+    if (JSON.stringify(rows) !== JSON.stringify(await this.rows())) throw new StudioError(409, '工作区已变化，请刷新并重新确认提交范围');
   }
   private async status(): Promise<WorkspaceStatus> { return (await this.inspect()).status; }
   private async branchStatus(cache: object) {
@@ -185,16 +195,17 @@ export class GitWorkspaceRepository implements Repository {
     return this.status();
   }
 
-  private async commitFiles(message: string, confirmation?: string, theme?: ThemeCommit): Promise<string> {
+  private async commitFiles(message: string, confirmation?: string, theme?: ThemeCommit, publishing = false): Promise<string> {
     await this.mutable();
-    if (theme) await this.assertGitIdle();
-    if (confirmation !== undefined) await this.validateReview(confirmation);
+    await this.assertGitIdle();
     if (typeof message !== 'string' || !message.trim() || message.length > 500 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(message)) throw new StudioError(400, '请输入不超过 500 字的提交说明');
     const rows = await this.rows();
+    if (confirmation !== undefined) await this.validateReview(confirmation, rows);
     if ((await git.listFiles(this.gitOptions)).some(internal)) throw new StudioError(409, 'Git 暂存区包含创作中心备份文件，请先在 Git 工具中处理');
     // Existing staged source/config changes must never silently enter a content commit.
     const included = (path: string) => theme ? path === themeConfigPath : managed(path);
     if (rows.some(([path, head, , stage]) => (theme || !included(path)) && head !== stage)) throw new StudioError(409, '暂存区含有创作中心以外的文件，请先在 Git 工具中处理');
+    if (publishing && rows.some(([path]) => !managed(path))) throw new StudioError(409, '存在托管范围以外的修改，请先在 Git 工具中处理再同步。');
     const entries = rows.filter(([path]) => included(path));
     if (!entries.length) throw new StudioError(409, '没有可提交的内容修改');
     for (const [path] of entries) await safeMediaPath(this.root, path);
@@ -215,8 +226,9 @@ export class GitWorkspaceRepository implements Repository {
   private async sync(confirmation?: string): Promise<WorkspaceStatus> {
     await this.mutable();
     await this.assertGitIdle();
-    if (confirmation !== undefined) await this.validateReview(confirmation);
-    if ((await this.rows()).length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
+    const rows = await this.rows();
+    if (confirmation !== undefined) await this.validateReview(confirmation, rows);
+    if (rows.length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
     await this.fetchRemote();
     let status = await this.status();
     if (status.behind && status.remoteHead) {

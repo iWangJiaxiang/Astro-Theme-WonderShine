@@ -448,6 +448,8 @@ try {
   await setViewport({width:1440,height:1000});
   await click('打开工作区'); await heading('今天，写点什么？');
   assert.ok(runtimeChunks.some(name => loadedScripts.has(name)), 'Opening a workspace loads the deferred native runtime');
+  await click('动态'); await page.waitForSelector('.thread-composer textarea');
+  assert.equal(await page.$eval('.thread-composer .save-button-main', e => e.textContent), '保存动态', 'folder without an HTTPS remote offers a file save');
   await click('工作区同步'); await page.waitForSelector('.workspace-status-grid');
   assert.equal(await page.$$eval('button', buttons => buttons.find(b => b.textContent.trim() === '同步 Git').disabled), true, 'local repository without a remote disables sync');
   await click('切换工作区'); await heading('连接创作工作区');

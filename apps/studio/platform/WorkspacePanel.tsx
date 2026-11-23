@@ -76,7 +76,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
           current = await api<WorkspaceStatus>('/workspace/review', 'POST');
           if (!current.confirmation) throw new Error('工作区已变化，请刷新并重新确认提交范围');
           reviewSync = true;
-          setNotice('已提交到设备，尚未推送。请核对提交后的状态，再确认同步 Git。');
+          setNotice('已提交到工作区，尚未推送。请核对提交后的状态，再确认同步 Git。');
         }
         if (kind === 'sync' || kind === 'publish') {
           const credential = nativeGitCredential.current;
@@ -94,12 +94,12 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         }
       }
       setStatus(current);
-      if (kind === 'commit') setNotice('已提交到设备，尚未推送到远端。');
+      if (kind === 'commit') setNotice('已提交到工作区，尚未推送到远端。');
       if (kind === 'sync' || kind === 'publish') setNotice('已与 Git 远端同步；网站上线状态请以部署平台为准。');
     } catch (reason) {
-      if (kind === 'publish') setNotice('内容已保存在设备上，可以重试发布。');
+      if (kind === 'publish') setNotice('内容已保存在工作区。请核对远端状态后再重试。');
       else if (syncing) setNotice(workspaceCommitNotice('unconfirmed'));
-      else if (committed && kind === 'commit-sync') setNotice('已提交到设备，尚未推送。请刷新状态后重新确认同步。');
+      else if (committed && kind === 'commit-sync') setNotice('已提交到工作区，尚未推送。请刷新状态后重新确认同步。');
       const failure = errorMessage(reason);
       setError(failure);
       if (syncing) setAuthFailed(isGitAuthFailure(failure));
@@ -178,9 +178,9 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         <ul>{status.managedChanges?.map(path => <li key={path}><code>{path}</code></li>)}</ul>
         <p className="muted small">{t('只包含已保存的托管文件，可能包含其他文章和草稿。同步会推送当前分支已有提交，不推送保存分支，也不代表网站已部署。')}</p>
         {status.changes !== status.managedChanges?.length && <ErrorNotice source="WorkspacePanel" message="存在托管范围以外的修改，请先在 Git 工具中处理再同步。" />}
-        <div className="row workspace-sync-actions"><button className="primary" disabled={busy || !!pending || !status.managedChanges?.length || !message.trim()} onClick={() => void review('commit')}>{t('提交到设备')}</button><button className="secondary" disabled={busy || !!pending || status.dirty || manualMerge || status.canSync === false} onClick={() => void review('sync')}>{t('同步 Git')}</button><button className="primary" disabled={busy || !!pending || !status.managedChanges?.length || status.changes !== status.managedChanges.length || !message.trim() || manualMerge || status.canSync === false} onClick={() => void review('commit-sync')}>{t('提交并同步')}</button></div>
+        <div className="row workspace-sync-actions"><button className="primary" disabled={busy || !!pending || !status.managedChanges?.length || !message.trim()} onClick={() => void review('commit')}>{t('提交到工作区')}</button><button className="secondary" disabled={busy || !!pending || status.dirty || manualMerge || status.canSync === false} onClick={() => void review('sync')}>{t('同步 Git')}</button><button className="primary" disabled={busy || !!pending || !status.managedChanges?.length || status.changes !== status.managedChanges.length || !message.trim() || manualMerge || status.canSync === false} onClick={() => void review('commit-sync')}>{t('提交并同步')}</button></div>
         {pending && <div role="group" aria-label={t('确认 Git 操作')} className="notice">
-          <p>{t('确认 Git 操作')}：<strong>{status.branch}</strong> — {t(pending === 'commit' ? '提交到设备' : pending === 'sync' ? '同步 Git' : '提交并同步')}</p>
+          <p>{t('确认 Git 操作')}：<strong>{status.branch}</strong> — {t(pending === 'commit' ? '提交到工作区' : pending === 'sync' ? '同步 Git' : '提交并同步')}</p>
           <p>{t('请核对以上文件范围与待推送提交。未保存的编辑不会包含在内；失败时本地文件和提交会保留。')}</p>
           {credentialField}
           <div className="publish-actions"><button className="primary" disabled={busy} onClick={() => void action(pending)}>{busy ? t('处理中…') : t('确认执行')}</button>

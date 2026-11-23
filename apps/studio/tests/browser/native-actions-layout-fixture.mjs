@@ -71,8 +71,8 @@ function installGeometry() {
   };
   const selector = surface => surface === 'login' ? '.account-login-buttons' : '.workspace-sync-actions';
   const expected = {
-    en: { login: ['Sign in with GitHub', 'Sign in with CNB'], workspace: ['Commit locally', 'Sync Git', 'Commit and synchronize'] },
-    'zh-CN': { login: ['使用 GitHub 登录', '使用 CNB 登录'], workspace: ['提交到设备', '同步 Git', '提交并同步'] },
+    en: { login: ['Sign in with GitHub', 'Sign in with CNB'], workspace: ['Commit to workspace', 'Sync Git', 'Commit and synchronize'] },
+    'zh-CN': { login: ['使用 GitHub 登录', '使用 CNB 登录'], workspace: ['提交到工作区', '同步 Git', '提交并同步'] },
   };
   function inspect(surface, language, providers, width, platform) {
     const group = document.querySelector(selector(surface)); need(group, 'geometry');

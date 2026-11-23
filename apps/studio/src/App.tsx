@@ -76,6 +76,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       appearance: Record<string, Json>;
       mode: string;
       workspace?: boolean;
+      workspaceCanSync?: boolean;
       quickSync?: boolean;
       saveScope: string;
       saveCapabilities: SaveCapabilities;
@@ -243,7 +244,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       try {
         const result = await api<Bootstrap>("/bootstrap" + (refresh ? "?refresh=1" : ""));
         if (!isCurrent()) return;
-        configureSaving(`${session.value?.identity.id}:${result.saveScope}`, result.saveCapabilities, result.workspace);
+        configureSaving(`${session.value?.identity.id}:${result.saveScope}`, result.saveCapabilities, result.workspaceCanSync ?? result.workspace);
         data.value = result;
         const scheme = result.appearance[schemePath];
         try {
