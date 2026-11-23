@@ -29,17 +29,17 @@ export default component<Record<never, never>, Events>('ActivitySettings', (_pro
     if (error.value) return <ErrorNotice message={error.value} source="ActivitySettings" />;
     if (!languages.value) return <LoadingState label="正在加载站点…" compact />;
 
-    return <>
-      {languages.value.languages.length > 1 && <label className="settings-group-tabs small">
-        {t('语言版本')}
-        <select name="activity-language" value={language.value} disabled={dirty.value} onChange={event => { language.value = event.currentTarget.value; }}>
-          {languages.value.languages.map(code => <option key={code} value={code}>{code}</option>)}
-        </select>
-      </label>}
-      <SettingsView key={language.value} group="activity" language={language.value} onDirty={value => {
+    const languageControl = languages.value.languages.length > 1 && <label className="row small">
+      {t('语言版本')}
+      <select name="activity-language" value={language.value} disabled={dirty.value} style={{ width: 'auto' }}
+        onChange={event => { language.value = event.currentTarget.value; }}>
+        {languages.value.languages.map(code => <option key={code} value={code}>{code}</option>)}
+      </select>
+    </label>;
+    return <SettingsView key={language.value} group="activity" language={language.value} headingControl={languageControl}
+      onDirty={value => {
         dirty.value = value;
         emit('dirty', value);
-      }} onSaved={() => emit('saved')} />
-    </>;
+      }} onSaved={() => emit('saved')} />;
   };
 });
