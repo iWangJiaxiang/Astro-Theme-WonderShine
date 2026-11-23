@@ -48,7 +48,6 @@ function setPostDateList() {
             date_str = GLOBAL_CONFIG.i18n.today;
         }
         dateTag[i].textContent = date_str;
-        dateTag[i].title = date;
     }
 }
 

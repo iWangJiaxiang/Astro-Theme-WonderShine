@@ -306,8 +306,8 @@ export async function checkBrowser(options = demo) {
           return Math.abs(avatar.left - body.left) < 1;
         }));
       }
-      if (options === demo && ['article', 'thread', 'timeline', 'topics'].includes(name)) {
-        const times = await page.$$eval(':is(#post-meta, .activity-main, .activity-aside) time[datetime]', nodes =>
+      if (options === demo && ['home', 'article', 'thread', 'timeline', 'topics'].includes(name)) {
+        const times = await page.$$eval(':is(#post-meta, .activity-main, .activity-aside, #home_top, #recent-posts) time[datetime]', nodes =>
           nodes.map(node => ({text:node.textContent,date:node.dateTime,title:node.title})));
         assert.ok(times.length, 'Publication times are present');
         for (const time of times.filter(item => item.date)) {
