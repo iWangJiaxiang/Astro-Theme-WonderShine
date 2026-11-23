@@ -71,6 +71,8 @@ section.native-ai-settings { max-width: 960px; }
 .native-connect .field { min-width: 0; margin: 0; }
 .native-connect .field > span { font-size: 13px; }
 .native-connect .field input, .native-connect .field select { min-width: 0; max-width: 100%; min-height: 42px; }
+.native-connect .checkbox-field { flex-direction: row; align-items: center; gap: 9px; min-height: 36px; cursor: pointer; }
+.native-connect .checkbox-field input { width: 17px; min-height: 0; padding: 0; }
 .connection-folder { min-width: 0; }
 .folder-picker { width: 100%; min-height: 154px; display: flex; flex-direction: column; gap: 12px; align-items: center; justify-content: center; background: var(--form-surface); border: 1px dashed var(--studio-line); border-radius: 12px; color: var(--wjx-fontcolor); }
 .folder-picker:hover, .folder-picker:focus-visible { border-color: var(--wjx-theme); background: color-mix(in srgb, var(--wjx-theme) 5%, var(--studio-card)); }

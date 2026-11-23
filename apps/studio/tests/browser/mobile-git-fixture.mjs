@@ -16,7 +16,7 @@ export async function mobileGitFixture(base, appData, studio) {
   const token = 'fixture-token';
   const server = createServer({ key: await readFile(key), cert: await readFile(ca) }, async (request, response) => {
     const url = new URL(request.url, 'https://127.0.0.1');
-    if (!online || !['/remote.git/info/refs','/remote.git/git-upload-pack','/remote.git/git-receive-pack'].includes(url.pathname)) {
+    if (!online || !/^\/(remote|theme)\.git\/(info\/refs|git-upload-pack|git-receive-pack)$/.test(url.pathname)) {
       response.writeHead(503).end(); return;
     }
     if (privateRemote && request.headers.authorization !== 'Basic ' + Buffer.from('oauth2:' + token).toString('base64')) {

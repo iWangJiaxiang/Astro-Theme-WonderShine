@@ -18,6 +18,7 @@ import { gitHttp, validateGitOptions, type GitOptions } from './git-repository.j
 import { StudioError } from './errors.js';
 import { requireWorkspaceConfirmation, type ReviewState } from '../shared/workspace-confirmation.js';
 import { nodeReviewSource, nodeWorkspaceReviews } from './review-store.js';
+import { fetchWorkspace } from '../platform/fetch-workspace.js';
 
 function managed(path: string): boolean {
   try { validateRepositoryPath(path); return true; } catch { /* Try media paths next. */ }
@@ -116,7 +117,7 @@ export class GitWorkspaceRepository implements Repository {
       if (exists && (await readdir(this.root)).length) throw new StudioError(409, '工作区目录已有文件，请选择空目录或匹配的 Git 仓库');
       const staging = await mkdtemp(`${this.root}.clone-`);
       try {
-        await git.clone({ fs, http: this.http, dir: staging, url: this.options.url, ref: this.options.branch, singleBranch: true, onAuth: this.auth });
+        await git.clone({ fs, http: this.http, dir: staging, url: this.options.url, ref: this.options.branch, singleBranch: true, depth: 1, noTags: true, onAuth: this.auth });
         // The destination is empty, and it remains untouched until the complete clone is ready.
         await rename(staging, this.root);
       } catch (error) {
@@ -127,9 +128,6 @@ export class GitWorkspaceRepository implements Repository {
     const origin = await git.getConfig({ ...this.gitOptions, path: 'remote.origin.url' });
     const branch = await git.currentBranch(this.gitOptions);
     if (origin !== this.options.url || branch !== this.options.branch) throw new StudioError(409, '本地仓库的地址或分支与工作区配置不一致，请检查配置');
-    try {
-      if ((await readFile(join(this.root, '.git', 'shallow'), 'utf8')).trim()) throw new StudioError(409, '工作区需要完整 Git 历史，请先补全浅克隆历史');
-    } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   }
 
   private async mutable(): Promise<void> {
@@ -238,10 +236,14 @@ export class GitWorkspaceRepository implements Repository {
     return git.commit({ ...this.gitOptions, message: message.trim(), author: { name: this.options.name, email: this.options.email } });
   }
 
-  private async fetchRemote() {
+  private async fetchRemote(syncing = false) {
     try {
-      await git.fetch({ ...this.gitOptions, http: this.http, url: this.options.url, remote: 'origin', ref: this.options.branch, singleBranch: true, onAuth: this.auth });
-    } catch { throw new StudioError(502, '暂时无法连接 Git 远端，本地文件和提交已保留'); }
+      await fetchWorkspace(fs.promises, { dir: this.root, http: this.http, url: this.options.url,
+        branch: this.options.branch, onAuth: this.auth }, syncing);
+    } catch (error) {
+      if (error instanceof StudioError) throw error;
+      throw new StudioError(502, '暂时无法连接 Git 远端，本地文件和提交已保留');
+    }
   }
 
   private async sync(confirmation?: string): Promise<WorkspaceStatus> {
@@ -250,7 +252,7 @@ export class GitWorkspaceRepository implements Repository {
     const rows = await this.rows();
     if (confirmation !== undefined) await this.validateReview(confirmation, rows);
     if (rows.length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
-    await this.fetchRemote();
+    await this.fetchRemote(true);
     let status = await this.status();
     if (status.behind && status.remoteHead) {
       const target = status.diverged && status.head

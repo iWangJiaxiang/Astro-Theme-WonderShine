@@ -74,6 +74,10 @@ test('persistent workspaces retain offline edits, recover on reopen and synchron
   const first = (await workspace.read(articlePath))!;
   assert.equal((await workspace.workspace.status()).dirty, false);
   assert.equal(cloneRequests, 1);
+  assert.equal(run(['rev-parse', '--is-shallow-repository'], directory), 'true');
+  assert.equal(run(['rev-list', '--count', 'HEAD'], directory), '1');
+  assert.deepEqual(await workspace.workspace.checkRemote!(), { ahead: 0, behind: 0 });
+  assert.equal(cloneRequests, 1, 'checking an unchanged tip does not download history');
   offline = true;
   const originalRemote = run(['--git-dir=repo.git', 'rev-parse', 'main']);
   const saved = await workspace.write(articlePath, first.text.replace('Hello', 'Offline edit'), first.revision);
@@ -137,6 +141,7 @@ test('persistent workspaces retain offline edits, recover on reopen and synchron
   const synced = await reopened.workspace.sync(syncReview.confirmation);
   assert.equal(synced.confirmation, undefined);
   assert.equal(synced.ahead, 0);
+  assert.equal(run(['rev-parse', '--is-shallow-repository'], directory), 'false');
   assert.equal(run(['--git-dir=repo.git', 'ls-tree', 'main', 'themes/wondershine']), `160000 commit ${themeCommit}\tthemes/wondershine`, 'content commits must preserve the pinned theme gitlink');
   assert.ok(synced.lastSync);
   assert.match(run(['--git-dir=repo.git', 'show', `main:${articlePath}`]), /Offline edit/);
@@ -245,9 +250,6 @@ test('persistent workspaces retain offline edits, recover on reopen and synchron
   assert.match((await reopened.read(articlePath))!.text, /Local branch/);
   assert.equal(run(['--git-dir=repo.git', 'rev-parse', 'main']), remoteCommit);
   assert.equal((await new GitWorkspaceRepository(options).workspace.status()).diverged, true);
-  await writeFile(join(directory, '.git/shallow'), String(divergent.head));
-  await assert.rejects(new GitWorkspaceRepository(options).workspace.status(), /补全浅克隆历史/);
-  await rm(join(directory, '.git/shallow'));
 
   // An interrupted checkout must not allow further mutation before manual recovery.
   await writeFile(join(directory, '.git/wondershine-sync.json'), '{}');

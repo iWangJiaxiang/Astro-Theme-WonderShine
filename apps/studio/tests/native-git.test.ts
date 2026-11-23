@@ -44,19 +44,23 @@ test('native Git persists offline commits, fast-forwards safely, preserves rejec
   seedCommit('initial');
   // The personal blog pins its Astro theme through a Git submodule.
   const themeCommit = run(['rev-parse', 'HEAD'], seed);
+  run(['init', '--bare', '-b', 'main', 'theme.git']);
   await nodeFiles.mkdir(join(seed, 'themes/wondershine'), { recursive: true });
-  await nodeFiles.writeFile(join(seed, '.gitmodules'), '[submodule "themes/wondershine"]\n\tpath = themes/wondershine\n\turl = https://git.test/theme.git\n');
+  await nodeFiles.writeFile(join(seed, '.gitmodules'), '[submodule "themes/wondershine"]\n\tpath = themes/wondershine\n\turl = ../theme.git\n');
   run(['add', '.gitmodules'], seed);
   run(['update-index', '--add', '--cacheinfo', `160000,${themeCommit},themes/wondershine`], seed);
   run(['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '-m', 'pin theme submodule'], seed);
   run(['push', '../remote.git', 'main'], seed);
+  run(['push', '../theme.git', 'main'], seed);
   const executable = join(run(['--exec-path']), 'git-http-backend');
-  let requests = 0, authorized = false;
+  let requests = 0, uploads = 0, submoduleRequests = 0, authorized = false;
   const server = createServer((req, res) => {
     requests++;
     if (!req.headers.authorization) { res.writeHead(401, { 'WWW-Authenticate': 'Basic realm=Git' }).end(); return; }
     authorized = true;
     const url = new URL(req.url!, 'http://localhost');
+    if (url.pathname.endsWith('/git-upload-pack')) uploads++;
+    if (url.pathname.startsWith('/theme.git/')) submoduleRequests++;
     const child = spawn(executable, [], { env: { ...process.env, GIT_PROJECT_ROOT: base, GIT_HTTP_EXPORT_ALL: '1', PATH_INFO: url.pathname,
       REQUEST_METHOD: req.method, QUERY_STRING: url.search.slice(1), CONTENT_TYPE: req.headers['content-type'] || '', REMOTE_USER: 'tester', REMOTE_ADDR: '127.0.0.1' } });
     const parts: Buffer[] = []; child.stdout.on('data', chunk => parts.push(chunk)); child.stderr.resume(); req.pipe(child.stdin);
@@ -114,6 +118,21 @@ test('native Git persists offline commits, fast-forwards safely, preserves rejec
   });
   const beforeOpenRequests = requests;
   let engine = create(); await assert.rejects(engine.status(), /请先下载/); assert.equal(requests, beforeOpenRequests); await engine.open(); assert.equal((await engine.status()).dirty, false); assert.ok(authorized);
+  assert.equal(run(['rev-parse', '--is-shallow-repository'], root), 'true');
+  assert.equal(run(['rev-list', '--count', 'HEAD'], root), '1');
+  assert.equal(submoduleRequests, 0);
+  await engine.open(undefined, true, true);
+  assert.equal(submoduleRequests, 0, 'opening an existing repository does not initialize submodules');
+  const withTheme = join(base, 'with-theme');
+  const optedIn = create(files, withTheme, join(base, 'with-theme-state'));
+  await optedIn.open(undefined, true, true);
+  assert.equal(run(['rev-parse', 'HEAD'], join(withTheme, 'themes/wondershine')), themeCommit);
+  assert.match(await nodeFiles.readFile(join(withTheme, 'themes/wondershine', article), 'utf8'), /Original/);
+  assert.equal((await optedIn.status()).dirty, false);
+  assert.ok(submoduleRequests > 0);
+  const beforeCheck = uploads;
+  assert.deepEqual(await engine.checkRemote!(), { ahead: 0, behind: 0 });
+  assert.equal(uploads, beforeCheck, 'checking the shallow tip only discovers refs');
   const initialRequests = requests, initialHead = run(['--git-dir=remote.git', 'rev-parse', 'main']);
   offline = true;
   await nodeFiles.writeFile(join(root, article), 'Offline writing');
@@ -146,6 +165,7 @@ test('native Git persists offline commits, fast-forwards safely, preserves rejec
   assert.ok(syncReview.confirmation);
   assert.notEqual(syncReview.confirmation, preview.confirmation);
   const synced = await engine.sync(syncReview.confirmation); assert.equal(synced.ahead, 0); assert.ok(synced.lastSync);
+  assert.equal(run(['rev-parse', '--is-shallow-repository'], root), 'false');
   assert.equal(synced.confirmation, undefined);
   assert.match(run(['--git-dir=remote.git', 'show', `main:${article}`]), /Offline writing/);
   assert.equal(run(['--git-dir=remote.git', 'ls-tree', 'main', 'themes/wondershine']), `160000 commit ${themeCommit}\tthemes/wondershine`, 'native content commit must preserve the theme gitlink');

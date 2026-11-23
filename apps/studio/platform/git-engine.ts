@@ -6,7 +6,7 @@ import type { ThemeCommit } from '../shared/theme-update.js';
 import { commitBranchSnapshot, assertBranchSnapshot } from './branch-save.js';
 import type { BranchFile, BranchSave } from '../shared/save.js';
 import './buffer.js';
-import { add, checkout, clone, commit, currentBranch, fetch, getConfig, listFiles, log, push, readCommit, remove, resolveRef, statusMatrix, writeRef, type HttpClient, type ProgressCallback, type StatusRow } from 'isomorphic-git';
+import { add, checkout, clone, commit, currentBranch, getConfig, listFiles, log, push, readCommit, remove, resolveRef, statusMatrix, writeRef, type HttpClient, type ProgressCallback, type StatusRow } from 'isomorphic-git';
 import { StudioError } from '../core/errors.js';
 import { validateMediaPath } from '../core/media-validation.js';
 import { validateRepositoryPath } from '../shared/repository.js';
@@ -15,7 +15,9 @@ import { requireWorkspaceConfirmation, workspaceReviewUnavailable, type ReviewSt
 import { ensureDirectory, missingFile, parentPath, type WorkspaceFiles } from './filesystem.js';
 import { validateBranch, validateProfile, validateRemote, type WorkspaceProfile } from './hosting.js';
 import { withWorkspaceLock } from './queue.js';
-const git = { add, checkout, clone, commit, currentBranch, fetch, getConfig, listFiles, log, push, readCommit, remove, resolveRef, statusMatrix, writeRef };
+import { fetchWorkspace } from './fetch-workspace.js';
+import { downloadSubmodules } from './git-submodules.js';
+const git = { add, checkout, clone, commit, currentBranch, getConfig, listFiles, log, push, readCommit, remove, resolveRef, statusMatrix, writeRef };
 
 const internal = (path: string) => path === '.studio-history' || path.startsWith('.studio-history/') || path === '.studio-write-lock' || path.startsWith('.studio-write-lock/');
 function managed(path: string): boolean {
@@ -34,7 +36,7 @@ export class NativeGitEngine implements WorkspaceControl {
   constructor(private files: WorkspaceFiles, private root: string, private stateRoot: string,
     private profile: WorkspaceProfile, private http: HttpClient,
     private credentials: () => { username: string; password: string } | Promise<{ username: string; password: string }>,
-    private reviews?: WorkspaceReviewAdapter) {
+    private reviews?: WorkspaceReviewAdapter, private httpFor?: (url: string) => HttpClient) {
     validateProfile(profile, { allowAutomaticBranch: true });
     if (!root || root === '/' || root.endsWith('/') || root.split('/').some(part => part === '.' || part === '..')
       || stateRoot === root || stateRoot.startsWith(root + '/')) throw new Error('Git 工作区与状态目录必须分开存储');
@@ -67,8 +69,10 @@ export class NativeGitEngine implements WorkspaceControl {
     }
   }
 
-  open(onProgress?: ProgressCallback, allowClone = true): Promise<void> { return withWorkspaceLock(this.root, () => this.openUnlocked(allowClone, onProgress)); }
-  private async openUnlocked(allowClone = false, onProgress?: ProgressCallback): Promise<void> {
+  open(onProgress?: ProgressCallback, allowClone = true, includeSubmodules = false): Promise<void> {
+    return withWorkspaceLock(this.root, () => this.openUnlocked(allowClone, onProgress, includeSubmodules));
+  }
+  private async openUnlocked(allowClone = false, onProgress?: ProgressCallback, includeSubmodules = false): Promise<void> {
     if (this.profile.source !== 'local') await ensureDirectory(this.files, parentPath(this.root));
     const exists = await this.exists(this.root);
     if (exists) await this.ordinaryDirectory(this.root);
@@ -85,10 +89,14 @@ export class NativeGitEngine implements WorkspaceControl {
       await this.files.mkdir(staging);
       try {
         await git.clone({ fs: { promises: this.files }, http: this.http, dir: staging, url: this.profile.url,
-          ...(this.profile.branch ? { ref: this.profile.branch } : {}), singleBranch: true, nonBlocking: true, batchSize: 8, onAuth: this.credentials, onProgress });
+          ...(this.profile.branch ? { ref: this.profile.branch } : {}), singleBranch: true, depth: 1, noTags: true,
+          nonBlocking: true, batchSize: 8, onAuth: this.credentials, onProgress });
         const detectedBranch = await git.currentBranch({ fs: { promises: this.files }, dir: staging });
         validateBranch(detectedBranch || '');
         if (this.profile.branch && detectedBranch !== this.profile.branch) throw new Error('Clone branch mismatch');
+        if (includeSubmodules) {
+          await downloadSubmodules(this.files, staging, this.profile.url, this.httpFor ?? (() => this.http), this.credentials, onProgress);
+        }
         // Keep partial downloads outside the selected workspace until clone fully succeeds.
         await this.files.rename(staging, this.root);
         this.profile.branch = detectedBranch!;
@@ -100,9 +108,6 @@ export class NativeGitEngine implements WorkspaceControl {
     const origin = await git.getConfig({ ...this.options, path: 'remote.origin.url' });
     if ((origin || '') !== this.profile.url || await git.currentBranch(this.options) !== this.profile.branch) {
       throw new StudioError(409, '本地仓库的地址或分支与工作区配置不一致，请检查配置');
-    }
-    if (await this.exists(this.root + '/.git/shallow') && String(await this.files.readFile(this.root + '/.git/shallow', 'utf8')).trim()) {
-      throw new StudioError(409, '工作区需要完整 Git 历史，请先补全浅克隆历史');
     }
     await ensureDirectory(this.files, this.stateRoot);
   }
@@ -257,11 +262,11 @@ export class NativeGitEngine implements WorkspaceControl {
     return git.commit({ ...this.options, message: message.trim(), author: { name: this.profile.authorName, email: this.profile.authorEmail } });
   }
 
-  private async fetchRemote() {
+  private async fetchRemote(syncing = false) {
     validateRemote(this.profile.url);
     try {
-      await git.fetch({ ...this.options, http: this.http, url: this.profile.url, remote: 'origin', ref: this.profile.branch,
-        singleBranch: true, onAuth: this.credentials });
+      await fetchWorkspace(this.files, { dir: this.root, http: this.http, url: this.profile.url,
+        branch: this.profile.branch, onAuth: this.credentials }, syncing);
     } catch (error) { checkAuthError(error); throw new StudioError(502, '暂时无法连接 Git 远端，本地文件和提交已保留'); }
   }
   get canSync() {
@@ -294,7 +299,7 @@ export class NativeGitEngine implements WorkspaceControl {
     try { validateRemote(this.profile.url); } catch { throw new StudioError(400, 'App 同步需要 HTTPS 远端；本地保存和提交仍可使用'); }
     const rows = await this.checkedRows(confirmation);
     if (rows.length) throw new StudioError(409, '请先提交本地修改，再同步远端；未保存到 Git 的内容不会被覆盖');
-    await this.fetchRemote();
+    await this.fetchRemote(true);
     const status = await this.branchStatus({});
     if (status.behind && status.remoteHead) {
       const target = status.diverged && status.head

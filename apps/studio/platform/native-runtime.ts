@@ -29,7 +29,7 @@ import { createNativeMediaImageLoader } from './media-thumbnails';
 const summaryRoots = ['articles', 'pages', 'collections', 'threads', 'topics'];
 const summaryOrder = (a: string, b: string) => summaryRoots.indexOf(a.split('/')[1]) - summaryRoots.indexOf(b.split('/')[1]) || comparePathComponents(a, b);
 
-export async function connectNativeWorkspace(profile: WorkspaceProfile, token: string, onDisconnect: () => void, onProgress?: ProgressCallback, summaryStore?: SummaryIndexStore, allowClone = true, grant?: GitGrant): Promise<() => void> {
+export async function connectNativeWorkspace(profile: WorkspaceProfile, token: string, onDisconnect: () => void, onProgress?: ProgressCallback, summaryStore?: SummaryIndexStore, allowClone = true, grant?: GitGrant, includeSubmodules = false): Promise<() => void> {
   validateProfile(profile, { allowAutomaticBranch: true });
   const base = (await appDataDir()).replace(/\\/g, '/').replace(/\/$/, '');
   const folder = base + '/workspaces/' + profile.id;
@@ -48,7 +48,8 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
   }
   let httpsRemote = false;
   try { validateRemote(profile.url); httpsRemote = true; } catch { /* Local-only and SSH repositories can be edited offline. */ }
-  const http = httpsRemote ? createGitHttp(profile.url, (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }))
+  const httpFor = (url: string) => createGitHttp(url, (input, init) => nativeFetch(input, { ...init, maxRedirections: 0 }));
+  const http = httpsRemote ? httpFor(profile.url)
     : { request: async (): Promise<never> => { throw new Error('App 同步需要 HTTPS 远端；本地保存和提交仍可使用'); } };
   // Recover derived review locks only under the process-lifetime native owner,
   // before opening Git or exposing any workspace operation to the transport.
@@ -59,10 +60,10 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
   const git = typeof document !== 'undefined' && document.documentElement.dataset.nativeMobile
     ? (await import('./mobile-git')).mobileGit(files, root, state, profile, credential.password, reviews)
     : new (await import('./git-engine')).NativeGitEngine(files, root, state, profile, http,
-      async () => ({ username: profile.username || 'oauth2', password: await credential.password() }), reviews);
+      async () => ({ username: profile.username || 'oauth2', password: await credential.password() }), reviews, httpFor);
   const diagnostics = createLoadDiagnostics(localStorage);
   const progress = diagnostics.progress(onProgress);
-  try { await diagnostics.measure('git-open', () => git.open(progress.onProgress, allowClone)); }
+  try { await diagnostics.measure('git-open', () => git.open(progress.onProgress, allowClone, includeSubmodules)); }
   finally { progress.finish(); }
   const local = new FileRepository(files, root, state, () => git.assertWritable());
   await diagnostics.measure('recovery', () => local.recover());
