@@ -1,5 +1,5 @@
 import { discardState } from '../shared/workspace-discard.js';
-import { discardFiles } from '../platform/discard-files.js';
+import { discardFiles, discardRows } from '../platform/discard-files.js';
 import { mergeTarget } from '../platform/merge-target.js';
 import { assertThemeCommit } from '../platform/theme-commit.js';
 import type { ThemeCommit } from '../shared/theme-update.js';
@@ -196,7 +196,7 @@ export class GitWorkspaceRepository implements Repository {
   private async discard(token?: string): Promise<WorkspaceStatus> {
     await this.mutable();
     await this.assertGitIdle();
-    const rows = await this.rows();
+    const rows = await discardRows(this.gitOptions);
     const status = await this.status();
     const state = await discardState({ scope: 'server:' + this.root, head: status.head, branch: status.branch, rows },
       await readFile(join(this.root, '.git', 'index')));

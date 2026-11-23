@@ -1,5 +1,5 @@
 import { discardState } from '../shared/workspace-discard.js';
-import { discardFiles } from './discard-files.js';
+import { discardFiles, discardRows } from './discard-files.js';
 import { mergeTarget } from './merge-target.js';
 import { assertThemeCommit } from './theme-commit.js';
 import type { ThemeCommit } from '../shared/theme-update.js';
@@ -219,7 +219,7 @@ export class NativeGitEngine implements WorkspaceControl {
   private discardChanges(token?: string): Promise<WorkspaceStatus> {
     return withWorkspaceLock(this.root, async () => {
       await this.openUnlocked(); await this.assertWritable();
-      const rows = await this.rows();
+      const rows = await discardRows(this.options);
       const status = await this.statusUnlocked(rows);
       const state = await discardState({ scope: 'native:' + this.root, branch: status.branch, head: status.head, rows },
         await this.files.readFile(this.root + '/.git/index') as Uint8Array);

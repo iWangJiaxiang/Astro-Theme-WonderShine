@@ -49,7 +49,9 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       if (sequence !== requestSequence.current) return;
       if (!reviewed.confirmation) throw new Error('工作区已变化，请刷新并重新确认提交范围');
       setStatus(reviewed);
-      if (kind !== 'publish') setPending(kind);
+      if (kind === 'discard' && !reviewed.discardPaths?.length) {
+        setPending(null); setNotice('工作区没有未提交的修改');
+      } else if (kind !== 'publish') setPending(kind);
       else if (!reviewed.dirty) setPending('sync');
       else setPending(reviewed.canPublish ? 'publish' : 'commit-sync');
     } catch (reason) { if (sequence === requestSequence.current) { setError(errorMessage(reason)); setPending(null); } }
@@ -185,7 +187,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         <p className="muted small">{t('只包含已保存的托管文件，可能包含其他文章和草稿。同步会推送当前分支已有提交，不推送保存分支，也不代表网站已部署。')}</p>
         {status.changes !== status.managedChanges?.length && <ErrorNotice source="WorkspacePanel" message="存在托管范围以外的修改，请先在 Git 工具中处理再同步。" />}
         <div className="row workspace-sync-actions"><button className="primary" disabled={busy || !!pending || !status.managedChanges?.length || !message.trim()} onClick={() => void review('commit')}>{t('提交到工作区')}</button><button className="secondary" disabled={busy || !!pending || status.dirty || manualMerge || status.canSync === false} onClick={() => void review('sync')}>{t('同步 Git')}</button><button className="primary" disabled={busy || !!pending || !status.managedChanges?.length || status.changes !== status.managedChanges.length || !message.trim() || manualMerge || status.canSync === false} onClick={() => void review('commit-sync')}>{t('提交并同步')}</button></div>
-        {status.canDiscard && <button type="button" className="text-button danger" disabled={busy || !!pending || !status.dirty} onClick={() => void review('discard')}>{t('还原工作区')}</button>}
+        {status.canDiscard && <button type="button" className="text-button danger" disabled={busy || !!pending} onClick={() => void review('discard')}>{t('还原工作区')}</button>}
         {pending && <div role="group" aria-label={t('确认 Git 操作')} className="notice">
           <p>{t('确认 Git 操作')}：<strong>{status.branch}</strong> — {t(pending === 'discard' ? '还原工作区' : pending === 'commit' ? '提交到工作区' : pending === 'sync' ? '同步 Git' : '提交并同步')}</p>
           {pending === 'discard' ? <><p>{t('以下修改将被撤销，新增文件将被移除。已提交的版本会保留。')}</p>
