@@ -7,8 +7,11 @@ type WorkspaceFetch = Pick<Parameters<typeof fetch>[0], 'dir' | 'http' | 'url' |
   url: string;
   branch: string;
 };
+type FetchFiles = Omit<WorkspaceFiles, 'mkdir'> & {
+  mkdir(path: string): Promise<unknown>;
+};
 
-export async function fetchWorkspace(files: WorkspaceFiles, { dir: directory, url, branch, ...network }: WorkspaceFetch, syncing: boolean) {
+export async function fetchWorkspace(files: FetchFiles, { dir: directory, url, branch, ...network }: WorkspaceFetch, syncing: boolean) {
   const dir = directory.replaceAll('\\', '/');
   const options = { fs: { promises: files }, dir, url, remote: 'origin', ...network };
   const ref = `refs/heads/${branch}`;
@@ -34,7 +37,7 @@ export async function fetchWorkspace(files: WorkspaceFiles, { dir: directory, ur
   // isomorphic-git saves refs and shallow markers before it finishes saving the pack.
   const pending = new Map<string, string | Uint8Array | null>();
   const metadata = (path: string) => path === shallow || path.startsWith(tracking);
-  const staged: WorkspaceFiles = Object.create(files);
+  const staged: FetchFiles = Object.create(files);
   staged.writeFile = async (path, data, opts) => {
     if (metadata(path)) pending.set(path, data);
     else await files.writeFile(path, data, opts);
