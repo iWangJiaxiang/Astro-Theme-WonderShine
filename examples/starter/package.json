@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev --host 127.0.0.1",
+    "theme:update": "node scripts/theme-channel.mjs --write-lock",
     "build": "astro build",
     "preview": "astro preview --host 127.0.0.1",
     "check": "astro check"
