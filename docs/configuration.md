@@ -79,9 +79,13 @@ compact_paths = ["/about", "/zh-CN/about"]
 
 桌面与移动导航共用 `menu.nav_menu`。启用动态功能后，未配置的 `/threads/`、`/timeline/` 入口默认插入第一个菜单之后；如果任意层级的菜单已显式配置对应地址（含语言前缀及有无尾斜杠），则不再重复插入该入口。可将时间线放在动态菜单的子项中。移动导航的无子项菜单直接跳转，有子项菜单使用原生折叠控件；设置了 `href` 的分组在展开后提供主链接，紧凑导航的“更多”分组同样保留主链接。
 
+## 首页推荐
+
+`config.toml` 的 `[extra.top]` 中 `recent_top = true` 显示首页横幅与推荐区。分类入口由 `extra.top.banner_left.category_groups` 配置。文章推荐读取 `data.toml` 的 `post.recommend_posts`，今日推荐读取 `post.today_recommend`。可以在语言配置和 `data.<语言>.toml` 中覆盖相应设置。
+
 ## 动态与订阅
 
-`config.toml` 的 `[extra.activity]` 下 `enable = true` 启用动态与话题；主题默认启用。首页第一页展示最新的公开动态，按有效的最近更新时间排序。旧版首页推荐设置仍保留在站点文件中。关闭动态功能后，动态与话题内容不会进入公开查询，自动动态导航入口也不再添加。手写导航不会因此自动删除，请同步检查菜单。
+`config.toml` 的 `[extra.activity]` 下 `enable = true` 启用动态与话题；主题默认启用。首页第一页展示最新的公开动态，按有效的最近更新时间排序。关闭动态功能后，动态与话题内容不会进入公开查询，自动动态导航入口也不再添加。手写导航不会因此自动删除，请同步检查菜单。
 
 推荐由 Studio 创建 UUID 和译文；手工维护时可参考 Starter 的 `content/threads/`。例如 `content/threads/11111111-2222-4333-8444-555555555555/index.md`：
 

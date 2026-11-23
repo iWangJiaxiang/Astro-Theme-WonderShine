@@ -306,13 +306,6 @@
     font-size:30px
   }
 }
-/* Keep article cards on the same theme scale as archives and category pages. */
-@media(min-width:1200px){
-  .activity-home + .layout #recent-posts > .recent-post-item,
-  .activity-home + .layout #category-bar,
-  .activity-home + .layout #aside-content,
-  .activity-home + .layout #aside-content .card-widget{animation:none}
-}
 [data-theme=dark] .activity-toolbar .is-active{
   color:#18171d
 }

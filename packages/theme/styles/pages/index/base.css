@@ -23,32 +23,6 @@
         margin-top: 0
     }
 }
-@media (min-width: 1200px) {
-    #home_top.activity-home,
-    #home_top.activity-home + .layout {
-        width: calc(100% - 96px);
-        max-width: 1600px;
-        padding: 0;
-        margin: 22px auto 0;
-    }
-
-    #home_top.activity-home + .layout {
-        margin: 24px auto 64px;
-    }
-
-    .activity-home + .layout #aside-content {
-        width: 300px;
-    }
-
-    .activity-home + .layout > .recent-posts {
-        width: calc(100% - 300px);
-    }
-
-    .activity-home + .layout.hide-aside > .recent-posts {
-        width: 100%;
-    }
-}
-
 /* 顶部遮罩 */
 #post-cover-rgb {
     position: absolute;
@@ -57,8 +31,16 @@
     background: var(--wjx-lighttext);
 }
 
-#home_top:not(.activity-home) {
-    margin-top: 0;
+#home_top:empty {
+    display: none;
+}
+#recent-top-post-group + .home-threads {
+    margin-top: 1rem;
+}
+@media (max-width: 768px) {
+    .home-threads {
+        margin-inline: 1rem;
+    }
 }
 .home-threads {
     padding: .85rem 1rem;

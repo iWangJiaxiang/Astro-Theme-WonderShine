@@ -103,9 +103,33 @@ export async function checkBrowser(options = demo) {
         const drawer = '#sidebar-menus[data-home-drawer]';
         const trigger = '#toggle-menu button';
         assert.equal(await page.$eval('#home-threads-title', heading => heading.textContent), prefix ? '最新动态' : 'Latest thread');
-        assert.deepEqual(await page.$$eval('#home_top a', links => links.map(link => link.pathname)), [prefix + '/threads/', thread]);
+        assert.deepEqual(await page.$$eval('.home-threads a', links => links.map(link => link.pathname)), [prefix + '/threads/', thread]);
         assert.equal(await page.$$eval('#home_top > section', cards => cards.length), 1);
-        assert.equal(await page.$('#todayCard, #recent-top-post-group, .compact-more'), null);
+        assert.equal(await page.$('.compact-more'), null);
+        assert.ok(await page.$('#recent-top-post-group + .home-threads'));
+        assert.equal(await page.$eval('#todayCard', link => link.pathname), prefix + '/articles/welcome/');
+        const recommendations = '#recommendations-toggle';
+        const recommendationLink = '#home-recommendations .recommendation-link';
+        assert.equal(await page.$eval(recommendationLink, link => link.pathname), prefix + '/collections/field-notes/first/');
+        await page.setViewport({width:1440,height:900});
+        await page.waitForSelector(recommendations, {visible:true});
+        await page.waitForSelector('#banners', {visible:true});
+        assert.equal(await page.$eval(recommendationLink, link => link.checkVisibility({visibilityProperty:true})), false);
+        await page.click(recommendations);
+        await page.waitForSelector(recommendationLink, {visible:true});
+        await finishLayout();
+        assert.equal(await page.$eval('#todayCard', link => link.checkVisibility({visibilityProperty:true})), false);
+        await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-recommendations.png')});
+        await page.mouse.move(0,0);
+        await page.waitForSelector(recommendations + '[aria-expanded="false"]');
+        await page.focus(recommendations);
+        await page.keyboard.press('Enter');
+        await page.waitForSelector(recommendations + '[aria-expanded="true"]');
+        await page.focus(recommendationLink);
+        await page.keyboard.press('Escape');
+        await page.waitForSelector(recommendations + '[aria-expanded="false"]');
+        assert.equal(await page.$eval(recommendations, button => button === document.activeElement), true);
+        await page.$eval(recommendations, button => button.blur());
 
         for (const width of [1440, 1165]) {
           await page.setViewport({width, height:900});
@@ -127,6 +151,9 @@ export async function checkBrowser(options = demo) {
         await page.waitForSelector('.home-thread', {visible:true});
         await finishLayout();
         assert.equal(await page.$eval(menu, link => link.checkVisibility({visibilityProperty:true})), false);
+        await page.waitForSelector(recommendationLink, {visible:true});
+        assert.equal(await page.$eval('#todayCard', link => link.checkVisibility()), false);
+        assert.ok(await page.$eval('#bannerGroup .banners-link', links => links.checkVisibility()));
         await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-mobile.png')});
         await page.click(trigger);
         await page.waitForSelector(drawer + '[open]');
@@ -165,6 +192,12 @@ export async function checkBrowser(options = demo) {
         if (!prefix) {
           await page.setViewport({width:320,height:720});
           await page.waitForSelector(trigger, {visible:true});
+          assert.ok(await page.$eval('#recent-post-top', row => {
+            row.scrollLeft = row.scrollWidth;
+            const scrolled = row.scrollLeft > 0;
+            row.scrollLeft = 0;
+            return scrolled && document.documentElement.scrollWidth <= innerWidth;
+          }));
           const layout = await page.evaluate(() => {
             const link = document.querySelector('#site-name');
             const title = link.querySelector('span');
