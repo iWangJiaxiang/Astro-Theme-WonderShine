@@ -81,15 +81,22 @@ export async function checkBrowser(options = demo) {
       return (!background || getComputedStyle(background).visibility === 'hidden') && !document.documentElement.hasAttribute('data-astro-transition');
     });
     const finishLayout = () => page.evaluate(async () => {
-      await new Promise(requestAnimationFrame);
-      // Capture the final responsive layout while leaving persistent animations alone.
-      for (const animation of document.getAnimations()) {
-        if (animation.playState === 'running' && animation.effect?.getComputedTiming().endTime <= 1000) {
-          animation.finish();
-        }
+      // Wait for short layout animations without requiring a frame after a viewport change.
+      const animations = document.getAnimations().filter(animation =>
+        animation.playState === 'running' && animation.effect?.getComputedTiming().endTime <= 1000);
+      if (!animations.length) return;
+      let timeout;
+      try {
+        await Promise.race([
+          Promise.allSettled(animations.map(animation => animation.finished)),
+          new Promise(resolve => { timeout = setTimeout(resolve, 1000); }),
+        ]);
+      } finally {
+        clearTimeout(timeout);
       }
     });
     for (const [name, route] of options.pages) {
+      console.log(`Checking ${route}`);
       requests.length = 0;
       const response = await page.goto(origin + route, { waitUntil: 'networkidle0' });
       assert.equal(response.status(), 200, route);
