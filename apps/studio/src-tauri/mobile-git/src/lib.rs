@@ -58,7 +58,11 @@ pub enum Job {
         message: String,
         theme: Option<Vec<ThemeBlobs>>,
     },
-    Discard { head: String, paths: Vec<String> },
+    ReviewDiscard,
+    Discard {
+        head: String,
+        paths: Vec<String>,
+    },
     Publish {
         head: String,
         paths: Vec<String>,
@@ -173,14 +177,15 @@ fn counts(repo: &Repository, head: Oid, remote: Option<Oid>) -> Result<(usize, u
         oid.map(|_| (count + 1, 0)).map_err(|_| READ)
     })
 }
-fn changes(repo: &Repository, paths: Option<&[String]>) -> Result<Vec<Value>> {
+fn changes(repo: &Repository, paths: Option<&[String]>, discard: bool) -> Result<Vec<Value>> {
     if paths == Some(&[]) {
         return Ok(Vec::new());
     }
     repo.add_ignore_rule("/.studio-history/\n/.studio-write-lock/")
         .map_err(|_| READ)?;
     let mut opts = StatusOptions::new();
-    opts.include_untracked(true)
+    opts.exclude_submodules(discard)
+        .include_untracked(true)
         .recurse_untracked_dirs(true)
         .disable_pathspec_match(true)
         .renames_head_to_index(false)
@@ -195,6 +200,11 @@ fn changes(repo: &Repository, paths: Option<&[String]>) -> Result<Vec<Value>> {
     for entry in repo.statuses(Some(&mut opts)).map_err(|_| READ)?.iter() {
         let path = entry.path().ok_or(READ)?;
         if internal(path) {
+            continue;
+        }
+        if discard && [entry.head_to_index(), entry.index_to_workdir()].into_iter().flatten().any(|delta| {
+            delta.old_file().mode() == git2::FileMode::Commit || delta.new_file().mode() == git2::FileMode::Commit
+        }) {
             continue;
         }
         let s = entry.status();
@@ -228,13 +238,13 @@ fn changes(repo: &Repository, paths: Option<&[String]>) -> Result<Vec<Value>> {
     }
     Ok(rows)
 }
-fn inspect(repo: &Repository, branch: &str, paths: Option<&[String]>) -> Result<Value> {
+fn inspect(repo: &Repository, branch: &str, paths: Option<&[String]>, discard: bool) -> Result<Value> {
     let local = head(repo)?;
     let remote = remote_tip(repo, branch)?;
     let (ahead, behind) = counts(repo, local, remote)?;
     Ok(
         json!({"head":local.to_string(),"remoteHead":remote.map(|o|o.to_string()),"ahead":ahead,"behind":behind,
-        "rows":changes(repo, paths)?}),
+        "rows":changes(repo, paths, discard)?}),
     )
 }
 fn commit(
@@ -422,7 +432,7 @@ pub fn execute(
             Ok(json!({"ahead": ahead, "behind": behind}))
         }
         Job::Guard => Ok(Value::Null),
-        Job::Inspect { paths, .. } => Ok(inspect(&repo, branch, paths.as_deref())?),
+        Job::Inspect { paths, .. } => Ok(inspect(&repo, branch, paths.as_deref(), false)?),
         Job::Commit {
             head,
             paths,
@@ -432,9 +442,10 @@ pub fn execute(
             let oid = commit(&repo, &root, p, &head, &paths, &message, theme.as_deref())?;
             Ok(json!(oid.to_string()))
         }
+        Job::ReviewDiscard => Ok(inspect(&repo, branch, None, true)?),
         Job::Discard { head: expected, paths } => {
             let oid = head(&repo)?;
-            let rows = changes(&repo, None)?;
+            let rows = changes(&repo, None, true)?;
             if oid.to_string() != expected || paths.len() != rows.len() ||
                 !paths.iter().zip(&rows).all(|(p, row)| row[0].as_str() == Some(p.as_str())) {
                 return Err(CHANGED.into());
@@ -571,8 +582,9 @@ mod tests {
         assert_eq!(run(Job::Open { clone: false }).unwrap(), p.branch);
         fs::write(root.join(path), "discard me").unwrap();
         fs::write(root.join("new.txt"), "new").unwrap();
-        let rows = changes(&Repository::open(&root).unwrap(), None).unwrap();
+        let rows = changes(&Repository::open(&root).unwrap(), None, true).unwrap();
         let paths = rows.iter().map(|row| row[0].as_str().unwrap().to_owned()).collect();
+        assert!(rows.iter().all(|row| row[0] != "theme"), "Leave the uninitialized submodule alone");
         run(Job::Discard { head: before.clone(), paths }).unwrap();
         assert_eq!(fs::read_to_string(root.join(path)).unwrap(), "original");
         assert!(!root.join("new.txt").exists());

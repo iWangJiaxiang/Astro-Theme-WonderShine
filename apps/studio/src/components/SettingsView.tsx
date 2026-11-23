@@ -570,6 +570,11 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       const disabled = busy.value || themeDirty.value || branchPending.value || unknownSaveObligation.value;
       const updatesVersion = check?.pinned || !!check?.packageRevision;
       const sameVersion = updatesVersion && check?.currentVersion === check?.channelVersion;
+      const destinationHint = check?.destination === "workspace"
+        ? saveContext.value.workspaceCanSync ? "提交后将同步当前分支，包括已有的待推送提交。" : "确认后将仅提交到本地 Git。"
+        : check?.destination === "remote"
+          ? updatesVersion ? "确认后将提交并推送版本变更。" : "确认后将提交并推送重建请求。"
+          : updatesVersion ? "确认后将写入版本设置。" : "确认后将写入重建注释，供你提交。";
       return <div className="full-width theme-update-controls">
         <div className="row">
           <button className="secondary" type="button" disabled={disabled} onClick={() => void updateTheme(false)}>
@@ -589,10 +594,8 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           {check.pinned && check.currentVersion && <p>{t("已固定版本 {version}", { version: check.currentVersion })}</p>}
           {!check.pinned && check.packageRevision && <p>{t("仓库主题版本 {version}", { version: check.currentVersion ?? "" })}</p>}
           <p>{t("渠道当前版本 {version}", { version: check.channelVersion })}</p>
-          <p className="muted">{t(sameVersion ? "已是该渠道当前版本" : !updatesVersion ? "已部署版本未知。重新构建时会使用渠道当时的版本。"
-            : (check.destination === "remote" || check.destination === "workspace" && saveContext.value.workspaceCanSync) ? "确认后将提交并推送版本变更。" : check.destination === "workspace" ? "确认后将仅提交到本地 Git。" : "确认后将写入版本设置。")}</p>
-          {!updatesVersion && <p className="muted">{t((check.destination === "remote" || check.destination === "workspace" && saveContext.value.workspaceCanSync) ? "确认后将提交并推送重建请求。"
-            : check.destination === "workspace" ? "确认后将仅提交到本地 Git。" : "确认后将写入重建注释，供你提交。")}</p>}
+          {!updatesVersion && <p className="muted">{t("已部署版本未知。重新构建时会使用渠道当时的版本。")}</p>}
+          <p className="muted">{t(sameVersion ? "已是该渠道当前版本" : destinationHint)}</p>
         </div>}
       </div>;
     }

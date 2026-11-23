@@ -12,6 +12,8 @@ export async function discardRows(options: GitDirectory): Promise<StatusRow[]> {
     map: async (path, [head, work, stage]) => {
       if (path === '.') return;
       if (['.studio-history', '.studio-write-lock', '.git'].includes(path.split('/')[0])) return null;
+      // A nested repository owns its untracked files and its separate history.
+      if (path.split('/').some(part => part.toLowerCase() === '.git')) throw unsupported();
       if (!head && !stage && await isIgnored({ ...options, filepath: path })) return null;
       const types = await Promise.all([head?.type(), work?.type(), stage?.type()]);
       if (types.includes('commit')) return null; // Submodule checkouts are independent repositories.

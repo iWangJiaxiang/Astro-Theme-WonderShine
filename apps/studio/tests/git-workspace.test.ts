@@ -109,6 +109,11 @@ test('persistent workspaces retain offline edits, recover on reopen and synchron
   await rm(join(directory, articlePath));
   await writeFile(join(directory, 'config.toml'), 'title="changed"');
   await writeFile(join(directory, 'untracked.txt'), 'temporary');
+  run(['init', 'nested'], directory);
+  await writeFile(join(directory, 'nested/unpublished.md'), 'nested work');
+  await assert.rejects(workspace.workspace.reviewDiscard!(), /无法安全还原/);
+  assert.equal(await readFile(join(directory, 'nested/unpublished.md'), 'utf8'), 'nested work');
+  await rm(join(directory, 'nested'), { recursive: true });
   const reviewed = await workspace.workspace.reviewDiscard!();
   assert.deepEqual(new Set(reviewed.discardPaths), new Set([articlePath, 'config.toml', 'new-note.txt', 'untracked.txt']));
   await writeFile(scratch, 'changed after review');

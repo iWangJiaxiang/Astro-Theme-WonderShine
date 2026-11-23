@@ -1,6 +1,7 @@
 // Application copy only. Site content and stored configuration values are never translated.
 export const english: Record<string, string> = {
   "工作区没有未提交的修改": "The workspace has no uncommitted changes.",
+  "提交后将同步当前分支，包括已有的待推送提交。": "Studio will sync this branch after committing, including earlier unpushed commits.",
   "正在还原工作区…": "Restoring workspace\u2026",
   "已还原工作区": "Workspace restored",
   "还原工作区": "Discard workspace changes",

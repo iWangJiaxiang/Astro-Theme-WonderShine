@@ -76,7 +76,7 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
   }
   function discardChanges(token?: string) {
     return run(null, async () => {
-      const current = await inspect(undefined, true);
+      const current = await command<Inspection>('reviewDiscard');
       const state = await discardState({ ...reviewState(current), rows: current.rows },
         await files.readFile(root + '/.git/index') as Uint8Array);
       const paths = current.rows.map(([path]) => path);
