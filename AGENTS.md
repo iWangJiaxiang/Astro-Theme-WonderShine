@@ -64,7 +64,7 @@
 - 持久工作区可能保存唯一的未发布内容和未推送提交，属于用户数据，不能作为构建缓存清理。`.studio-history/` 和 AppData 同样不能随意删除。
 - `STUDIO_SITE_ROOT` 为本地站点；在线 Git 与持久 Git 工作区的语义见 `docs/studio-workspaces.md`。云函数临时磁盘不能冒充持久离线工作区。
 - Git 分支保存不会自动推送、创建 PR 或合并；工作区同步也不应隐式推送所有保存分支。
-- Studio 将主题渠道与固定版本写入站点 `config.toml`；独立 npm 站点的构建前脚本在部署环境选择实际版本。保存沿用已有工作区语义，见 `docs/deployment.md`。
+- Studio 保存独立 npm 博客的主题渠道或应用更新时，将具体版本及锁文件一起写入站点，渠道与固定偏好保存在 `config.toml`。部署默认使用已提交的依赖；接入 `theme:update` 的流水线在启动时按该配置选版并更新锁文件。保存沿用已有工作区语义，见 `docs/deployment.md`。
 - 保留 revision 冲突检测、工作区锁、Origin/CSRF 与权限检查。不得为恢复同步而自动 force push 或删除工作区。
 - API 密钥、Git token、签名材料不得进入版本库、日志、截图或浏览器公开配置。测试使用临时仓库与测试服务，不对真实仓库执行破坏性操作或调用计费 API。
 

@@ -192,3 +192,41 @@ test('theme updates recheck pins and request rebuilds without changing parsed si
   tags.canary = '1.0.0';
   await assert.rejects(checkThemeUpdate(repo, registry), { status: 502 });
 });
+
+test('channel saves and explicit updates write the npm manifest and matching lock as one batch', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'studio-theme-npm-'));
+  t.after(async () => { await rm(root, { recursive: true, force: true }); await rm(root + '.studio-revisions-v1', { recursive: true, force: true }); });
+  const name = '@wondershine/theme', entry = 'node_modules/' + name;
+  const manifest = { scripts: { build: 'astro build' }, dependencies: { [name]: '1.0.0', astro: '7.0.0' } };
+  const lock = { lockfileVersion: 3, packages: { '': { dependencies: manifest.dependencies }, [entry]: { version: '1.0.0' }, 'node_modules/astro': { version: '7.0.0' } } };
+  await writeFile(join(root, 'package.json'), JSON.stringify(manifest));
+  await writeFile(join(root, 'package-lock.json'), JSON.stringify(lock));
+  const repo = new LocalRepository(root);
+  let canary = '1.0.1-canary.10', graphChanged = false;
+  const registry: typeof fetch = async url => {
+    if (String(url).endsWith('dist-tags')) return Response.json({ canary });
+    return Response.json({ name, version: canary, ...(graphChanged && { dependencies: { extra: '1.0.0' } }),
+      dist: { tarball: `https://registry.npmjs.org/${name}/-/theme-${canary}.tgz`, integrity: 'sha512-' + 'A'.repeat(86) + '==' } });
+  };
+  const content = new ContentService(repo, undefined, registry);
+  await content.saveSettings('theme', { 'extra.theme.channel': 'canary' }, null);
+  const read = async (path: string) => JSON.parse(await readFile(join(root, path), 'utf8'));
+  assert.deepEqual(await read('package.json'), { ...manifest, dependencies: { ...manifest.dependencies, [name]: canary } });
+  assert.equal((await read('package-lock.json')).packages[entry].version, canary);
+  canary = '1.0.1-canary.11';
+  const check = await checkThemeUpdate(repo, registry);
+  assert.equal(check.currentVersion, '1.0.1-canary.10');
+  graphChanged = true;
+  await assert.rejects(applyThemeUpdate(repo, registry, new Date(), check), /锁文件/);
+  assert.equal((await read('package.json')).dependencies[name], check.currentVersion);
+  graphChanged = false;
+  const before = await repo.read('config.toml');
+  await applyThemeUpdate(repo, registry, new Date(), check);
+  assert.deepEqual(await repo.read('config.toml'), before);
+  assert.equal((await read('package.json')).dependencies[name], canary);
+  const savedLock = await read('package-lock.json');
+  assert.equal(savedLock.packages[''].dependencies[name], canary);
+  assert.equal(savedLock.packages[entry].resolved, `https://registry.npmjs.org/${name}/-/theme-${canary}.tgz`);
+  assert.deepEqual(savedLock.packages['node_modules/astro'], lock.packages['node_modules/astro']);
+  await assert.rejects(applyThemeUpdate(repo, registry, new Date(), check), { status: 409 });
+});

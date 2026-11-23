@@ -11,6 +11,10 @@ export function validatePath(path: string): void {
     throw new StudioError(400, '不允许访问此文件路径');
   }
 }
+// Repository adapters also store Studio-generated npm dependency updates.
+export function validateRepositoryPath(path: string): void {
+  if (path !== 'package.json' && path !== 'package-lock.json') validatePath(path);
+}
 export type WriteGuard = (repository: Repository) => Promise<void>;
 export interface RepositoryWrite { path: string; text: string | null; expectedRevision: string | null; commitMessage?: string }
 export interface Repository {

@@ -15,8 +15,8 @@ const hook = fileURLToPath(new URL('../examples/starter/scripts/theme-channel.mj
 test('a standalone npm build follows moved tags and honors a pin without Studio', async t => {
   const root = await mkdtemp(join(tmpdir(), 'theme-channel-'));
   t.after(() => rm(root, { recursive: true, force: true }));
-  const name = '@wondershine/theme', latest = '1.0.0', preview = '1.1.0-beta.1', newer = '1.1.0-beta.2';
-  const tags = { latest, next: preview };
+  const name = '@wondershine/theme', latest = '1.0.0', preview = '1.1.0-beta.1', newer = '1.1.0-beta.2', canary = '1.1.0-canary.1', nextCanary = '1.1.0-canary.2';
+  const tags = { latest, next: preview, canary };
   const versions: Record<string, object> = {};
   const tarballs = new Map<string, Buffer>();
   let lookups = 0;
@@ -34,7 +34,7 @@ test('a standalone npm build follows moved tags and honors a pin without Studio'
   const fixture = join(root, 'fixture'), site = join(root, 'site');
   await mkdir(fixture); await mkdir(site);
   const env = { ...process.env, npm_config_registry: registry, npm_config_cache: join(root, 'cache'), npm_config_audit: 'false', npm_config_fund: 'false' };
-  for (const version of [latest, preview, newer]) {
+  for (const version of [latest, preview, newer, canary, nextCanary]) {
     await writeFile(join(fixture, 'package.json'), JSON.stringify({ name, version }));
     const { stdout } = await exec('npm', ['pack', '--json', '--pack-destination', root], { cwd: fixture, env });
     const file = '/' + JSON.parse(stdout)[0].filename;
@@ -43,7 +43,7 @@ test('a standalone npm build follows moved tags and honors a pin without Studio'
     versions[version] = { name, version, dist: { tarball: registry + file, integrity: 'sha512-' + createHash('sha512').update(bytes).digest('base64') } };
   }
   const parser = dirname(dirname(createRequire(import.meta.url).resolve('smol-toml')));
-  const manifest = JSON.stringify({ name: 'fixture', private: true, scripts: { prebuild: 'node "' + hook + '"', build: 'node --version' },
+  const manifest = JSON.stringify({ name: 'fixture', private: true, scripts: { prebuild: 'node "' + hook + '"', build: 'node --version', 'theme:update': 'node "' + hook + '" --write-lock' },
     dependencies: { [name]: latest, 'smol-toml': 'file:' + parser } });
   await writeFile(join(site, 'package.json'), manifest);
   const npm = (...args: string[]) => exec('npm', args, { cwd: site, env });
@@ -66,4 +66,26 @@ test('a standalone npm build follows moved tags and honors a pin without Studio'
   const before = lookups;
   assert.equal(await build(), latest);
   assert.equal(lookups, before);
+
+  // A pipeline persists the selection before npm ci installs it in a clean checkout.
+  const update = async (expected: string) => {
+    await npm('run', 'theme:update');
+    const pkg = JSON.parse(await readFile(join(site, 'package.json'), 'utf8'));
+    const locked = JSON.parse(await readFile(join(site, 'package-lock.json'), 'utf8'));
+    assert.equal(pkg.dependencies[name], expected);
+    assert.equal(locked.packages[''].dependencies[name], expected);
+    assert.equal(locked.packages['node_modules/' + name].version, expected);
+    await npm('ci');
+    assert.equal(JSON.parse(await readFile(join(site, 'node_modules', name, 'package.json'), 'utf8')).version, expected);
+  };
+  await writeFile(join(site, 'config.toml'), '[extra.theme]\nchannel="canary"\n');
+  await update(canary);
+  tags.canary = nextCanary;
+  await update(nextCanary);
+  await writeFile(join(site, 'config.toml'), `[extra.theme]\nchannel="canary"\npinned=true\nversion="${nextCanary}"\n`);
+  tags.canary = canary;
+  const beforePin = lookups;
+  await npm('run', 'theme:update');
+  assert.equal(lookups, beforePin);
+  assert.equal(JSON.parse(await readFile(join(site, 'package.json'), 'utf8')).dependencies[name], nextCanary);
 });

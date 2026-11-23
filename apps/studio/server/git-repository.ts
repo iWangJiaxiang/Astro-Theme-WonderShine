@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import git from 'isomorphic-git';
 import type { HttpClient } from 'isomorphic-git';
 import type { FileSnapshot, SaveResult } from '../shared/types.js';
-import { LocalRepository, type Repository, validatePath } from './repository.js';
+import { LocalRepository, type Repository, validateRepositoryPath } from './repository.js';
 import { StudioError } from './errors.js';
 import { gitBlobRevision } from '../core/revision.js';
 
@@ -103,14 +103,14 @@ export class GitRepository implements Repository {
       throw new StudioError(502, 'Git 操作失败，请检查仓库连接、权限和分支；本次修改尚未确认发布');
     } finally { this.clearReadCache(); await rm(directory, { recursive: true, force: true }); }
   }
-  async read(path: string): Promise<FileSnapshot | null> { validatePath(path); return this.readCheckout.use(value => value.repo.read(path)); }
+  async read(path: string): Promise<FileSnapshot | null> { validateRepositoryPath(path); return this.readCheckout.use(value => value.repo.read(path)); }
   async list(): Promise<FileSnapshot[]> { return this.readCheckout.use(value => value.repo.list()); }
   async listForSummary(): Promise<Pick<FileSnapshot, 'path' | 'text'>[]> { return this.readCheckout.use(value => value.repo.listForSummary()); }
   async write(path: string, text: string | null, expectedRevision: string | null, guard?: WriteGuard): Promise<SaveResult> {
     return this.writeBatch([{ path, text, expectedRevision }], guard);
   }
   async writeBatch(entries: RepositoryWrite[], guard?: WriteGuard): Promise<SaveResult> {
-    for (const entry of entries) validatePath(entry.path);
+    for (const entry of entries) validateRepositoryPath(entry.path);
     return this.checkout(async (repo, dir) => {
       const saved = await repo.writeBatch(entries, guard);
       for (const { path, text } of entries) {

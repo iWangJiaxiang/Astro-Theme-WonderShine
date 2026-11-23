@@ -39,7 +39,7 @@ export function chooser(page) {
   };
 }
 
-export async function checkControls({ page, click, heading, fill, base, screenshots, choose, mockThemeCheck }) {
+export async function checkControls({ page, click, heading, fill, base, screenshots, choose }) {
   const { readFile, writeFile, mkdir } = await import('node:fs/promises');
   const { patchToml, splitDocument } = await import('../../server/content.ts');
   const { parse } = await import('smol-toml');
@@ -95,12 +95,13 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await fill('[aria-label="选择浅色主题色"]', '#3355aa');
   assert.equal(await page.$eval('[name="extra.style.theme_light_skin"]', e => e.value), '#3355aa');
   assert.equal(await page.$eval('[data-field="extra.style.theme_light_skin"] .color-swatch', e => getComputedStyle(e).backgroundColor), 'rgb(51, 85, 170)');
-  const saved = await saveTheme();
+  await saveTheme();
+  const packageFile = base + '/site/package.json';
+  assert.equal(JSON.parse(await readFile(packageFile, 'utf8')).dependencies['@wondershine/theme'], '1.2.3-canary.0');
   assert.equal(parse(await readFile(base + '/site/config.toml', 'utf8')).extra.style.theme_light_skin, '#3355aa');
   assert.equal(parse(await readFile(base + '/site/config.toml', 'utf8')).extra.theme.channel, 'canary');
   await page.screenshot({ path: screenshots + '/form-colors.png', fullPage: true });
 
-  mockThemeCheck({ revision: saved.revision, channel: 'canary', pinned: false, currentVersion: null, channelVersion: '1.2.3-canary.1', destination: 'file' });
   await click('检查更新');
   await page.waitForFunction(() => document.querySelector('.theme-update-controls')?.textContent.includes('1.2.3-canary.1'));
   const beforeRebuild = await readFile(configFile, 'utf8');
@@ -110,12 +111,11 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await page.screenshot({ path: screenshots + '/theme-update-result-mobile.png' });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.setViewport({ width: 1440, height: 1000 });
-  const [rebuild] = await Promise.all([page.waitForResponse(response => new URL(response.url()).pathname === '/api/theme-update' && response.request().method() === 'POST'), click('请求重新构建')]);
+  const [rebuild] = await Promise.all([page.waitForResponse(response => new URL(response.url()).pathname === '/api/theme-update' && response.request().method() === 'POST'), click('更新到此版本')]);
   assert.equal(rebuild.status(), 200);
   const rebuiltText = await readFile(configFile, 'utf8');
-  assert.match(rebuiltText, /^# WonderShine Studio theme rebuild: canary /);
+  assert.equal(JSON.parse(await readFile(packageFile, 'utf8')).dependencies['@wondershine/theme'], '1.2.3-canary.1');
   assert.deepEqual(parse(rebuiltText), parse(beforeRebuild));
-  mockThemeCheck(undefined);
   await page.waitForSelector('.settings-page .notice.success');
   await click('工作台'); await heading('今天，写点什么？');
   await writeFile(configFile, patchToml(await readFile(configFile, 'utf8'), { 'extra.style.font_family': 'Custom Font' }));

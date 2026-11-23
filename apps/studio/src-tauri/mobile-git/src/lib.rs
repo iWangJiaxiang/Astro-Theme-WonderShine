@@ -36,6 +36,7 @@ impl Profile {
 }
 #[derive(Deserialize)]
 pub struct ThemeBlobs {
+    path: String,
     before: Option<String>,
     after: String,
 }
@@ -55,7 +56,7 @@ pub enum Job {
         head: String,
         paths: Vec<String>,
         message: String,
-        theme: Option<ThemeBlobs>,
+        theme: Option<Vec<ThemeBlobs>>,
     },
     Publish {
         head: String,
@@ -87,7 +88,7 @@ fn relative(path: &str) -> bool {
 fn managed(path: &str) -> bool {
     static TEXT: LazyLock<regex::Regex> = LazyLock::new(|| {
         regex::Regex::new(
-        r"^(config\.toml|data(\.[A-Za-z0-9-]+)?\.toml|public/data/friends(\.[A-Za-z0-9-]+)?\.json|content/(articles|pages|collections|threads|topics)/.+\.md|content/_index(\.[A-Za-z0-9-]+)?\.md)$").unwrap()
+        r"^(package(-lock)?\.json|config\.toml|data(\.[A-Za-z0-9-]+)?\.toml|public/data/friends(\.[A-Za-z0-9-]+)?\.json|content/(articles|pages|collections|threads|topics)/.+\.md|content/_index(\.[A-Za-z0-9-]+)?\.md)$").unwrap()
     });
     relative(path)
         && ((path.encode_utf16().count() <= 500 && TEXT.is_match(path))
@@ -242,7 +243,7 @@ fn commit(
     expected: &str,
     paths: &[String],
     message: &str,
-    theme: Option<&ThemeBlobs>,
+    theme: Option<&[ThemeBlobs]>,
 ) -> Result<Oid> {
     if paths.is_empty()
         || message.trim().is_empty()
@@ -261,16 +262,14 @@ fn commit(
         return Err(CHANGED);
     }
     let tree = parent.tree().map_err(|_| READ)?;
-    let config = Path::new("config.toml");
-    if let Some(theme) = theme {
-        if paths.len() != 1 || paths[0] != "config.toml" {
-            return Err(INVALID);
-        }
-        let before = tree
-            .get_name("config.toml")
-            .map(|entry| entry.id().to_string());
-        if before != theme.before {
-            return Err(CHANGED);
+    if let Some(files) = theme {
+        if paths.len() != files.len() { return Err(INVALID); }
+        for (path, file) in paths.iter().zip(files) {
+            if path != &file.path || !matches!(path.as_str(), "config.toml" | "package.json" | "package-lock.json") {
+                return Err(INVALID);
+            }
+            let before = tree.get_name(path).map(|entry| entry.id().to_string());
+            if before != file.before { return Err(CHANGED); }
         }
     }
     let mut index = repo.index().map_err(|_| READ)?;
@@ -305,10 +304,10 @@ fn commit(
             index.remove_path(Path::new(path)).map_err(|_| WRITE)?;
         }
     }
-    if let Some(theme) = theme {
-        let after = index.get_path(config, 0).ok_or(CHANGED)?.id;
-        if Oid::from_str(&theme.after).ok() != Some(after) {
-            return Err(CHANGED);
+    if let Some(files) = theme {
+        for file in files {
+            let after = index.get_path(Path::new(&file.path), 0).ok_or(CHANGED)?.id;
+            if Oid::from_str(&file.after).ok() != Some(after) { return Err(CHANGED); }
         }
     }
     let id = index.write_tree().map_err(|_| WRITE)?;
@@ -429,7 +428,7 @@ pub fn execute(
             message,
             theme,
         } => {
-            let oid = commit(&repo, &root, p, &head, &paths, &message, theme.as_ref())?;
+            let oid = commit(&repo, &root, p, &head, &paths, &message, theme.as_deref())?;
             Ok(json!(oid.to_string()))
         }
         Job::Publish {
@@ -578,7 +577,7 @@ mod tests {
             head: theme_head.clone(),
             paths: vec!["config.toml".into()],
             message: "chore(theme): rebuild from latest".into(),
-            theme: Some(ThemeBlobs { before: None, after }),
+            theme: Some(vec![ThemeBlobs { path: "config.toml".into(), before: None, after }]),
         };
         assert_eq!(run(commit_theme("wrong blob".into())), Err(CHANGED.into()));
         assert_eq!(git(&root, &["diff", "--cached", "--name-only"]), "");

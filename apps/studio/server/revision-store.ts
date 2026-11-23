@@ -4,7 +4,7 @@ import { lstat, mkdir, open, realpath, rename, rmdir, unlink } from 'node:fs/pro
 import { dirname, join, parse, relative, resolve, isAbsolute } from 'node:path';
 import type { SnapshotRevisionStrategy } from '../core/revision.js';
 import { StudioError } from './errors.js';
-import { validatePath } from '../shared/repository.js';
+import { validateRepositoryPath } from '../shared/repository.js';
 
 export interface DiskRevisionOptions {
   directory?: string;
@@ -130,12 +130,12 @@ export class DiskRevisionStore implements SnapshotRevisionStrategy {
     return data.entries as IndexEntry[];
   }
   async revision(path: string, text: string): Promise<string> {
-    validatePath(path);
+    validateRepositoryPath(path);
     this.validateText(text);
     return this.withLock((scope, directory) => this.publish(scope, directory, path, text));
   }
   async snapshot(path: string, read: Parameters<NonNullable<SnapshotRevisionStrategy['snapshot']>>[1]) {
-    validatePath(path);
+    validateRepositoryPath(path);
     return this.withLock(async (scope, directory) => {
       const file = await read();
       if (!file) return null;

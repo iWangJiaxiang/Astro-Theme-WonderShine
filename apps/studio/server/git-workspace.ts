@@ -1,6 +1,5 @@
 import { mergeTarget } from '../platform/merge-target.js';
 import { assertThemeCommit } from '../platform/theme-commit.js';
-import { themeConfigPath } from '../core/theme-update.js';
 import type { ThemeCommit } from '../shared/theme-update.js';
 import { commitBranchSnapshot, assertBranchSnapshot } from '../platform/branch-save.js';
 import fs from 'node:fs';
@@ -9,7 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import git, { type StatusRow } from 'isomorphic-git';
 import type { Repository, RepositoryWrite, WriteGuard } from '../shared/repository.js';
 import type { WorkspaceControl, WorkspaceStatus } from '../shared/workspace.js';
-import { LocalRepository, validatePath } from './repository.js';
+import { LocalRepository, validateRepositoryPath } from './repository.js';
 import { DiskRevisionStore } from './revision-store.js';
 import { safeMediaPath, validateMediaPath } from './media-files.js';
 import { validateUpload } from './media-upload.js';
@@ -19,7 +18,7 @@ import { requireWorkspaceConfirmation, type ReviewState } from '../shared/worksp
 import { nodeReviewSource, nodeWorkspaceReviews } from './review-store.js';
 
 function managed(path: string): boolean {
-  try { validatePath(path); return true; } catch { /* Try media paths next. */ }
+  try { validateRepositoryPath(path); return true; } catch { /* Try media paths next. */ }
   try { validateMediaPath(path); return true; } catch { return false; }
 }
 const internal = (path: string) => path === '.studio-history' || path.startsWith('.studio-history/') || path === '.studio-write-lock' || path.startsWith('.studio-write-lock/');
@@ -46,7 +45,7 @@ export class GitWorkspaceRepository implements Repository {
         await this.assertGitIdle();
         await assertBranchSnapshot(files, async path => {
           let content = true;
-          try { validatePath(path); } catch { content = false; }
+          try { validateRepositoryPath(path); } catch { content = false; }
           if (!content) return (await this.local.readMedia(path))?.data ?? null;
           const file = await this.local.read(path);
           return file ? new TextEncoder().encode(file.text) : null;
@@ -203,13 +202,13 @@ export class GitWorkspaceRepository implements Repository {
     if (confirmation !== undefined) await this.validateReview(confirmation, rows);
     if ((await git.listFiles(this.gitOptions)).some(internal)) throw new StudioError(409, 'Git 暂存区包含创作中心备份文件，请先在 Git 工具中处理');
     // Existing staged source/config changes must never silently enter a content commit.
-    const included = (path: string) => theme ? path === themeConfigPath : managed(path);
+    const included = (path: string) => theme ? theme.files.some(file => file.path === path) : managed(path);
     if (rows.some(([path, head, , stage]) => (theme || !included(path)) && head !== stage)) throw new StudioError(409, '暂存区含有创作中心以外的文件，请先在 Git 工具中处理');
     if (publishing && rows.some(([path]) => !managed(path))) throw new StudioError(409, '存在托管范围以外的修改，请先在 Git 工具中处理再同步。');
     const entries = rows.filter(([path]) => included(path));
     if (!entries.length) throw new StudioError(409, '没有可提交的内容修改');
     for (const [path] of entries) await safeMediaPath(this.root, path);
-    if (theme) await assertThemeCommit(this.gitOptions, theme, await readFile(join(this.root, themeConfigPath)));
+    if (theme) await assertThemeCommit(this.gitOptions, theme, path => readFile(join(this.root, path)));
     for (const [path, , worktree] of entries) {
       if (!worktree) await git.remove({ ...this.gitOptions, filepath: path });
       else await git.add({ ...this.gitOptions, filepath: path });

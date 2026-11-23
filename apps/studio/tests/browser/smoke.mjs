@@ -32,7 +32,7 @@ await new Promise(resolve => reserve.listen(0, '127.0.0.1', resolve));
 const port = reserve.address().port;
 await new Promise(resolve => reserve.close(resolve));
 const origin = `http://localhost:${port}`;
-const server = spawn(process.execPath, process.env.STUDIO_TEST_DEV ? ['--import', 'tsx', 'server/dev.ts'] : ['dist/server.mjs'], { cwd: studio, env: { ...process.env,
+const server = spawn(process.execPath, ['--import', './tests/browser/theme-registry.mjs', ...(process.env.STUDIO_TEST_DEV ? ['--import', 'tsx', 'server/dev.ts'] : ['dist/server.mjs'])], { cwd: studio, env: { ...process.env,
   STUDIO_ORIGIN: origin, PORT: String(port), STUDIO_HOST: '127.0.0.1', STUDIO_SITE_ROOT: base + '/site',
   STUDIO_STATE: 'file', STUDIO_STATE_DIR: base + '/state', STUDIO_GIT_URL: '', STUDIO_OIDC_ISSUER: '',
   STUDIO_ADMIN_USER: 'owner', STUDIO_ADMIN_PASSWORD_HASH: await hashPassword('studio-browser-test-2026'), STUDIO_SESSION_SECRET: randomBytes(32).toString('hex') }, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -96,11 +96,10 @@ try {
   page.on('pageerror', error => errors.push(error.message)); page.on('dialog', dialog => dialog.accept());
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.setRequestInterception(true);
-  let holdDocumentWrite = false, releaseDocumentWrite, mockedThemeCheck;
+  let holdDocumentWrite = false, releaseDocumentWrite;
   let holdEditorEngine = false, editorEngineRequest;
   const delayNextDocumentSave = () => { holdDocumentWrite = true; return () => { holdDocumentWrite = false; releaseDocumentWrite?.(); releaseDocumentWrite = undefined; }; };
   page.on('request', request => {
-    if (mockedThemeCheck && request.url() === origin + '/api/theme-update' && request.method() === 'GET') return request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify(mockedThemeCheck) });
     if (request.url() === origin + '/api/ai/config') return request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: true, image: false }) });
     if (request.url() === origin + '/api/ai/text') return request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: 'Reviewed browser summary fixture.' }) });
     if (holdDocumentWrite && request.url() === origin + '/api/document' && request.method() === 'PUT') { releaseDocumentWrite = () => request.continue(); return; }
@@ -232,7 +231,7 @@ try {
   await click('进入编辑器'); await heading('Browser page'); await fill('.markdown-source', '# Browser page');
   await page.$eval('.metadata-card input[type=checkbox]', el => el.click()); await click('本地保存'); await page.waitForSelector('.notice.success');
   await checkPageManagement({ page, base, screenshots, click, heading, fill, delayNextDocumentSave });
-  await checkControls({ page, click, heading, fill, base, screenshots, choose, mockThemeCheck: value => { mockedThemeCheck = value; } });
+  await checkControls({ page, click, heading, fill, base, screenshots, choose });
   await checkMedia({ page, base, theme, screenshots, click, heading, fill });
   await checkUploads({ page, base, theme, screenshots, click, heading, fill });
   await page.click('[aria-label="退出登录"]');await page.waitForSelector('[name=username]');
