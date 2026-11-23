@@ -168,13 +168,13 @@ html:has(.studio-shell[data-swipe-back]) { overscroll-behavior-x: contain; }
 .more-groups > nav {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
   gap: 1px; border: 1px solid var(--studio-line); border-radius: 12px;
-  background: var(--studio-line); overflow: hidden;
+  background: var(--studio-card); overflow: hidden;
 }
 .more-groups > nav:empty { display: none; }
 .more-groups > nav > button {
   display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 48px;
   padding: 9px 12px; text-align: start; font-size: .8125rem; overflow-wrap: anywhere;
-  background: var(--studio-card);
+  background: var(--studio-card); box-shadow: 0 0 0 1px var(--studio-line);
 }
 .more-groups > nav > button > svg {
   width: 28px; height: 28px; padding: 5px; border-radius: 7px;
@@ -194,6 +194,10 @@ html:has(.studio-shell[data-swipe-back]) { overscroll-behavior-x: contain; }
   display: flex; align-items: center; justify-content: flex-start; gap: 8px;
   margin: 0; padding: 8px 12px; min-width: 0; background: var(--studio-card);
   font-size: .8125rem; text-align: start;
+}
+.more-page .preference-controls > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+@media (max-width: 480px) {
+  .more-groups > nav > button:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
 .more-page .language-switcher select { min-width: 0; max-width: 100%; }
 .more-page .preference-controls svg { color: var(--studio-muted); }
