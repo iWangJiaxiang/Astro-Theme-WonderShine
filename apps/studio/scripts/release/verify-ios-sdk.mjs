@@ -29,6 +29,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   if (!artifact) throw new Error('Missing iOS IPA');
   const ipa = resolve('temp/studio-artifacts', artifact.name);
   const metadata = readAppMetadata(ipa);
+  if (process.env.STUDIO_IOS_BUILD_NUMBER && (metadata.CFBundleShortVersionString !== process.env.STUDIO_VERSION ||
+      metadata.CFBundleVersion !== process.env.STUDIO_IOS_BUILD_NUMBER)) {
+    throw new Error('Signed IPA version or build number differs from the selected TestFlight build.');
+  }
   validateIOSExportCompliance(metadata);
   console.log(`Verified signed IPA SDK: ${validateIOSSdk(metadata.DTSDKName)}`);
   console.log(`Verified signed IPA encryption declaration: false; build ${metadata.CFBundleVersion}`);
