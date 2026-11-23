@@ -1,4 +1,3 @@
-import { ErrorNotice } from "./ErrorNotice";
 import { dateParts } from "../../shared/form-fields";
 import type { Json } from "../../shared/types";
 import { t } from "../i18n";
@@ -92,7 +91,7 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
                     )
                   : null,
               )
-            : element("span", { id: `${id}-value` }, t("设置发布时间")),
+            : element("span", { id: `${id}-value` }, t("提交时使用当前时间")),
           element(
             "span",
             { className: classes("thread-date-edit") },
@@ -154,7 +153,6 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
                           value: pending.value.date ?? "",
                           type: "date",
                           required: true,
-                          autoFocus: true,
                           "aria-label": t("发布日期"),
                           onInput: domEvent(($event: Event) => {
                             pending.value.date = (
@@ -180,12 +178,10 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
                           }),
                         }),
                       ),
-                      !pendingValue.value
-                        ? element(
-                            ErrorNotice,
-                            { source: "PublicationDateField", message: "请填写有效的日期和时间", className: "danger small" },
-                          )
-                        : null,
+                      <div className="date-shortcuts">
+                        <button type="button" className="secondary" onClick={() => { pending.value = publicationDateDraft(new Date().toISOString()); }}>{t("使用当前时间")}</button>
+                        <button type="button" className="text-button" onClick={() => { emit("update:modelValue", ""); close(); }}>{t("移除时间")}</button>
+                      </div>,
                       element(
                         "details",
                         { className: classes("publication-date-help") },
@@ -202,7 +198,7 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
                             "修改日期时保留原时区与时间精度，修改时间时保留原时区。此设置不会自动定时发布。",
                           ),
                         ),
-                        !parts.value?.zone
+                        parts.value && !parts.value.zone
                           ? element(
                               "p",
                               null,

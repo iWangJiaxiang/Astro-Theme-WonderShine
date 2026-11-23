@@ -425,7 +425,6 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                         value: search.value ?? "",
                         type: "search",
                         disabled: creating.value,
-                        autoFocus: true,
                         placeholder:
                           props.searchPlaceholder || t("输入名称搜索…"),
                         onInput: domEvent(($event: Event) => {

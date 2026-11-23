@@ -119,7 +119,6 @@ const LoginView: StudioComponent<Props, Events> = component<Props, Events>(
                     name: "username",
                     autoComplete: "username",
                     required: true,
-                    autoFocus: true,
                     placeholder: t("管理员账号"),
                     onInput: domEvent(($event: Event) => {
                       username.value = (

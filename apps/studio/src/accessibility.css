@@ -11,10 +11,11 @@ body:has(dialog[open]) { overflow: hidden; }
 dialog[open] {
   position: fixed;
   top: calc(var(--native-visible-top, 0px) + max(var(--studio-overlay-gap), env(safe-area-inset-top)));
-  bottom: auto;
+  bottom: calc(100% - var(--native-visible-top, 0px) - var(--native-visible-height, 100dvh) + max(var(--studio-overlay-gap), env(safe-area-inset-bottom)));
+  height: fit-content;
   left: var(--studio-visible-left, 0px);
   right: calc(100% - var(--studio-visible-left, 0px) - var(--studio-visible-width, 100vw));
-  margin-block: 0;
+  margin-block: auto;
   margin-inline: auto;
   max-width: calc(var(--studio-visible-width, 100vw) - 2 * max(var(--studio-overlay-gap), env(safe-area-inset-left), env(safe-area-inset-right)));
   max-height: var(--studio-overlay-height);
@@ -164,15 +165,45 @@ html:has(.studio-shell[data-swipe-back]) { overscroll-behavior-x: contain; }
 .more-page { max-width: 42rem; margin-inline: auto; }
 .more-groups { display: grid; gap: 8px; }
 .more-groups > .nav-label { margin: 14px 0 0; }
-.more-groups > nav { border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-card); }
+.more-groups > nav {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: 1px; border: 1px solid var(--studio-line); border-radius: 12px;
+  background: var(--studio-card); overflow: hidden;
+}
 .more-groups > nav:empty { display: none; }
 .more-groups > nav > button {
-  width: 100%; display: flex; align-items: center; gap: 12px;
-  min-block-size: 48px; padding: 10px 14px; text-align: start;
+  display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 48px;
+  padding: 9px 12px; text-align: start; font-size: .8125rem; overflow-wrap: anywhere;
+  background: var(--studio-card); box-shadow: 0 0 0 1px var(--studio-line);
 }
-.more-groups > nav > button + button { border-block-start: 1px solid var(--studio-line); }
-.more-groups > nav > button > svg { flex: none; }
-.more-groups > nav > button > svg:last-child { margin-inline-start: auto; color: var(--studio-muted); }
-.more-groups > nav > button:is(:focus-visible, :active) { background: var(--form-surface); border-radius: 8px; outline-offset: -2px; }
-.more-page .studio-preferences { margin: 14px 0; }
+.more-groups > nav > button > svg {
+  width: 28px; height: 28px; padding: 5px; border-radius: 7px;
+  color: var(--wjx-theme); background: var(--form-surface);
+}
+.more-groups > nav > button:is(:focus-visible, :active) { background: var(--form-surface); outline-offset: -3px; }
+.more-page .studio-preferences {
+  margin: 12px 0 6px; background: var(--studio-card);
+  border: 1px solid var(--studio-line); border-radius: 12px; overflow: hidden;
+}
+.more-page .studio-preferences > summary { padding: 12px; font-size: .8125rem; font-weight: 600; }
+.more-page .preference-controls {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px;
+  background: var(--studio-line); border-top: 1px solid var(--studio-line);
+}
+.more-page .preference-controls > * {
+  display: flex; align-items: center; justify-content: flex-start; gap: 8px;
+  margin: 0; padding: 8px 12px; min-width: 0; background: var(--studio-card);
+  font-size: .8125rem; text-align: start;
+}
+.more-page .preference-controls > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+@media (max-width: 480px) {
+  .more-groups > nav > button:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+.more-page .language-switcher select { min-width: 0; max-width: 100%; }
+.more-page .preference-controls svg { color: var(--studio-muted); }
 .more-page .sidebar-bottom { padding-inline: 0; color: inherit; }
+
+[data-auto-focus]:focus { outline: none !important; box-shadow: none !important; }
+.theme-progress { display: grid; gap: 12px; }
+.theme-progress h2 { margin: 0; }
+.theme-progress > button { justify-self: end; }

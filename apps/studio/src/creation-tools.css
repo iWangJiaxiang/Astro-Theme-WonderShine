@@ -150,11 +150,6 @@ dialog.media-details {
   background: var(--studio-card);
   color: inherit;
 }
-dialog.media-details[open] {
-  bottom: calc(100% - var(--native-visible-top, 0px) - var(--native-visible-height, 100dvh) + max(var(--studio-overlay-gap), env(safe-area-inset-bottom)));
-  height: fit-content;
-  margin-block: auto;
-}
 .media-details::backdrop { background: #0b1026b3; }
 .media-details .card-heading { display: flex; align-items: center; gap: 16px; padding: 10px 16px; }
 .media-details h2 { margin: 0; font-size: 1rem; overflow-wrap: anywhere; }

@@ -86,6 +86,7 @@ try {
   await fill('.markdown-source', '记录一个独立的想法。'); await choose('extra.topics', initialTopic.extra.id);
   await click('保存草稿'); await saved();
   const thread = await metadata(threadPath);
+  assert.ok(thread.date, 'The first save assigns a publication timestamp');
   assert.equal(thread.draft, true); assert.equal(thread.extra.kind, 'thread');
   assert.deepEqual(thread.extra.topics, [initialTopic.extra.id]);
   assert.equal(thread.extra.thread_root, undefined); assert.equal(thread.extra.reply_to, undefined);

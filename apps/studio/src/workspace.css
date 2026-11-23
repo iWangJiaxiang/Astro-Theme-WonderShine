@@ -241,7 +241,7 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 
 .studio-preferences { margin: 12px 0; }
 .studio-preferences summary { padding: 8px; cursor: pointer; }
-.studio-preferences > :is(button, label, .language-switcher) { display: flex; align-items: center; gap: 8px; margin: 6px 8px; }
+.sidebar .preference-controls > :is(button, label, .language-switcher) { display: flex; align-items: center; gap: 8px; margin: 6px 8px; }
 .quick-sync { position: relative; }
 .quick-sync [aria-busy=true] svg { animation: sync-rotate 1s linear infinite; }
 @keyframes sync-rotate { to { transform: rotate(360deg); } }

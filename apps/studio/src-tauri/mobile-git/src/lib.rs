@@ -58,6 +58,11 @@ pub enum Job {
         message: String,
         theme: Option<Vec<ThemeBlobs>>,
     },
+    ReviewDiscard,
+    Discard {
+        head: String,
+        paths: Vec<String>,
+    },
     Publish {
         head: String,
         paths: Vec<String>,
@@ -172,14 +177,15 @@ fn counts(repo: &Repository, head: Oid, remote: Option<Oid>) -> Result<(usize, u
         oid.map(|_| (count + 1, 0)).map_err(|_| READ)
     })
 }
-fn changes(repo: &Repository, paths: Option<&[String]>) -> Result<Vec<Value>> {
+fn changes(repo: &Repository, paths: Option<&[String]>, discard: bool) -> Result<Vec<Value>> {
     if paths == Some(&[]) {
         return Ok(Vec::new());
     }
     repo.add_ignore_rule("/.studio-history/\n/.studio-write-lock/")
         .map_err(|_| READ)?;
     let mut opts = StatusOptions::new();
-    opts.include_untracked(true)
+    opts.exclude_submodules(discard)
+        .include_untracked(true)
         .recurse_untracked_dirs(true)
         .disable_pathspec_match(true)
         .renames_head_to_index(false)
@@ -194,6 +200,11 @@ fn changes(repo: &Repository, paths: Option<&[String]>) -> Result<Vec<Value>> {
     for entry in repo.statuses(Some(&mut opts)).map_err(|_| READ)?.iter() {
         let path = entry.path().ok_or(READ)?;
         if internal(path) {
+            continue;
+        }
+        if discard && [entry.head_to_index(), entry.index_to_workdir()].into_iter().flatten().any(|delta| {
+            delta.old_file().mode() == git2::FileMode::Commit || delta.new_file().mode() == git2::FileMode::Commit
+        }) {
             continue;
         }
         let s = entry.status();
@@ -227,13 +238,13 @@ fn changes(repo: &Repository, paths: Option<&[String]>) -> Result<Vec<Value>> {
     }
     Ok(rows)
 }
-fn inspect(repo: &Repository, branch: &str, paths: Option<&[String]>) -> Result<Value> {
+fn inspect(repo: &Repository, branch: &str, paths: Option<&[String]>, discard: bool) -> Result<Value> {
     let local = head(repo)?;
     let remote = remote_tip(repo, branch)?;
     let (ahead, behind) = counts(repo, local, remote)?;
     Ok(
         json!({"head":local.to_string(),"remoteHead":remote.map(|o|o.to_string()),"ahead":ahead,"behind":behind,
-        "rows":changes(repo, paths)?}),
+        "rows":changes(repo, paths, discard)?}),
     )
 }
 fn commit(
@@ -421,7 +432,7 @@ pub fn execute(
             Ok(json!({"ahead": ahead, "behind": behind}))
         }
         Job::Guard => Ok(Value::Null),
-        Job::Inspect { paths, .. } => Ok(inspect(&repo, branch, paths.as_deref())?),
+        Job::Inspect { paths, .. } => Ok(inspect(&repo, branch, paths.as_deref(), false)?),
         Job::Commit {
             head,
             paths,
@@ -430,6 +441,49 @@ pub fn execute(
         } => {
             let oid = commit(&repo, &root, p, &head, &paths, &message, theme.as_deref())?;
             Ok(json!(oid.to_string()))
+        }
+        Job::ReviewDiscard => Ok(inspect(&repo, branch, None, true)?),
+        Job::Discard { head: expected, paths } => {
+            let oid = head(&repo)?;
+            let rows = changes(&repo, None, true)?;
+            if oid.to_string() != expected || paths.len() != rows.len() ||
+                !paths.iter().zip(&rows).all(|(p, row)| row[0].as_str() == Some(p.as_str())) {
+                return Err(CHANGED.into());
+            }
+            let tree = repo.find_commit(oid).and_then(|c| c.tree()).map_err(|_| READ)?;
+            let mut restore = git2::build::CheckoutBuilder::new();
+            restore.force().disable_pathspec_match(true);
+            let mut tracked = false;
+            let mut added = Vec::new();
+            for path in &paths {
+                if internal(path) || path.contains(['\\', ':']) || path.split('/').any(|p| p.is_empty() || p == "." || p == ".." || p.eq_ignore_ascii_case(".git")) {
+                    return Err(INVALID.into());
+                }
+                let mut target = root.clone();
+                for part in path.split('/') {
+                    target.push(part);
+                    if fs::symlink_metadata(&target).is_ok_and(|m| m.is_symlink()) {
+                        return Err(INVALID.into());
+                    }
+                }
+                if target.is_dir() { return Err(INVALID.into()); }
+                match tree.get_path(Path::new(path)) {
+                    Ok(entry) if matches!(entry.filemode(), 0o100644 | 0o100755) => {
+                        restore.path(path.as_str());
+                        tracked = true;
+                    }
+                    Err(e) if e.code() == git2::ErrorCode::NotFound => added.push((path, target)),
+                    _ => return Err(INVALID.into()),
+                }
+            }
+            if tracked { repo.checkout_tree(tree.as_object(), Some(&mut restore)).map_err(|_| WRITE)?; }
+            let mut index = repo.index().map_err(|_| READ)?;
+            for (path, target) in added {
+                if index.get_path(Path::new(path), 0).is_some() { index.remove_path(Path::new(path)).map_err(|_| WRITE)?; }
+                if target.try_exists().map_err(|_| READ)? { fs::remove_file(target).map_err(|_| WRITE)?; }
+            }
+            index.write().map_err(|_| WRITE)?;
+            Ok(Value::Null)
         }
         Job::Publish {
             head,
@@ -526,6 +580,15 @@ mod tests {
         let before = git(&root, &["rev-parse", "HEAD"]);
         let run = |action| execute(base.path(), &p, action, "", &|_, _, _| {});
         assert_eq!(run(Job::Open { clone: false }).unwrap(), p.branch);
+        fs::write(root.join(path), "discard me").unwrap();
+        fs::write(root.join("new.txt"), "new").unwrap();
+        let rows = changes(&Repository::open(&root).unwrap(), None, true).unwrap();
+        let paths = rows.iter().map(|row| row[0].as_str().unwrap().to_owned()).collect();
+        assert!(rows.iter().all(|row| row[0] != "theme"), "Leave the uninitialized submodule alone");
+        run(Job::Discard { head: before.clone(), paths }).unwrap();
+        assert_eq!(fs::read_to_string(root.join(path)).unwrap(), "original");
+        assert!(!root.join("new.txt").exists());
+        assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
         fs::write(root.join(path), "unpublished thread").unwrap();
         let status = run(Job::Inspect {
             paths: None,

@@ -620,7 +620,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
           );
           values.value = {
             ...JSON.parse(JSON.stringify(baseline.value)),
-            ...(!isSection && !isTopic ? { date: new Date().toISOString() } : {}),
+            ...(!isSection && !isTopic && !isThread ? { date: new Date().toISOString() } : {}),
             ...props.initial,
           };
         } else {
@@ -892,12 +892,15 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       message.value = "";
       const submittedBody = body.value,
         submittedValues = JSON.parse(JSON.stringify(values.value));
+      const submissionDate = isThread && !submittedValues.date ? new Date().toISOString() : undefined;
+      if (submissionDate) submittedValues.date = submissionDate;
       try {
         const result = await api<SaveResult>("/document", "PUT", {
           path: props.path,
           body: submittedBody,
           changes: {
             ...changes.value,
+            ...(submissionDate && { date: submissionDate }),
             ...(trackedTranslation.value
               ? {
                   "extra.translation_reviewed":
@@ -910,6 +913,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         });
         autosavePaused.value = false;
         revision.value = result.revision;
+        if (submissionDate && !values.value.date) values.value.date = submissionDate;
         baseline.value = submittedValues;
         originalBody.value = submittedBody;
         branchPending.value = result.branchPending === true;
@@ -2263,8 +2267,6 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       element(
                         "p",
                         { className: classes("muted path-label") },
-                        t("文件位置"),
-                        "：",
                         props.path,
                       ),
                     ),
