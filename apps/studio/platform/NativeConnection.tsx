@@ -53,7 +53,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
     setRecords(next);
   }
   function selectWorkspace(item: SavedWorkspace) {
-    setToken(''); setError(''); setShowForm(true);
+    setToken(''); setError(''); setShowForm(true); setIncludeSubmodules(false);
     if (item.source === 'service') { setService(item); setAddress(item.address); setConnection('remote'); }
     else { setService(null); setProfile(item); setConnection(item.source === 'local' ? 'local' : 'clone'); }
   }
@@ -76,7 +76,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
       const next = records.filter(record => record.id !== item.id);
       persist(next);
       if (profile.id === item.id || service?.id === item.id || !next.length) {
-        setProfile(blank()); setService(null); setAddress(''); setToken(''); setShowForm(!next.length);
+        setProfile(blank()); setService(null); setAddress(''); setToken(''); setIncludeSubmodules(false); setShowForm(!next.length);
       }
       setError('');
     } catch (reason) { setError((reason as Error).message); }
@@ -84,6 +84,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
   }
   const [profile, setProfile] = useState<WorkspaceProfile>(() => (folderAvailable ? profiles[0] : profiles.find(item => item.source !== 'local')) || blank());
   const [connection, setConnection] = useState<Connection>(() => folderAvailable && (profiles[0]?.source === 'local' || !profiles.length) ? 'local' : 'clone');
+  const [includeSubmodules, setIncludeSubmodules] = useState(false);
   const [address, setAddress] = useState('');
   const [token, updateToken] = useState('');
   const login = useRef<{ grant: GitGrant; url: string; provider: string; username: string } | null>(null);
@@ -97,7 +98,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
   function field(key: keyof WorkspaceProfile, value: string) { if (key === 'url' || key === 'provider' || key === 'username') setToken(''); setProfile(current => ({ ...current, [key]: value })); }
   function switchConnection(value: Connection) {
     if (value === 'local' && !folderAvailable) value = 'clone';
-    setConnection(value); setError(''); setToken(''); setService(null); setAddress(''); setShowForm(true);
+    setConnection(value); setError(''); setToken(''); setService(null); setAddress(''); setShowForm(true); setIncludeSubmodules(false);
     setProfile(profiles.find(item => value === 'local' ? item.source === 'local' : item.source !== 'local') || blank());
   }
   async function chooseFolder() {
@@ -134,7 +135,8 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
         const { connectNativeWorkspace } = await import('./native-runtime');
         const selected = login.current;
         const grant = selected && selected.url === item.url && selected.provider === item.provider && selected.username === item.username && selected.grant.token === credential ? selected.grant : undefined;
-        dispose = await connectNativeWorkspace(item, credential, onDisconnect, progress => { if (mounted.current) setProgress(progress); }, undefined, !resume, grant);
+        dispose = await connectNativeWorkspace(item, credential, onDisconnect, progress => { if (mounted.current) setProgress(progress); },
+          undefined, !resume, grant, !resume && !match && !existing && connection === 'clone' && includeSubmodules);
       }
       if (!mounted.current) { dispose(); return; }
       try { if (!resume) persist([item, ...records.filter(record => record.id !== item.id)]); }
@@ -190,7 +192,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
       {records.some(item => item.archived) && <details className="archived-workspaces"><summary>{t('已归档工作区')}</summary>
         {records.filter(item => item.archived).map(renderRecord)}
       </details>}
-      <button className="secondary" disabled={busy} onClick={() => { setProfile(blank()); setService(null); setAddress(''); setToken(''); setError(''); setConnection(folderAvailable ? 'local' : 'clone'); setShowForm(true); }}>{t('添加工作区')}</button>
+      <button className="secondary" disabled={busy} onClick={() => { setProfile(blank()); setService(null); setAddress(''); setToken(''); setError(''); setIncludeSubmodules(false); setConnection(folderAvailable ? 'local' : 'clone'); setShowForm(true); }}>{t('添加工作区')}</button>
     </section>}
     {showForm && <>
     {connection === 'clone' && <AccountLogin disabled={busy} onSelect={(account, repository) => {
@@ -202,12 +204,16 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
     }} />}
     <form onSubmit={connect}><fieldset disabled={busy} className="connection-form-fields">
       {connection === 'remote' ? <label className="field"><span>{t('创作中心地址')}</span><input type="url" required placeholder="https://studio.example.com" value={address} readOnly={!!service} onChange={event => setAddress(event.target.value)} /></label> : <>
-        {profiles.some(item => local ? item.source === 'local' : item.source !== 'local') && <label className="field"><span>{t('最近使用')}</span><select value={existing ? profile.id : ''} onChange={event => { setProfile(profiles.find(item => item.id === event.target.value) || blank()); setToken(''); setError(''); }}><option value="">{t('添加仓库')}</option>{profiles.filter(item => local ? item.source === 'local' : item.source !== 'local').map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}
+        {profiles.some(item => local ? item.source === 'local' : item.source !== 'local') && <label className="field"><span>{t('最近使用')}</span><select value={existing ? profile.id : ''} onChange={event => { setProfile(profiles.find(item => item.id === event.target.value) || blank()); setToken(''); setError(''); setIncludeSubmodules(false); }}><option value="">{t('添加仓库')}</option>{profiles.filter(item => local ? item.source === 'local' : item.source !== 'local').map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>}
         {local ? <div className="connection-folder">
           <button className="folder-picker" type="button" disabled={!folderAvailable} onClick={() => void chooseFolder()}><Icon name="folder" size={28} /><span>{profile.localPath ? profile.label : t('选择本地仓库')}</span><span className="folder-picker-action">{profile.localPath ? t('更换文件夹') : t('浏览文件夹')}</span></button>
           {profile.localPath && <div className="selected-repository"><span className="repository-path">{profile.localPath}</span><span className="repository-branch">{profile.branch}</span></div>}
           {!folderAvailable && <p className="muted small">{t('此设备请使用远程仓库，下载后可离线编辑。')}</p>}
         </div> : <label className="field connection-url"><span>{t('仓库地址')}</span><input type="url" required readOnly={existing} placeholder="https://github.com/owner/blog.git" value={profile.url} onChange={e => field('url', e.target.value)} autoCapitalize="none" spellCheck={false} /></label>}
+        {!local && !existing && <label className="field checkbox-field">
+          <input type="checkbox" checked={includeSubmodules} onChange={event => setIncludeSubmodules(event.target.checked)} />
+          <span>{t('下载子模块')}</span>
+        </label>}
         {(!local || profile.localPath) && <details className="connection-options"><summary>{t('连接与提交设置')}</summary><div className="connection-option-fields">
           <div className="connection-fields"><label className="field"><span>{t('工作区名称')}</span><input value={profile.label} onChange={e => field('label', e.target.value)} /></label><label className="field"><span>{t('分支')}</span><input required={existing || local} placeholder={t('自动识别默认分支')} readOnly={existing || local} value={profile.branch} onChange={e => field('branch', e.target.value)} /></label></div>
           {!local && <label className="field"><span>{t('Git 服务')}</span><select value={profile.provider} onChange={e => field('provider', e.target.value as HostingKind)}>{hostingProviders.map(item => <option key={item.id} value={item.id}>{t(item.label)}</option>)}</select></label>}

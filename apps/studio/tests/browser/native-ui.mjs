@@ -68,6 +68,22 @@ try {
   git(['add', '.']); git(['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', 'commit', '-m', 'initial']);
   git(['config', 'user.name', 'Folder writer']); git(['config', 'user.email', 'folder@example.test']);
   await fs.cp(root, localRoot, { recursive: true });
+  const themeSeed = join(base, 'theme-seed');
+  const themeGit = (...args) => execFileSync('git', ['-C', themeSeed, ...args], { stdio: 'pipe' }).toString().trim();
+  await fs.mkdir(themeSeed);
+  themeGit('init', '-b', 'main');
+  await fs.writeFile(join(themeSeed, 'theme.txt'), 'Pinned theme');
+  themeGit('add', 'theme.txt');
+  themeGit('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', 'commit', '-m', 'Pinned theme');
+  const themePin = themeGit('rev-parse', 'HEAD');
+  await fs.writeFile(join(themeSeed, 'theme.txt'), 'New theme');
+  themeGit('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', 'commit', '-am', 'New theme');
+  themeGit('clone', '--bare', themeSeed, join(base, 'theme.git'));
+  const themePath = 'themes/wondershine';
+  await fs.writeFile(join(root, '.gitmodules'), `[submodule "theme"]\n\tpath = ${themePath}\n\turl = ../theme.git\n`);
+  git(['add', '.gitmodules']);
+  git(['update-index', '--add', '--cacheinfo', `160000,${themePin},${themePath}`]);
+  git(['commit', '-m', 'initial']);
   execFileSync('git', ['clone', '--bare', root, join(base, 'remote.git')], {stdio:'pipe'});
   execFileSync('git', ['--git-dir=' + join(base, 'remote.git'), 'config', 'http.receivepack', 'true']);
   execFileSync('git', ['--git-dir=' + join(base, 'remote.git'), 'branch', 'release/blog', 'main']);
@@ -749,6 +765,8 @@ try {
     await click('远程仓库');
   }
   await page.waitForSelector('.connection-url input');
+  const submoduleOption = '.connection-form-fields input[type=checkbox]';
+  assert.equal(await page.$eval(submoduleOption, input => input.checked), false);
   for (const [width, height, name] of [[390, 844, 'iphone'], [430, 932, 'iphone-large'], [768, 1024, 'ipad'], [844, 390, 'landscape'], [375, 667, 'compact']]) {
     await setViewport({ width, height, isMobile: true, hasTouch: true });
     await page.waitForFunction(height => Math.abs(parseFloat(document.documentElement.style.getPropertyValue('--native-visible-height')) - height) < 1, {}, height);
@@ -789,6 +807,8 @@ try {
   await page.click('.error-actions .secondary');
   await page.waitForFunction(() => !document.querySelector('.error-dialog[open]'));
   await screenshot('clone-error-mobile'); console.log('PASS: clone error releases connection state.');
+  await page.click(submoduleOption);
+  assert.equal(await page.$eval(submoduleOption, input => input.checked), true);
   downloadGate = new Promise(resolve => { releaseDownload = resolve; });
   checkoutGate = new Promise(resolve => { releaseCheckout = resolve; });
   await click('下载并开始创作'); await page.waitForSelector('.connection-progress progress');
@@ -803,7 +823,12 @@ try {
   console.log('PASS: real clone progress at three widths.'); releaseCheckout();await heading('What will you write today?');
   const saved = await page.evaluate(()=>JSON.parse(localStorage.getItem('wondershine.native.workspaces.v1')));
   assert.equal(saved[0].branch,'release/blog');
-  assert.equal(execFileSync('git',['branch','--show-current'],{cwd:join(appData,'workspaces',saved[0].id,'repo')}).toString().trim(),'release/blog');
+  const phoneRepo = join(appData, 'workspaces', saved[0].id, 'repo');
+  const phoneGit = (...args) => execFileSync('git', ['-C', phoneRepo, ...args]).toString().trim();
+  assert.equal(phoneGit('branch', '--show-current'), 'release/blog');
+  assert.equal(phoneGit('rev-parse', '--is-shallow-repository'), 'true');
+  assert.equal(phoneGit('rev-list', '--count', 'HEAD'), '1');
+  assert.equal(await fs.readFile(join(phoneRepo, themePath, 'theme.txt'), 'utf8'), 'Pinned theme');
   await page.select('.language-switcher select', 'zh-CN');
   assert.ok([...keyring.values()].some(secret => JSON.parse(secret).token === 'fixture-token'));
   assert.ok(!await page.evaluate(() => JSON.stringify(localStorage).includes('fixture-token')));
@@ -884,7 +909,6 @@ try {
   assert.equal(worktreeScans - scansBeforePublish, 1, 'An uninterrupted mobile publish visits unrelated tracked assets only during initial discovery');
   console.log('Mobile publish worktree scans:', worktreeScans - scansBeforePublish);
   await click('完成');
-  const phoneRepo = join(appData, 'workspaces', saved[0].id, 'repo');
   execFileSync('git', ['-C', phoneRepo, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.org', 'commit', '--allow-empty', '-m', 'Quick sync fixture']);
   await page.click('.quick-sync button');
   await page.waitForFunction(() => document.querySelector('.quick-sync-progress')?.textContent.includes('分支已同步'));
@@ -893,6 +917,7 @@ try {
   await click('切换工作区'); await heading('连接创作工作区');
   assert.equal(await page.$('.studio-shell'), null, 'Explicit switching leaves the chooser open');
   await click('添加工作区');
+  assert.equal(await page.$eval(submoduleOption, input => input.checked), false);
   await page.type('.connection-url input', mobile.url);
   await click('下载并开始创作'); await heading('今天，写点什么？');
   assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('wondershine.native.workspaces.v1')).map(item => item.id)), [saved[0].id], 'adding the same mobile repository reopens its original checkout');
@@ -906,6 +931,9 @@ try {
   const mainProfile = { ...saved[0], id: crypto.randomUUID(), branch: 'main' };
   await fs.mkdir(join(appData, 'workspaces', mainProfile.id, 'state'), { recursive: true });
   await mobile.invoke({ profile: mainProfile, job: { action: 'open', clone: true } });
+  await assert.rejects(fs.stat(join(appData, 'workspaces', mainProfile.id, 'repo', themePath, 'theme.txt')), { code: 'ENOENT' });
+  assert.deepEqual(await mobile.invoke({ profile: mainProfile, job: { action: 'checkRemote' } }), { ahead: 0, behind: 0 });
+  assert.equal(execFileSync('git', ['-C', join(appData, 'workspaces', mainProfile.id, 'repo'), 'rev-parse', '--is-shallow-repository']).toString().trim(), 'true');
   await mobile.verifySync(mainProfile);
 
   if (process.env.STUDIO_TEST_OAUTH === 'fixture') {

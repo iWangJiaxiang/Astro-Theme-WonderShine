@@ -92,14 +92,14 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
   return {
     reviewDiscard: () => discardChanges(),
     discard: (token: string) => discardChanges(requireWorkspaceConfirmation(token)),
-    async open(progress?: ProgressCallback, allowClone = true) {
+    async open(progress?: ProgressCallback, allowClone = true, includeSubmodules = false) {
       profile.branch = await run(null, async () => {
         let clone = allowClone;
         if (clone) {
           try { await files.lstat(root + '/.git'); clone = false; }
           catch (error) { if (!missingFile(error)) throw error; }
         }
-        return command<string>('open', { clone }, progress);
+        return command<string>('open', { clone, includeSubmodules: clone && includeSubmodules }, progress);
       });
     },
     // FileRepository already holds the workspace lock.

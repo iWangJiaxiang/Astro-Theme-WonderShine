@@ -45,6 +45,8 @@ pub struct ThemeBlobs {
 pub enum Job {
     Open {
         clone: bool,
+        #[serde(default, rename = "includeSubmodules")]
+        include_submodules: bool,
     },
     Guard,
     CheckRemote,
@@ -335,6 +337,20 @@ fn commit(
     .map_err(|_| WRITE)
 }
 
+fn validate_remote(url: &url::Url) -> Result<()> {
+    if url.scheme() != "https"
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.host().is_none()
+        || url.path() == "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(INVALID);
+    }
+    Ok(())
+}
+
 pub fn execute(
     base: &Path,
     p: &Profile,
@@ -353,16 +369,7 @@ pub fn execute(
         return Err(INVALID.into());
     }
     let url = url::Url::parse(&p.url).map_err(|_| INVALID)?;
-    if url.scheme() != "https"
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || url.host().is_none()
-        || url.path() == "/"
-        || url.query().is_some()
-        || url.fragment().is_some()
-    {
-        return Err(INVALID.into());
-    }
+    validate_remote(&url)?;
     if !p.branch.is_empty()
         && (!git2::Reference::is_valid_name(&format!("refs/heads/{}", p.branch))
             || p.branch.starts_with('-'))
@@ -375,16 +382,16 @@ pub fn execute(
     for dir in [base, &base.join("workspaces"), &workspace, &state] {
         directory(dir)?;
     }
-    if matches!(job, Job::Open { clone: true })
-        && !root.join(".git").try_exists().map_err(|_| READ)?
-    {
-        if root.try_exists().map_err(|_| READ)? {
-            directory(&root)?;
-            if fs::read_dir(&root).map_err(|_| READ)?.next().is_some() {
-                return Err("工作区目录已有文件，请选择空目录或匹配的 Git 仓库".into());
+    if let Job::Open { clone: true, include_submodules } = &job {
+        if !root.join(".git").try_exists().map_err(|_| READ)? {
+            if root.try_exists().map_err(|_| READ)? {
+                directory(&root)?;
+                if fs::read_dir(&root).map_err(|_| READ)?.next().is_some() {
+                    return Err("工作区目录已有文件，请选择空目录或匹配的 Git 仓库".into());
+                }
             }
+            network::clone_into(&root, p, password, progress, *include_submodules)?;
         }
-        network::clone_into(&root, p, password, progress)?;
     }
     directory(&root)?;
     directory(&root.join(".git"))?;
@@ -395,7 +402,6 @@ pub fn execute(
     )
     .map_err(|_| READ)?;
     if repo.is_bare()
-        || repo.is_shallow()
         || repo.is_worktree()
         || repo.workdir().and_then(|dir| dir.canonicalize().ok())
             != Some(root.canonicalize().map_err(|_| READ)?)
@@ -427,7 +433,7 @@ pub fn execute(
     match job {
         Job::Open { .. } => Ok(json!(branch)),
         Job::CheckRemote => {
-            network::fetch_current(&repo, p, &state, password)?;
+            network::fetch_current(&repo, p, &state, password, false)?;
             let (ahead, behind) = counts(&repo, head(&repo)?, remote_tip(&repo, branch)?)?;
             Ok(json!({"ahead": ahead, "behind": behind}))
         }
@@ -579,7 +585,7 @@ mod tests {
         );
         let before = git(&root, &["rev-parse", "HEAD"]);
         let run = |action| execute(base.path(), &p, action, "", &|_, _, _| {});
-        assert_eq!(run(Job::Open { clone: false }).unwrap(), p.branch);
+        assert_eq!(run(Job::Open { clone: false, include_submodules: false }).unwrap(), p.branch);
         fs::write(root.join(path), "discard me").unwrap();
         fs::write(root.join("new.txt"), "new").unwrap();
         let rows = changes(&Repository::open(&root).unwrap(), None, true).unwrap();

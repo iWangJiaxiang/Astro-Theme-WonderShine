@@ -12,6 +12,7 @@ const REJECTED: &str = "Git 远端拒绝了推送，请检查分支保护规则�
 const MERGE: &str = "无法自动合并，请在 Git 工具中处理；双方提交均已保留";
 const PUSH: &str = "Git 推送未确认，请重试同步以核对远端；本地提交已保留";
 const CLONE: &str = "首次下载 Git 工作区失败，请检查连接；已有文件未被替换";
+const UNSHALLOW: i32 = i32::MAX;
 
 pub fn initialize() -> Result<()> {
     static INIT: OnceLock<Result<()>> = OnceLock::new();
@@ -109,20 +110,32 @@ fn network_error(stage: &str, error: git2::Error, fallback: &'static str) -> Val
     json!({"message": message, "gitDetail": format!("libgit2 {} {:?}/{:?}", stage, error.class(), error.code())})
 }
 
+fn fetch_options<'a>(
+    p: &'a Profile,
+    password: &'a str,
+    progress: &'a dyn Fn(&str, usize, usize),
+    depth: i32,
+) -> FetchOptions<'a> {
+    let mut options = FetchOptions::new();
+    options
+        .depth(depth)
+        .follow_redirects(RemoteRedirect::None)
+        .download_tags(AutotagOption::None)
+        .remote_callbacks(callbacks(p, password, progress));
+    options
+}
+
 fn fetch(
     repo: &Repository,
     p: &Profile,
     password: &str,
     branch: &str,
+    depth: i32,
     progress: &dyn Fn(&str, usize, usize),
     fallback: &'static str,
 ) -> std::result::Result<(), Value> {
     let mut remote = repo.find_remote("origin").map_err(|_| READ)?;
-    let mut options = FetchOptions::new();
-    options
-        .follow_redirects(RemoteRedirect::None)
-        .download_tags(AutotagOption::None)
-        .remote_callbacks(callbacks(p, password, progress));
+    let mut options = fetch_options(p, password, progress, depth);
     remote
         .fetch(
             &[format!("+refs/heads/{branch}:refs/remotes/origin/{branch}")],
@@ -132,11 +145,82 @@ fn fetch(
         .map_err(|error| network_error("fetch", error, fallback))
 }
 
+fn submodules(
+    repo: &Repository,
+    p: &Profile,
+    password: &str,
+    progress: &dyn Fn(&str, usize, usize),
+) -> std::result::Result<(), Value> {
+    let root = repo.workdir().ok_or(CLONE)?;
+    match fs::symlink_metadata(root.join(".gitmodules")) {
+        Ok(info) if info.is_file() => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        _ => return Err(CLONE.into()),
+    }
+    let origin = url::Url::parse(&p.url).map_err(|_| CLONE)?;
+    for module in repo.submodules().map_err(|_| CLONE)? {
+        let Some(pin) = module.index_id() else { continue };
+        let path = module.path().to_str().ok_or(CLONE)?;
+        let mut target = root.to_owned();
+        for part in path.split('/') {
+            let lower = part.to_ascii_lowercase();
+            if part.is_empty()
+                || part.ends_with(['.', ' '])
+                || part.contains(['\\', ':'])
+                || part.chars().any(char::is_control)
+                || lower.eq(".git")
+                || lower.starts_with("git~")
+                || lower.starts_with(".git~")
+            {
+                return Err(CLONE.into());
+            }
+            target.push(part);
+            match fs::symlink_metadata(&target) {
+                Ok(info) if info.is_dir() => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    fs::create_dir(&target).map_err(|_| CLONE)?;
+                }
+                _ => return Err(CLONE.into()),
+            }
+        }
+        if fs::read_dir(&target).map_err(|_| CLONE)?.next().is_some() {
+            return Err(CLONE.into());
+        }
+        let address = module.url().ok_or(CLONE)?;
+        let url = if address.starts_with("./") || address.starts_with("../") {
+            let base = format!("{}/", origin.as_str().trim_end_matches('/'));
+            url::Url::parse(&base).and_then(|base| base.join(address))
+        } else {
+            url::Url::parse(address)
+        }
+        .map_err(|_| CLONE)?;
+        validate_remote(&url)?;
+        let child = Repository::init(&target).map_err(|_| CLONE)?;
+        let mut remote = child.remote("origin", url.as_str()).map_err(|_| CLONE)?;
+        let mut shallow = fetch_options(p, password, progress, 1);
+        // Older pinned commits may require fetching the advertised branch or tag that contains them.
+        if remote.fetch(&[format!("{pin}:refs/studio/pinned")], Some(&mut shallow), None).is_err()
+            || child.find_commit(pin).is_err()
+        {
+            let depth = if child.is_shallow() { UNSHALLOW } else { 0 };
+            let mut options = fetch_options(p, password, progress, depth);
+            options.download_tags(AutotagOption::All);
+            remote.fetch(&["+refs/heads/*:refs/remotes/origin/*"], Some(&mut options), None)
+                .map_err(|error| network_error("fetch", error, CLONE))?;
+        }
+        child.set_head_detached(pin).map_err(|_| CLONE)?;
+        child.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))
+            .map_err(|_| CLONE)?;
+    }
+    Ok(())
+}
+
 pub(super) fn clone_into(
     root: &Path,
     p: &Profile,
     password: &str,
     progress: &dyn Fn(&str, usize, usize),
+    include_submodules: bool,
 ) -> std::result::Result<(), Value> {
     #[cfg(target_os = "android")]
     android_roots(root.parent().ok_or(INVALID)?)?;
@@ -171,7 +255,7 @@ pub(super) fn clone_into(
             return Err(CLONE.into());
         }
         drop(remote);
-        fetch(&repo, p, password, &branch, progress, CLONE)?;
+        fetch(&repo, p, password, &branch, 1, progress, CLONE)?;
         let commit = repo
             .find_commit(remote_tip(&repo, &branch)?.ok_or(CLONE)?)
             .map_err(|_| CLONE)?;
@@ -183,21 +267,60 @@ pub(super) fn clone_into(
             .force()
             .progress(|_, n, total| progress("Updating workdir", n, total));
         repo.checkout_head(Some(&mut checkout)).map_err(|_| CLONE)?;
+        if include_submodules {
+            submodules(&repo, p, password, progress)?;
+        }
     }
     fs::rename(staging.path(), root).map_err(|_| CLONE)?;
     Ok(())
 }
 
-pub(super) fn fetch_current(repo: &Repository, p: &Profile, state: &Path, password: &str) -> std::result::Result<(), Value> {
+pub(super) fn fetch_current(repo: &Repository, p: &Profile, state: &Path, password: &str, syncing: bool) -> std::result::Result<(), Value> {
     #[cfg(target_os = "android")]
     android_roots(state)?;
     let no_progress = |_: &str, _: usize, _: usize| {};
-    fetch(repo, p, password, &p.branch, &no_progress, CONNECT)
+    if !repo.is_shallow() {
+        return fetch(repo, p, password, &p.branch, 0, &no_progress, CONNECT);
+    }
+    let tip = remote_tip(repo, &p.branch)?;
+    let mut remote = repo.find_remote("origin").map_err(|_| READ)?;
+    let mut connection = remote
+        .connect_auth(Direction::Fetch, Some(callbacks(p, password, &no_progress)), None)
+        .map_err(|error| network_error("fetch", error, CONNECT))?;
+    let name = format!("refs/heads/{}", p.branch);
+    let advertised = connection.list().map_err(|_| CONNECT)?.iter()
+        .find(|entry| entry.name() == name)
+        .map(|entry| entry.oid())
+        .ok_or("远端分支不存在，本地文件和提交已保留")?;
+    drop(connection);
+    if Some(advertised) == tip && (!syncing || head(repo)? == advertised) {
+        return Ok(());
+    }
+    // Keep the last known remote tip until we have a complete history to compare.
+    let pending = "refs/studio/fetched";
+    match repo.find_reference(pending) {
+        Ok(mut old) => old.delete().map_err(|_| WRITE)?,
+        Err(error) if error.code() == git2::ErrorCode::NotFound => (),
+        Err(_) => return Err(READ.into()),
+    }
+    let mut options = fetch_options(p, password, &no_progress, UNSHALLOW);
+    remote
+        .fetch(&[format!("+{name}:{pending}")], Some(&mut options), None)
+        .map_err(|error| network_error("fetch", error, CONNECT))?;
+    let mut fetched = repo.find_reference(pending).map_err(|_| CONNECT)?;
+    let target = fetched.target().ok_or(CONNECT)?;
+    fetched.delete().map_err(|_| WRITE)?;
+    if repo.is_shallow() {
+        return Err("远端未提供所需的 Git 历史，本地文件和提交已保留".into());
+    }
+    repo.reference(&format!("refs/remotes/origin/{}", p.branch), target, true, "Studio fetch")
+        .map_err(|_| WRITE)?;
+    Ok(())
 }
 
 pub(super) fn sync(repo: &Repository, p: &Profile, state: &Path, password: &str) -> std::result::Result<bool, Value> {
     let no_progress = |_: &str, _: usize, _: usize| {};
-    fetch_current(repo, p, state, password)?;
+    fetch_current(repo, p, state, password, true)?;
     let before = head(repo)?;
     let target = remote_tip(repo, &p.branch)?.ok_or(CONNECT)?;
     let (ahead, behind) = counts(repo, before, Some(target))?;
