@@ -67,7 +67,8 @@
 .thread-composer .composer-secondary-actions .text-button { font-size: 11px; }
 .thread-composer .composer-secondary-actions > .small { font-size: 10px; margin-right: auto; }
 .thread-composer .composer-file { padding: 0; flex-basis: 100%; }
-.thread-composer .composer-file summary { cursor: pointer; }
+.thread-composer .composer-file summary { cursor: pointer; display: list-item; align-content: center; }
+.thread-composer .composer-file .path-label { margin: 0; line-height: 1.4; }
 @media(min-width:1600px) {
   .thread-composer .markdown-source { min-height: 160px; height: 160px; }
   .thread-composer .composer-heading { padding-top: 22px; }
@@ -87,6 +88,7 @@
   .thread-composer .composer-footer { margin-inline: 16px; }
   .composer-publish { width: 100%; justify-content: space-between; }
   .composer-publish .autosave-control { flex-wrap: wrap; }
+  .composer-publish > .save-button { margin-inline-start: auto; }
   .thread-composer .composer-publish .save-button-main { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
   .thread-composer .composer-publish .save-button-toggle { flex-shrink: 0; }
 }
@@ -121,14 +123,15 @@
 .publication-date-dialog::backdrop { background: #10162a70; backdrop-filter: blur(3px); }
 .publication-date-dialog .card-heading { padding: 18px 22px; }
 .publication-date-dialog h2 { font-size: 15px; }
-.publication-date-fields { display: grid; gap: 16px; padding: 22px; }
+.publication-date-fields { grid-template-columns: minmax(0, 1fr); display: grid; gap: 16px; padding: 22px; }
 .publication-date-fields > .field { grid-template-columns: 48px minmax(0, 1fr); gap: 14px; margin: 0; }
-.publication-date-dialog .publication-date-fields .field input[type] { min-height: 40px; padding: 8px 11px; border: 1px solid var(--studio-line); border-radius: 7px; box-shadow: none; }
+.publication-date-dialog .publication-date-fields .field input[type] { min-width: 0; max-width: 100%; width: 100%; box-sizing: border-box; min-height: 40px; padding: 8px 11px; border: 1px solid var(--studio-line); border-radius: 7px; box-shadow: none; }
 .publication-date-dialog .publication-date-fields .field input[type]:focus { border-color: var(--wjx-theme); box-shadow: 0 0 0 3px color-mix(in srgb, var(--wjx-theme) 10%, transparent); }
-.publication-date-help { color: var(--studio-muted); font-size: 11px; }
-.publication-date-help summary { cursor: pointer; }
+.date-shortcuts { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.publication-date-help { padding: 0 12px; border-radius: 8px; background: var(--form-surface); color: var(--studio-muted); font-size: 11px; }
+.publication-date-help summary { cursor: pointer; padding-block: 8px; align-content: center; }
 .publication-date-help summary span { float: right; font-variant-numeric: tabular-nums; }
-.publication-date-help p { margin: 10px 0 0; line-height: 1.7; }
+.publication-date-help p { margin: 0; padding-bottom: 10px; line-height: 1.7; }
 .publication-date-dialog .selection-footer { justify-content: flex-end; padding: 14px 22px; }
 .publication-date-dialog .primary { padding: 9px 16px; font-size: 12px; }
 @media(max-width:1000px) {

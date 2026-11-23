@@ -97,7 +97,7 @@ export async function api<T>(path: string, method = 'GET', body?: unknown): Prom
     if (error instanceof Error) {
       // Only keep the API operation. Paths below a resource, query strings and bodies may contain user data.
       const route = path.split(/[?#]/, 1)[0];
-      const match = /^\/(workspace\/(?:publish|commit|sync|review)|[a-z-]+)(?:\/|$)/.exec(route);
+      const match = /^\/(workspace\/(?:publish|commit|sync|review|discard)|[a-z-]+)(?:\/|$)/.exec(route);
       if (match) failedRequests.set(error, method + ' /' + match[1]);
     }
     throw error;

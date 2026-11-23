@@ -1,3 +1,5 @@
+import { discardState } from '../shared/workspace-discard.js';
+import { discardFiles } from '../platform/discard-files.js';
 import { mergeTarget } from '../platform/merge-target.js';
 import { assertThemeCommit } from '../platform/theme-commit.js';
 import type { ThemeCommit } from '../shared/theme-update.js';
@@ -67,6 +69,8 @@ export class GitWorkspaceRepository implements Repository {
         await this.commitFiles(message, requireWorkspaceConfirmation(confirmation), undefined, true);
         await this.sync();
       }),
+      reviewDiscard: () => this.run(() => this.discard()),
+      discard: token => this.run(() => this.discard(requireWorkspaceConfirmation(token))),
       commitTheme: change => this.run(() => this.commitFiles(change.message, undefined, change)),
       sync: confirmation => this.run(() => this.sync(confirmation)),
     };
@@ -143,7 +147,7 @@ export class GitWorkspaceRepository implements Repository {
   }
 
   private async rows(cache = {}) {
-    return (await git.statusMatrix({ ...this.gitOptions, cache, filter: path => !internal(path) }))
+    return (await git.statusMatrix({ ...this.gitOptions, cache, refresh: false, filter: path => !internal(path) }))
       .filter(([, head, worktree, stage]) => head !== worktree || head !== stage);
   }
   private async createReview(): Promise<WorkspaceStatus> {
@@ -184,9 +188,27 @@ export class GitWorkspaceRepository implements Repository {
     const managedChanges = rows.filter(([path]) => managed(path)).map(([path]) => path);
     const changes = rows.length;
     return {
-      status: { branch: this.options.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, canMerge: true, managedChanges },
+      status: { branch: this.options.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, canDiscard: true, canMerge: true, managedChanges },
       review: { scope: 'server:' + this.root, branch: this.options.branch, head, rows: rows.filter(([path]) => managed(path)) },
     };
+  }
+
+  private async discard(token?: string): Promise<WorkspaceStatus> {
+    await this.mutable();
+    await this.assertGitIdle();
+    const rows = await this.rows();
+    const status = await this.status();
+    const state = await discardState({ scope: 'server:' + this.root, head: status.head, branch: status.branch, rows },
+      await readFile(join(this.root, '.git', 'index')));
+    const store = nodeWorkspaceReviews(this.root), source = nodeReviewSource(this.root);
+    if (token === undefined) {
+      const review = await store.createReview(state, source);
+      return { ...status, discardPaths: rows.map(([path]) => path), confirmation: review.confirmation };
+    }
+    await store.validateReview(token, state, source);
+    for (const [path] of rows) await safeMediaPath(this.root, path);
+    await discardFiles(this.gitOptions, rows);
+    return this.status();
   }
 
   private async commit(message: string, confirmation?: string): Promise<WorkspaceStatus> {

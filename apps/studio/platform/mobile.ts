@@ -7,6 +7,23 @@ export function installMobileShell(native = true): () => void {
     root.dataset.nativeMobile = 'true';
     root.dataset.nativePlatform = /Android/.test(navigator.userAgent) ? 'android' : 'ios';
   }
+  // Keyboard navigation keeps its focus ring. A dialog or route that moves
+  // focus after a tap should not paint an unrelated control as selected.
+  let pointerTarget: EventTarget | null = null;
+  let keyboard = false;
+  let automatic: HTMLElement | null = null;
+  const clearRing = () => { automatic?.removeAttribute('data-auto-focus'); automatic = null; };
+  const onPointer = (event: PointerEvent) => { keyboard = false; pointerTarget = event.target; clearRing(); };
+  const onKey = () => { keyboard = true; pointerTarget = null; clearRing(); };
+  const onFocus = (event: FocusEvent) => {
+    clearRing();
+    if (keyboard || !(event.target instanceof HTMLElement) || pointerTarget instanceof Node && event.target.contains(pointerTarget)) return;
+    automatic = event.target;
+    automatic.setAttribute('data-auto-focus', '');
+  };
+  document.addEventListener('pointerdown', onPointer, true);
+  document.addEventListener('keydown', onKey, true);
+  document.addEventListener('focusin', onFocus, true);
   const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
   const previous = viewport?.content;
   if (native && mobile && viewport) viewport.content = 'width=device-width, initial-scale=1, viewport-fit=cover';
@@ -23,6 +40,10 @@ export function installMobileShell(native = true): () => void {
   window.addEventListener('resize', update);
   update();
   return () => {
+    clearRing();
+    document.removeEventListener('pointerdown', onPointer, true);
+    document.removeEventListener('keydown', onKey, true);
+    document.removeEventListener('focusin', onFocus, true);
     delete root.dataset.nativeMobile;
     delete root.dataset.nativePlatform;
     root.removeAttribute('data-compact-viewport');

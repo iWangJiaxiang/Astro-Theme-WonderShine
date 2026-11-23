@@ -14,6 +14,8 @@ export interface WorkspaceStatus {
   canSync?: boolean;
   canPublish?: boolean;
   canMerge?: boolean;
+  canDiscard?: boolean;
+  discardPaths?: string[];
   managedChanges?: string[];
   /** Present only on explicit createReview(), never status/commit/sync responses. */
   confirmation?: string;
@@ -26,6 +28,8 @@ export interface WorkspaceControl {
   readonly canSync?: boolean;
   /** Commit the confirmed theme change on the configured branch, scoped to exact config blobs. */
   commitTheme?(change: ThemeCommit): Promise<string>;
+  reviewDiscard?(): Promise<WorkspaceStatus>;
+  discard?(confirmation: string): Promise<WorkspaceStatus>;
   publish?(message: string, confirmation: string): Promise<void>;
   saveBranch?(key: string, files: BranchFile[]): Promise<BranchSave>;
   checkRemote?(): Promise<Pick<WorkspaceStatus, 'ahead' | 'behind'>>;

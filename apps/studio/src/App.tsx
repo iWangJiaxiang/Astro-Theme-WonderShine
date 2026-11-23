@@ -449,23 +449,24 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         return <button key={id} type="button" aria-current={active ? "page" : undefined}
           className={classes({ active })} onClick={() => navigate(id)}>
           <Icon name={icon} size={18} />{t(title)}
-          {more ? <Icon name="arrow" size={16} /> : active ? <span className="nav-indicator" /> : null}
+          {!more && active ? <span className="nav-indicator" /> : null}
         </button>;
       }
       const content = availableNavigation().filter(item => !more || !primaryNavigation.includes(item));
       return <div className={more ? "more-groups" : "sidebar-navigation"}>
-        <p className="nav-label">{t("创作空间")}</p>
+        {more ? <h1 className="nav-label">{t("创作空间")}</h1> : <p className="nav-label">{t("创作空间")}</p>}
         <nav aria-label={t("内容导航")}>{content.map(item => destination(item.id, item.label, item.icon))}</nav>
         <p className="nav-label">{t("站点管理")}</p>
         {loadingSite.value && !data.value && <LoadingState label="正在加载站点…" compact />}
         <nav aria-label={t("站点设置")}>{siteGroups().map(group => destination(group.id, group.title, icons[group.id] || "file"))}</nav>
         <details className="studio-preferences" open={more || undefined}><summary>{t("界面设置")}</summary>
-          <LanguageSwitcher />
+          <div className="preference-controls"><LanguageSwitcher />
           <button type="button" aria-current={view.value === "appearance" ? "page" : undefined} onClick={() => navigate("appearance")}><Icon size={18} name="palette" />{t("外观样式")}</button>
           <button type="button" className="theme-switch" aria-pressed={dark.value} onClick={() => {
             saveStudioAppearance({ ...studioAppearance.value, [schemePath]: dark.value ? "light" : "dark" });
-          }}>{t("切换明暗模式")}</button>
+          }}><Icon name={dark.value ? "sun" : "moon"} size={18} />{t("切换明暗模式")}</button>
           {props.workspaceSwitcher && <button type="button" disabled={pendingMutations.value > 0} onClick={() => void logout()}><Icon size={18} name="switchWorkspace" />{t("切换工作区")}</button>}
+          </div>
         </details>
       </div>;
     }
@@ -794,7 +795,6 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                           })
                         : view.value === "more"
                           ? <section className="more-page">
-                              <div className="page-heading"><h1>{t("更多")}</h1></div>
                               {navigationGroups(true)}
                               {accountControls()}
                             </section>
@@ -1138,7 +1138,6 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                       : element(SettingsView, {
                                           key: view.value,
                                           group: view.value,
-                                          manageWorkspace: () => navigate("workspace"),
                                           onExit: (() => navigate("home")) satisfies EventHandler<typeof SettingsView, "onExit">,
                                           onDirty: (($event) => {
                                             dirty.value = $event;

@@ -13,7 +13,7 @@ export function contentLanguage(path: string, defaultLanguage: string): string {
 export function localizedPath(kind: LocalizedKind, id: string, language: string, defaultLanguage: string): string {
   return `content/${kind === 'thread' ? 'threads' : 'topics'}/${id}/index${language === defaultLanguage ? '' : `.${language}`}.md`;
 }
-export function newThread(language: string, defaultLanguage: string, id = contentId('thread'), date = new Date().toISOString()): ContentDraft {
+export function newThread(language: string, defaultLanguage: string, id = contentId('thread'), date = ''): ContentDraft {
   return { path: localizedPath('thread', id, language, defaultLanguage), initial: { draft: true, date, 'extra.kind': 'thread', 'extra.id': id } };
 }
 export function newTopic(language: string, defaultLanguage: string, id = contentId('topic')): ContentDraft {

@@ -295,7 +295,6 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                             element("input", {
                               value: search.value ?? "",
                               type: "search",
-                              autoFocus: true,
                               placeholder: t("搜索标题、标签或文件位置…"),
                               onInput: domEvent(($event: Event) => {
                                 search.value = (

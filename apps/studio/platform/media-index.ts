@@ -101,6 +101,10 @@ export function createNativeMediaIndex(repository: Repository & Pick<FileReposit
         await invalidate();
         return workspace.sync(confirmation);
       });
+      if (property === 'discard' && workspace.discard) return (confirmation: string) => serialize(async () => {
+        await invalidate();
+        return workspace.discard!(confirmation);
+      });
       if (property === 'publish' && workspace.publish) return (message: string, confirmation: string) => serialize(async () => {
         await invalidate();
         return workspace.publish!(message, confirmation);

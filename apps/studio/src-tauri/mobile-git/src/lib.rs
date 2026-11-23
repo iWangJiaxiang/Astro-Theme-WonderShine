@@ -58,6 +58,7 @@ pub enum Job {
         message: String,
         theme: Option<Vec<ThemeBlobs>>,
     },
+    Discard { head: String, paths: Vec<String> },
     Publish {
         head: String,
         paths: Vec<String>,
@@ -431,6 +432,48 @@ pub fn execute(
             let oid = commit(&repo, &root, p, &head, &paths, &message, theme.as_deref())?;
             Ok(json!(oid.to_string()))
         }
+        Job::Discard { head: expected, paths } => {
+            let oid = head(&repo)?;
+            let rows = changes(&repo, None)?;
+            if oid.to_string() != expected || paths.len() != rows.len() ||
+                !paths.iter().zip(&rows).all(|(p, row)| row[0].as_str() == Some(p.as_str())) {
+                return Err(CHANGED.into());
+            }
+            let tree = repo.find_commit(oid).and_then(|c| c.tree()).map_err(|_| READ)?;
+            let mut restore = git2::build::CheckoutBuilder::new();
+            restore.force().disable_pathspec_match(true);
+            let mut tracked = false;
+            let mut added = Vec::new();
+            for path in &paths {
+                if internal(path) || path.contains(['\\', ':']) || path.split('/').any(|p| p.is_empty() || p == "." || p == ".." || p.eq_ignore_ascii_case(".git")) {
+                    return Err(INVALID.into());
+                }
+                let mut target = root.clone();
+                for part in path.split('/') {
+                    target.push(part);
+                    if fs::symlink_metadata(&target).is_ok_and(|m| m.is_symlink()) {
+                        return Err(INVALID.into());
+                    }
+                }
+                if target.is_dir() { return Err(INVALID.into()); }
+                match tree.get_path(Path::new(path)) {
+                    Ok(entry) if matches!(entry.filemode(), 0o100644 | 0o100755) => {
+                        restore.path(path.as_str());
+                        tracked = true;
+                    }
+                    Err(e) if e.code() == git2::ErrorCode::NotFound => added.push((path, target)),
+                    _ => return Err(INVALID.into()),
+                }
+            }
+            if tracked { repo.checkout_tree(tree.as_object(), Some(&mut restore)).map_err(|_| WRITE)?; }
+            let mut index = repo.index().map_err(|_| READ)?;
+            for (path, target) in added {
+                if index.get_path(Path::new(path), 0).is_some() { index.remove_path(Path::new(path)).map_err(|_| WRITE)?; }
+                if target.try_exists().map_err(|_| READ)? { fs::remove_file(target).map_err(|_| WRITE)?; }
+            }
+            index.write().map_err(|_| WRITE)?;
+            Ok(Value::Null)
+        }
         Job::Publish {
             head,
             paths,
@@ -526,6 +569,14 @@ mod tests {
         let before = git(&root, &["rev-parse", "HEAD"]);
         let run = |action| execute(base.path(), &p, action, "", &|_, _, _| {});
         assert_eq!(run(Job::Open { clone: false }).unwrap(), p.branch);
+        fs::write(root.join(path), "discard me").unwrap();
+        fs::write(root.join("new.txt"), "new").unwrap();
+        let rows = changes(&Repository::open(&root).unwrap(), None).unwrap();
+        let paths = rows.iter().map(|row| row[0].as_str().unwrap().to_owned()).collect();
+        run(Job::Discard { head: before.clone(), paths }).unwrap();
+        assert_eq!(fs::read_to_string(root.join(path)).unwrap(), "original");
+        assert!(!root.join("new.txt").exists());
+        assert_eq!(git(&root, &["rev-parse", "HEAD"]), before);
         fs::write(root.join(path), "unpublished thread").unwrap();
         let status = run(Job::Inspect {
             paths: None,

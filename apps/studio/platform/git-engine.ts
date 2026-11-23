@@ -1,3 +1,5 @@
+import { discardState } from '../shared/workspace-discard.js';
+import { discardFiles } from './discard-files.js';
 import { mergeTarget } from './merge-target.js';
 import { assertThemeCommit } from './theme-commit.js';
 import type { ThemeCommit } from '../shared/theme-update.js';
@@ -186,7 +188,7 @@ export class NativeGitEngine implements WorkspaceControl {
     const managedChanges = review.rows.map(([path]) => path);
     const changes = rows.length;
     return {
-      status: { branch: this.profile.branch, dirty: changes > 0, changes, ...branch, lastSync, canSync: this.canSync, canMerge: true, managedChanges },
+      status: { branch: this.profile.branch, dirty: changes > 0, changes, ...branch, lastSync, canDiscard: true, canSync: this.canSync, canMerge: true, managedChanges },
       review,
     };
   }
@@ -211,6 +213,26 @@ export class NativeGitEngine implements WorkspaceControl {
   }
   commitForReview(message: string, confirmation: string): Promise<void> {
     return withWorkspaceLock(this.root, async () => { await this.commitUnlocked(message, confirmation); });
+  }
+  reviewDiscard() { return this.discardChanges(); }
+  discard(token: string) { return this.discardChanges(requireWorkspaceConfirmation(token)); }
+  private discardChanges(token?: string): Promise<WorkspaceStatus> {
+    return withWorkspaceLock(this.root, async () => {
+      await this.openUnlocked(); await this.assertWritable();
+      const rows = await this.rows();
+      const status = await this.statusUnlocked(rows);
+      const state = await discardState({ scope: 'native:' + this.root, branch: status.branch, head: status.head, rows },
+        await this.files.readFile(this.root + '/.git/index') as Uint8Array);
+      const { store, source } = this.reviewAdapter();
+      if (token === undefined) {
+        const review = await store.createReview(state, source);
+        return { ...status, discardPaths: rows.map(([path]) => path), confirmation: review.confirmation };
+      }
+      await store.validateReview(token, state, source);
+      for (const [path] of rows) await this.safeFile(path);
+      await discardFiles(this.options, rows);
+      return this.statusUnlocked();
+    });
   }
   commitTheme(change: ThemeCommit): Promise<string> {
     return withWorkspaceLock(this.root, () => this.commitUnlocked(change.message, undefined, change));

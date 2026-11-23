@@ -1,4 +1,6 @@
 import { ErrorNotice } from "./ErrorNotice";
+import Modal from "./Modal";
+import type { WorkspaceStatus } from "../../shared/workspace";
 import SaveButton from "./SaveButton";
 import { saveContext } from "../save-preferences";
 import type { SaveMode } from "../../shared/save";
@@ -38,7 +40,7 @@ import ValueEditor from "./ValueEditor";
 import type { ThemeUpdateCheck, ThemeUpdateResult } from "../../shared/theme-update";
 import { notifyWorkspaceChanged } from "../workspace-events";
 
-type Props = { group: string; embedded?: boolean; language?: string; manageWorkspace?: () => void };
+type Props = { group: string; embedded?: boolean; language?: string };
 type Events = { dirty: [value: boolean]; saved: []; exit: [] };
 const themeFields = ["extra.theme.channel", "extra.theme.pinned", "extra.theme.version"];
 const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
@@ -57,7 +59,8 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
     const ready = ref(false), busy = ref(false),
       error = ref<Message>(""), message = ref<Message>("");
     const themeCheck = shallowRef<ThemeUpdateCheck | null>(null);
-    const themeOperation = ref<"check" | "apply" | null>(null), themeNeedsSync = ref(false);
+    const themeOperation = ref<"check" | "apply" | null>(null);
+    const themeLog = ref<Message[]>([]), showThemeLog = ref(false), pendingThemeCommit = ref("");
     let requestId = 0, mainPending = false;
     let relationsRequestId = 0, relationsRefreshPending = false,
       relationsAuthenticationEpoch = observedAuthenticationEpoch;
@@ -81,6 +84,8 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       mainPending = false;
       batch(() => {
         if (!owns) retired.value = true;
+        showThemeLog.value = false;
+        pendingThemeCommit.value = "";
         if (abandonedMain) mainNeedsReload.value = true;
         if (relationsLoading.value) relationsNeedsRetry.value = true;
         relationsLoading.value = false;
@@ -479,10 +484,10 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
         }
       }
     }
-    async function updateTheme(apply: boolean) {
+    async function updateTheme(apply: boolean, retrySync = false) {
       if (!canInteract() || !ready.value || !settings.value || busy.value || themeDirty.value || branchPending.value || unknownSaveObligation.value) return;
       const check = themeCheck.value;
-      if (apply && (!check || (check.revision ?? "") !== settings.value.revision)) return;
+      if (apply && !retrySync && (!check || (check.revision ?? "") !== settings.value.revision)) return;
       if (!apply) themeCheck.value = null;
       const operation = { authentication: authenticationEpoch.value, initiated: false };
       const current = () => ownsInstance() && operation.authentication === authenticationEpoch.value && activeSave === operation;
@@ -490,12 +495,16 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       batch(() => {
         busy.value = true;
         themeOperation.value = apply ? "apply" : "check";
+        if (apply) {
+          showThemeLog.value = true;
+          themeLog.value = retrySync ? ["已提交到工作区，尚未推送到远端。"] : ["正在应用主题更新…"];
+        }
         error.value = "";
         message.value = "";
       });
       try {
         if (!current()) return;
-        if (!check || !apply) {
+        if (!apply) {
           const result = await api<ThemeUpdateCheck>("/theme-update");
           if (!current()) return;
           if ((result.revision ?? "") !== settings.value?.revision) {
@@ -503,23 +512,44 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           } else themeCheck.value = result;
           return;
         }
+        if (!retrySync && check) {
+          operation.initiated = true;
+          const result = await api<ThemeUpdateResult>("/theme-update", "POST", { revision: check.revision, packageRevision: check.packageRevision, channelVersion: check.channelVersion });
+          if (!current()) return;
+          operation.initiated = false;
+          batch(() => {
+            settings.value = { ...settings.value!, revision: result.revision };
+            if (result.pinnedThemeVersion) {
+              const path = "extra.theme.version";
+              if (!themeDirty.value) values.value[path] = result.pinnedThemeVersion;
+              baseline.value[path] = result.pinnedThemeVersion;
+            }
+            themeCheck.value = null;
+            themeLog.value = [...themeLog.value, result.message];
+            pendingThemeCommit.value = check.destination === "workspace" && !result.localCommitPending && saveContext.value.workspaceCanSync ? result.commit || "" : "";
+            if (result.localCommitPending) error.value = result.message;
+            else message.value = result.message;
+          });
+          if (current() && check.destination === "workspace") notifyWorkspaceChanged();
+        }
+        if (!current() || !pendingThemeCommit.value) return;
+        const review = await api<WorkspaceStatus>("/workspace/review", "POST");
+        if (!current()) return;
+        if (!review.confirmation || (!retrySync && review.head !== pendingThemeCommit.value))
+          throw new Error("工作区已变化，请刷新并重新确认提交范围");
+        if (review.dirty) throw new Error("请先保存编辑并提交工作区更改，再同步 Git。");
+        themeLog.value = [...themeLog.value, { key: "正在同步分支 {branch}…", params: { branch: review.branch } }];
         operation.initiated = true;
-        const result = await api<ThemeUpdateResult>("/theme-update", "POST", { revision: check.revision, packageRevision: check.packageRevision, channelVersion: check.channelVersion });
+        try {
+          await api("/workspace/sync", "POST", { confirmation: review.confirmation });
+        } finally {
+          if (current()) notifyWorkspaceChanged();
+        }
         if (!current()) return;
         operation.initiated = false;
-        batch(() => {
-          settings.value = { ...settings.value!, revision: result.revision };
-          if (result.pinnedThemeVersion) {
-            const path = "extra.theme.version";
-            if (!themeDirty.value) values.value[path] = result.pinnedThemeVersion;
-            baseline.value[path] = result.pinnedThemeVersion;
-          }
-          themeCheck.value = null;
-          themeNeedsSync.value = check.destination === "workspace";
-          if (result.localCommitPending) error.value = result.message;
-          else message.value = result.message;
-        });
-        if (current() && check.destination === "workspace") notifyWorkspaceChanged();
+        pendingThemeCommit.value = "";
+        message.value = "主题更新已推送。请在站点部署平台查看构建结果。";
+        themeLog.value = [...themeLog.value, message.value];
       } catch (reason) {
         if (current()) {
           operation.initiated = false;
@@ -545,23 +575,24 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           <button className="secondary" type="button" disabled={disabled} onClick={() => void updateTheme(false)}>
             {t(themeOperation.value === "check" ? "正在检查更新" : "检查更新")}
           </button>
-          {check && !sameVersion && <button className="primary" type="button" disabled={disabled} onClick={() => void updateTheme(true)}>
+          {check && !sameVersion && !pendingThemeCommit.value && <button className="primary" type="button" disabled={disabled} onClick={() => void updateTheme(true)}>
             {t(themeOperation.value === "apply" ? "正在应用主题更新…" : updatesVersion ? "更新到此版本" : "请求重新构建")}
           </button>}
-          {themeNeedsSync.value && props.manageWorkspace && <button className="secondary" type="button" disabled={busy.value} onClick={() => {
-            if (canInteract()) props.manageWorkspace?.();
-          }}>
-            {t("前往工作区同步")}
-          </button>}
+          {pendingThemeCommit.value && <button className="secondary" type="button" disabled={disabled} onClick={() => void updateTheme(true, true)}>{t("重试同步")}</button>}
         </div>
+        {showThemeLog.value && <Modal className="quick-sync-progress theme-progress" label={t("主题维护")} onCancel={() => { showThemeLog.value = false; }}>
+          <h2>{t("主题维护")}</h2><ol role="status">{themeLog.value.map((step, index) => <li key={index}>{t(step)}</li>)}</ol>
+          {error.value && <ErrorNotice source="SettingsView" message={error.value} />}
+          <button type="button" className="secondary" onClick={() => { showThemeLog.value = false; }}>{t("关闭")}</button>
+        </Modal>}
         {themeDirty.value ? <p className="muted small">{t("保存版本设置后可检查更新。")}</p> : check && <div role="status" className="small">
           {check.pinned && check.currentVersion && <p>{t("已固定版本 {version}", { version: check.currentVersion })}</p>}
           {!check.pinned && check.packageRevision && <p>{t("仓库主题版本 {version}", { version: check.currentVersion ?? "" })}</p>}
           <p>{t("渠道当前版本 {version}", { version: check.channelVersion })}</p>
           <p className="muted">{t(sameVersion ? "已是该渠道当前版本" : !updatesVersion ? "已部署版本未知。重新构建时会使用渠道当时的版本。"
-            : check.destination === "remote" ? "确认后将提交并推送版本变更。" : check.destination === "workspace" ? "确认后将提交版本变更，随后可在工作区同步。" : "确认后将写入版本设置。")}</p>
-          {!updatesVersion && <p className="muted">{t(check.destination === "remote" ? "确认后将提交并推送重建请求。"
-            : check.destination === "workspace" ? "确认后将提交重建请求，随后可在工作区同步。" : "确认后将写入重建注释，供你提交。")}</p>}
+            : (check.destination === "remote" || check.destination === "workspace" && saveContext.value.workspaceCanSync) ? "确认后将提交并推送版本变更。" : check.destination === "workspace" ? "确认后将仅提交到本地 Git。" : "确认后将写入版本设置。")}</p>
+          {!updatesVersion && <p className="muted">{t((check.destination === "remote" || check.destination === "workspace" && saveContext.value.workspaceCanSync) ? "确认后将提交并推送重建请求。"
+            : check.destination === "workspace" ? "确认后将仅提交到本地 Git。" : "确认后将写入重建注释，供你提交。")}</p>}
         </div>}
       </div>;
     }

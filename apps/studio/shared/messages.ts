@@ -1,5 +1,14 @@
 // Application copy only. Site content and stored configuration values are never translated.
 export const english: Record<string, string> = {
+  "正在还原工作区…": "Restoring workspace\u2026",
+  "已还原工作区": "Workspace restored",
+  "还原工作区": "Discard workspace changes",
+  "以下修改将被撤销，新增文件将被移除。已提交的版本会保留。": "These changes will be discarded and new files removed. Existing commits will be kept.",
+  "此工作区包含无法安全还原的路径，请使用 Git 工具处理。": "This workspace contains paths that must be restored with a Git tool.",
+  "确认后将仅提交到本地 Git。": "This will create a local Git commit.",
+  "使用当前时间": "Use current time",
+  "移除时间": "Clear time",
+  "提交时使用当前时间": "Use submission time",
   "已合入远端更新": "Integrated remote changes",
   "已推送本地提交": "Pushed local commits",
   "忘记仓库授权": "Forget repository credentials",

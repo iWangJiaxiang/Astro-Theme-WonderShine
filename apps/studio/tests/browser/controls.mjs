@@ -117,6 +117,8 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   assert.equal(JSON.parse(await readFile(packageFile, 'utf8')).dependencies['@wondershine/theme'], '1.2.3-canary.1');
   assert.deepEqual(parse(rebuiltText), parse(beforeRebuild));
   await page.waitForSelector('.settings-page .notice.success');
+  await page.waitForSelector('.theme-progress[open]');
+  await page.click('.theme-progress > button');
   await click('工作台'); await heading('今天，写点什么？');
   await writeFile(configFile, patchToml(await readFile(configFile, 'utf8'), { 'extra.style.font_family': 'Custom Font' }));
   const [freshResponse] = await Promise.all([themeResponse('GET'), click('主题维护')]);

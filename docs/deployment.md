@@ -10,7 +10,7 @@
 
 在 Studio 的「主题维护 → 主题版本」选择「最新」(`latest`)、「预览」(`next`) 或「开发」(`canary`)，然后保存。Studio 查询 npm，将具体版本写入博客 `package.json` 的 `dependencies["@wondershine/theme"]`，并同步已有的 npm v3 锁文件。渠道和固定偏好保存在 `config.toml`。开启「固定版本」时可以填写已发布的版本号，留空则固定到该渠道的当前版本。
 
-「检查更新」可以比较仓库版本和 npm 渠道版本。点击「更新到此版本」后，Studio 保存新版本。在线 Git 模式会推送；持久工作区需要同步，本地目录需要自行提交并推送。普通 `npm ci` 安装仓库锁定的版本。
+「检查更新」可以比较仓库版本和 npm 渠道版本。点击「更新到此版本」后，Studio 保存新版本。在线 Git 模式会推送。支持同步的持久工作区会在主题维护页提交修改并同步当前分支，日志显示每一步的结果。推送失败后可以在原页重试同步。本地目录仍需自行提交并推送。普通 `npm ci` 安装仓库锁定的版本。
 
 要在每次流水线启动时跟随渠道，可使用 Starter 提供的 `npm run theme:update`。已有站点可复制 [theme-channel.mjs](../examples/starter/scripts/theme-channel.mjs)，将该 npm 命令设为 `node scripts/theme-channel.mjs --write-lock`。流水线先用 `npm ci` 安装已提交的依赖，再运行更新命令。关闭固定版本时会查询所选渠道，开启时直接使用保存的版本。只有依赖清单或锁文件发生变化时才需再次执行 `npm ci`，随后按原流程构建。需要记录实际部署版本的站点，可在构建和验证成功后提交这两个文件。手机上的 Studio 可以关闭。
 

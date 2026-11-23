@@ -1,3 +1,5 @@
+import { discardState } from '../shared/workspace-discard';
+import { requireWorkspaceConfirmation } from '../shared/workspace-confirmation';
 import { Channel, invoke } from '@tauri-apps/api/core';
 import type { GitProgressEvent, ProgressCallback } from 'isomorphic-git';
 import { StudioError } from '../core/errors';
@@ -46,7 +48,7 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
     let lastSync = null;
     try { lastSync = String(await files.readFile(state + '/last-sync', 'utf8')); }
     catch (error) { if (!missingFile(error)) throw error; }
-    return { ...refs, branch: profile.branch, lastSync, canSync: true, canMerge: true, diverged: refs.ahead > 0 && refs.behind > 0,
+    return { ...refs, branch: profile.branch, lastSync, canDiscard: true, canSync: true, canMerge: true, diverged: refs.ahead > 0 && refs.behind > 0,
       changes: rows.length, dirty: !!rows.length, managedChanges: reviewState(current).rows.map(([path]) => path) };
   }
   // The connection owns a private checkout. Another lock holder, an error, an
@@ -72,7 +74,24 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
       return status(await inspect(candidates));
     });
   }
+  function discardChanges(token?: string) {
+    return run(null, async () => {
+      const current = await inspect(undefined, true);
+      const state = await discardState({ ...reviewState(current), rows: current.rows },
+        await files.readFile(root + '/.git/index') as Uint8Array);
+      const paths = current.rows.map(([path]) => path);
+      if (token === undefined) {
+        const review = await reviews.store.createReview(state, reviews.source);
+        return { ...await status(current), discardPaths: paths, confirmation: review.confirmation };
+      }
+      await reviews.store.validateReview(token, state, reviews.source);
+      await command('discard', { head: current.head, paths });
+      return status(await inspect());
+    });
+  }
   return {
+    reviewDiscard: () => discardChanges(),
+    discard: (token: string) => discardChanges(requireWorkspaceConfirmation(token)),
     async open(progress?: ProgressCallback, allowClone = true) {
       profile.branch = await run(null, async () => {
         let clone = allowClone;

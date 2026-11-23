@@ -119,6 +119,17 @@ export function createApp(options: AppOptions) {
     return c.json(await control.checkRemote());
   });
   app.post('/api/workspace/review', async c => c.json(await workspace().createReview()));
+  app.post('/api/workspace/discard/review', async c => {
+    const control = workspace();
+    if (!control.reviewDiscard) throw new StudioError(404, '未找到此接口');
+    return c.json(await control.reviewDiscard());
+  });
+  app.post('/api/workspace/discard', async c => {
+    const control = workspace();
+    if (!control.discard) throw new StudioError(404, '未找到此接口');
+    const input = await c.req.json<{ confirmation?: string }>();
+    return c.json(await control.discard(requireWorkspaceConfirmation(input?.confirmation)));
+  });
   app.post('/api/workspace/publish', async c => {
     const control = workspace();
     if (!control.publish) throw new StudioError(404, '未找到此接口');
