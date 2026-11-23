@@ -1,3 +1,4 @@
+import { workspaceCapabilities } from '../shared/workspace.js';
 import { requireWorkspaceConfirmation } from '../shared/workspace-confirmation.js';
 import { saveCapabilities } from './save.js';
 import { ContentService } from './content-service.js';
@@ -64,7 +65,7 @@ export function createContentTransport(repository: Repository, options: ContentT
       };
       if (path === '/api/bootstrap' && method === 'GET') {
         const [site, appearance] = await Promise.all([content.settings('site'), content.settings('appearance')]);
-        return json({ site: site.values, appearance: appearance.values, saveScope: session.identity.id, saveCapabilities: saveCapabilities(repository), mode: repository.mode, workspace: !!repository.workspace, quickSync: !!repository.workspace?.checkRemote, nativeAi: !!options.ai,
+        return json({ site: site.values, appearance: appearance.values, saveScope: session.identity.id, saveCapabilities: saveCapabilities(repository), mode: repository.mode, ...workspaceCapabilities(repository.workspace), nativeAi: !!options.ai,
           groups: settingsSchemas.map(({ id, title, description }) => ({ id, title, description })) });
       }
       if (path === '/api/workspace' && method === 'GET' && repository.workspace) return json(await repository.workspace.status());

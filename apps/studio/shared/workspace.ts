@@ -22,6 +22,8 @@ export interface WorkspaceStatus {
 
 /** Save, local commit, and remote synchronization are distinct operations. */
 export interface WorkspaceControl {
+  /** False for a local checkout without a usable sync remote. */
+  readonly canSync?: boolean;
   /** Commit the confirmed theme change on the configured branch, scoped to exact config blobs. */
   commitTheme?(change: ThemeCommit): Promise<string>;
   publish?(message: string, confirmation: string): Promise<void>;
@@ -38,4 +40,12 @@ export interface WorkspaceControl {
   commitForReview?(message: string, confirmation: string): Promise<void>;
   /** Same internal-only omission policy as commit; user-facing callers must supply confirmation. */
   sync(confirmation?: string): Promise<WorkspaceStatus>;
+}
+
+export function workspaceCapabilities(workspace?: WorkspaceControl) {
+  return {
+    workspace: !!workspace,
+    workspaceCanSync: !!workspace && workspace.canSync !== false,
+    quickSync: !!workspace?.checkRemote,
+  };
 }

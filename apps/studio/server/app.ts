@@ -1,3 +1,4 @@
+import { workspaceCapabilities } from '../shared/workspace.js';
 import { revisionOf as scopeHash } from '../core/portable.js';
 import { requireWorkspaceConfirmation } from '../shared/workspace-confirmation.js';
 import { saveCapabilities } from '../core/save.js';
@@ -104,7 +105,7 @@ export function createApp(options: AppOptions) {
   app.get('/api/bootstrap', async c => {
     if (c.req.query('refresh') === '1') runtime.invalidate();
     const [site, appearance] = await Promise.all([content.settings('site'), content.settings('appearance')]);
-    return c.json({ site: site.values, appearance: appearance.values, saveScope: await scopeHash(options.repository.saveScope ?? options.config.origin), saveCapabilities: saveCapabilities(options.repository), mode: options.repository.mode, workspace: !!options.repository.workspace, quickSync: !!options.repository.workspace?.checkRemote,
+    return c.json({ site: site.values, appearance: appearance.values, saveScope: await scopeHash(options.repository.saveScope ?? options.config.origin), saveCapabilities: saveCapabilities(options.repository), mode: options.repository.mode, ...workspaceCapabilities(options.repository.workspace),
       groups: settingsSchemas.map(({ id, title, description }) => ({ id, title, description })) });
   });
   const workspace = () => {

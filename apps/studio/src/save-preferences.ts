@@ -1,12 +1,12 @@
 import { ref } from './reactivity';
 import type { SaveCapabilities, SaveMode } from '../shared/save';
-export const saveContext = ref({ scope: '', workspace: false, modes: ['local'] as SaveMode[], defaultMode: 'local' as SaveMode });
+export const saveContext = ref({ scope: '', workspaceCanSync: false, modes: ['local'] as SaveMode[], defaultMode: 'local' as SaveMode });
 const key = (scope: string) => 'studio.save-default.v1:' + scope;
-export function configureSaving(scope: string, capabilities: SaveCapabilities, workspace = false) {
+export function configureSaving(scope: string, capabilities: SaveCapabilities, workspaceCanSync = false) {
   let saved: string | null = null;
   try { saved = localStorage.getItem(key(scope)); } catch { /* Preferences remain optional. */ }
   const modes = capabilities.modes;
-  saveContext.value = { scope, workspace, modes, defaultMode: modes.includes(saved as SaveMode) ? saved as SaveMode : modes[0] };
+  saveContext.value = { scope, workspaceCanSync, modes, defaultMode: modes.includes(saved as SaveMode) ? saved as SaveMode : modes[0] };
 }
 export function rememberSaveMode(mode: SaveMode): boolean {
   if (!saveContext.value.modes.includes(mode)) return false;

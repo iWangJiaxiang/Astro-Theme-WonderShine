@@ -186,10 +186,8 @@ export class NativeGitEngine implements WorkspaceControl {
     const review = this.reviewState(branch.head, rows);
     const managedChanges = review.rows.map(([path]) => path);
     const changes = rows.length;
-    let canSync = true;
-    try { validateRemote(this.profile.url); } catch { canSync = false; }
     return {
-      status: { branch: this.profile.branch, dirty: changes > 0, changes, ...branch, lastSync, canSync, canMerge: true, managedChanges },
+      status: { branch: this.profile.branch, dirty: changes > 0, changes, ...branch, lastSync, canSync: this.canSync, canMerge: true, managedChanges },
       review,
     };
   }
@@ -248,8 +246,11 @@ export class NativeGitEngine implements WorkspaceControl {
         singleBranch: true, onAuth: this.credentials });
     } catch (error) { checkAuthError(error); throw new StudioError(502, '暂时无法连接 Git 远端，本地文件和提交已保留'); }
   }
+  get canSync() {
+    try { validateRemote(this.profile.url); return true; } catch { return false; }
+  }
   get checkRemote() {
-    if (!this.profile.url.startsWith('https://')) return undefined;
+    if (!this.canSync) return undefined;
     return () => withWorkspaceLock(this.root, async () => {
       await this.openUnlocked();
       await this.fetchRemote();
