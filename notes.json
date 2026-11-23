@@ -47,13 +47,13 @@
     {
       "area": "docs",
       "checked_at": "2026-11-23",
-      "result": "Tasks 9,2,4: reviewed release tests, CSS subprocess and CI; six issue threads have no new human activity. Fallbacks 8,10,7: inspected image deduplication, backlog and releasing docs; #14 contains duplicate bodies. Consolidation prepared.",
-      "follow_up": "#13 awaits implementation and remote validation; #15 existing docs branch awaits review. No local execution or new PR."
+      "result": "Tasks 7,4,5: reviewed releasing docs versus Starter npm pin, CSS subprocess, CI, routes and six issue threads; no human follow-up or open PR. Monthly #14 repeats bodies; consolidate unique history and pending actions.",
+      "follow_up": "#15 existing docs branch awaits review; #13 awaits implementation and remote validation. No local build/test or duplicate proposal."
     },
     {
       "area": "ci",
-      "checked_at": "2026-11-22",
-      "result": "Fallback Task 4: inspected ci.yml and package validation commands. No remote dispatch tool; no local install/build/test or release attempted.",
+      "checked_at": "2026-11-23",
+      "result": "Reviewed ci.yml and npm-release assertions. No remote dispatch tool; local build/test prohibited. Existing #13 tracks CSS null-status handling.",
       "follow_up": "#13 implementation/validation remains blocked by required remote execution."
     }
   ],
