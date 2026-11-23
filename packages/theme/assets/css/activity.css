@@ -45,6 +45,12 @@
   color:var(--activity-muted);
   line-height:1.8
 }
+.activity-eyebrow{
+  font-size:12px;
+  font-weight:600;
+  letter-spacing:1.5px;
+  color:var(--wjx-secondtext,#6b7280)
+}
 .activity-toolbar{
   display:flex;
   gap:8px;

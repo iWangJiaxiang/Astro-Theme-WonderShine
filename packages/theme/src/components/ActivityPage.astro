@@ -34,7 +34,7 @@ const topicActivityDate=topicActivity?new Date(topicActivity*1000).toISOString()
   <Comments site={site} document={document} lang={lang}/>
 </> : <>
 {isTopic&&<div class="activity-detail-top"><a href={url('/topics/')}>← {tr('topics')}</a></div>}
-<header class="activity-heading"><div><h1>{title}</h1>{isTopic&&document.extra.ai_translation&&<span class="ai-translation-label">{tr('ai_translation')}</span>}{intro&&<p>{intro}</p>}</div></header>
+<header class="activity-heading"><div>{isTopic&&<p class="activity-eyebrow">{tr('topic')}</p>}<h1>{title}</h1>{isTopic&&document.extra.ai_translation&&<span class="ai-translation-label">{tr('ai_translation')}</span>}{intro&&<p>{intro}</p>}</div></header>
 {isThreads ? <><nav class="activity-toolbar"><a class="is-active" aria-current="page" href={url('/threads/')}>{tr('threads')}</a><a href={url('/topics/')}>{tr('topics')}</a><a href={url('/timeline/')}>{tr('timeline')}</a>{siteFeedFilenames(site,lang).includes('threads.xml')&&<a class="activity-feed" href={`${localeHome(lang,site)}threads.xml`}>RSS ↗</a>}</nav>{route.items?.length?route.items.map((thread:any)=><ThreadCard site={site} document={thread} lang={lang}/>):<div class="activity-empty">{tr('empty')}</div>}<Pagination {...route}/></> :
 isTopics ? <><div class="topic-grid" data-activity-items>{topics(site,lang).map(topic=>{
 const related=topicItems(site,topic),active=lastActivity(related);
