@@ -79,7 +79,7 @@ document.addEventListener('astro:page-load',async()=>{
       const avatar=item.avatar&&safeURL(item.avatar);if(avatar){const image=document.createElement('img');image.src=avatar;image.alt=item.nick||'';image.loading='lazy';image.decoding='async';thumb.append(image)}
       const name=document.createElement('div');name.className='name';const nick=document.createElement('span');nick.textContent=(item.nick||'')+(sidebar?' / ':'');name.append(nick);
       const content=document.createElement('div');content.className='content';const link=document.createElement('a');link.href=url;link.className='comment';link.textContent=plain(item.content);link.title=link.textContent;content.append(link);
-      const time=document.createElement('time');const date=new Date(item.date);if(Number.isFinite(date.getTime())){time.dateTime=date.toISOString();time.textContent=relativeDate(date)}
+      const time=document.createElement('time');const date=new Date(item.date);if(Number.isFinite(date.getTime())){time.dateTime=date.toISOString();time.title=time.dateTime.replace('T',' ').replace(/\.\d{3}Z$/,' UTC');time.textContent=relativeDate(date)}
       // Sidebar CSS intentionally hides direct content > time for article widgets.
       // Comment attribution therefore belongs inside .content > .name, as in the theme.
       if(sidebar){name.append(time);content.append(name)}else{thumb.append(name);content.append(time)}

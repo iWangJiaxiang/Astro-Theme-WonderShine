@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { ErrorNotice } from "./ErrorNotice";
 import Modal from "./Modal";
 import type { WorkspaceStatus } from "../../shared/workspace";
@@ -40,7 +41,7 @@ import ValueEditor from "./ValueEditor";
 import type { ThemeUpdateCheck, ThemeUpdateResult } from "../../shared/theme-update";
 import { notifyWorkspaceChanged } from "../workspace-events";
 
-type Props = { group: string; embedded?: boolean; language?: string };
+type Props = { group: string; embedded?: boolean; language?: string; headingControl?: ReactNode };
 type Events = { dirty: [value: boolean]; saved: []; exit: [] };
 const themeFields = ["extra.theme.channel", "extra.theme.pinned", "extra.theme.version"];
 const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
@@ -629,6 +630,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                   null,
                   t(settings.value.title),
                 ),
+                props.headingControl,
               ),
               element(
                 "div",

@@ -141,6 +141,23 @@ try {
   await checkViewTransitions({ page, click, fill, heading });
  await click('站点信息');await heading('站点信息');await fill('.settings-grid .field input','Studio integration fixture');await click('本地保存');await page.waitForSelector('.notice.success');
  assert.match(await readFile(base+'/site/config.toml','utf8'),/Studio integration fixture/);
+ await click('动态页面'); await heading('动态页面');
+ const introField = 'textarea[name="extra.activity.timeline_intro"]';
+ const activityLanguage = 'select[name="activity-language"]';
+ await page.waitForSelector(introField);
+ assert.equal(await page.$eval(activityLanguage, field => field.value), 'en');
+ await fill(introField, 'Timeline notes in English');
+ assert.equal(await page.$eval(activityLanguage, field => field.disabled), true);
+ await click('本地保存'); await page.waitForSelector('.notice.success');
+ await page.select(activityLanguage, 'zh-CN');
+ await page.waitForSelector('.notice.success', {hidden:true});
+ await page.waitForSelector(introField);
+ await fill(introField, '按时间浏览最新记录。');
+ await click('本地保存'); await page.waitForSelector('.notice.success');
+ const activityConfig = parse(await readFile(base + '/site/config.toml', 'utf8')).extra;
+ assert.equal(activityConfig.activity.timeline_intro, 'Timeline notes in English');
+ assert.equal(activityConfig.locale['zh-CN'].activity.timeline_intro, '按时间浏览最新记录。');
+ await page.screenshot({path:screenshots+'/activity-settings-desktop.png'});
  for(const name of ['导航菜单','友链管理','关于页设置','标签与分类','主题维护']){await click(name);await heading(name);assert.equal(await page.$('.notice.error'),null,name)}
  // Reproduce the Shanghai-after-midnight / previous-UTC-day boundary in the actual editor.
  await page.emulateTimezone('Asia/Shanghai');
@@ -272,6 +289,8 @@ try {
   buildAstro(base + '/site');
   {
     const html = async path => readFile(base + '/site/dist/' + path + '/index.html', 'utf8');
+    assert.match(await html('timeline'), /Timeline notes in English/);
+    assert.match(await html('zh-CN/timeline'), /按时间浏览最新记录。/);
     const articleHTML = await html('articles/studio-browser-test');
     const insertedImage = await page.evaluate(html => {
       const image = new DOMParser().parseFromString(html, 'text/html').querySelector('img[alt="媒体 配图.webp"]');

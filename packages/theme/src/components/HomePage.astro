@@ -1,4 +1,5 @@
 ---
+import {utcDateTitle} from '../lib/date-display';
 import LocalizedEmpty from './LocalizedEmpty.astro';
 import PostCards from './PostCards.astro';
 import Sidebar from './Sidebar.astro';
@@ -28,7 +29,7 @@ const tr=(key:string)=>t(key,lang,site,'activity');
     {latest ? <a class="home-thread" href={latest.url}>
       {latest.title&&<strong>{latest.title}</strong>}
       <p>{latest.description || plain(latest.html) || tr('read_thread')}</p>
-      {latestDate&&<time datetime={latestDate}>{formatDate(latestDate,lang)}</time>}
+      {latestDate&&<time datetime={latestDate} title={utcDateTitle(latestDate)}>{formatDate(latestDate,lang)}</time>}
     </a> : <p class="home-threads-empty">{tr('empty')}</p>}
   </section>}
 </div>

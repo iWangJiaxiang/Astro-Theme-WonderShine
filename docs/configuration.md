@@ -87,6 +87,8 @@ compact_paths = ["/about", "/zh-CN/about"]
 
 `config.toml` 的 `[extra.activity]` 下 `enable = true` 启用动态与话题；主题默认启用。首页第一页展示最新的公开动态，按有效的最近更新时间排序。关闭动态功能后，动态与话题内容不会进入公开查询，自动动态导航入口也不再添加。手写导航不会因此自动删除，请同步检查菜单。
 
+在 Studio 的「站点管理 → 动态页面」可按内容语言编辑三个页面的说明。配置对应 `extra.activity.threads_intro`、`extra.activity.topics_intro` 和 `extra.activity.timeline_intro`。其他语言可在 `[extra.locale.<语言>.activity]` 覆盖，留空使用该语言的主题默认文案。
+
 推荐由 Studio 创建 UUID 和译文；手工维护时可参考 Starter 的 `content/threads/`。例如 `content/threads/11111111-2222-4333-8444-555555555555/index.md`：
 
 ```markdown

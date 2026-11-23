@@ -14,7 +14,7 @@ const demo = {
   pages: [
     ['home', '/'], ['article', '/articles/welcome/'],
     ['threads', '/threads/'], ['thread', '/threads/11111111-2222-4333-8444-555555555555/'],
-    ['series', '/collections/field-notes/'], ['tags', '/tags/design/'], ['timeline', '/timeline/'],
+    ['series', '/collections/field-notes/'], ['tags', '/tags/design/'], ['timeline', '/timeline/'], ['topics', '/topics/'],
     ['chinese', '/zh-CN/'],
   ],
   navigation: { path: '/articles/', language: 'zh-CN', translatedPath: '/zh-CN/articles/' },
@@ -292,15 +292,41 @@ export async function checkBrowser(options = demo) {
         await page.setViewport({width:1440,height:900});
         await page.evaluate(() => window.scrollTo({top:0,behavior:'instant'}));
       }
-      if (options === demo && ['thread', 'timeline'].includes(name)) {
-        const times = await page.$$eval('.thread-author time, .timeline-event[data-kind="thread"] .timeline-date time', nodes => nodes.map(node => ({text:node.textContent,date:node.getAttribute('datetime')})));
-        assert.ok(times.length, 'Thread publication times are present');
-        for (const time of times) {
-          assert.match(time.text, /\d{2}:\d{2}:\d{2} \(UTC\+08:00\)/);
-          assert.ok(Number.isFinite(Date.parse(time.date)), 'Machine timestamp remains intact');
+      if (options === demo && ['threads', 'timeline', 'topics'].includes(name)) {
+        assert.equal(await page.$('.activity-eyebrow'), null);
+      }
+      if (options === demo && name === 'thread') {
+        assert.equal(await page.$('.activity-detail-top'), null);
+        assert.ok(await page.$('.activity-heading h1'));
+      }
+      if (options === demo && ['threads', 'thread'].includes(name)) {
+        assert.ok(await page.$eval('.thread-card', card => {
+          const avatar = card.querySelector('.thread-author img').getBoundingClientRect();
+          const body = card.querySelector('.thread-body').getBoundingClientRect();
+          return Math.abs(avatar.left - body.left) < 1;
+        }));
+      }
+      if (options === demo && ['home', 'article', 'thread', 'timeline', 'topics'].includes(name)) {
+        const times = await page.$$eval(':is(#post-meta, .activity-main, .activity-aside, #home_top, #recent-posts) time[datetime]', nodes =>
+          nodes.map(node => ({text:node.textContent,date:node.dateTime,title:node.title})));
+        assert.ok(times.length, 'Publication times are present');
+        for (const time of times.filter(item => item.date)) {
+          assert.doesNotMatch(time.text, /UTC/);
+          assert.match(time.title, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} UTC$/);
         }
       }
       if (options === demo && name === 'timeline') {
+        const discussion = await page.$eval('.timeline-event[data-kind="thread"] .timeline-read', link => ({text:link.textContent,hash:link.hash}));
+        assert.match(discussion.text, /Join the discussion/);
+        assert.equal(discussion.hash, '#post-comment');
+        const rail = await page.$$eval('.timeline-list--connected .timeline-event:not([hidden])', entries => entries.map(entry => ({
+          dot: getComputedStyle(entry, '::before').content,
+          line: getComputedStyle(entry, '::after').content,
+        })));
+        assert.ok(rail.length > 1 && rail.every(entry => entry.dot !== 'none'));
+        assert.ok(rail.slice(0, -1).every(entry => entry.line !== 'none'));
+        assert.equal(rail.at(-1).line, 'none');
+        assert.equal(await page.$eval('.timeline-aside', aside => getComputedStyle(aside).borderTopWidth), '0px');
         assert.equal(await page.$$eval('.activity-subscriptions a', links => links.length), 2);
         assert.equal(await page.$$eval('.activity-counts a', links => links.length), 3);
         assert.ok(await page.$$eval('.activity-recent li', items => items.length <= 4));

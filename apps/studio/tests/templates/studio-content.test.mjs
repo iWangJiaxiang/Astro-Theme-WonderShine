@@ -97,6 +97,8 @@ test('Studio localized navigation and page settings use the Astro locale overlay
   const { root, service } = await fixture(t);
   for (const [id, changes, language] of [
     ['navigation', { 'menu.nav_menu': [{ name: 'English menu', url: '/en/' }] }, 'en'],
+    ['activity', { 'extra.activity.threads_intro': '中文动态说明' }, 'zh-CN'],
+    ['activity', { 'extra.activity.threads_intro': 'English threads', 'extra.activity.topics_intro': 'English topics', 'extra.activity.timeline_intro': 'English timeline' }, 'en'],
     ['page-wechat', { 'extra.wechat.name': 'English author', 'extra.wechat.description': 'English introduction' }, 'en'],
     ['page-equipment-items', { 'equipment.groups': [{ title: 'English equipment', items: [] }] }, 'en'],
   ]) {
@@ -108,4 +110,6 @@ test('Studio localized navigation and page settings use the Astro locale overlay
   assert.notEqual(localizeConfig(site, 'zh-CN').extra.wechat?.name, 'English author');
   assert.equal(localizeData(site, 'en').menu.nav_menu[0].name, 'English menu');
   assert.equal(localizeData(site, 'en').equipment.groups[0].title, 'English equipment');
+  assert.equal(localizeConfig(site, 'zh-CN').extra.activity.threads_intro, '中文动态说明');
+  assert.deepEqual(localizeConfig(site, 'en').extra.activity, {enable:true,threads_intro:'English threads',topics_intro:'English topics',timeline_intro:'English timeline'});
 });

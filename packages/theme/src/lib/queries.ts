@@ -46,7 +46,7 @@ export function formatDateTime(date?: string, lang = 'zh-CN') {
     hour: '2-digit', minute: '2-digit', second: '2-digit',
     hourCycle: 'h23', timeZone: 'Asia/Shanghai',
   }).format(new Date(date!));
-  return `${day} ${time} (UTC+08:00)`;
+  return `${day} ${time}`;
 }
 
 export function activitySummary(site: Site, lang: string) {
