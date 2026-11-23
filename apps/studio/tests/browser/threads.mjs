@@ -82,7 +82,6 @@ try {
   await click('动态'); await click('发动态'); await page.waitForSelector('.markdown-source');
   assert.equal(await page.$('.title-field'), null, 'thread creation must not require a title');
   assert.equal(await page.evaluate(() => document.body.innerText.includes('继续写一条')), false, 'threads have no continuation controls');
-  assert.ok(await page.$('.thread-date-trigger.date-missing'), 'A new thread starts without a timestamp');
   const threadPath = await path(); assert.match(threadPath, /^content\/threads\/[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\/index\.md$/);
   await fill('.markdown-source', '记录一个独立的想法。'); await choose('extra.topics', initialTopic.extra.id);
   await click('保存草稿'); await saved();

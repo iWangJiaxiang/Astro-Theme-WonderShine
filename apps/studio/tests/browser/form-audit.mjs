@@ -47,6 +47,11 @@ try {
      const r=e.getBoundingClientRect();if(r.width<1||r.height<1)continue;
      if(e.matches('input:not([type=checkbox]):not([type=radio]):not([type=color]),select,textarea')&&!e.closest('.composer-initial-language')&&r.width<72)bad.push({type:'control-squeezed',name:e.name||e.getAttribute('aria-label')||e.closest('label')?.textContent.trim()||e.className,width:Math.round(r.width)});
      if(r.left< -1||r.right>innerWidth+1)bad.push({type:'control-overflow',name:e.name||e.className,width:Math.round(r.width),left:Math.round(r.left)});
+     if (e.matches('.publication-date-dialog[open]')) {
+       const middle = visualViewport.offsetTop + visualViewport.height / 2;
+       if (Math.abs((r.top + r.bottom) / 2 - middle) > 2 || e.scrollWidth > e.clientWidth + 1)
+         bad.push({type:'publication-date-bounds', top:r.top, bottom:r.bottom, middle, contentWidth:e.scrollWidth, width:e.clientWidth});
+     }
      if(e.matches('dialog')&&(r.top< -1||r.bottom>innerHeight+1))bad.push({type:'dialog-height',height:Math.round(r.height),top:Math.round(r.top)});
     }
     for(const field of document.querySelectorAll('.field-inline')){
@@ -98,13 +103,9 @@ try {
  await click('引用');await page.waitForSelector('dialog[open]');await capture('reference-internal');await click('外部文章');await capture('reference-external');await closeDialog();
  await page.click('.composer-tools > button[aria-expanded]');
  await page.waitForSelector('.thread-properties-heading', {visible:true});await capture('thread-publishing');
+ await page.waitForSelector('.thread-date-trigger.date-missing');
  await page.click('.thread-composer .thread-date-trigger');await page.waitForSelector('.publication-date-dialog[open]');await capture('publication-date');
  const dateDialog = '.publication-date-dialog[open]';
- if (!await page.$eval(dateDialog, node => {
-   const rect = node.getBoundingClientRect();
-   const middle = visualViewport.offsetTop + visualViewport.height / 2;
-   return Math.abs((rect.top + rect.bottom) / 2 - middle) < 2 && node.scrollWidth <= node.clientWidth;
- })) throw new Error('Publication date dialog must be centered and fit its viewport');
  await click('使用当前时间');await click('应用时间');
  await page.waitForSelector('.thread-date-value');
  await page.click('.thread-composer .thread-date-trigger');await page.waitForSelector(dateDialog);
