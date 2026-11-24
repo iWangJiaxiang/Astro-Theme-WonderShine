@@ -15,7 +15,7 @@ const tr=(key:string)=>t(key,lang,site,'activity');
 {thread.extra.ai_translation&&<span class="ai-translation-label">{tr('ai_translation')}</span>}
 <div class="thread-body" set:html={thread.html}/>
 <References site={site} document={thread} lang={lang}/><TopicLinks site={site} document={thread} lang={lang}/>
-{!detail&&<footer><a href={thread.url}>{tr('read_thread')} →</a>{config.extra.comments.enable&&!thread.extra.disable_comment&&<a href={`${thread.url}#post-comment`}>{tr('comments')}</a>}</footer>}
+{!detail&&<footer><a href={thread.url}>{tr('view_details')} →</a>{config.extra.comments.enable&&!thread.extra.disable_comment&&<a href={`${thread.url}#post-comment`}>{tr('join_discussion')}</a>}</footer>}
 </article>
 <style is:global>
 /* Taxonomies share the thread component while keeping a compact list presentation. */
