@@ -1,0 +1,41 @@
+name: Prepare browser fonts
+description: Reuse missing Ubuntu 24.04 Noto packages for CJK and emoji screenshots
+runs:
+  using: composite
+  steps:
+    - name: Check installed font packages
+      id: fonts
+      shell: bash
+      run: |
+        missing=()
+        while read -r digest file; do
+          package=${file%%_*}
+          if [[ $(dpkg-query -W -f='${Status}' "$package" 2>/dev/null) != 'install ok installed' ]]; then
+            missing+=("$file")
+          fi
+        done < "$GITHUB_ACTION_PATH/packages.sha256"
+        echo "missing=${missing[*]}" >> "$GITHUB_OUTPUT"
+
+    - name: Reuse Ubuntu font packages
+      if: steps.fonts.outputs.missing != ''
+      uses: actions/cache@v6.1.0
+      with:
+        path: ${{ runner.temp }}/browser-fonts
+        key: noble-browser-fonts-${{ hashFiles('.github/actions/browser-fonts/packages.sha256') }}-${{ steps.fonts.outputs.missing }}
+
+    - name: Install verified font packages
+      if: steps.fonts.outputs.missing != ''
+      shell: bash
+      env:
+        FONT_PACKAGES: ${{ steps.fonts.outputs.missing }}
+      run: |
+        mkdir -p "$RUNNER_TEMP/browser-fonts"
+        cd "$RUNNER_TEMP/browser-fonts"
+        read -ra files <<< "$FONT_PACKAGES"
+        for file in "${files[@]}"; do
+          if [[ ! -f $file ]]; then
+            curl --fail --location --retry 3 --output "$file" "https://archive.ubuntu.com/ubuntu/pool/main/f/${file%%_*}/$file"
+          fi
+        done
+        sha256sum --check --ignore-missing "$GITHUB_ACTION_PATH/packages.sha256"
+        sudo dpkg -i "${files[@]}"

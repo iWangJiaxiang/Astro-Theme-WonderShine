@@ -76,10 +76,11 @@ export async function checkBrowser(options = demo) {
       }
       return url.startsWith(origin) || url.startsWith('data:') ? request.continue() : request.abort();
     });
+    // A reduced-motion page can settle without producing another animation frame.
     const settled = () => page.waitForFunction(() => {
       const background = document.querySelector('#loading-box .loading-bg');
       return (!background || getComputedStyle(background).visibility === 'hidden') && !document.documentElement.hasAttribute('data-astro-transition');
-    });
+    }, {polling:100});
     const finishLayout = () => page.evaluate(async () => {
       // Wait for short layout animations without requiring a frame after a viewport change.
       const animations = document.getAnimations().filter(animation =>
@@ -258,16 +259,49 @@ export async function checkBrowser(options = demo) {
         if (!prefix) {
           await page.emulateMediaFeatures([{name:'prefers-reduced-motion', value:'reduce'}]);
           await page.setViewport({width:390,height:844});
-          await page.click(trigger);
-          assert.equal(await page.$eval(drawer, panel => getComputedStyle(panel).transitionDuration), '0s');
-          await page.evaluate(() => {window.__homeDrawerNavigationProbe = true;});
-          await page.click(drawer + ' a[href="/threads/"]');
-          await page.waitForFunction(() => location.pathname === '/threads/');
-          await settled();
-          await page.goBack();
-          await page.waitForSelector(drawer);
-          await settled();
-          assert.equal(await page.evaluate(() => window.__homeDrawerNavigationProbe), true);
+          const target = drawer + '[open] a[href="/threads/"]';
+          await page.evaluate(() => {
+            const trace = window.__homeDrawerNavigationProbe = [];
+            const controller = new AbortController();
+            for (const type of ['astro:before-preparation', 'astro:before-swap', 'astro:page-load']) {
+              document.addEventListener(type, () => {
+                trace.push(type + ' ' + location.pathname);
+                if (type === 'astro:page-load' && location.pathname === '/') controller.abort();
+              }, {signal:controller.signal});
+            }
+          });
+          const waitForDrawerPage = async pathname => {
+            await page.waitForFunction(expected => location.pathname === expected
+              && window.__homeDrawerNavigationProbe?.includes('astro:page-load ' + expected), {polling:100}, pathname);
+            await settled();
+          };
+          try {
+            await page.locator(trigger).click();
+            const link = await page.waitForSelector(target, {visible:true});
+            assert.equal(await page.$eval(drawer, panel => getComputedStyle(panel).transitionDuration), '0s');
+            await link.scrollIntoView();
+            await page.waitForFunction(link => {
+              const {left, top, width, height} = link.getBoundingClientRect();
+              return link.contains(document.elementFromPoint(left + width / 2, top + height / 2));
+            }, {}, link);
+            await page.evaluate(() => document.addEventListener('click', event => {
+              window.__homeDrawerNavigationProbe.push({clicked:event.target.tagName, href:event.target.closest('a')?.getAttribute('href')});
+            }, {capture:true, once:true}));
+            await page.locator(target).click();
+            await waitForDrawerPage('/threads/');
+            await page.goBack();
+            await waitForDrawerPage('/');
+          } catch (error) {
+            const state = await page.evaluate(() => ({
+              trace:window.__homeDrawerNavigationProbe,
+              loading:document.querySelector('#loading-box')?.className,
+              visibility:document.querySelector('#loading-box .loading-bg')?.checkVisibility({visibilityProperty:true}),
+              transition:document.documentElement.getAttribute('data-astro-transition'),
+            })).catch(() => null);
+            console.error('Mobile drawer navigation failed', JSON.stringify({url:page.url(), state, errors, failures}));
+            await page.screenshot({path:path.join(screenshots, 'blog-drawer-navigation-failure.png')}).catch(console.error);
+            throw error;
+          }
           await page.click(trigger);
           await page.waitForSelector(drawer + '[open]');
           await page.keyboard.press('Escape');

@@ -71,11 +71,9 @@ jobs:
           ASTRO_IMAGE_CACHE_DIR: ${{ github.workspace }}/.astro/image-cache
       - uses: browser-actions/setup-chrome@v2.2.0
         id: chrome
-      - name: Prepare sandbox and multilingual fonts
-        run: |
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          sudo apt-get update
-          sudo apt-get install -y fonts-noto-cjk fonts-noto-color-emoji
+      - name: Enable Chromium sandbox namespaces on the ephemeral runner
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - uses: ./.github/actions/browser-fonts
       - name: Audit production preview (three cold runs per page)
         run: node scripts/lighthouse-audit.mjs
         env:
