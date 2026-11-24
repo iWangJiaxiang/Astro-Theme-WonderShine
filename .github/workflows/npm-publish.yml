@@ -140,11 +140,9 @@ jobs:
           DIST_TAG: ${{ steps.context.outputs.distTag }}
       - uses: browser-actions/setup-chrome@v2.2.0
         id: chrome
-      - name: Prepare browser sandbox and multilingual fonts
-        run: |
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          sudo apt-get update
-          sudo apt-get install -y fonts-noto-cjk fonts-noto-color-emoji
+      - name: Enable Chromium sandbox namespaces on the ephemeral runner
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - uses: ./.github/actions/browser-fonts
       - run: npm run test:browser
         env:
           STUDIO_TEST_BROWSER: ${{ steps.chrome.outputs.chrome-path }}

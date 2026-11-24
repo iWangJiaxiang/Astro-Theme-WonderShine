@@ -258,16 +258,39 @@ export async function checkBrowser(options = demo) {
         if (!prefix) {
           await page.emulateMediaFeatures([{name:'prefers-reduced-motion', value:'reduce'}]);
           await page.setViewport({width:390,height:844});
-          await page.click(trigger);
-          assert.equal(await page.$eval(drawer, panel => getComputedStyle(panel).transitionDuration), '0s');
-          await page.evaluate(() => {window.__homeDrawerNavigationProbe = true;});
-          await page.click(drawer + ' a[href="/threads/"]');
-          await page.waitForFunction(() => location.pathname === '/threads/');
-          await settled();
+          const target = drawer + '[open] a[href="/threads/"]';
+          await page.evaluate(() => {
+            const trace = window.__homeDrawerNavigationProbe = [];
+            for (const type of ['astro:before-preparation', 'astro:before-swap', 'astro:page-load']) {
+              document.addEventListener(type, () => trace.push(type), {once:true});
+            }
+          });
+          try {
+            await page.locator(trigger).click();
+            const link = await page.waitForSelector(target, {visible:true});
+            assert.equal(await page.$eval(drawer, panel => getComputedStyle(panel).transitionDuration), '0s');
+            await link.scrollIntoView();
+            await page.waitForFunction(link => {
+              const {left, top, width, height} = link.getBoundingClientRect();
+              return link.contains(document.elementFromPoint(left + width / 2, top + height / 2));
+            }, {}, link);
+            await page.evaluate(() => document.addEventListener('click', event => {
+              window.__homeDrawerNavigationProbe.push({clicked:event.target.tagName, href:event.target.closest('a')?.getAttribute('href')});
+            }, {capture:true, once:true}));
+            await page.locator(target).click();
+            await page.waitForFunction(() => location.pathname === '/threads/');
+            await settled();
+            assert.ok(await page.evaluate(() => Array.isArray(window.__homeDrawerNavigationProbe)), 'Drawer link uses ClientRouter');
+          } catch (error) {
+            console.error('Mobile drawer navigation failed', {url:page.url(),
+              trace:await page.evaluate(() => window.__homeDrawerNavigationProbe).catch(() => null), errors, failures});
+            await page.screenshot({path:path.join(screenshots, 'blog-drawer-navigation-failure.png')}).catch(console.error);
+            throw error;
+          }
           await page.goBack();
           await page.waitForSelector(drawer);
           await settled();
-          assert.equal(await page.evaluate(() => window.__homeDrawerNavigationProbe), true);
+          assert.ok(await page.evaluate(() => Array.isArray(window.__homeDrawerNavigationProbe)));
           await page.click(trigger);
           await page.waitForSelector(drawer + '[open]');
           await page.keyboard.press('Escape');
