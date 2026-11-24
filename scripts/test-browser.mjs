@@ -261,10 +261,19 @@ export async function checkBrowser(options = demo) {
           const target = drawer + '[open] a[href="/threads/"]';
           await page.evaluate(() => {
             const trace = window.__homeDrawerNavigationProbe = [];
+            const controller = new AbortController();
             for (const type of ['astro:before-preparation', 'astro:before-swap', 'astro:page-load']) {
-              document.addEventListener(type, () => trace.push(type), {once:true});
+              document.addEventListener(type, () => {
+                trace.push(type + ' ' + location.pathname);
+                if (type === 'astro:page-load' && location.pathname === '/') controller.abort();
+              }, {signal:controller.signal});
             }
           });
+          const waitForDrawerPage = async pathname => {
+            await page.waitForFunction(expected => location.pathname === expected
+              && window.__homeDrawerNavigationProbe?.includes('astro:page-load ' + expected), {polling:100}, pathname);
+            await settled();
+          };
           try {
             await page.locator(trigger).click();
             const link = await page.waitForSelector(target, {visible:true});
@@ -278,19 +287,19 @@ export async function checkBrowser(options = demo) {
               window.__homeDrawerNavigationProbe.push({clicked:event.target.tagName, href:event.target.closest('a')?.getAttribute('href')});
             }, {capture:true, once:true}));
             await page.locator(target).click();
-            await page.waitForFunction(() => location.pathname === '/threads/');
-            await settled();
-            assert.ok(await page.evaluate(() => Array.isArray(window.__homeDrawerNavigationProbe)), 'Drawer link uses ClientRouter');
+            await waitForDrawerPage('/threads/');
+            await page.goBack();
+            await waitForDrawerPage('/');
           } catch (error) {
-            console.error('Mobile drawer navigation failed', {url:page.url(),
-              trace:await page.evaluate(() => window.__homeDrawerNavigationProbe).catch(() => null), errors, failures});
+            const state = await page.evaluate(() => ({
+              trace:window.__homeDrawerNavigationProbe,
+              loading:document.querySelector('#loading-box')?.className,
+              transition:document.documentElement.getAttribute('data-astro-transition'),
+            })).catch(() => null);
+            console.error('Mobile drawer navigation failed', {url:page.url(), state, errors, failures});
             await page.screenshot({path:path.join(screenshots, 'blog-drawer-navigation-failure.png')}).catch(console.error);
             throw error;
           }
-          await page.goBack();
-          await page.waitForSelector(drawer);
-          await settled();
-          assert.ok(await page.evaluate(() => Array.isArray(window.__homeDrawerNavigationProbe)));
           await page.click(trigger);
           await page.waitForSelector(drawer + '[open]');
           await page.keyboard.press('Escape');
