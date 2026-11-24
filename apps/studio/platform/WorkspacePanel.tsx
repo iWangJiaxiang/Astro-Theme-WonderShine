@@ -21,6 +21,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
   const [error, setError] = useState<Message>('');
   const [notice, setNotice] = useState('');
   const dialog = useRef<HTMLDialogElement>(null);
+  const reviewTrigger = useRef<HTMLElement | null>(null);
   const tokenInput = useRef<HTMLInputElement>(null);
   const [authFailed, setAuthFailed] = useState(false);
   const retryOperation = useRef<'publish' | 'sync'>('sync');
@@ -47,9 +48,13 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
     const node = dialog.current!;
     node.showModal();
     node.querySelector('h2')?.focus();
-    return () => node.close();
+    return () => {
+      node.close();
+      reviewTrigger.current?.focus();
+    };
   }, [pending, publishPath]);
   async function review(kind: Operation) {
+    if (!publishPath && document.activeElement instanceof HTMLElement) reviewTrigger.current = document.activeElement;
     const sequence = ++requestSequence.current;
     setStage('正在检查工作区…'); setError(''); setNotice('');
     try {
@@ -188,7 +193,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         <div className="row workspace-sync-actions"><button className="primary" disabled={busy || !!pending || !status.managedChanges?.length || !message.trim()} onClick={() => void review('commit')}>{t('本地保存')}</button><button className="secondary" disabled={busy || !!pending || status.dirty || manualMerge || status.canSync === false} onClick={() => void review('sync')}>{t('同步 Git')}</button><button className="primary" disabled={busy || !!pending || !status.managedChanges?.length || status.changes !== status.managedChanges.length || !message.trim() || manualMerge || status.canSync === false} onClick={() => void review('publish')}>{t('保存并同步')}</button></div>
         {status.canDiscard && <button type="button" className="secondary danger workspace-discard" disabled={busy || !!pending} onClick={() => void review('discard')}>{t('还原工作区')}</button>}
         {pending && <dialog ref={dialog} className="publish-dialog workspace-confirm" aria-labelledby="workspace-confirm-heading"
-          onCancel={event => { event.preventDefault(); if (!busy) setPending(null); }}>
+          onCancel={event => { if (event.target === event.currentTarget) { event.preventDefault(); if (!busy) setPending(null); } }}>
           <h2 id="workspace-confirm-heading" tabIndex={-1}>{t(pending === 'discard' ? '还原工作区' : pending === 'commit' ? '本地保存' : pending === 'sync' ? '同步 Git' : '保存并同步')}</h2>
           <p><strong>{status.branch}</strong>{(pending === 'sync' || pending === 'publish') && <> · {t('待推送提交')} {status.ahead}</>}</p>
           {(pending === 'commit' || pending === 'publish') && <p>{t('提交说明')} · {message}</p>}

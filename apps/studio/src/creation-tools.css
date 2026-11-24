@@ -2,7 +2,7 @@
 .editor-save-actions { justify-content: flex-end; gap: 6px; }
 .editor-save-actions > .secondary { padding-inline: 9px; }
 .autosave-control { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 11px; color: var(--studio-muted); }
-.autosave-control select { field-sizing: content; padding: 7px 4px; min-height: 32px; width: auto; border: 1px solid var(--studio-line); border-radius: 7px; background: var(--studio-card); color: var(--wjx-fontcolor); font: inherit; cursor: pointer; }
+.autosave-control select { field-sizing: content; min-width: 72px; padding: 7px 4px; min-height: 32px; width: auto; border: 1px solid var(--studio-line); border-radius: 7px; background: var(--studio-card); color: var(--wjx-fontcolor); font: inherit; cursor: pointer; }
 .autosave-status { margin: 0 0 12px; color: var(--studio-muted); font-size: 11px; text-align: right; }
 .summary-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .summary-heading .ai-action { font-size: 12px; padding: 5px 8px; border-radius: 6px; background: color-mix(in srgb,var(--wjx-theme) 6%,var(--studio-card)); }

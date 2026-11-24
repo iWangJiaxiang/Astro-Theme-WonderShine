@@ -57,7 +57,7 @@ Git downloads the selected branch at depth 1. When creating a remote workspace, 
 
 Old SHA-based drafts and expired/evicted baseline tokens are not silently upgraded to the latest revision. Keep the draft, reload the actual document and merge changes before saving. Draft form values alone cannot reconstruct the complete original document or inherited settings dependencies.
 
-Ordinary Git status queries do not capture file contents. Entering the confirmation step creates a private, temporary, exact-byte review using bounded chunks. Commit and sync validate that review under the workspace lock; expiry or changed files require a new review. After committing, synchronization requires a separate confirmation of the new state. External editors do not participate in Studio's lock, so this does not eliminate every filesystem race between validation and Git staging.
+Ordinary Git status queries do not capture file contents. Entering the confirmation step creates a private, temporary, exact-byte review using bounded chunks. Commit and sync validate that review under the workspace lock; expiry or changed files require a new review. **Save and sync** covers the commit and push with one confirmation. Choosing **Save locally** creates a local commit that can be synchronized later. External editors do not participate in Studio's lock, so this does not eliminate every filesystem race between validation and Git staging.
 
 These changes require remote regression verification and platform-specific measurements. Reduced parsing, hashing or duplicate requests alone is not evidence of lower device latency or memory usage.
 
