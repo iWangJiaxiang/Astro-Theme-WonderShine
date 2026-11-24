@@ -96,6 +96,15 @@
   padding:0;
   margin-bottom:22px
 }
+.thread-layout .thread-author{
+  display:grid;
+  grid-template-columns:36px minmax(0,1fr) auto
+}
+.thread-layout .thread-author>strong{
+  justify-self:start;
+  white-space:normal;
+  overflow-wrap:anywhere
+}
 .activity-layout .thread-author>picture{
   flex:0 0 36px;
   width:36px;
@@ -238,35 +247,39 @@
 }
 .timeline-event{
   display:grid;
-  grid-template-columns:155px minmax(0,1fr);
-  gap:30px;
+  --timeline-date-width:155px;
+  --timeline-gap:30px;
+  grid-template-columns:var(--timeline-date-width) minmax(0,1fr);
+  gap:var(--timeline-gap);
   padding:28px 0;
   border-bottom:1px solid var(--activity-line)
 }
 .timeline-event:first-child{
   padding-top:12px
 }
-.timeline-list--connected{padding-inline-start:22px}
 .timeline-list--connected .timeline-event{
   --timeline-dot-center:40px;
+  --timeline-axis:calc(var(--timeline-date-width) + var(--timeline-gap) / 2);
   position:relative;
   padding-top:28px
 }
 .timeline-list--connected .timeline-event::before{
   content:'';
   position:absolute;
-  inset-inline-start:-22px;
+  inset-inline-start:calc(var(--timeline-axis) - 5px);
   top:calc(var(--timeline-dot-center) - 5px);
   width:10px;
   height:10px;
   border-radius:50%;
-  background:var(--wjx-theme);
+  box-sizing:border-box;
+  border:2px solid var(--wjx-theme);
+  background:var(--wjx-background);
   z-index:1
 }
 .timeline-list--connected .timeline-event:has(~ .timeline-event:not([hidden]))::after{
   content:'';
   position:absolute;
-  inset-inline-start:-18px;
+  inset-inline-start:calc(var(--timeline-axis) - 1px);
   top:var(--timeline-dot-center);
   height:calc(100% + 1px);
   width:2px;
@@ -336,8 +349,6 @@
     border-top:1px solid var(--wjx-card-border)
   }
   .activity-aside.timeline-aside{margin-top:24px}
-  .thread-author{flex-wrap:wrap}
-  .thread-author time{font-size:12px}
   .thread-card{
     padding:22px 18px
   }
@@ -345,6 +356,8 @@
     grid-template-columns:1fr;
     gap:10px
   }
+  .timeline-list--connected{padding-inline-start:22px}
+  .timeline-list--connected .timeline-event{--timeline-axis:-17px}
   .timeline-date{
     display:flex;
     gap:16px
@@ -352,6 +365,11 @@
   .activity-heading h1{
     font-size:30px
   }
+}
+@media(max-width:600px){
+  .thread-layout .thread-author{grid-template-columns:36px minmax(0,1fr);row-gap:0}
+  .thread-layout .thread-author>picture{grid-row:1 / 3}
+  .thread-layout .thread-author>time{grid-column:2;margin:0;white-space:normal}
 }
 [data-theme=dark] .activity-toolbar .is-active{
   color:#18171d

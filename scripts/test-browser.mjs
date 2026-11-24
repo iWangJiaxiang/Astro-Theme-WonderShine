@@ -287,6 +287,7 @@ export async function checkBrowser(options = demo) {
           return [...links].every(link => link.getBoundingClientRect().height > 0) && aside.height > 0 && aside.top >= document.querySelector('.activity-main').getBoundingClientRect().bottom
             && document.documentElement.scrollWidth <= innerWidth;
         }));
+        if (name === 'threads') await page.screenshot({path:path.join(screenshots, 'blog-threads-mobile.png')});
         await page.$eval('#aside-content', aside => aside.scrollIntoView({behavior:'instant'}));
         await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-sidebar-mobile.png')});
         await page.setViewport({width:1440,height:900});
@@ -302,8 +303,9 @@ export async function checkBrowser(options = demo) {
       if (options === demo && ['threads', 'thread'].includes(name)) {
         assert.ok(await page.$eval('.thread-card', card => {
           const avatar = card.querySelector('.thread-author img').getBoundingClientRect();
+          const author = card.querySelector('.thread-author strong').getBoundingClientRect();
           const body = card.querySelector('.thread-body').getBoundingClientRect();
-          return Math.abs(avatar.left - body.left) < 1;
+          return Math.abs(avatar.left - body.left) < 1 && author.left >= avatar.right && author.left - avatar.right <= 16;
         }));
       }
       if (options === demo && ['home', 'article', 'thread', 'timeline', 'topics'].includes(name)) {
@@ -319,11 +321,17 @@ export async function checkBrowser(options = demo) {
         const discussion = await page.$eval('.timeline-event[data-kind="thread"] .timeline-read', link => ({text:link.textContent,hash:link.hash}));
         assert.match(discussion.text, /Join the discussion/);
         assert.equal(discussion.hash, '#post-comment');
-        const rail = await page.$$eval('.timeline-list--connected .timeline-event:not([hidden])', entries => entries.map(entry => ({
-          dot: getComputedStyle(entry, '::before').content,
-          line: getComputedStyle(entry, '::after').content,
-        })));
-        assert.ok(rail.length > 1 && rail.every(entry => entry.dot !== 'none'));
+        const rail = await page.$$eval('.timeline-list--connected .timeline-event:not([hidden])', entries => entries.map(entry => {
+          const dot = getComputedStyle(entry, '::before');
+          const left = entry.getBoundingClientRect().left + parseFloat(dot.left);
+          return {
+            betweenColumns: left > entry.querySelector('.timeline-date').getBoundingClientRect().right
+              && left + parseFloat(dot.width) < entry.querySelector('.timeline-content').getBoundingClientRect().left,
+            dot: dot.content,
+            line: getComputedStyle(entry, '::after').content,
+          };
+        }));
+        assert.ok(rail.length > 1 && rail.every(entry => entry.dot !== 'none' && entry.betweenColumns));
         assert.ok(rail.slice(0, -1).every(entry => entry.line !== 'none'));
         assert.equal(rail.at(-1).line, 'none');
         assert.equal(await page.$eval('.timeline-aside', aside => getComputedStyle(aside).borderTopWidth), '0px');
