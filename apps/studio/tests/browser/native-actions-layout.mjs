@@ -317,15 +317,15 @@ async function reviewCase(page, row, record) {
   need(JSON.stringify(initial.buttons.map(b => b.disabled)) === '[false,true,false]', 'busy');
   await pointer(page, '.workspace-sync-actions > button:nth-child(3)');
   await wait(page, () => window.nativeActions.snapshot().held && window.nativeActions.snapshot().review === 1 && [...document.querySelectorAll('.workspace-sync-actions > button')].every(b => b.disabled) && document.querySelector('.workspace-panel .field input')?.disabled && document.querySelector('.workspace-panel .page-heading button')?.disabled);
-  need(await page.evaluate(() => window.nativeActions.messagePreserved() && !document.querySelector('.workspace-sync-card > [role="group"]')), 'busy');
+  need(await page.evaluate(() => window.nativeActions.messagePreserved() && !document.querySelector('dialog.workspace-confirm:modal')), 'busy');
   sameGeometry(initial, await measurement(page, row, 'workspace'));
   await capture(page, record, 'busy', '.workspace-sync-actions');
   await page.evaluate(() => window.nativeActions.release());
-  await wait(page, () => document.querySelector('.workspace-sync-card > [role="group"]') && window.nativeActions.snapshot().mutations === 0);
+  await wait(page, () => document.querySelector('dialog.workspace-confirm:modal') && window.nativeActions.snapshot().mutations === 0);
   const pending = await measurement(page, row, 'workspace'); sameGeometry(initial, pending);
   need(pending.buttons.every(b => b.disabled), 'pending');
   need(await page.evaluate(() => window.nativeActions.messagePreserved() && document.querySelector('.workspace-panel .field input').disabled && document.querySelector('.workspace-panel .page-heading button').disabled), 'draft');
-  const confirmation = '.workspace-sync-card > [role="group"]';
+  const confirmation = 'dialog.workspace-confirm:modal';
   await page.$eval(confirmation, group => {
     const buttons = [...group.querySelectorAll('button')];
     if (buttons.length !== 2 || buttons.some(b => b.disabled) || buttons[0].textContent.trim() !== 'Confirm and proceed' || buttons[1].textContent.trim() !== 'Cancel') throw new Error('pending');
@@ -334,6 +334,9 @@ async function reviewCase(page, row, record) {
   });
   // Do not programmatically seed a focus boundary. Native Tab must make both
   // confirmation controls reachable while all original actions stay disabled.
+  need(await page.evaluate(() => document.activeElement === document.querySelector('.workspace-confirm h2')), 'focus-identity');
+  await page.keyboard.press('Tab');
+  need(await page.evaluate(() => document.activeElement === document.querySelector('.workspace-confirm summary')), 'focus-order');
   const seen = [];
   for (let i = 0; i < caps.tabs && seen.length < 2; i++) {
     live(page); await page.keyboard.press('Tab'); await settle(page);
@@ -350,7 +353,7 @@ async function reviewCase(page, row, record) {
   await capture(page, record, 'pending', confirmation);
   need(await page.$eval(confirmation, group => document.activeElement === group.querySelectorAll('button')[1]), 'focus-identity');
   live(page); await page.keyboard.press('Enter'); // Real focused Cancel only; never confirm.
-  await wait(page, () => !document.querySelector('.workspace-sync-card > [role="group"]') && !document.querySelector('.workspace-panel .field input').disabled);
+  await wait(page, () => !document.querySelector('dialog.workspace-confirm:modal') && !document.querySelector('.workspace-panel .field input').disabled);
   need(await page.evaluate(() => window.nativeActions.messagePreserved()), 'draft');
   const cancelled = await measurement(page, row, 'workspace'); sameGeometry(initial, cancelled);
   need(JSON.stringify(cancelled.buttons.map(b => b.disabled)) === '[false,true,false]', 'cancel');

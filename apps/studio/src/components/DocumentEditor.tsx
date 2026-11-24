@@ -1100,6 +1100,25 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                           element("option", { value: 1800 }, t("每 30 分钟")),
                         ),
                       ),
+                      isLocalized
+                        ? element(
+                            "button",
+                            {
+                              disabled:
+                                busy.value ||
+                                (!dirty.value && !branchPending.value && saveMode.value !== "branch" && values.value.draft === true),
+                              className: classes("secondary"),
+                              onClick: domEvent(($event: Event) => {
+                                saveLocalized(true);
+                              }),
+                            },
+                            t(
+                              values.value.draft === false
+                                ? "转为草稿"
+                                : "保存草稿",
+                            ),
+                          )
+                        : null,
                       revision.value
                         ? element(
                             "button",
@@ -1128,30 +1147,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                         },
                         t("下载备份"),
                       ),
-                      isLocalized
-                        ? element(
-                            Fragment,
-                            null,
-                            element(
-                              "button",
-                              {
-                                disabled:
-                                  busy.value ||
-                                  (!dirty.value && !branchPending.value && saveMode.value !== "branch" && values.value.draft === true),
-                                className: classes("secondary"),
-                                onClick: domEvent(($event: Event) => {
-                                  saveLocalized(true);
-                                }),
-                              },
-                              t(
-                                values.value.draft === false
-                                  ? "转为草稿"
-                                  : "保存草稿",
-                              ),
-                            ),
-                            saveAction(true),
-                          )
-                        : saveAction(),
+                      isLocalized ? saveAction(true) : saveAction(),
                     ),
                   )
                 : null,

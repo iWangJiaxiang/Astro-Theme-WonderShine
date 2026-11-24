@@ -408,7 +408,7 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
                 { className: classes("row") },
                 element(
                   "label",
-                  { className: classes("field field-inline") },
+                  { className: classes("field language-target") },
                   element("span", null, t("目标语言")),
                   element(
                     "select",
@@ -436,7 +436,7 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
                       translate(targetLanguage.value);
                     }),
                   },
-                  t("创建译文草稿"),
+                  t("创建译文"),
                 ),
                 element(
                   "button",
@@ -450,7 +450,7 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
                       translate(targetLanguage.value, true);
                     }),
                   },
-                  t("AI 翻译为草稿"),
+                  t("AI 翻译"),
                 ),
               ),
               preparing.value

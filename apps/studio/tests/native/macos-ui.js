@@ -65,9 +65,9 @@
     await wait(() => document.querySelector('[aria-label="图片提示词"]')?.value, 'cover prompt');
     await click('生成图片'); await wait(() => document.querySelector('.ai-image-preview img')?.naturalWidth > 0, 'cover preview');
     await click('保存并设为封面'); await wait(() => !document.querySelector('.ai-assistant-dialog'), 'cover applied'); await click('本地保存'); await notice(); results.push('native-http-image-media-save'); await progress();
-    await click('＋ 添加语言'); await click('AI 翻译为草稿');
+    await click('＋ 添加语言'); await click('AI 翻译');
     await heading('Native translated article'); results.push('native-ai-translation-draft'); await progress();
-    await click('工作区同步'); await wait(() => document.querySelector('.workspace-status-grid'), 'workspace status'); await click('提交到工作区');
+    await click('工作区同步'); await wait(() => document.querySelector('.workspace-status-grid'), 'workspace status'); await click('本地保存'); await click('确认执行');
     await wait(() => text().includes('已提交到工作区，尚未推送到远端。'), 'local commit'); results.push('native-git-commit'); await progress();
     document.querySelector('[aria-label="退出登录"]').click(); await heading('连接创作工作区');
     await click('打开工作区'); await heading('今天，写点什么？'); await click('客户端 API 设置');

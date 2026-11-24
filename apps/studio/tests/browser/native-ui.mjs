@@ -1016,7 +1016,7 @@ try {
     await click('确认执行');
     await startReauthorization();
     await finishReauthorization();
-    await page.waitForSelector('.workspace-panel [role=group] .publish-actions .primary:not(:disabled)');
+    await page.waitForSelector('.workspace-panel .workspace-confirm:modal .publish-actions .primary:not(:disabled)');
     assert.notEqual(remoteHead(), 'CNB workspace sync after reauthorization');
     await click('确认执行');
     await page.waitForFunction(() => document.querySelector('.workspace-panel [role=status]')?.textContent.includes('已与 Git 远端同步'));
