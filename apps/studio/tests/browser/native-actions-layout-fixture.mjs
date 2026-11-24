@@ -71,8 +71,8 @@ function installGeometry() {
   };
   const selector = surface => surface === 'login' ? '.account-login-buttons' : '.workspace-sync-actions';
   const expected = {
-    en: { login: ['Sign in with GitHub', 'Sign in with CNB'], workspace: ['Commit to workspace', 'Sync Git', 'Commit and synchronize'] },
-    'zh-CN': { login: ['使用 GitHub 登录', '使用 CNB 登录'], workspace: ['提交到工作区', '同步 Git', '提交并同步'] },
+    en: { login: ['Sign in with GitHub', 'Sign in with CNB'], workspace: ['Save locally', 'Sync Git', 'Save and sync'] },
+    'zh-CN': { login: ['使用 GitHub 登录', '使用 CNB 登录'], workspace: ['本地保存', '同步 Git', '保存并同步'] },
   };
   function inspect(surface, language, providers, width, platform) {
     const group = document.querySelector(selector(surface)); need(group, 'geometry');
@@ -287,7 +287,7 @@ function installGeometry() {
     } else {
       need(surface === 'confirmation', 'focus-identity');
       need(refresh.disabled && input.disabled && actions.every(node => node.disabled), 'pending');
-      route = [...(panel.querySelector('.workspace-sync-card > [role="group"]')?.querySelectorAll('button') || [])];
+      route = [...(panel.querySelector('dialog.workspace-confirm:modal')?.querySelectorAll('button') || [])];
       need(route.length === 2 && route.every(node => !node.disabled), 'pending');
     }
     const active = document.activeElement;
@@ -469,7 +469,7 @@ setApiTransport((path, init) => {
     if (path === '/workspace/review' && init.method === 'POST' && config.state === 'review' && counts.review === 0) {
       count('review'); held = true;
       await new Promise(resolve => { release = () => { held = false; release = null; resolve(); }; });
-      return new Response(JSON.stringify({ ...status, confirmation: 'layout-review-only' }));
+      return new Response(JSON.stringify({ ...status, canPublish: true, confirmation: 'layout-review-only' }));
     }
     count('unexpected'); throw new Error('transport');
   })();

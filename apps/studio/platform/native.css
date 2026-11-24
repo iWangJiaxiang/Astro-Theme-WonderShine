@@ -44,6 +44,7 @@ section.native-ai-settings { max-width: 960px; }
 /* Keep the heading from covering fields during reverse keyboard navigation. */
 .settings-page.workspace-panel > .page-heading { position: static; }
 .workspace-sync-card h2 { margin-bottom: 0; overflow-wrap: anywhere; }
+.workspace-discard { margin-top: 12px; border-color: currentColor; }
 .workspace-sync-card li { overflow-wrap: anywhere; }
 .workspace-sync-card ul { padding-inline-start: 1.25rem; }
 .workspace-sync-card .workspace-status-grid { padding-bottom: 24px; border-bottom: 1px solid var(--studio-line); }
