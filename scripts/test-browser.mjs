@@ -76,10 +76,11 @@ export async function checkBrowser(options = demo) {
       }
       return url.startsWith(origin) || url.startsWith('data:') ? request.continue() : request.abort();
     });
+    // A reduced-motion page can settle without producing another animation frame.
     const settled = () => page.waitForFunction(() => {
       const background = document.querySelector('#loading-box .loading-bg');
       return (!background || getComputedStyle(background).visibility === 'hidden') && !document.documentElement.hasAttribute('data-astro-transition');
-    });
+    }, {polling:100});
     const finishLayout = () => page.evaluate(async () => {
       // Wait for short layout animations without requiring a frame after a viewport change.
       const animations = document.getAnimations().filter(animation =>
@@ -294,9 +295,10 @@ export async function checkBrowser(options = demo) {
             const state = await page.evaluate(() => ({
               trace:window.__homeDrawerNavigationProbe,
               loading:document.querySelector('#loading-box')?.className,
+              visibility:document.querySelector('#loading-box .loading-bg')?.checkVisibility({visibilityProperty:true}),
               transition:document.documentElement.getAttribute('data-astro-transition'),
             })).catch(() => null);
-            console.error('Mobile drawer navigation failed', {url:page.url(), state, errors, failures});
+            console.error('Mobile drawer navigation failed', JSON.stringify({url:page.url(), state, errors, failures}));
             await page.screenshot({path:path.join(screenshots, 'blog-drawer-navigation-failure.png')}).catch(console.error);
             throw error;
           }
