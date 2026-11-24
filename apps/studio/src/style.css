@@ -216,6 +216,8 @@
 .language-version-tabs button { padding: 7px 13px; border-radius: 7px; font-size: 12px; border: 1px solid transparent; }
 .language-version-tabs button.active { color: var(--wjx-theme); background: color-mix(in srgb,var(--wjx-theme) 9%,transparent); border-color: color-mix(in srgb,var(--wjx-theme) 20%,transparent); }
 .language-version-create { border-top: 1px solid var(--studio-line); padding-top: 12px; margin-top: 12px; }
+.language-version-create > .row { gap: 6px; }
+.language-version-create > .row > button { padding-inline: 10px; }
 .language-version-create .language-target { display: flex; flex-direction: row; align-items: center; gap: 6px; margin: 0; max-width: 100%; }
 .language-target select { width: auto; min-width: 72px; max-width: 100%; }
 .language-version-create p { margin: 10px 0 0; }
