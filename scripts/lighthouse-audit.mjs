@@ -11,18 +11,18 @@ const device = process.env.AUDIT_DEVICE || 'mobile';
 if (!['mobile', 'desktop'].includes(device)) throw new Error('Unsupported audit device');
 const output = path.join(root, 'temp/lighthouse', device);
 await mkdir(output, { recursive: true });
-const requireSite = createRequire(path.join(site, 'package.json'));
-const astro = path.join(path.dirname(requireSite.resolve('astro/package.json')), 'bin/astro.mjs');
-const origin = 'http://127.0.0.1:4399';
-const pages = [
+const deployedUrl = process.env.AUDIT_URL ? new URL(process.env.AUDIT_URL) : undefined;
+if (deployedUrl && (deployedUrl.protocol !== 'https:' || deployedUrl.username || deployedUrl.password)) {
+  throw new Error('Use a public HTTPS page URL without credentials');
+}
+const origin = deployedUrl?.origin || 'http://127.0.0.1:4399';
+const pages = deployedUrl ? [['deployed', deployedUrl.pathname + deployedUrl.search]] : [
   ['home', '/'], ['article', '/articles/welcome/'], ['timeline', '/timeline/'],
   ['collection', '/collections/field-notes/'], ['chinese-home', '/zh-CN/'],
 ];
-const preview = spawn(process.execPath, [astro, 'preview', '--root', site, '--host', '127.0.0.1', '--port', '4399'], { cwd: site, stdio: ['ignore', 'pipe', 'pipe'] });
-let serverLog = '', serverError;
-preview.stdout.on('data', data => { serverLog += data; });
-preview.stderr.on('data', data => { serverLog += data; });
-preview.on('error', error => { serverError = error; });
+const fixture = deployedUrl ? 'deployed-page' : 'theme-demo';
+const description = deployedUrl ? `Deployed page at ${deployedUrl.href}.` : 'Theme demo production preview.';
+let preview;
 let current;
 async function run(args) {
   await new Promise((resolve, reject) => {
@@ -35,14 +35,23 @@ async function run(args) {
 const metricIds = ['first-contentful-paint', 'largest-contentful-paint', 'total-blocking-time', 'cumulative-layout-shift', 'speed-index'];
 const results = [];
 try {
-  let ready = false;
-  for (let attempt = 0; attempt < 150; attempt++) {
-    if (serverError) throw serverError;
-    if (preview.exitCode !== null) throw new Error(serverLog);
-    try { if ((await fetch(origin)).ok) { ready = true; break; } } catch { /* Preview is starting. */ }
-    await new Promise(resolve => setTimeout(resolve, 200));
+  if (!deployedUrl) {
+    const requireSite = createRequire(path.join(site, 'package.json'));
+    const astro = path.join(path.dirname(requireSite.resolve('astro/package.json')), 'bin/astro.mjs');
+    preview = spawn(process.execPath, [astro, 'preview', '--root', site, '--host', '127.0.0.1', '--port', '4399'], { cwd: site, stdio: ['ignore', 'pipe', 'pipe'] });
+    let serverLog = '', serverError;
+    preview.stdout.on('data', data => { serverLog += data; });
+    preview.stderr.on('data', data => { serverLog += data; });
+    preview.on('error', error => { serverError = error; });
+    let ready = false;
+    for (let attempt = 0; attempt < 150; attempt++) {
+      if (serverError) throw serverError;
+      if (preview.exitCode !== null) throw new Error(serverLog);
+      try { if ((await fetch(origin)).ok) { ready = true; break; } } catch { /* Preview is starting. */ }
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    if (!ready) throw new Error('Preview did not become ready: ' + serverLog);
   }
-  if (!ready) throw new Error('Preview did not become ready: ' + serverLog);
   for (const [name, route] of pages) {
     const response = await fetch(origin + route);
     if (!response.ok) throw new Error(`Audit page ${route}: HTTP ${response.status}`);
@@ -69,12 +78,12 @@ try {
     const ordered = [...runs].sort((a, b) => a.categories.performance - b.categories.performance);
     results.push({ name, route, performanceRange: [ordered[0].categories.performance, ordered[2].categories.performance],
       allScores: runs.map(run => run.categories), representative: ordered[1] });
-    await writeFile(path.join(output, 'summary.json'), JSON.stringify({ source: process.env.GITHUB_SHA, device, fixture: 'theme-demo',
-      limitations: 'Production-built fictional demo on Astro preview, not the personal blog or CDN. Default Lighthouse simulated throttling. Three fresh Chrome runs; representative is median performance score.', results }, null, 2));
+    await writeFile(path.join(output, 'summary.json'), JSON.stringify({ source: process.env.GITHUB_SHA, device, fixture,
+      limitations: description + ' Default Lighthouse simulated throttling. Three fresh Chrome runs; representative is median performance score.', results }, null, 2));
   }
   const rows = results.map(({ name, performanceRange, representative: run }) => `| ${name} | ${run.categories.performance} (${performanceRange.join('–')}) | ${run.categories.accessibility} | ${run.categories['best-practices']} | ${run.categories.seo} | ${run.metrics['largest-contentful-paint'].display} | ${run.metrics['total-blocking-time'].display} | ${run.metrics['cumulative-layout-shift'].display} |`);
-  await writeFile(path.join(output, 'summary.md'), `# Lighthouse ${device}\n\nTheme demo production preview. Median performance run of three; not a deployed personal-site score.\n\n| Page | Performance (range) | Accessibility | Best practices | SEO | LCP | TBT | CLS |\n|---|---:|---:|---:|---:|---:|---:|---:|\n${rows.join('\n')}\n`);
+  await writeFile(path.join(output, 'summary.md'), `# Lighthouse ${device}\n\n${description} Median performance run of three.\n\n| Page | Performance (range) | Accessibility | Best practices | SEO | LCP | TBT | CLS |\n|---|---:|---:|---:|---:|---:|---:|---:|\n${rows.join('\n')}\n`);
 } finally {
   current?.kill('SIGTERM');
-  preview.kill('SIGTERM');
+  preview?.kill('SIGTERM');
 }
