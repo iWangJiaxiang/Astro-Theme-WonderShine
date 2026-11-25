@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildThemeCss } from '../scripts/build-theme-css.mjs';
 
-test('CSS builds finish every stylesheet and retain the 404 output name', () => {
+test('CSS builds complete all stylesheets', () => {
   const calls: string[][] = [];
   buildThemeCss((_command, args) => {
     calls.push(args);
