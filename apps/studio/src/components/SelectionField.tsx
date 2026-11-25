@@ -142,7 +142,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
     }
     const modal = createBusinessModal(() => dialog.value, () => opened.value && !props.disabled);
     function open() {
-      if (props.disabled) return;
+      if (props.disabled || creating.value) return;
       pending.value = [...selected.value];
       search.value = "";
       createError.value = "";
@@ -151,7 +151,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       modal.open();
     }
     function close(confirmed?: string) {
-      if (creating.value) return;
+      if (creating.value && !props.disabled) return;
       modal.close();
       opened.value = false;
       let target: HTMLElement | null | undefined = trigger.value;
@@ -191,7 +191,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       created.value = false;
       try {
         const option = await props.createOption(query.value);
-        if (!alive) return;
+        if (!alive || !opened.value || props.disabled) return;
         addedOptions.value = [
           ...addedOptions.value.filter((item) => item.value !== option.value),
           option,
@@ -201,7 +201,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
           : [option.value];
         created.value = true;
       } catch (error) {
-        if (alive) createError.value = errorMessage(error);
+        if (alive && opened.value && !props.disabled) createError.value = errorMessage(error);
       } finally {
         creating.value = false;
       }
@@ -284,7 +284,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                 ref: domRef(trigger),
                 type: "button",
                 name: props.name,
-                disabled: props.disabled,
+                disabled: props.disabled || (creating.value && !opened.value),
                 "aria-haspopup": "dialog",
                 "aria-expanded": opened.value,
                 "aria-labelledby":

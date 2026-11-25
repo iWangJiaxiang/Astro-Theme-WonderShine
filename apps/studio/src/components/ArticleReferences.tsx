@@ -13,7 +13,7 @@ import {
   renderList,
   type StudioComponent,
 } from "../react-component";
-import { computed, onBeforeUnmount, ref, useId } from "../reactivity";
+import { computed, onBeforeUnmount, ref, useId, watch } from "../reactivity";
 import Icon from "./Icon";
 
 type Props = {
@@ -85,9 +85,10 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
         : articles.value.find((item) => key(item) === reference.path)?.title ||
             reference.path;
     }
-    const modal = createBusinessModal(() => dialog.value, () => opened.value && !props.disabled);
+    const unavailable = computed(() => !!props.disabled || references.value.length >= 12);
+    const modal = createBusinessModal(() => dialog.value, () => opened.value && !unavailable.value);
     function open() {
-      if (props.disabled || references.value.length >= 12) return;
+      if (unavailable.value) return;
       search.value = "";
       selected.value = "";
       url.value = "";
@@ -102,7 +103,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
       trigger.value?.focus();
     }
     function add() {
-      if (props.disabled || references.value.length >= 12) return;
+      if (unavailable.value) return;
       let reference: Reference;
       if (mode.value === "internal") {
         if (!visibleChoice.value) return;
@@ -134,6 +135,9 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
       emit("update:modelValue", [...references.value, reference]);
       close();
     }
+    watch(unavailable, blocked => {
+      if (blocked && opened.value) close();
+    });
     onBeforeUnmount(() => modal.dispose());
     return () =>
       element(
@@ -150,7 +154,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
             "button",
             {
               ref: domRef(trigger),
-              disabled: props.disabled || references.value.length >= 12,
+              disabled: unavailable.value,
               "aria-haspopup": "dialog",
               "aria-expanded": opened.value,
               className: classes("text-button"),

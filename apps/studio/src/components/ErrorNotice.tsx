@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { version } from '../../package.json';
 import { t, type Message } from '../i18n';
+import { containModalFocus } from '../modal-layer';
 import { useSignals } from '../reactivity';
 
 function redact(text: string) {
@@ -28,7 +29,8 @@ export function ErrorDetails({ message, source }: DetailsProps) {
     if (!report) return;
     const node = dialog.current!;
     node.showModal();
-    return () => { if (node.open) node.close(); };
+    const releaseFocus = containModalFocus(node);
+    return () => { releaseFocus(); if (node.open) node.close(); };
   }, [report]);
 
   function open() {

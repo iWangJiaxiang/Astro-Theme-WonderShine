@@ -19,6 +19,10 @@ export async function checkSelectionField(browser) {
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import SelectionField from './src/components/SelectionField';
+import ArticleReferences from './src/components/ArticleReferences';
+import PublicationDateField from './src/components/PublicationDateField';
+import SaveButton from './src/components/SaveButton';
+import { ErrorDetails } from './src/components/ErrorNotice';
 import { locale } from './src/i18n';
 import { installMobileShell } from './platform/mobile';
 // Preserve App + main.ts cascade, including the real stylesheet imports.
@@ -41,6 +45,19 @@ function Field({ name, initial, ...props }) {
   const [value, setValue] = useState(initial);
   return <SelectionField {...props} name={name} modelValue={value}
     onUpdateModelValue={next => { updates[name] = (updates[name] || 0) + 1; setValue(next); }} />;
+}
+let setLocked, setShowModes, finishCreate;
+function ChangingControls() {
+  const [locked, lock] = useState(false), [modes, showModes] = useState(true);
+  setLocked = lock; setShowModes = showModes;
+  return <main>
+    <PublicationDateField modelValue="2026-11-25" disabled={locked} onUpdateModelValue={() => updates.date = 1} />
+    <ArticleReferences modelValue={[]} items={[]} language="en" disabled={locked} onUpdateModelValue={() => updates.reference = 1} />
+    <Field name="create" label="Topic" initial={[]} multiple options={[]} disabled={locked}
+      createOption={title => new Promise(resolve => { finishCreate = () => resolve({ value: 'new', label: title }); })} />
+    <SaveButton mode="local" showModes={modes} onModeChange={() => {}} onSave={() => {}} />
+    <ErrorDetails message="Error" source="Fixture" />
+  </main>;
 }
 let resizePlain;
 function Fixture() {
@@ -66,6 +83,9 @@ function Fixture() {
 const root = createRoot(document.getElementById('root'));
 root.render(<Fixture />);
 window.selectionFixture = {
+  changing() { root.render(<ChangingControls />); },
+  lock(value) { setLocked(value); }, showModes(value) { setShowModes(value); },
+  finishCreate() { finishCreate(); },
   resizePlain(size) { resizePlain(size); },
   updates(name) { return updates[name] || 0; },
   cleanup() { root.unmount(); disposeShell(); },
@@ -268,6 +288,45 @@ window.selectionFixture = {
         assert.equal(await page.evaluate(() => document.activeElement?.id === 'after-disabled'), true, `${label}: keyboard skips disabled trigger`);
         assert.equal(await updates('disabled'), 0);
         assert.equal(await valueIs('disabled', 'Public images (default)'), true, `${label}: disabled value untouched`);
+
+        await page.evaluate(() => window.selectionFixture.changing());
+        for (const selector of ['.thread-date-trigger', '.reference-heading button']) {
+          await page.locator(selector).click();
+          await page.waitForSelector('dialog:modal');
+          await page.evaluate(() => window.selectionFixture.lock(true));
+          await page.waitForFunction(() => !document.querySelector('dialog'));
+          assert.equal(await updates('date') + await updates('reference'), 0);
+          await page.evaluate(() => window.selectionFixture.lock(false));
+        }
+
+        await open('create');
+        await page.type('.selection-dialog input[type=search]', 'New topic');
+        await page.locator('.selection-create-action').click();
+        await page.waitForSelector('.selection-dialog[aria-busy=true]');
+        await page.evaluate(() => window.selectionFixture.lock(true));
+        await page.waitForFunction(() => !document.querySelector('dialog'));
+        await page.evaluate(() => { window.selectionFixture.lock(false); window.selectionFixture.finishCreate(); });
+        await open('create');
+        assert.equal(await page.$('.selection-dialog input[value=new]'), null);
+        assert.equal(await updates('create'), 0);
+        await page.keyboard.press('Escape');
+        await page.locator('.save-button-toggle').click();
+        await page.waitForSelector('.save-mode-menu');
+        await page.evaluate(() => window.selectionFixture.showModes(false));
+        await page.waitForFunction(() => !document.querySelector('.save-mode-menu, .save-button-toggle'));
+        await page.evaluate(() => window.selectionFixture.showModes(true));
+        await page.waitForSelector('.save-button-toggle[aria-expanded=false]');
+
+        await page.locator('.error-more').click();
+        await page.waitForSelector('.error-dialog textarea:focus');
+        await page.keyboard.down('Shift');
+        await page.keyboard.press('Tab');
+        await page.keyboard.up('Shift');
+        await page.waitForSelector('.error-dialog .primary:focus');
+        await page.keyboard.press('Tab');
+        await page.waitForSelector('.error-dialog textarea:focus');
+        await page.keyboard.press('Escape');
+        await page.waitForSelector('.error-more:focus');
       }
     } catch (error) { failures.push(error); }
     finally {

@@ -16,7 +16,7 @@ import {
   portal,
   type StudioComponent,
 } from "../react-component";
-import { computed, onBeforeUnmount, ref, useId } from "../reactivity";
+import { computed, onBeforeUnmount, ref, useId, watch } from "../reactivity";
 import Icon from "./Icon";
 
 type Props = { modelValue: Json | undefined; disabled?: boolean };
@@ -53,6 +53,9 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
       emit("update:modelValue", pendingValue.value);
       close();
     }
+    watch(() => props.disabled, disabled => {
+      if (disabled && opened.value) close();
+    });
     onBeforeUnmount(() => modal.dispose());
     return () =>
       element(
@@ -180,7 +183,7 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
                       ),
                       <div className="date-shortcuts">
                         <button type="button" className="secondary" onClick={() => { pending.value = publicationDateDraft(new Date().toISOString()); }}>{t("使用当前时间")}</button>
-                        <button type="button" className="text-button" onClick={() => { emit("update:modelValue", ""); close(); }}>{t("移除时间")}</button>
+                        <button type="button" className="text-button" disabled={props.disabled} onClick={() => { if (!props.disabled) { emit("update:modelValue", ""); close(); } }}>{t("移除时间")}</button>
                       </div>,
                       element(
                         "details",

@@ -68,13 +68,13 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
       window.visualViewport?.removeEventListener('resize', place); window.visualViewport?.removeEventListener('scroll', place);
     };
   }, [open]);
-  useEffect(() => { if (busy) setOpen(false); }, [busy]);
+  useEffect(() => { if (busy || !showModes) setOpen(false); }, [busy, showModes]);
   return <div className="save-button">
     <button type="button" className="primary save-button-main" disabled={disabled || busy} onClick={() => { if (allowed()) onSave(); }}>
       {busy ? t('正在保存…') : label || t(saveModeLabel[mode])}
     </button>
     {showModes && <button type="button" className="primary save-button-toggle" ref={trigger} disabled={busy} aria-label={t('选择保存方式')} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => { if (!allowed()) return; setError(false); setOpen(!open); }}>⌄</button>}
-    {open && createPortal(<div id={id} className="save-mode-menu" role="dialog" aria-label={t('保存方式')} ref={panel} style={{ top: position.top, left: position.left }}
+    {open && showModes && !busy && createPortal(<div id={id} className="save-mode-menu" role="dialog" aria-label={t('保存方式')} ref={panel} style={{ top: position.top, left: position.left }}
       onKeyDown={event => {
         if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey || event.defaultPrevented || !allowed() || !trigger.current) return;
         if ((event.target as HTMLElement).closest('dialog:modal')) return;
