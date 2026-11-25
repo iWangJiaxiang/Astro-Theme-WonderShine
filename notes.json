@@ -24,14 +24,17 @@
       "note": "Explained repeated report_incomplete notification is not build failure evidence; #13/#15 remain actual tracked work. No new human activity; avoid repeating."
     }
   ],
-  "fixes": [],
-  "checks": [
+  "fixes": [
     {
-      "area": "code",
-      "checked_at": "2026-11-24",
-      "result": "Tasks 10,4,2,5: checked seven live issues, zero PRs, CSS subprocess and Markdown rendering. #13/#15 already tracked; #39 repeats a notification. No new independent candidate.",
-      "follow_up": "Existing #13 requires implementation and remote validation; this run assessed candidates only."
-    },
+      "issue": 13,
+      "pr": null,
+      "branch": "repo-assist/fix-issue-13-css-process-failures",
+      "status": "open",
+      "updated_at": "2026-11-25",
+      "note": "CSS subprocess fix and injected-runner regression test source committed. Draft PR requested this run; reconcile live PR next run. Syntax/diff checks passed; build/tests not run; remote CI required."
+    }
+  ],
+  "checks": [
     {
       "area": "performance",
       "checked_at": "2026-11-24",
@@ -55,14 +58,26 @@
       "checked_at": "2026-11-24",
       "result": "Task 4: reviewed ci.yml build, starter, type, integration, package and browser steps; no new actionable proposal. No remote dispatch capability.",
       "follow_up": "Remote CI required for future source fixes."
+    },
+    {
+      "area": "code",
+      "checked_at": "2026-11-25",
+      "result": "Tasks 10,3,5: implemented #13 with stop-on-failure CSS helper; reviewed final diff. No fallback needed after substantive fix.",
+      "follow_up": "Draft PR requires remote validation; no local build/test allowed."
+    },
+    {
+      "area": "tests",
+      "checked_at": "2026-11-25",
+      "result": "Added mocked-runner cases for success, nonzero exit, startup failure and signal termination; verifies no later CSS jobs run.",
+      "follow_up": "Test source only; npm test, theme build and tgz consumer validation pending remote CI."
     }
   ],
   "completed_actions": [],
   "priorities": [
     {
-      "task": 4,
-      "item": "CSS subprocess failure handling",
-      "note": "Issue #13 remains actionable; implement error/null-status handling and remote failure-path tests when CI execution is available. Do not repeat existing issue guidance."
+      "task": 6,
+      "item": "Validate CSS subprocess fix",
+      "note": "Reconcile draft PR request for #13 branch; review remote CI and run failure-path, theme and tgz acceptance. Do not duplicate fix."
     }
   ]
 }
