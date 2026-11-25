@@ -104,7 +104,7 @@ const GettingStarted: StudioComponent<Props, Events> = component<Props, Events>(
                     onClick={() => { showingSteps.value = !showingSteps.value; }}
                   >
                     {t("从这里开始")}
-                    <Icon name="chevron-down" />
+                    <Icon name="chevron-down" size={16} />
                   </button>
                 </h2>
               ),

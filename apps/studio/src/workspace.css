@@ -25,7 +25,7 @@ h1 { font-size: var(--studio-page-title); margin-bottom: 8px; }
 .getting-started:not(.guide-page) .guide-heading { align-items: center; }
 .getting-started:not(.guide-page) .guide-heading h2 { margin: 0; min-width: 0; font-size: 15px; }
 .guide-toggle { display: inline-flex; align-items: center; gap: 8px; padding: 8px 0; font-weight: inherit; text-align: start; }
-.guide-toggle svg { width: 16px; color: var(--studio-muted); }
+.guide-toggle svg { color: var(--studio-muted); }
 .guide-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 .guide-heading > .text-button { color: var(--studio-muted); }
 .getting-started:not(.guide-page) .guide-steps { margin-top: 16px; }
