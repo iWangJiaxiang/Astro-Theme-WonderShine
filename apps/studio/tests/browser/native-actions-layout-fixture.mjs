@@ -430,7 +430,7 @@ function FixtureLogin() {
 function WorkspaceFixture() {
   const [host, setHost] = useState(null);
   return <div className="studio-shell"><div className="main-shell">
-    <header className="topbar"><div className="row topbar-actions"><span className="nav-refresh-slot" ref={setHost} /></div></header>
+    <header className="topbar"><div className="row"><span>Workspace</span></div><div className="row topbar-actions"><span className="nav-refresh-slot" ref={setHost} /></div></header>
     <main className="main-content"><RefreshHost.Provider value={host}><WorkspacePanel /></RefreshHost.Provider></main>
   </div></div>;
 }
