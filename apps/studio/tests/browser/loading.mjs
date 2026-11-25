@@ -130,7 +130,7 @@ export async function checkLoading({ browser, origin, screenshots }) {
     await page.waitForSelector('.reference-dialog[open] .selection-footer button:disabled');
     await page.keyboard.press('Enter');
     const refDialog = '.reference-dialog[open]';
-    await page.click(referenceSearch, { clickCount: 3 });
+    await page.$eval(referenceSearch, input => input.select());
     await page.keyboard.press('Backspace');
     await page.waitForSelector(refDialog + ' input:checked');
     const candidate = await page.$eval(refDialog + ' input:checked', input => input.value);
