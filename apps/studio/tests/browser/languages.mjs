@@ -5,6 +5,7 @@ export async function checkLanguages({ browser, origin, screenshots, base }) {
   const fixture = base + '/site/content/articles/language-check';
   await mkdir(fixture, { recursive: true });
   await writeFile(fixture + '/index.md', '+++\ntitle="标签与分类"\ndate=2026-10-24\ndraft=false\n[taxonomies]\ntags=["project"]\ncategories=[]\n+++\nLanguage test content.');
+  await writeFile(fixture + '/index.zh-CN.md', '+++\ntitle="中文版测试"\ndraft=false\n+++\nChinese translation.');
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   const errors = [];
@@ -72,12 +73,37 @@ export async function checkLanguages({ browser, origin, screenshots, base }) {
     assert.equal(await page.$eval('.page-heading h1', el => el.textContent), '标签与分类');
     await page.waitForFunction(() => document.querySelector('[aria-label="Selected Tags"] button')?.textContent.includes('项目'));
     assert.equal(await page.$eval('[aria-label="Selected Tags"] button', el => el.textContent.trim()), '项目 ×');
+    const selectedTab = '.language-version-tabs [aria-selected="true"]';
+    await page.waitForSelector('.language-version-tabs [aria-selected="false"]:not(:disabled)');
+    await page.focus(selectedTab);
+    assert.ok(await page.evaluate(() => {
+    const before = document.activeElement;
+    return before.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true, cancelable: true }))
+      && document.activeElement === before;
+  }), 'modified arrow remains available to the browser');
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.$eval('.language-version-tabs :focus', el => el.getAttribute('aria-selected')), 'false');
+    await page.keyboard.press('Enter');
+    await heading('中文版测试');
+    await page.waitForSelector('.language-version-tabs [aria-selected="false"]:not(:disabled)');
+    await page.focus(selectedTab);
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.$eval('.language-version-tabs :focus', tab => tab.tabIndex), 0);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.$('.language-version-tabs :focus'), null, 'Tab exits after browsing an inactive version');
+    await page.keyboard.down('Shift'); await page.keyboard.press('Tab'); await page.keyboard.up('Shift');
+    assert.equal(await page.$eval(selectedTab, tab => tab === document.activeElement), true);
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Enter');
+    await heading('标签与分类');
+    await page.waitForSelector('.markdown-source');
     const originalBody = await page.$eval('.markdown-source', el => el.value);
     await fill('.markdown-source', originalBody + '\nI18N unsaved source');
     await language('zh-CN'); await page.waitForSelector('.markdown-source');
     assert.equal(await page.$eval('.markdown-source', el => el.value), originalBody + '\nI18N unsaved source');
     await language('en');
     await click('Visual editor'); await page.waitForSelector('.vditor-ir [contenteditable=true]');
+    assert.equal(await page.$eval('.editor-tabs [aria-pressed="true"]', el => el.textContent), 'Visual editor');
     await page.click('.vditor-ir [contenteditable=true]'); await page.keyboard.type('I18N-RICH-TAIL');
     await language('zh-CN'); await page.waitForSelector('.vditor-ir [contenteditable=true]');
     await click('Markdown 源码');

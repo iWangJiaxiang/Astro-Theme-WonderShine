@@ -25,6 +25,7 @@ const MediaDirectoryNode: StudioComponent<Props, Events> = component<
       (value) => {
         if (value.startsWith(props.node.path + "/")) expanded.value = true;
       },
+      { immediate: true },
     );
     return () =>
       element(

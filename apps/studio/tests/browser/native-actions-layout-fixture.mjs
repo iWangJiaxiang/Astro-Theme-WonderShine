@@ -277,16 +277,16 @@ function installGeometry() {
   function landing(surface, index, allowBoundary = false, reverse = false) {
     const diagnostic = reverse ? (index === 2 ? reverseButton : reverseInput) : undefined;
     const panel = document.querySelector('.workspace-panel'), heading = panel?.querySelector(':scope > .page-heading');
-    const refresh = heading?.querySelector('button'), input = panel?.querySelector('.field > input');
+    const refresh = document.querySelector('.topbar .navigation-refresh'), input = panel?.querySelector('.field > input');
     const actions = [...(panel?.querySelector('.workspace-sync-actions')?.children || [])];
     need(heading && refresh?.tagName === 'BUTTON' && input?.tagName === 'INPUT' && actions.length === 3 && actions.every(node => node.tagName === 'BUTTON'), 'focus-identity', diagnostic);
     let route;
     if (surface === 'workspace') {
-      need(!refresh.disabled && !input.disabled && !actions[0].disabled && actions[1].disabled && !actions[2].disabled, 'focus-disabled', diagnostic);
+      need(refresh.getAttribute('aria-disabled') === 'false' && !input.disabled && !actions[0].disabled && actions[1].disabled && !actions[2].disabled, 'focus-disabled', diagnostic);
       route = [refresh, input, actions[0], actions[2]];
     } else {
       need(surface === 'confirmation', 'focus-identity');
-      need(refresh.disabled && input.disabled && actions.every(node => node.disabled), 'pending');
+      need(refresh.getAttribute('aria-disabled') === 'true' && input.disabled && actions.every(node => node.disabled), 'pending');
       route = [...(panel.querySelector('dialog.workspace-confirm:modal')?.querySelectorAll('button') || [])];
       need(route.length === 2 && route.every(node => !node.disabled), 'pending');
     }
@@ -358,6 +358,7 @@ import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import AccountLogin from './platform/AccountLogin';
 import { WorkspacePanel } from './platform/WorkspacePanel';
+import { RefreshHost } from './src/navigation-refresh';
 import { setApiTransport, pendingMutations } from './src/api';
 import { setLocale } from './src/i18n';
 import { installMobileShell } from './platform/mobile';
@@ -426,9 +427,16 @@ function FixtureLogin() {
     {config.state === 'disabled' && <button data-edge="after" type="button">After</button>}
   </div>;
 }
+function WorkspaceFixture() {
+  const [host, setHost] = useState(null);
+  return <div className="studio-shell"><div className="main-shell">
+    <header className="topbar"><div className="row"><span>Workspace</span></div><div className="row topbar-actions"><span className="nav-refresh-slot" ref={setHost} /></div></header>
+    <main className="main-content"><RefreshHost.Provider value={host}><WorkspacePanel /></RefreshHost.Provider></main>
+  </div></div>;
+}
 function show(surface) {
   need(root && !retiring, 'fixture');
-  flushSync(() => root.render(surface === 'login' ? <FixtureLogin /> : <div className="studio-shell"><div className="main-shell"><main className="main-content"><WorkspacePanel /></main></div></div>));
+  flushSync(() => root.render(surface === 'login' ? <FixtureLogin /> : <WorkspaceFixture />));
 }
 window.nativeActions = {
   show,

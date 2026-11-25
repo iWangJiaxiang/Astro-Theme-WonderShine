@@ -3,11 +3,13 @@ import type { Choice } from "../../shared/choices";
 import type { Json } from "../../shared/types";
 import { errorMessage } from "../api";
 import { t, type Message } from "../i18n";
+import { followChoiceChange } from "../choice-focus";
 import { createBusinessModal } from "../modal-layer";
 import {
   classes,
   component,
   domEvent,
+  preventSearchSubmit,
   domRef,
   element,
   Fragment,
@@ -17,6 +19,7 @@ import {
 } from "../react-component";
 import {
   computed,
+  nextTick,
   onBeforeUnmount,
   ref,
   useId,
@@ -31,6 +34,7 @@ type Props = {
   name: string;
   label: string;
   multiple?: boolean;
+  allowCustomValues?: boolean;
   disabled?: boolean;
   hint?: string;
   preview?: string;
@@ -48,7 +52,8 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
   (props, emit, expose) => {
     const id = useId(),
       dialog = ref<HTMLDialogElement>(),
-      trigger = ref<HTMLButtonElement>();
+      trigger = ref<HTMLButtonElement>(),
+      inline = ref<HTMLFieldSetElement>();
     const opened = ref(false),
       search = ref(""),
       pending = ref<string[]>([]),
@@ -77,26 +82,35 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       },
       { immediate: true },
     );
-    const options = computed<Choice[]>(() => [
-      ...props.options,
-      ...addedOptions.value.filter(
-        (option) => !props.options.some((item) => item.value === option.value),
-      ),
-      ...known.value
-        .filter(
-          (value) =>
-            ![...props.options, ...addedOptions.value].some(
-              (option) => option.value === value,
-            ),
-        )
-        .map((value) => ({ value, label: t("{value}（自定义）", { value }) })),
-    ]);
+    const options = computed<Choice[]>(() => {
+      const choices = [...props.options];
+      const values = new Set(choices.map(option => option.value));
+      for (const option of addedOptions.value) {
+        if (values.has(option.value)) continue;
+        choices.push(option);
+        values.add(option.value);
+      }
+      if (props.allowCustomValues !== false) {
+        for (const value of known.value) {
+          if (!values.has(value)) choices.push({ value, label: t("{value}（自定义）", { value }) });
+        }
+      }
+      return choices;
+    });
+    const checkedValues = computed(() => new Set(selected.value));
+    const pendingValues = computed(() => new Set(pending.value));
     const filtered = computed(() =>
       options.value.filter((option) =>
         normalized(
           `${option.label} ${option.value} ${(option.searchTerms || []).join(" ")}`,
         ).includes(normalized(search.value)),
       ),
+    );
+    const visibleChoice = computed(() =>
+      filtered.value.find((option) => option.value === pending.value[0]),
+    );
+    const canConfirm = computed(() =>
+      !creating.value && !props.disabled && (props.multiple || !!visibleChoice.value),
     );
     const canCreate = computed(
       () =>
@@ -134,7 +148,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
     }
     const modal = createBusinessModal(() => dialog.value, () => opened.value && !props.disabled);
     function open() {
-      if (props.disabled) return;
+      if (props.disabled || creating.value) return;
       pending.value = [...selected.value];
       search.value = "";
       createError.value = "";
@@ -142,17 +156,49 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       opened.value = true;
       modal.open();
     }
-    function close() {
-      if (creating.value) return;
+    const isInline = computed(() => !props.compact && !props.createOption && options.value.length <= 5);
+    function fieldTarget(confirmed?: string, index = 0) {
+      let target: HTMLElement | null | undefined = trigger.value;
+      if (!target && inline.value && !inline.value.disabled) {
+        const inputs = [...inline.value.querySelectorAll<HTMLInputElement>("input:not(:disabled)")];
+        target = inputs.find(input => input.value === confirmed) ?? inputs.find(input => input.checked) ?? inputs[Math.min(index, inputs.length - 1)] ?? inline.value;
+      }
+      return target;
+    }
+    watch([isInline, options], ([nowInline, choices], [wasInline]) => {
+      const active = document.activeElement;
+      if (!(active instanceof HTMLElement)) return;
+      if (opened.value) {
+        if (!(active instanceof HTMLInputElement) || !dialog.value?.contains(active)) return;
+        const group = active.closest("fieldset");
+        if (!group || filtered.value.some(option => option.value === active.value)) return;
+        const index = [...group.querySelectorAll("input")].indexOf(active);
+        followChoiceChange(active, () => {
+          if (!dialog.value?.open) return;
+          const remaining = group.querySelectorAll<HTMLInputElement>("input:not(:disabled)");
+          return remaining[Math.min(index, remaining.length - 1)] ?? dialog.value.querySelector<HTMLInputElement>('input[type="search"]');
+        });
+        return;
+      }
+      if (nowInline !== wasInline && (active === trigger.value || inline.value?.contains(active))) {
+        followChoiceChange(active, fieldTarget);
+      } else if (nowInline && active instanceof HTMLInputElement && inline.value?.contains(active)
+        && !choices.some(option => option.value === active.value)) {
+        const index = [...inline.value.querySelectorAll("input")].indexOf(active);
+        followChoiceChange(active, () => fieldTarget(undefined, index));
+      }
+    });
+    function close(confirmed?: string) {
+      if (creating.value && !props.disabled) return;
       modal.close();
       opened.value = false;
-      let target: HTMLElement | null | undefined = trigger.value;
+      let target = fieldTarget(confirmed);
       // A portaled chooser can outlive a responsive disclosure's open state.
       // Use the outermost folded ancestor's summary, never reopen its contents.
       for (let parent = target?.parentElement; parent; parent = parent.parentElement) {
         if (!parent.matches("details:not([open])")) continue;
         const summary = parent.querySelector<HTMLElement>(":scope > summary");
-        if (!summary?.contains(target ?? null)) target = summary;
+        if (!summary?.contains(target ?? null)) target = summary ?? undefined;
       }
       if (!target?.isConnected || target.closest("[hidden], [inert]") || target.matches(":disabled") || !target.getClientRects().length) return;
       const style = getComputedStyle(target);
@@ -162,11 +208,11 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       target.focus({ preventScroll: true });
     }
     function confirm() {
-      if (creating.value) return;
+      if (!canConfirm.value) return;
       publish(pending.value);
-      close();
+      close(props.multiple ? undefined : pending.value[0]);
     }
-    async function create() {
+    async function create(button: HTMLButtonElement) {
       if (
         !props.createOption ||
         !canCreate.value ||
@@ -174,12 +220,15 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
         props.disabled
       )
         return;
+      const owner = dialog.value;
+      const restoreFocus = document.activeElement === button;
+      let createdValue: string | undefined;
       creating.value = true;
       createError.value = "";
       created.value = false;
       try {
         const option = await props.createOption(query.value);
-        if (!alive) return;
+        if (!alive || !opened.value || props.disabled) return;
         addedOptions.value = [
           ...addedOptions.value.filter((item) => item.value !== option.value),
           option,
@@ -188,10 +237,19 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
           ? [...new Set([...pending.value, option.value])]
           : [option.value];
         created.value = true;
+        createdValue = option.value;
       } catch (error) {
-        if (alive) createError.value = errorMessage(error);
+        if (alive && opened.value && !props.disabled) createError.value = errorMessage(error);
       } finally {
         creating.value = false;
+        if (restoreFocus) {
+          await nextTick();
+          if (owner?.open && owner === dialog.value && opened.value && !props.disabled &&
+              [document.body, owner, button].some(node => node === document.activeElement)) {
+            const option = [...owner.querySelectorAll<HTMLInputElement>(".selection-result-options input")].find(input => input.value === createdValue);
+            (option ?? owner.querySelector<HTMLInputElement>('input[type="search"]'))?.focus();
+          }
+        }
       }
     }
     watch(
@@ -223,13 +281,16 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
           },
           props.label,
         ),
-        !props.compact && !props.createOption && options.value.length <= 5
+        isInline.value
           ? element(
               "fieldset",
               {
+                ref: domRef(inline),
+                tabIndex: -1,
                 disabled: props.disabled,
                 "aria-labelledby": `${id}-label`,
-                className: classes("choice-options"),
+                "aria-describedby": props.hint ? `${id}-hint` : undefined,
+                className: classes("choice-options", { "radio-options": !props.multiple }),
               },
               renderList(options.value).map((option) =>
                 element(
@@ -237,14 +298,14 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                   {
                     key: option.value,
                     className: classes("choice-tile", {
-                      selected: selected.value.includes(option.value),
+                      selected: checkedValues.value.has(option.value),
                     }),
                   },
                   element("input", {
                     type: props.multiple ? "checkbox" : "radio",
                     name: props.name,
                     value: option.value,
-                    checked: selected.value.includes(option.value),
+                    checked: checkedValues.value.has(option.value),
                     onChange: domEvent(($event: Event) => {
                       publish(toggle(selected.value, option.value));
                     }),
@@ -270,9 +331,10 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                 ref: domRef(trigger),
                 type: "button",
                 name: props.name,
-                disabled: props.disabled,
+                disabled: props.disabled || (creating.value && !opened.value),
                 "aria-haspopup": "dialog",
                 "aria-expanded": opened.value,
+                "aria-describedby": props.hint ? `${id}-hint` : undefined,
                 "aria-labelledby":
                   props.compact && !compactValues.value.length
                     ? `${id}-label`
@@ -361,6 +423,12 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                       p1: labels.value.get(value) || value,
                     }),
                     onClick: domEvent(($event: Event) => {
+                      const button = $event.currentTarget as HTMLButtonElement;
+                      const group = button.parentElement;
+                      followChoiceChange(button, () => {
+                        if (group?.isConnected) return group.querySelectorAll("button")[index] ?? group.querySelector<HTMLButtonElement>("button:last-child");
+                        return fieldTarget();
+                      });
                       publish(selected.value.filter((_, i) => i !== index));
                     }),
                   },
@@ -372,7 +440,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
             )
           : null,
         props.hint
-          ? element("small", { className: classes("muted") }, props.hint)
+          ? element("small", { id: `${id}-hint`, className: classes("muted") }, props.hint)
           : null,
         portal(
           element(
@@ -432,10 +500,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                             $event.target as HTMLInputElement
                           ).value;
                         }),
-                        onKeyDown: domEvent(($event: Event) => {
-                          if (($event as KeyboardEvent).key !== "Enter") return;
-                          $event.preventDefault();
-                        }),
+                        onKeyDown: preventSearchSubmit,
                       }),
                     ),
                     props.createOption
@@ -450,7 +515,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                                   disabled: creating.value || props.disabled,
                                   className: classes("selection-create-action"),
                                   onClick: domEvent(($event: Event) => {
-                                    create();
+                                    void create($event.currentTarget as HTMLButtonElement);
                                   }),
                                 },
                                 element(Icon, { name: "plus", size: 17 }),
@@ -497,7 +562,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                         {
                           disabled: creating.value,
                           "aria-label": props.label,
-                          className: classes("selection-result-options"),
+                          className: classes("selection-result-options", { "radio-options": !props.multiple }),
                         },
                         renderList(filtered.value).map((option) =>
                           element(
@@ -505,14 +570,14 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                             {
                               key: option.value,
                               className: classes("choice-tile", {
-                                selected: pending.value.includes(option.value),
+                                selected: pendingValues.value.has(option.value),
                               }),
                             },
                             element("input", {
                               type: props.multiple ? "checkbox" : "radio",
                               name: `${props.name}-dialog`,
                               value: option.value,
-                              checked: pending.value.includes(option.value),
+                              checked: pendingValues.value.has(option.value),
                               onChange: domEvent(($event: Event) => {
                                 pending.value = toggle(
                                   pending.value,
@@ -549,10 +614,13 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                       { className: classes("selection-footer") },
                       element(
                         "small",
-                        { className: classes("muted") },
+                        { className: classes("muted", { "pending-choice-label": !props.multiple && !!visibleChoice.value }),
+                          title: props.multiple ? undefined : visibleChoice.value?.label },
                         props.multiple
                           ? t("已选 {p0} 项", { p0: pending.value.length })
-                          : t("单选"),
+                          : visibleChoice.value
+                            ? t("已选：{label}", { label: visibleChoice.value.label })
+                            : t("单选"),
                         " · ",
                         t("共 {count} 项", { count: options.value.length }),
                       ),
@@ -560,13 +628,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                         "button",
                         {
                           type: "button",
-                          disabled:
-                            creating.value ||
-                            props.disabled ||
-                            (!props.multiple &&
-                              !options.value.some(
-                                (option) => option.value === pending.value[0],
-                              )),
+                          disabled: !canConfirm.value,
                           className: classes("primary"),
                           onClick: domEvent(($event: Event) => {
                             confirm();

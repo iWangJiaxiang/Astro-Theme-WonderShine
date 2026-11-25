@@ -3,8 +3,8 @@ import { watch } from "./reactivity";
 
 const focusLayers: HTMLDialogElement[] = [];
 
-function tabStops(dialog: HTMLDialogElement): HTMLElement[] {
-  const candidates = [...dialog.querySelectorAll<HTMLElement>(
+export function tabStops(container: HTMLElement): HTMLElement[] {
+  const candidates = [...container.querySelectorAll<HTMLElement>(
     'a[href], area[href], button, input, select, textarea, summary, iframe, audio[controls], video[controls], [tabindex], [contenteditable="true"]',
   )].filter((node) => {
     // Closed details only exposes its first direct summary and its descendants.
@@ -21,13 +21,24 @@ function tabStops(dialog: HTMLDialogElement): HTMLElement[] {
   });
   // Native radio groups have one sequential stop, not one per option. Keep the
   // browser in charge of arrow keys and ordinary movement within the dialog.
-  return candidates.filter((node) => {
-    if (!(node instanceof HTMLInputElement) || node.type !== "radio" || !node.name) return true;
-    const group = candidates.filter((other): other is HTMLInputElement =>
-      other instanceof HTMLInputElement && other.type === "radio" &&
-      other.name === node.name && other.form === node.form);
-    return node === (group.find((radio) => radio.checked) || group[0]);
-  }).sort((a, b) => (a.tabIndex || Number.MAX_SAFE_INTEGER) - (b.tabIndex || Number.MAX_SAFE_INTEGER));
+  const groups = new Map<HTMLFormElement | null, Map<string, HTMLInputElement>>();
+  const skipped = new Set<HTMLElement>();
+  for (const node of candidates) {
+    if (!(node instanceof HTMLInputElement) || node.type !== "radio" || !node.name) continue;
+    let group = groups.get(node.form);
+    if (!group) {
+      group = new Map();
+      groups.set(node.form, group);
+    }
+    const previous = group.get(node.name);
+    if (!previous || node.checked) {
+      if (previous) skipped.add(previous);
+      group.set(node.name, node);
+    } else {
+      skipped.add(node);
+    }
+  }
+  return candidates.filter(node => !skipped.has(node)).sort((a, b) => (a.tabIndex || Number.MAX_SAFE_INTEGER) - (b.tabIndex || Number.MAX_SAFE_INTEGER));
 }
 
 /** Native modality blocks the page, but can still Tab into browser chrome.
@@ -65,9 +76,13 @@ export function containModalFocus(dialog: HTMLDialogElement): () => void {
     const stops = tabStops(dialog);
     const first = stops[0], last = stops[stops.length - 1];
     const outside = !active || active === dialog || !dialog.contains(active);
+    // An initially focused heading can precede every sequential stop.
+    const nonSequential = active instanceof HTMLElement && active.tabIndex < 0 && !outside;
+    const beforeFirst = nonSequential && first && !!(active.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const afterLast = nonSequential && last && !!(active.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_PRECEDING);
     const target = !first ? dialog : event.shiftKey
-      ? (outside || active === first ? last : undefined)
-      : (outside || active === last ? first : undefined);
+      ? (outside || beforeFirst || active === first ? last : undefined)
+      : (outside || afterLast || active === last ? first : undefined);
     if (!target) return;
     // Prevent before the UA's boundary navigation, not after body/chrome focus.
     event.preventDefault();

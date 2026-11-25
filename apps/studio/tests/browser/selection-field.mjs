@@ -19,6 +19,10 @@ export async function checkSelectionField(browser) {
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import SelectionField from './src/components/SelectionField';
+import ArticleReferences from './src/components/ArticleReferences';
+import PublicationDateField from './src/components/PublicationDateField';
+import SaveButton from './src/components/SaveButton';
+import { ErrorDetails } from './src/components/ErrorNotice';
 import { locale } from './src/i18n';
 import { installMobileShell } from './platform/mobile';
 // Preserve App + main.ts cascade, including the real stylesheet imports.
@@ -42,9 +46,27 @@ function Field({ name, initial, ...props }) {
   return <SelectionField {...props} name={name} modelValue={value}
     onUpdateModelValue={next => { updates[name] = (updates[name] || 0) + 1; setValue(next); }} />;
 }
+let setLocked, setShowModes, finishCreate;
+function ChangingControls() {
+  const [locked, lock] = useState(false), [modes, showModes] = useState(true);
+  const [references, setReferences] = useState(Array.from({ length: 11 }, (_, i) => ({ kind: 'external', url: 'https://example.com/' + i, title: String(i) })));
+  setLocked = lock; setShowModes = showModes;
+  return <main>
+    <PublicationDateField modelValue="2026-11-25" disabled={locked} onUpdateModelValue={() => updates.date = 1} />
+    <ArticleReferences modelValue={references} items={[]} language="en" disabled={locked} onUpdateModelValue={value => { updates.reference = 1; setReferences(value); }} />
+    <Field name="chips" label="Selected topics" initial={['a','b','c']} multiple options={tags} />
+    <Field name="create" label="Topic" initial={[]} multiple options={[]} disabled={locked}
+      createOption={title => new Promise(resolve => { finishCreate = () => resolve({ value: 'new', label: title }); })} />
+    <SaveButton mode="local" showModes={modes} onModeChange={() => {}} onSave={() => {}} />
+    <ErrorDetails message="Error" source="Fixture" />
+  </main>;
+}
+let resizePlain;
 function Fixture() {
+  const [options, setOptions] = useState(many);
+  resizePlain = size => setOptions(Array.from({ length: size }, (_, i) => ({ value: 'option-' + i, label: 'Option ' + (i + 1) })));
   return <main style={{ padding: 16, display: 'grid', gap: 14, maxWidth: 800, margin: '0 auto' }}>
-    <Field name="plain" label="Plain chooser" initial="option-0" options={many} />
+    <Field name="plain" label="Plain chooser" initial="option-0" options={options} allowCustomValues={false} hint="Choose one option." />
     <Field name="folder" label="Folder" initial="" options={folders} compact />
     <Field name="destination" label="Upload destination" initial="public" options={folders} compact icon="folder" />
     <Field name="multi" label="Topics" initial={['', 'a', 'b']} options={tags} compact multiple />
@@ -60,9 +82,22 @@ function Fixture() {
     <button id="after-disabled" type="button">After disabled</button>
   </main>;
 }
+let choiceReads = 0;
+function manyTags() {
+  const options = Array.from({ length: 1000 }, (_, i) => ({
+    get value() { choiceReads++; return 'tag-' + i; }, label: 'Tag ' + i,
+  }));
+  const selected = [...Array.from({ length: 500 }, (_, i) => 'tag-' + (500 + i)), 'legacy'];
+  root.render(<Field name="large-tags" label="Tags" initial={selected} options={options} multiple compact />);
+}
 const root = createRoot(document.getElementById('root'));
 root.render(<Fixture />);
 window.selectionFixture = {
+  manyTags, choiceReads() { return choiceReads; },
+  changing() { root.render(<ChangingControls />); },
+  lock(value) { setLocked(value); }, showModes(value) { setShowModes(value); },
+  finishCreate() { finishCreate(); },
+  resizePlain(size) { resizePlain(size); },
   updates(name) { return updates[name] || 0; },
   cleanup() { root.unmount(); disposeShell(); },
 };
@@ -165,13 +200,21 @@ window.selectionFixture = {
         const updates = name => page.evaluate(name => window.selectionFixture.updates(name), name);
         const valueIs = (name, value) => page.$eval(`${trigger(name)} > .choice-value`, (node, value) => node.textContent === value, value);
         const open = async name => {
-          await page.click(trigger(name));
+          await page.locator(trigger(name)).click();
           await page.waitForSelector('.selection-dialog[open]');
         };
+        const description = selector => page.$eval(selector, control =>
+          document.getElementById(control.getAttribute('aria-describedby'))?.textContent);
+        assert.equal(await description(trigger('plain')), 'Choose one option.');
+        assert.equal(await page.$eval(trigger('folder'), button => button.hasAttribute('aria-describedby')), false);
         await open('folder');
         await page.click('.selection-dialog input[type="radio"][value="public"]');
         assert.equal(await valueIs('folder', 'All folders'), true, `${label}: pending single does not update parent`);
         assert.equal(await updates('folder'), 0);
+        await page.type('.selection-dialog input[type=search]', 'no-matching-folder');
+        await page.waitForSelector('.selection-dialog .primary:disabled');
+        await page.keyboard.press('Enter');
+        assert.equal(await updates('folder'), 0, 'a filtered-out single choice cannot be published');
         await page.click('.selection-dialog .card-heading button');
         await closed('folder');
         assert.equal(await updates('folder'), 0, `${label}: pointer cancel publishes nothing`);
@@ -211,6 +254,63 @@ window.selectionFixture = {
         assert.equal(await valueIs('plain', 'Option 6'), true);
         assert.equal(await updates('plain'), 1, `${label}: pointer confirm publishes once`);
 
+        await page.evaluate(() => window.selectionFixture.resizePlain(1000));
+        await open('plain');
+        await page.waitForFunction(() => document.querySelectorAll('.selection-dialog input[type=radio]').length === 1000);
+        const restoreName = await page.evaluateHandle(() => {
+          const prototype = HTMLInputElement.prototype;
+          const descriptor = Object.getOwnPropertyDescriptor(prototype, 'name');
+          let reads = 0;
+          Object.defineProperty(prototype, 'name', { ...descriptor, get() { reads++; return descriptor.get.call(this); } });
+          return () => { Object.defineProperty(prototype, 'name', descriptor); return reads; };
+        });
+        await page.keyboard.press('Tab');
+        const reads = await restoreName.evaluate(restore => restore());
+        await restoreName.dispose();
+        assert.ok(reads >= 1000 && reads < 10000, 'one Tab groups 1,000 radios without repeated full-list scans');
+        await page.click('.selection-dialog input[value="option-2"]');
+        await page.evaluate(() => window.selectionFixture.resizePlain(5));
+        await page.waitForSelector('[data-field="plain"] fieldset');
+        await page.click('.selection-dialog .selection-footer .primary');
+        await page.waitForSelector('[data-field="plain"] input[value="option-2"]:checked:focus');
+
+        await page.evaluate(() => window.selectionFixture.resizePlain(6));
+        await open('plain');
+        await page.evaluate(() => window.selectionFixture.resizePlain(5));
+        await page.waitForSelector('[data-field="plain"] fieldset');
+        await page.keyboard.press('Escape');
+        await page.waitForSelector('[data-field="plain"] input[value="option-2"]:checked:focus');
+
+        await page.evaluate(() => window.selectionFixture.resizePlain(6));
+        await page.waitForSelector(trigger('plain') + ':focus');
+        await page.evaluate(() => window.selectionFixture.resizePlain(5));
+        await page.waitForSelector('[data-field="plain"] input[value="option-2"]:checked:focus');
+
+        const inlineFocused = '[data-field="plain"] input:focus';
+        await page.focus('[data-field="plain"] input[value="option-4"]');
+        await page.evaluate(() => window.selectionFixture.resizePlain(4));
+        await page.waitForSelector(inlineFocused + '[value="option-2"]:checked');
+        const beforeRemoval = await updates('plain');
+        await page.evaluate(() => window.selectionFixture.resizePlain(2));
+        await page.waitForSelector(inlineFocused + '[value="option-1"]:not(:checked)');
+        assert.equal(await updates('plain'), beforeRemoval, 'moving focus leaves selection to the user');
+        await page.evaluate(() => window.selectionFixture.resizePlain(0));
+        await page.waitForSelector('[data-field="plain"] fieldset:focus');
+        assert.equal(await description('[data-field="plain"] fieldset'), 'Choose one option.');
+
+        await page.evaluate(() => window.selectionFixture.resizePlain(8));
+        await open('plain');
+        const dialogOption = '.selection-dialog input[type=radio]';
+        await page.focus(dialogOption + '[value="option-6"]');
+        await page.evaluate(() => window.selectionFixture.resizePlain(6));
+        await page.waitForSelector(dialogOption + '[value="option-5"]:focus:not(:checked)');
+        await page.keyboard.press('ArrowLeft');
+        await page.waitForSelector(dialogOption + '[value="option-4"]:focus:checked');
+        await page.evaluate(() => window.selectionFixture.resizePlain(0));
+        await page.waitForSelector('.selection-dialog input[type=search]:focus');
+        assert.equal(await updates('plain'), beforeRemoval, 'dialog focus recovery leaves the form value unchanged');
+        await page.keyboard.press('Escape');
+
         await open('multi');
         await page.click('.selection-dialog input[type="checkbox"][value="c"]');
         assert.equal(await page.$eval(`${trigger('multi')} .choice-count`, node => node.textContent === '2'), true);
@@ -233,6 +333,91 @@ window.selectionFixture = {
         assert.equal(await page.evaluate(() => document.activeElement?.id === 'after-disabled'), true, `${label}: keyboard skips disabled trigger`);
         assert.equal(await updates('disabled'), 0);
         assert.equal(await valueIs('disabled', 'Public images (default)'), true, `${label}: disabled value untouched`);
+
+        await page.evaluate(() => window.selectionFixture.manyTags());
+        await page.waitForSelector(trigger('large-tags'));
+        const optionReads = await page.evaluate(() => window.selectionFixture.choiceReads());
+        assert.ok(optionReads >= 1000 && optionReads < 20000, 'building 1,000 choices with 501 selected tags stays linear');
+        await open('large-tags');
+        await page.waitForSelector('.selection-dialog input[value=legacy]:checked');
+        assert.equal(await page.$$eval('.selection-dialog input:checked', inputs => inputs.length), 501);
+        assert.equal(await page.$$eval('.selection-dialog .choice-tile', tiles => tiles.length), 1001);
+        await page.keyboard.press('Escape');
+
+        await page.evaluate(() => window.selectionFixture.changing());
+        for (const selector of ['.thread-date-trigger', '.reference-heading button']) {
+          await page.locator(selector).click();
+          await page.waitForSelector('dialog:modal');
+          await page.evaluate(() => window.selectionFixture.lock(true));
+          await page.waitForFunction(() => !document.querySelector('dialog'));
+          assert.equal(await updates('date') + await updates('reference'), 0);
+          await page.evaluate(() => window.selectionFixture.lock(false));
+        }
+
+        for (const expected of ['B', 'C']) {
+          const chip = '[data-field="chips"] .selected-choices button:first-child';
+          await page.focus(chip);
+          await page.keyboard.press('Enter');
+          await page.waitForFunction(expected => document.activeElement?.closest('.selected-choices')
+            && document.activeElement.textContent.startsWith(expected), {}, expected);
+        }
+        await page.keyboard.press('Enter');
+        await page.waitForSelector('[data-field="chips"] input:focus');
+
+        await page.locator('.reference-heading button').click();
+        await page.waitForSelector('dialog:modal');
+        await page.locator('dialog [aria-pressed=false]').click();
+        await page.type('dialog input[type=url]', 'https://example.com/last');
+        await page.locator('dialog .selection-footer button').click();
+        await page.waitForSelector('.reference-heading button:disabled');
+        await page.waitForSelector('.reference-chips li:last-child button:focus');
+        await page.keyboard.press('Enter');
+        await page.waitForSelector('.reference-chips li:last-child button:focus');
+        assert.equal(await page.$$eval('.reference-chips li', items => items.length), 11);
+        await open('create');
+        const enterAllowed = await page.$eval('.selection-dialog input[type=search]', input =>
+          [true, false].map(isComposing => input.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter', isComposing, bubbles: true, cancelable: true,
+          }))));
+        assert.deepEqual(enterAllowed, [true, false]);
+        await page.type('.selection-dialog input[type=search]', 'New topic');
+        await page.locator('.selection-create-action').click();
+        await page.waitForSelector('.selection-dialog[aria-busy=true]');
+        await page.evaluate(() => window.selectionFixture.lock(true));
+        await page.waitForFunction(() => !document.querySelector('dialog'));
+        await page.evaluate(() => { window.selectionFixture.lock(false); window.selectionFixture.finishCreate(); });
+        await open('create');
+        assert.equal(await page.$('.selection-dialog input[value=new]'), null);
+        assert.equal(await updates('create'), 0);
+        await page.type('.selection-dialog input[type=search]', 'Keyboard topic');
+        await page.focus('.selection-create-action');
+        await page.keyboard.press('Enter');
+        await page.waitForSelector('.selection-dialog[aria-busy=true]');
+        await page.evaluate(() => window.selectionFixture.finishCreate());
+        await page.waitForSelector('.selection-dialog input[value=new]:checked:focus');
+        await page.keyboard.press('Tab');
+        await page.waitForSelector('.selection-footer .primary:focus');
+        await page.keyboard.press('Enter');
+        await page.waitForSelector(trigger('create') + ':focus');
+        assert.equal(await page.$('.selection-dialog[open]'), null);
+        assert.equal(await updates('create'), 1);
+        await page.locator('.save-button-toggle').click();
+        await page.waitForSelector('.save-mode-menu');
+        await page.evaluate(() => window.selectionFixture.showModes(false));
+        await page.waitForFunction(() => !document.querySelector('.save-mode-menu, .save-button-toggle'));
+        await page.evaluate(() => window.selectionFixture.showModes(true));
+        await page.waitForSelector('.save-button-toggle[aria-expanded=false]');
+
+        await page.locator('.error-more').click();
+        await page.waitForSelector('.error-dialog textarea:focus');
+        await page.keyboard.down('Shift');
+        await page.keyboard.press('Tab');
+        await page.keyboard.up('Shift');
+        await page.waitForSelector('.error-dialog .primary:focus');
+        await page.keyboard.press('Tab');
+        await page.waitForSelector('.error-dialog textarea:focus');
+        await page.keyboard.press('Escape');
+        await page.waitForSelector('.error-more:focus');
       }
     } catch (error) { failures.push(error); }
     finally {

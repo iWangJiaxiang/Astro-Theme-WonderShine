@@ -5,6 +5,7 @@ import type { SaveMode } from '../../shared/save';
 import { rememberSaveMode, saveContext, saveModeLabel } from '../save-preferences';
 import { t } from '../i18n';
 import { useSignals } from '../reactivity';
+import { tabStops } from '../modal-layer';
 import { overlayPosition } from '../overlay-position';
 
 type Props = { mode: SaveMode; onModeChange(mode: SaveMode): void; onSave(): void; disabled?: boolean; busy?: boolean; label?: string; showModes?: boolean; canInteract?(): boolean };
@@ -18,6 +19,11 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
   const trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null);
   const id = useId();
   const context = saveContext.value;
+  function selectMode(choice: SaveMode) {
+    if (!allowed()) return false;
+    onModeChange(choice);
+    return allowed();
+  }
   function rememberPreference() {
     if (!allowed()) return false;
     if (!canInteract) return rememberSaveMode(mode);
@@ -62,23 +68,36 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
       window.visualViewport?.removeEventListener('resize', place); window.visualViewport?.removeEventListener('scroll', place);
     };
   }, [open]);
-  useEffect(() => { if (busy) setOpen(false); }, [busy]);
+  useEffect(() => { if (busy || !showModes) setOpen(false); }, [busy, showModes]);
   return <div className="save-button">
     <button type="button" className="primary save-button-main" disabled={disabled || busy} onClick={() => { if (allowed()) onSave(); }}>
       {busy ? t('正在保存…') : label || t(saveModeLabel[mode])}
     </button>
     {showModes && <button type="button" className="primary save-button-toggle" ref={trigger} disabled={busy} aria-label={t('选择保存方式')} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => { if (!allowed()) return; setError(false); setOpen(!open); }}>⌄</button>}
-    {open && createPortal(<div id={id} className="save-mode-menu" role="dialog" aria-label={t('保存方式')} ref={panel} style={{ top: position.top, left: position.left }}>
-      <div role="radiogroup" aria-label={t('保存方式')} onKeyDown={event => {
-        if (!allowed() || !panel.current || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    {open && showModes && !busy && createPortal(<div id={id} className="save-mode-menu" role="dialog" aria-label={t('保存方式')} ref={panel} style={{ top: position.top, left: position.left }}
+      onKeyDown={event => {
+        if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey || event.defaultPrevented || !allowed() || !trigger.current) return;
+        if ((event.target as HTMLElement).closest('dialog:modal')) return;
+        const stops = tabStops(event.currentTarget);
+        if (event.target !== (event.shiftKey ? stops[0] : stops.at(-1))) return;
+        // Forward Tab continues natively from the opener. Backward Tab lands on it.
+        if (event.shiftKey) event.preventDefault();
+        setOpen(false);
+        trigger.current.focus({ preventScroll: true });
+      }}>
+      <div className="radio-options" role="radiogroup" aria-label={t('保存方式')} onKeyDown={event => {
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || !allowed() || !panel.current || !['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();
         const items = [...panel.current!.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)')];
         const current = items.indexOf(document.activeElement as HTMLButtonElement);
-        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
-        items[next]?.focus();
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length;
+        const target = items[next];
+        if (!target) return;
+        const choice = context.modes.find(value => value === target.value);
+        if (choice && selectMode(choice)) target.focus();
       }}>
-        {(['local', 'branch', ...(context.modes.includes('remote') ? ['remote'] : [])] as SaveMode[]).map(choice => <button type="button" key={choice} role="radio" aria-checked={mode === choice} disabled={!context.modes.includes(choice)} title={!context.modes.includes(choice) ? t('当前连接不支持此保存方式') : undefined} onClick={() => { if (!allowed()) return; onModeChange(choice); if (!allowed()) return; setOpen(false); trigger.current?.focus(); }}>
-          <span className="save-mode-check" aria-hidden="true">{mode === choice ? '✓' : ''}</span><span>{t(saveModeLabel[choice])}</span>{context.defaultMode === choice && <small>{t('默认')}</small>}
+        {(['local', 'branch', ...(context.modes.includes('remote') ? ['remote'] : [])] as SaveMode[]).map(choice => <button type="button" key={choice} role="radio" value={choice} tabIndex={mode === choice ? 0 : -1} aria-checked={mode === choice} disabled={!context.modes.includes(choice)} title={!context.modes.includes(choice) ? t('当前连接不支持此保存方式') : undefined} onClick={() => { if (!selectMode(choice)) return; setOpen(false); trigger.current?.focus(); }}>
+          <span>{t(saveModeLabel[choice])}</span>{context.defaultMode === choice && <small>{t('默认')}</small>}
         </button>)}
       </div>
       <button type="button" className="save-mode-default" disabled={mode === context.defaultMode} onClick={() => { if (!allowed()) return; const remembered = rememberPreference(); if (!allowed()) return; if (remembered) { setOpen(false); trigger.current?.focus(); } else setError(true); }}>{t('将当前方式设为默认')}</button>

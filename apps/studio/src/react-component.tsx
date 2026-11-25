@@ -229,6 +229,11 @@ export type EventHandler<
 > = K extends keyof React.ComponentProps<C>
   ? NonNullable<React.ComponentProps<C>[K]>
   : never;
+/** Search Enter must leave IME candidate confirmation to the input method. */
+export function preventSearchSubmit(event: React.KeyboardEvent<HTMLInputElement>) {
+  if (event.key === "Enter" && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229)
+    event.preventDefault();
+}
 export function domEvent(handler: (event: Event) => unknown) {
   return (event: React.SyntheticEvent) => handler(event as unknown as Event);
 }

@@ -1,3 +1,5 @@
+import { NavigationRefresh } from "../navigation-refresh";
+import { followPageChange } from "../choice-focus";
 import { ErrorDetails, ErrorNotice } from "./ErrorNotice";
 import { collectionChoices, taxonomyChoices } from "../../shared/choices";
 import {
@@ -418,7 +420,16 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
       request++;
     });
     onMounted(() => load());
+    const validCreateLanguage = computed(() => !languages.value || languages.value.languages.includes(createLanguage.value));
+    const validLocation = computed(() => {
+      if (props.kind === "article" && articleCollection.value)
+        return collections.value.some(option => option.value === articleCollection.value);
+      if (props.kind === "collection" && subtype.value !== "column")
+        return parents.value.some(option => option.value === parent.value);
+      return true;
+    });
     function create() {
+      if (loading.value || !validCreateLanguage.value || !validLocation.value) return;
       if (!title.value.trim() || !/^[a-z0-9][a-z0-9-]*$/.test(slug.value)) {
         createError.value = "请填写标题，网址标识使用小写字母、数字和连字符。";
         return;
@@ -429,15 +440,6 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
       };
       let path = "";
       if (props.kind === "article") {
-        if (
-          articleCollection.value &&
-          !collections.value.some(
-            (option) => option.value === articleCollection.value,
-          )
-        ) {
-          createError.value = "请选择已有系列。";
-          return;
-        }
         path = articleCollection.value
           ? `content/collections/${articleCollection.value}/${slug.value}/index.md`
           : `content/articles/${slug.value}/index.md`;
@@ -452,13 +454,6 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
         if (subtype.value !== "chapter") {
           metadata["extra.cover"] = "/img/default-cover.svg";
           metadata["extra.tags"] = [];
-        }
-        if (
-          subtype.value !== "column" &&
-          !parents.value.some((option) => option.value === parent.value)
-        ) {
-          createError.value = "请选择已有分组、系列或专辑。";
-          return;
         }
         const directory =
           subtype.value === "column"
@@ -502,18 +497,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
           element(
             "div",
             { className: classes("row") },
-            element(
-              "button",
-              {
-                disabled: loading.value,
-                className: classes("text-button library-refresh"),
-                onClick: domEvent(($event: Event) => {
-                  load(true);
-                }),
-              },
-              element(Icon, { name: "sync" }),
-              t("刷新内容"),
-            ),
+            <NavigationRefresh label="刷新内容" busy={loading.value} onRefresh={() => load(true)} />,
             element(
               "button",
               {
@@ -628,6 +612,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
             languages.value
               ? element(SelectionField, {
                   modelValue: language.value,
+                  allowCustomValues: false,
                   name: "library-language",
                   label: t("内容语言"),
                   options: languages.value.languages.map((value) => ({
@@ -830,6 +815,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                           disabled: pageNumber.value <= 1,
                           className: classes("text-button"),
                           onClick: domEvent(($event: Event) => {
+                            followPageChange($event.currentTarget as HTMLButtonElement);
                             pageNumber.value--;
                           }),
                         },
@@ -848,6 +834,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                           disabled: pageNumber.value >= pages.value,
                           className: classes("text-button"),
                           onClick: domEvent(($event: Event) => {
+                            followPageChange($event.currentTarget as HTMLButtonElement);
                             pageNumber.value++;
                           }),
                         },
@@ -933,7 +920,9 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 languages.value
                   ? element(SelectionField, {
                       modelValue: createLanguage.value,
+                      allowCustomValues: false,
                       name: "create-language",
+                      hint: validCreateLanguage.value ? undefined : t("目标语言未在站点中配置"),
                       label: t("内容语言"),
                       options: languages.value.languages.map((value) => ({
                         value,
@@ -997,6 +986,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 props.kind === "article"
                   ? element(SelectionField, {
                       modelValue: articleCollection.value,
+                      allowCustomValues: false,
                       name: "article-collection",
                       label: t("所属系列"),
                       options: [
@@ -1004,9 +994,9 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                         ...collections.value,
                       ],
                       disabled: loading.value,
-                      hint: t(
-                        "加入系列后会作为章节显示。新系列请在「合集管理」中创建。",
-                      ),
+                      hint: validLocation.value
+                        ? t("加入系列后会作为章节显示。新系列请在「合集管理」中创建。")
+                        : t("请选择已有系列。"),
                       onUpdateModelValue: (($event) => {
                         articleCollection.value = String($event);
                       }) satisfies EventHandler<
@@ -1018,6 +1008,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 props.kind === "collection" && subtype.value !== "column"
                   ? element(SelectionField, {
                       modelValue: parent.value,
+                      allowCustomValues: false,
                       name: "collection-parent",
                       label:
                         subtype.value === "chapter"
@@ -1037,11 +1028,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 element(
                   "button",
                   {
-                    disabled:
-                      loading.value ||
-                      (props.kind === "collection" &&
-                        subtype.value !== "column" &&
-                        !parent.value),
+                    disabled: loading.value || !validCreateLanguage.value || !validLocation.value,
                     className: classes("primary wide"),
                   },
                   t("进入编辑器"),

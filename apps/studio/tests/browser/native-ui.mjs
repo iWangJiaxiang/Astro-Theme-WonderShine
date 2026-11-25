@@ -458,6 +458,8 @@ try {
   await page.click('.folder-picker');
   assert.equal(await page.$('.selected-repository'), null, 'cancelled picker does not select a folder');
   selectedFolder = localRoot; await page.click('.folder-picker'); await page.waitForSelector('.selected-repository');
+  await click('本地文件夹');
+  assert.ok(await page.$('.selected-repository'), 'Reselecting the active mode preserves the unsaved folder');
   await screenshot('connection-folder-selected-desktop');
   await page.click('.connection-options summary'); await screenshot('connection-folder-options-desktop');
   await setViewport({width:390,height:844}); await screenshot('connection-folder-options-mobile'); await noOverflow('local folder options');
@@ -505,9 +507,33 @@ try {
   assert.match(savedArticle, /Native UI saved/); assert.doesNotMatch(savedArticle, /Native UI fixture\./);
   const originalHead = git(['rev-parse', 'HEAD']);
   const originalIndex = await fs.readFile(join(root, '.git/index'));
+  await page.focus('.save-button-toggle');
+  await page.keyboard.press('Tab');
+  const nextAfterSave = await page.evaluateHandle(() => document.activeElement);
+  await page.click('.save-button-toggle');
+  await page.waitForSelector('.save-mode-menu [role=radio]:focus');
+  await page.keyboard.down('Shift'); await page.keyboard.press('Tab'); await page.keyboard.up('Shift');
+  await page.waitForSelector('.save-mode-menu', { hidden: true });
+  assert.equal(await page.$eval('.save-button-toggle', button => button === document.activeElement), true);
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.save-mode-menu [role=radio]:focus');
+  await page.keyboard.press('Tab');
+  await page.waitForSelector('.save-mode-menu', { hidden: true });
+  assert.ok(await nextAfterSave.evaluate(node => node === document.activeElement), 'forward exit follows the opener in document order');
+  await nextAfterSave.dispose();
   await page.click('.save-button-toggle'); await page.waitForSelector('.save-mode-menu');
-  await page.click('.save-mode-menu [role="radio"]:nth-child(2)');
-  await page.click('.save-button-toggle'); await click('将当前方式设为默认');
+  await page.waitForFunction(() => document.activeElement?.matches('.save-mode-menu [value=local]'));
+  assert.ok(await page.evaluate(() => {
+    const before = document.activeElement;
+    return before.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true, cancelable: true }))
+      && document.activeElement === before;
+  }), 'modified arrow remains available to the browser');
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => document.activeElement?.matches('.save-mode-menu [value=branch][aria-checked=true]'));
+  assert.equal(await page.$$eval('.save-mode-menu [role=radio]', items => items.filter(item => item.tabIndex === 0).length), 1);
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement?.matches('.save-mode-default')), true);
+  await page.keyboard.press('Enter');
   await click('Git 分支保存'); await page.waitForSelector('.saved-branch');
   const branch = await page.$eval('.saved-branch', e => e.textContent);
   assert.match(branch, /^studio\/save-/);
@@ -694,8 +720,8 @@ try {
   await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36');
   await setViewport({width:390,height:844,isMobile:true,hasTouch:true});
   await page.reload({waitUntil:'networkidle0'});await heading('连接创作工作区');
-  assert.equal(await page.$eval('.connection-modes button[aria-pressed=true]',node=>node.textContent.trim()),'远程仓库','mobile first launch starts with usable repository URL entry');
-  assert.equal(await page.$$eval('.connection-modes button', buttons => buttons.some(button => button.textContent.includes('本地文件夹'))), false, 'Mobile does not offer an unsupported folder picker');
+  assert.equal(await page.$('.connection-modes'), null, 'Mobile omits the single repository mode');
+  await page.waitForSelector('.connection-url input', { visible: true });
   await click('连接自建创作中心'); await page.waitForSelector('input[placeholder="https://studio.example.com"]');
   await click('返回仓库连接'); await page.waitForSelector('.connection-url input');
   assert.equal(await page.$('.folder-picker'), null, 'Returning from remote service uses the mobile repository URL mode');
@@ -762,7 +788,8 @@ try {
       assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('oauth-fixture-token')), false);
     }
     allowOAuthHttp = false;
-    await click('远程仓库');
+    await click('连接自建创作中心');
+    await click('返回仓库连接');
   }
   await page.waitForSelector('.connection-url input');
   const submoduleOption = '.connection-form-fields input[type=checkbox]';
@@ -858,7 +885,7 @@ try {
   await page.waitForSelector('.thread-composer textarea');
   assert.deepEqual([...reviewClaims], claimsBeforeReload, 'Mobile reload resumes without new recovery claims');
   await page.click('.visit-site');
-  await page.waitForFunction(() => !!document.querySelector('.quick-sync button:not(:disabled)'));
+  await page.waitForFunction(() => !!document.querySelector('.topbar button.navigation-refresh[aria-disabled=false][aria-label="同步 Git 并刷新当前内容"]'));
   await Promise.race([openedSite, new Promise((_, reject) => { const deadline = setTimeout(() => reject(new Error('Native URL handler did not receive the site URL')), 5000); deadline.unref(); })]);
   await screenshot('phone-composer', false);
   assert.ok(await page.$eval('.composer-tools .choice-compact .choice-trigger', button => {
@@ -909,11 +936,23 @@ try {
   assert.equal(worktreeScans - scansBeforePublish, 1, 'An uninterrupted mobile publish visits unrelated tracked assets only during initial discovery');
   console.log('Mobile publish worktree scans:', worktreeScans - scansBeforePublish);
   await click('完成');
-  execFileSync('git', ['-C', phoneRepo, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.org', 'commit', '--allow-empty', '-m', 'Quick sync fixture']);
-  await page.click('.quick-sync button');
+  const syncArticle = 'content/articles/quick-sync-fixture/index.md';
+  await fs.mkdir(join(phoneRepo, 'content/articles/quick-sync-fixture'), { recursive: true });
+  const syncBody = '+++\ntitle = "Navigation sync article"\ndate = 2030-01-01\n+++\nBody';
+  await fs.writeFile(join(phoneRepo, syncArticle), syncBody);
+  execFileSync('git', ['-C', phoneRepo, 'add', syncArticle]);
+  execFileSync('git', ['-C', phoneRepo, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.org', 'commit', '-m', 'Quick sync fixture']);
+  assert.equal(await page.$$eval('.topbar .navigation-refresh', buttons => buttons.length), 1);
+  await page.locator('.topbar .navigation-refresh[aria-disabled=false][aria-label="同步 Git 并刷新当前内容"]').click();
   await page.waitForFunction(() => document.querySelector('.quick-sync-progress')?.textContent.includes('分支已同步'));
   assert.equal(execFileSync('git', [...remoteArgs, 'log', '-1', '--format=%s', 'release/blog']).toString().trim(), 'Quick sync fixture');
   await page.waitForSelector('.quick-sync-progress', { hidden: true });
+  await page.waitForFunction(() => document.querySelector('.home-grid')?.textContent.includes('Navigation sync article'));
+  await fs.writeFile(join(phoneRepo, syncArticle), syncBody.replace('Navigation sync article', 'Local refresh without a commit'));
+  await page.locator('.topbar .navigation-refresh[aria-disabled=false]').click();
+  await page.waitForFunction(() => document.querySelector('.home-grid')?.textContent.includes('Local refresh without a commit'));
+  assert.equal(phoneGit('log', '-1', '--format=%s'), 'Quick sync fixture');
+  await fs.writeFile(join(phoneRepo, syncArticle), syncBody);
   await click('切换工作区'); await heading('连接创作工作区');
   assert.equal(await page.$('.studio-shell'), null, 'Explicit switching leaves the chooser open');
   await click('添加工作区');
@@ -951,7 +990,7 @@ try {
       keyring.set(key, expired);
       await restartNativeFixture();
       await heading('今天，写点什么？');
-      await page.waitForSelector('.quick-sync button:not(:disabled)');
+      await page.waitForSelector('.topbar button.navigation-refresh[aria-disabled=false][aria-label="同步 Git 并刷新当前内容"]');
     };
     const startReauthorization = async () => {
       oauthApproved = false;
@@ -971,7 +1010,7 @@ try {
 
     await reopenWithExpiredGrant();
     commitOffline('CNB quick sync after reauthorization');
-    await page.click('.quick-sync button');
+    await page.locator('.topbar .navigation-refresh[aria-disabled=false][aria-label="同步 Git 并刷新当前内容"]').click();
     await page.waitForFunction(() => document.querySelector('.quick-sync-progress [role=alert]')?.textContent.includes('授权已过期'));
     await screenshot('cnb-quick-sync-expired', false);
     await startReauthorization();

@@ -1,3 +1,5 @@
+import { NavigationRefresh } from "../navigation-refresh";
+import { followPageChange } from "../choice-focus";
 import { ErrorDetails, ErrorNotice } from "./ErrorNotice";
 import { isLibraryItem } from "../../shared/library";
 import type { ArticleSummary, Json } from "../../shared/types";
@@ -169,18 +171,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
           element(
             "div",
             { className: classes("row") },
-            element(
-              "button",
-              {
-                disabled: loading.value,
-                className: classes("text-button library-refresh"),
-                onClick: domEvent(($event: Event) => {
-                  load(true);
-                }),
-              },
-              element(Icon, { name: "sync" }),
-              t("刷新内容"),
-            ),
+            <NavigationRefresh label="刷新内容" busy={loading.value} onRefresh={() => load(true)} />,
             props.kind === "topic"
               ? element(
                   "button",
@@ -311,6 +302,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
             languages.value
               ? element(SelectionField, {
                   modelValue: language.value,
+                  allowCustomValues: false,
                   name: "thread-language",
                   label: t("内容语言"),
                   options: languages.value.languages.map((value) => ({
@@ -498,6 +490,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
                           disabled: page.value <= 1,
                           className: classes("text-button"),
                           onClick: domEvent(($event: Event) => {
+                            followPageChange($event.currentTarget as HTMLButtonElement);
                             page.value--;
                           }),
                         },
@@ -510,6 +503,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
                           disabled: page.value >= pages.value,
                           className: classes("text-button"),
                           onClick: domEvent(($event: Event) => {
+                            followPageChange($event.currentTarget as HTMLButtonElement);
                             page.value++;
                           }),
                         },

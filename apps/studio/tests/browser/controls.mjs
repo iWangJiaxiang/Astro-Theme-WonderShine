@@ -68,12 +68,40 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await page.screenshot({ path: screenshots + '/studio-appearance-desktop.png' });
   await page.setViewport({ width: 390, height: 844 });
   await page.waitForFunction(() => document.querySelector('#studio-navigation').getBoundingClientRect().right <= 1);
+  const schemeChoices = '[data-field="extra.style.color_scheme"] input[type=radio]';
+  const choices = await page.$$eval(schemeChoices, inputs => inputs.map(input => {
+    const tile = input.closest('label');
+    const box = tile.getBoundingClientRect();
+    return { checked: input.checked, top: box.top, width: box.width, height: box.height,
+      indicatorOpacity: getComputedStyle(input).opacity, background: getComputedStyle(tile).backgroundColor };
+  }));
+  assert.equal(choices.length, 3);
+  assert.equal(new Set(choices.map(choice => choice.top)).size, 1, 'short radio choices share a row');
+  assert.ok(choices.every(choice => choice.indicatorOpacity === '0' && choice.width >= 44 && choice.height >= 44),
+    'the label replaces the radio circle and retains a touch target');
+  assert.notEqual(choices.find(choice => choice.checked).background, choices.find(choice => !choice.checked).background);
   await page.screenshot({ path: screenshots + '/studio-appearance-mobile.png' });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.setViewport({ width: 1440, height: 1000 });
   for (const [accent, foreground] of [['#222222', 'rgb(255, 255, 255)'], ['#eeeeee', 'rgb(0, 0, 0)']]) {
     await fill('[name="extra.style.theme_dark_skin"]', accent);
     await page.waitForFunction(color => getComputedStyle(document.querySelector('.brand-mark')).color === color, {}, foreground);
+    const ratio = await page.$eval('.studio-preferences [aria-current=page]', button => {
+      const ctx = document.createElement('canvas').getContext('2d');
+      function luminance(colors) {
+        for (const color of colors) { ctx.fillStyle = color; ctx.fillRect(0, 0, 1, 1); }
+        const [r, g, b] = [...ctx.getImageData(0, 0, 1, 1).data].map(byte => {
+          const value = byte / 255;
+          return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4;
+        });
+        return .2126 * r + .7152 * g + .0722 * b;
+      }
+      const style = getComputedStyle(button);
+      const background = luminance([getComputedStyle(button.closest('.sidebar')).backgroundColor, style.backgroundColor]);
+      const text = luminance([style.color]);
+      return (Math.max(background, text) + .05) / (Math.min(background, text) + .05);
+    });
+    assert.ok(ratio >= 4.5, 'active navigation text stays readable on its tinted surface');
   }
   await click('恢复站点默认外观');
   await click('主题维护'); await heading('主题维护');
@@ -261,6 +289,33 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await page.waitForSelector('.creation-dialog', { hidden: true });
   assert.ok(await page.$eval(createButton, button => button === document.activeElement), 'closing creation returns focus to the opener');
   await page.setViewport({ width: 1440, height: 1000 });
+
+  // Resume the same creation draft after its saved language disappears.
+  await page.locator(createButton).click();
+  await choose('create-language', 'zh-CN');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.creation-dialog', { hidden: true });
+  await choose('library-language', 'zh-CN');
+  await page.evaluate(() => {
+    const fetchOriginal = window.fetch;
+    window.fetch = async (...args) => {
+      const response = await fetchOriginal(...args);
+      if (new URL(response.url).pathname !== '/api/content-languages') return response;
+      window.fetch = fetchOriginal;
+      return Response.json({ defaultLanguage: 'en', languages: ['en'] });
+    };
+  });
+  await page.locator('.topbar .navigation-refresh[aria-label="刷新内容"][aria-disabled=false]').click();
+  await page.waitForSelector('[name="library-language"][value="en"]:checked');
+  assert.equal(await page.$('[name="library-language"][value="zh-CN"]'), null);
+  await page.locator(createButton).click();
+  assert.equal(await page.$('.creation-dialog [name="create-language"][value="zh-CN"]'), null);
+  await page.waitForSelector('.creation-dialog .primary:disabled');
+  assert.equal(await page.$eval('[name="creation-title"]', node => node.value), 'Enter should not create');
+  await choose('create-language', 'en');
+  await page.waitForSelector('.creation-dialog .primary:not(:disabled)');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.creation-dialog', { hidden: true });
 
   await mkdir(base + '/site/content/articles/date-control', { recursive: true });
   const dateFile = base + '/site/content/articles/date-control/index.md';

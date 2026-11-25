@@ -121,8 +121,27 @@ export async function checkLoading({ browser, origin, screenshots }) {
     await page.click('.thread-composer .article-references .reference-heading button');
     await page.waitForSelector('.reference-dialog[open] input[type="radio"]', { visible: true });
     assert.ok(await page.$$eval('.reference-dialog[open] input[type="radio"]', nodes => nodes.length > 0), 'recovered composer options contain article references');
+    await page.click('.reference-dialog[open] input[type=radio]');
+    const referenceSearch = '.reference-dialog[open] input[type=search]';
+    await page.focus(referenceSearch);
+    await page.keyboard.press('Enter');
+    await page.waitForSelector('.reference-dialog[open] .selection-footer button:not(:disabled)');
+    await page.type(referenceSearch, 'no-match-for-this-reference');
+    await page.waitForSelector('.reference-dialog[open] .selection-footer button:disabled');
+    await page.keyboard.press('Enter');
+    const refDialog = '.reference-dialog[open]';
+    await page.$eval(referenceSearch, input => input.select());
+    await page.keyboard.press('Backspace');
+    await page.waitForSelector(refDialog + ' input:checked');
+    const candidate = await page.$eval(refDialog + ' input:checked', input => input.value);
+    await page.click(refDialog + ' .selection-footer button');
+    await page.waitForSelector(refDialog, { hidden: true });
+    await page.click('.thread-composer .article-references .reference-heading button');
+    await page.waitForSelector(refDialog + ' input:disabled');
+    assert.ok(await page.$$eval(refDialog + ' input:disabled', (nodes, value) => nodes.some(n => n.value === value), candidate));
     await page.click('.reference-dialog[open] .card-heading button');
     await page.waitForSelector('.reference-dialog[open]', { hidden: true });
+    await page.click('.thread-composer .reference-chips li:last-child button');
     await page.click('.thread-composer .composer-tools > button[aria-expanded="true"]');
     failContent = true;
     const [failedLibrary] = await Promise.all([

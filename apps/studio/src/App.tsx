@@ -1,3 +1,4 @@
+import { NavigationGitSync, NavigationRefresh, RefreshHost, type GitSyncAction } from "./navigation-refresh";
 import QuickSync from "./components/QuickSync";
 import { ErrorDetails, ErrorNotice } from "./components/ErrorNotice";
 import { LegacyRecovery } from "../platform/LegacyRecovery";
@@ -28,7 +29,7 @@ import { navigationPosition } from "./navigation-position";
 import { mediaUploading } from "./media-store";
 import { subscribeWorkspaceChanged } from "./workspace-events";
 import { locale, t, type Message } from "./i18n";
-import { ref, watch, onMounted, onBeforeUnmount, computed } from "./reactivity";
+import { ref, shallowRef, watch, onMounted, onBeforeUnmount, computed } from "./reactivity";
 import type { Json, ArticleSummary } from "../shared/types";
 import { blogStyleFields } from "../shared/settings";
 import { api, session, reauthentication, errorMessage, pendingMutations } from "./api";
@@ -84,9 +85,13 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       nativeAi?: boolean;
       groups: { id: string; title: string }[];
     };
+    const navigationGit = shallowRef<GitSyncAction | null>(null);
+    const refreshHost = ref<HTMLSpanElement | null>(null);
     const editorView = ref<{
       flush: () => void;
       isBusy?: () => boolean;
+      refresh?: () => void;
+      refreshing?: () => boolean;
     } | null>(null);
     const checking = ref(true),
       data = ref<Bootstrap | null>(null),
@@ -461,7 +466,6 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         return <button key={id} type="button" aria-current={active ? "page" : undefined}
           className={classes({ active })} onClick={() => navigate(id)}>
           <Icon name={icon} size={18} />{t(title)}
-          {!more && active ? <span className="nav-indicator" /> : null}
         </button>;
       }
       const content = availableNavigation().filter(item => !more || !primaryNavigation.includes(item));
@@ -473,7 +477,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         <nav aria-label={t("站点设置")}>{siteGroups().map(group => destination(group.id, group.title, icons[group.id] || "file"))}</nav>
         <details className="studio-preferences" open={more || undefined}><summary>{t("界面设置")}</summary>
           <div className="preference-controls"><LanguageSwitcher />
-          <button type="button" aria-current={view.value === "appearance" ? "page" : undefined} onClick={() => navigate("appearance")}><Icon size={18} name="palette" />{t("外观样式")}</button>
+          <button type="button" className="appearance-link" aria-current={view.value === "appearance" ? "page" : undefined} onClick={() => navigate("appearance")}><Icon size={18} name="palette" />{t("外观样式")}</button>
           <button type="button" className="theme-switch" aria-pressed={dark.value} onClick={() => {
             saveStudioAppearance({ ...studioAppearance.value, [schemePath]: dark.value ? "light" : "dark" });
           }}><Icon name={dark.value ? "sun" : "moon"} size={18} />{t("切换明暗模式")}</button>
@@ -593,7 +597,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
           ? element(LoadingState, { label: "正在打开创作中心…" })
           : !session.value
             ? element(LoginView, null)
-            : element(
+            : <NavigationGitSync.Provider value={navigationGit}>{element(
                 "div",
                 {
                   inert: reauthentication.value,
@@ -664,7 +668,17 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                     element(
                       "div",
                       { className: classes("row topbar-actions") },
-                      data.value?.quickSync ? <QuickSync key={session.value.identity.id} editing={() => dirty.value || !!editorView.value?.isBusy?.()} onManage={() => navigate("workspace")} /> : null,
+                      <span className="nav-refresh-slot" ref={domRef(refreshHost)}>
+                        {document.value && editorView.value?.refresh &&
+                          <NavigationRefresh label="刷新内容"
+                            busy={editorView.value.refreshing?.()} blocked={editorView.value.isBusy?.()}
+                            onRefresh={() => editorView.value?.refresh?.()} />}
+                        {!document.value && ["home", "more", "help", "appearance"].includes(view.value) &&
+                          <NavigationRefresh label="刷新页面" followsWorkspace busy={loadingSite.value || loadingArticles.value} onRefresh={reloadWorkspace} />}
+                      </span>,
+                      data.value?.quickSync && data.value.workspaceCanSync !== false ? <QuickSync
+                        key={JSON.stringify([session.value.identity.id, session.value.identity.method, data.value.saveScope])}
+                        action={navigationGit} editing={() => dirty.value || mediaUploading.value || pendingMutations.value > 0 || !!editorView.value?.isBusy?.()} onManage={() => navigate("workspace")} /> : null,
                       data.value
                         ? element(
                             "span",
@@ -739,7 +753,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                           ),
                         )
                       : null,
-                    <ViewTransition
+                    <RefreshHost.Provider value={refreshHost.value}><ViewTransition
                       viewId={document.value?.path ?? view.value}
                       mode={document.value?.mode ?? "section"}
                     >
@@ -1165,7 +1179,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                               "onSaved"
                                             >,
                                         })}
-                    </ViewTransition>,
+                    </ViewTransition></RefreshHost.Provider>,
                   ),
                   !props.workspaceSwitcher && element(
                     "footer",
@@ -1174,7 +1188,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                     " ",
                   ),
                 ),
-              ),
+              )}</NavigationGitSync.Provider>,
         reauthentication.value && session.value
           ? element(
               Modal,

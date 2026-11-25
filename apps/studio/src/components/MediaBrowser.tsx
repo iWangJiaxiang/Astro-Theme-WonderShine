@@ -1,3 +1,5 @@
+import { NavigationRefresh } from "../navigation-refresh";
+import { followPageChange } from "../choice-focus";
 import { ErrorDetails, ErrorNotice } from "./ErrorNotice";
 import {
   formatBytes,
@@ -11,6 +13,7 @@ import { session } from "../api";
 import { t } from "../i18n";
 import { subscribeWorkspaceChanged } from "../workspace-events";
 import {
+  hasLoadedMediaListing,
   loadMedia,
   mediaError,
   mediaListing,
@@ -23,6 +26,7 @@ import {
   classes,
   component,
   domEvent,
+  preventSearchSubmit,
   domRef,
   element,
   renderList,
@@ -37,6 +41,8 @@ import MediaPreviewImage from "./MediaPreviewImage";
 import MediaUpload, { type MediaUploadFeedback } from "./MediaUpload";
 import SelectionField from "./SelectionField";
 
+const pageSize = 24;
+
 type Props = {
   mode: MediaMode;
   documentPath: string;
@@ -44,7 +50,10 @@ type Props = {
   current?: string;
   svgOnly: boolean;
 };
-type Events = { select: [item: MediaItem, value: string, trigger?: HTMLButtonElement] };
+type Events = {
+  select: [item: MediaItem, value: string, trigger?: HTMLButtonElement];
+  visibleSelection: [path: string];
+};
 const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
   "MediaBrowser",
   (props, emit, expose) => {
@@ -95,52 +104,82 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
         browseExpanded.value = ($event.currentTarget as HTMLDetailsElement).open;
       }),
     });
+    const sourceItems = computed(() => source.value === "all"
+      ? eligible.value
+      : eligible.value.filter(item => item.path.startsWith(source.value + "/")));
     const folders = computed(() => [
       { value: "", label: t("全部文件夹") },
-      ...[...new Set(eligible.value.map((item) => item.directory))]
+      ...[...new Set(sourceItems.value.map((item) => item.directory))]
         .sort()
         .map((value) => ({ value, label: `${t("文件位置")}：${value}` })),
     ]);
     const filtered = computed(() =>
-      eligible.value.filter(
+      sourceItems.value.filter(
         (item) =>
           (props.mode === "library"
             ? inMediaDirectory(item, folder.value)
             : !folder.value || item.directory === folder.value) &&
-          (source.value === "all" ||
-            item.path.startsWith(source.value + "/")) &&
           item.path
             .toLocaleLowerCase()
             .includes(search.value.trim().toLocaleLowerCase()),
       ),
     );
     const pages = computed(() =>
-      Math.max(1, Math.ceil(filtered.value.length / 24)),
+      Math.max(1, Math.ceil(filtered.value.length / pageSize)),
     );
     const items = computed(() =>
-      filtered.value.slice((page.value - 1) * 24, page.value * 24),
+      filtered.value.slice((page.value - 1) * pageSize, page.value * pageSize),
     );
+    watch(() => props.mode !== "library" && items.value.some(item =>
+      item.path === props.selected && !item.unavailable) ? props.selected : "",
+      path => emit("visibleSelection", path));
+    watch(folders, choices => {
+      if (props.mode !== "library" && !choices.some(choice => choice.value === folder.value))
+        folder.value = "";
+    });
+    let locateCurrent = props.mode !== "library" && !!props.current;
     watch([search, source, folder], () => {
+      locateCurrent = false;
       page.value = 1;
     });
-    watch(mediaVersion, () => {
+    function pageContaining(path: string) {
+      const index = filtered.value.findIndex(item => item.path === path && !item.unavailable);
+      return index < 0 ? undefined : Math.floor(index / pageSize) + 1;
+    }
+    function locateStoredImage() {
+      if (!locateCurrent) return;
+      page.value = pageContaining(props.current || "") ?? page.value;
+      // A preview can omit the image or place it on a different page.
+      if (!mediaLoading.value && hasLoadedMediaListing()) locateCurrent = false;
+    }
+    watch([mediaListing, items], ([listing], [previousListing, previousPage]) => {
+      if (listing === previousListing) return;
       failed.value = new Set();
       if (
         folder.value &&
         !eligible.value.some((item) => inMediaDirectory(item, folder.value))
       )
         folder.value = "";
-      page.value = 1;
+      if (props.mode === "library") {
+        page.value = 1;
+      } else {
+        const wasVisible = previousPage.some(item => item.path === props.selected && !item.unavailable);
+        const selectedPage = wasVisible ? pageContaining(props.selected) : undefined;
+        page.value = selectedPage ?? Math.min(page.value, pages.value);
+      }
     });
+    watch([mediaVersion, mediaLoading], locateStoredImage);
     onMounted(() => {
       void loadMedia();
+      locateStoredImage();
     });
-    onBeforeUnmount(subscribeWorkspaceChanged(() => loadMedia()));
+    onBeforeUnmount(subscribeWorkspaceChanged(() => loadMedia(true)));
     function uploaded(item: MediaItem) {
+      locateCurrent = false;
       search.value = "";
       source.value = "all";
       folder.value = props.mode === "library" ? item.directory : "";
-      page.value = 1;
+      page.value = pageContaining(item.path) ?? 1;
       const value = mediaValue(item, props.mode, props.documentPath);
       if (value !== null) emit("select", item, value);
     }
@@ -230,6 +269,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                   element(
                     "button",
                     {
+                      "aria-current": folder.value ? undefined : "location",
                       className: classes("directory-all", {
                         active: !folder.value,
                       }),
@@ -291,7 +331,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                 mode: props.mode,
                 documentPath: props.documentPath,
                 svgOnly: props.svgOnly,
-                preferredDirectory: folder.value,
+                preferredDirectory: props.mode === "library" ? folder.value : undefined,
                 feedbackMode: "external",
                 onFeedback: (($event) => {
                   uploadFeedback.value = $event;
@@ -318,24 +358,10 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                   onInput: domEvent(($event: Event) => {
                     search.value = ($event.target as HTMLInputElement).value;
                   }),
-                  onKeyDown: domEvent(($event: Event) => {
-                    if (($event as KeyboardEvent).key !== "Enter") return;
-                    $event.preventDefault();
-                  }),
+                  onKeyDown: preventSearchSubmit,
                 }),
               ),
-              element(
-                "button",
-                {
-                  type: "button",
-                  disabled: mediaLoading.value || mediaUploading.value,
-                  className: classes("secondary"),
-                  onClick: domEvent(($event: Event) => {
-                    loadMedia(true);
-                  }),
-                },
-                mediaLoading.value ? t("读取中…") : t("刷新仓库"),
-              ),
+              <NavigationRefresh label="刷新仓库" followsWorkspace busy={mediaLoading.value} blocked={mediaUploading.value} onRefresh={() => loadMedia(true)} />,
             ),
             props.mode !== "library"
               ? element(
@@ -400,6 +426,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                       element("span", { "aria-hidden": "true" }, t("文件夹")),
                       element(SelectionField, {
                         modelValue: folder.value,
+                        allowCustomValues: false,
                         name: "media-folder",
                         label: t("文件夹"),
                         compact: true,
@@ -445,18 +472,6 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
               ? element(
                   ErrorNotice,
                   { source: "MediaBrowser", message: mediaError.value },
-                  " ",
-                  element(
-                    "button",
-                    {
-                      type: "button",
-                      className: classes("text-button"),
-                      onClick: domEvent(($event: Event) => {
-                        loadMedia(true);
-                      }),
-                    },
-                    t("重试"),
-                  ),
                 )
               : null,
             mediaListing.value.truncated
@@ -529,13 +544,6 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                               { className: classes("muted small") },
                               t(item.unavailable) || t("暂时无法预览"),
                             ),
-                        props.selected === item.path
-                          ? element(
-                              "span",
-                              { className: classes("media-selected-mark") },
-                              element(Icon, { name: "check", size: 16 }),
-                            )
-                          : null,
                       ),
                       element(
                         "span",
@@ -590,6 +598,8 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                             disabled: page.value <= 1,
                             className: classes("text-button"),
                             onClick: domEvent(($event: Event) => {
+                              followPageChange($event.currentTarget as HTMLButtonElement);
+                              locateCurrent = false;
                               page.value--;
                             }),
                           },
@@ -603,6 +613,8 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                             disabled: page.value >= pages.value,
                             className: classes("text-button"),
                             onClick: domEvent(($event: Event) => {
+                              followPageChange($event.currentTarget as HTMLButtonElement);
+                              locateCurrent = false;
                               page.value++;
                             }),
                           },

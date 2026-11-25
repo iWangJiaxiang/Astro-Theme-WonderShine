@@ -1,11 +1,13 @@
 import { ErrorNotice } from "./ErrorNotice";
 import type { ArticleSummary, Json } from "../../shared/types";
 import { t } from "../i18n";
+import { followChoiceChange } from "../choice-focus";
 import { createBusinessModal } from "../modal-layer";
 import {
   classes,
   component,
   domEvent,
+  preventSearchSubmit,
   domRef,
   element,
   Fragment,
@@ -13,7 +15,7 @@ import {
   renderList,
   type StudioComponent,
 } from "../react-component";
-import { computed, onBeforeUnmount, ref, useId } from "../reactivity";
+import { computed, onBeforeUnmount, ref, useId, watch } from "../reactivity";
 import Icon from "./Icon";
 
 type Props = {
@@ -35,7 +37,8 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
       | { kind: "external"; url: string; title: string };
     const id = useId(),
       dialog = ref<HTMLDialogElement>(),
-      trigger = ref<HTMLButtonElement>();
+      trigger = ref<HTMLButtonElement>(),
+      chips = ref<HTMLUListElement>();
     const opened = ref(false),
       mode = ref<"internal" | "external">("internal"),
       search = ref(""),
@@ -66,6 +69,8 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
         (a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0),
       );
     });
+    const linkedArticles = computed(() => new Set(references.value.flatMap(reference =>
+      reference.kind === "internal" ? [reference.path] : [])));
     const filtered = computed(() =>
       articles.value.filter((item) =>
         [item.title, item.path, ...item.tags]
@@ -74,15 +79,19 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
           .includes(search.value.trim().toLowerCase()),
       ),
     );
+    const visibleChoice = computed(() =>
+      filtered.value.find((item) => key(item) === selected.value && !linkedArticles.value.has(key(item))),
+    );
     function label(reference: Reference) {
       return reference.kind === "external"
         ? reference.title || reference.url
         : articles.value.find((item) => key(item) === reference.path)?.title ||
             reference.path;
     }
-    const modal = createBusinessModal(() => dialog.value, () => opened.value && !props.disabled);
+    const unavailable = computed(() => !!props.disabled || references.value.length >= 12);
+    const modal = createBusinessModal(() => dialog.value, () => opened.value && !unavailable.value);
     function open() {
-      if (props.disabled || references.value.length >= 12) return;
+      if (unavailable.value) return;
       search.value = "";
       selected.value = "";
       url.value = "";
@@ -97,10 +106,10 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
       trigger.value?.focus();
     }
     function add() {
-      if (props.disabled) return;
+      if (unavailable.value) return;
       let reference: Reference;
       if (mode.value === "internal") {
-        if (!selected.value) return;
+        if (!visibleChoice.value) return;
         reference = { kind: "internal", path: selected.value };
       } else {
         try {
@@ -121,20 +130,20 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
           return;
         }
       }
-      if (
-        !references.value.some(
-          (item) =>
-            item.kind === reference.kind &&
-            (item.kind === "internal" && reference.kind === "internal"
-              ? item.path === reference.path
-              : item.kind === "external" &&
-                reference.kind === "external" &&
-                item.url === reference.url),
-        )
-      )
-        emit("update:modelValue", [...references.value, reference]);
+      if (reference.kind === "external" && references.value.some(item =>
+        item.kind === "external" && item.url === reference.url)) {
+        error.value = "已添加此引用";
+        return;
+      }
+      const fillsList = references.value.length === 11;
+      emit("update:modelValue", [...references.value, reference]);
       close();
+      if (fillsList && trigger.value)
+        followChoiceChange(trigger.value, () => chips.value?.querySelector<HTMLButtonElement>("li:last-child button"));
     }
+    watch(unavailable, blocked => {
+      if (blocked && opened.value) close();
+    });
     onBeforeUnmount(() => modal.dispose());
     return () =>
       element(
@@ -151,7 +160,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
             "button",
             {
               ref: domRef(trigger),
-              disabled: props.disabled || references.value.length >= 12,
+              disabled: unavailable.value,
               "aria-haspopup": "dialog",
               "aria-expanded": opened.value,
               className: classes("text-button"),
@@ -178,7 +187,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
         references.value.length
           ? element(
               "ul",
-              { className: classes("reference-chips") },
+              { ref: domRef(chips), className: classes("reference-chips") },
               renderList(references.value).map((reference, index) =>
                 element(
                   "li",
@@ -198,6 +207,9 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                       }),
                       className: classes("text-button"),
                       onClick: domEvent(($event: Event) => {
+                        followChoiceChange($event.currentTarget as HTMLButtonElement, () =>
+                          chips.value?.querySelectorAll("button")[index]
+                            ?? chips.value?.querySelector<HTMLButtonElement>("li:last-child button") ?? trigger.value);
                         emit(
                           "update:modelValue",
                           references.value.filter((_, i) => i !== index),
@@ -298,6 +310,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                               value: search.value ?? "",
                               type: "search",
                               placeholder: t("搜索标题、标签或文件位置…"),
+                              onKeyDown: preventSearchSubmit,
                               onInput: domEvent(($event: Event) => {
                                 search.value = (
                                   $event.target as HTMLInputElement
@@ -316,7 +329,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                               "fieldset",
                               {
                                 "aria-label": t("本站文章"),
-                                className: classes("selection-result-options"),
+                                className: classes("selection-result-options radio-options"),
                               },
                               renderList(filtered.value).map((item) =>
                                 element(
@@ -324,12 +337,13 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                                   {
                                     key: key(item),
                                     className: classes("choice-tile", {
-                                      selected: selected.value === key(item),
+                                      selected: item === visibleChoice.value,
                                     }),
                                   },
                                   element("input", {
-                                    checked: selected.value === key(item),
+                                    checked: item === visibleChoice.value,
                                     type: "radio",
+                                    disabled: linkedArticles.value.has(key(item)),
                                     name: "reference-article",
                                     value: key(item),
                                     onChange: domEvent(($event: Event) => {
@@ -345,6 +359,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                                     element(
                                       "small",
                                       null,
+                                      linkedArticles.value.has(key(item)) ? t("已添加此引用") + " · " : "",
                                       item.lang,
                                       " · ",
                                       t(item.draft ? "草稿" : "已发布"),
@@ -385,6 +400,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                               required: true,
                               placeholder: "https://example.com/article",
                               onInput: domEvent(($event: Event) => {
+                                error.value = "";
                                 url.value = (
                                   $event.target as HTMLInputElement
                                 ).value;
@@ -416,14 +432,16 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                       "div",
                       { className: classes("selection-footer") },
                       mode.value === "internal" ? (
-                        <small className="muted">{t("本站引用自动匹配内容语言；缺少公开译文时显示原文。")}</small>
+                        <small className={classes("muted", { "pending-choice-label": !!visibleChoice.value })} title={visibleChoice.value?.title}>{visibleChoice.value
+                          ? t("已选：{label}", { label: visibleChoice.value.title })
+                          : t("本站引用自动匹配内容语言；缺少公开译文时显示原文。")}</small>
                       ) : null,
                       element(
                         "button",
                         {
                           disabled:
                             props.disabled ||
-                            (mode.value === "internal" && !selected.value),
+                            (mode.value === "internal" && !visibleChoice.value),
                           className: classes("primary"),
                         },
                         t("添加引用"),

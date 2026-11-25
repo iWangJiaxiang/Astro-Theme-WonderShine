@@ -80,7 +80,7 @@ Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { wri
     await page.evaluate(() => window.loseResponse());
     await page.waitForFunction(() => document.querySelector('[role="status"]')?.textContent.includes('请核对远端状态'));
     assert.equal(await page.$(confirmation), null, 'A lost response must not open another confirmation');
-    await page.waitForFunction(() => !document.querySelector('.workspace-panel .page-heading button').disabled);
+    await page.waitForFunction(() => document.querySelector('.workspace-panel .navigation-refresh')?.getAttribute('aria-disabled') === 'false');
     await page.click('.workspace-panel .page-heading button');
     await page.waitForSelector('.workspace-sync-actions');
     await page.click('.workspace-sync-actions button:nth-child(2)');

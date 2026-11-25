@@ -1,3 +1,4 @@
+import { followChoiceChange } from "../choice-focus";
 import { ErrorNotice } from "./ErrorNotice";
 import { mediaURL, storedMediaPath, type MediaMode } from "../../shared/media";
 import { t } from "../i18n";
@@ -6,6 +7,7 @@ import {
   classes,
   component,
   domEvent,
+  domRef,
   element,
   type EventHandler,
   type StudioComponent,
@@ -28,6 +30,7 @@ type Events = { "update:modelValue": [value: string] };
 const ImageField: StudioComponent<Props, Events> = component<Props, Events>(
   "ImageField",
   (props, emit, expose) => {
+    const pickerTrigger = ref<HTMLButtonElement>();
     const opened = ref(false),
       failed = ref(false);
     const path = computed(() =>
@@ -114,6 +117,9 @@ const ImageField: StudioComponent<Props, Events> = component<Props, Events>(
             {
               type: "button",
               disabled: props.disabled,
+              ref: domRef(pickerTrigger),
+              "aria-haspopup": "dialog",
+              "aria-expanded": opened.value,
               "aria-label": t("选择或上传{p0}", { p0: props.label }),
               className: classes("secondary"),
               onClick: domEvent(($event: Event) => {
@@ -130,6 +136,7 @@ const ImageField: StudioComponent<Props, Events> = component<Props, Events>(
                   disabled: props.disabled,
                   className: classes("text-button"),
                   onClick: domEvent(($event: Event) => {
+                    followChoiceChange($event.currentTarget as HTMLButtonElement, () => pickerTrigger.value);
                     emit("update:modelValue", "");
                   }),
                 },
@@ -142,6 +149,7 @@ const ImageField: StudioComponent<Props, Events> = component<Props, Events>(
           : null,
         opened.value
           ? element(MediaPicker, {
+              returnFocus: pickerTrigger.value,
               mode: props.mode,
               documentPath: props.documentPath,
               selected: path.value || "",

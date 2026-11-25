@@ -109,8 +109,8 @@ body:has(.mobile-tabbar:not([hidden])) { padding-bottom: var(--tabbar-height); }
   color: var(--studio-muted); font-size: .6875rem; font-weight: 500; line-height: 1.15;
 }
 .mobile-tabbar svg { width: 44px; height: 24px; padding: 2px 12px; border-radius: 14px; }
-.mobile-tabbar [aria-current] { color: var(--wjx-theme); font-weight: 700; }
-.mobile-tabbar [aria-current] svg { background: color-mix(in srgb, var(--wjx-theme) 13%, var(--studio-card)); stroke-width: 2; }
+.mobile-tabbar [aria-current] { color: var(--studio-choice-ink); font-weight: 700; }
+.mobile-tabbar [aria-current] svg { background: color-mix(in srgb, var(--studio-choice-ink) 13%, var(--studio-card)); stroke-width: 2; }
 .mobile-tabbar .mobile-menu svg { stroke-width: 3.5; }
 .mobile-tabbar button:active svg { background: var(--form-surface); }
 .mobile-tabbar button:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: -3px; border-radius: 6px; }
@@ -151,7 +151,8 @@ body:has(.mobile-tabbar:not([hidden])) { padding-bottom: var(--tabbar-height); }
   .settings-page > .page-heading { top: var(--studio-header-height); }
 }
 @media (max-width: 760px), (max-width: 1024px) and (pointer: coarse) {
-  html:has(.topbar) { --studio-header-height: calc(3.5rem + env(safe-area-inset-top, 0px)); }
+  /* Reserve the six-pixel focus ring on both sides of the touch target and the header border. */
+  html:has(.topbar) { --studio-header-height: calc(max(3.5rem, var(--studio-touch-target, 44px) + 13px) + env(safe-area-inset-top, 0px)); }
 }
 @media (max-height: 500px) and (pointer: coarse) {
   .settings-page > .page-heading { position: static; }
@@ -207,3 +208,20 @@ html:has(.studio-shell[data-swipe-back]) { overscroll-behavior-x: contain; }
 .theme-progress { display: grid; gap: 12px; }
 .theme-progress h2 { margin: 0; }
 .theme-progress > button { justify-self: end; }
+
+@media (forced-colors: active) {
+  /* State belongs to the control; keep its keyboard outline independently visible. */
+  button:is([aria-current], [aria-selected=true], [aria-pressed=true]):not(.media-card) {
+    forced-color-adjust: none;
+    background: Highlight !important;
+    color: HighlightText !important;
+    box-shadow: none;
+  }
+  .mobile-tabbar button[aria-current] svg,
+  button:is([aria-current], [aria-selected=true], [aria-pressed=true]) :is(svg, small) {
+    background: transparent;
+    color: inherit;
+  }
+  button:is([aria-current], [aria-selected=true], [aria-pressed=true], [aria-checked=true]):focus-visible,
+  .radio-options > .choice-tile:has(> input:focus-visible) { outline-color: CanvasText; }
+}

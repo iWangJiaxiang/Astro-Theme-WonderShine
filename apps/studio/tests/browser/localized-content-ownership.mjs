@@ -655,7 +655,10 @@ export async function checkLocalizedContentOwnership(browser) {
         await ready(page);
         assert.deepEqual(await page.$$eval(`${section} [role="tab"]`, nodes => nodes.map(node => node.textContent.trim())), ['zh-CN', 'en'], 'Latest article owner filters mixed article/page rows from the actual shared response');
         assert.equal(await page.$(`${section} [role="alert"]`), null);
-        await page.click(`${section} [role="tab"]:not([aria-selected="true"])`);
+        await page.focus(`${section} [role="tab"][aria-selected="true"]`);
+        await page.keyboard.press('ArrowRight');
+        assert.equal(await page.$eval(`${section} [role="tab"]:focus`, node => node.getAttribute('aria-selected')), 'false', 'Arrow moves focus without switching documents');
+        await page.keyboard.press('Enter');
         assert.equal(await page.evaluate(() => window.ownership.openedCorrectly()), true, 'Current shared result can open exactly its existing translation');
       } else {
         const middle = await held(page, endpoint, 2);

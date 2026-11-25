@@ -211,6 +211,8 @@ async function checkTouchNavigation(page, screenshots) {
     await phone.waitForSelector('.more-page nav[aria-label="站点设置"]');
     await phone.$eval('.more-page nav[aria-label="站点设置"]', nav => [...nav.querySelectorAll('button')].find(button => button.textContent.trim() === '站点信息').click());
     await phone.waitForSelector('.settings-card input');
+    // The destination restores focus and scroll together after settings load.
+    await phone.waitForSelector('.settings-page h1:focus');
     for (const [width, height] of [[390, 844], [768, 900], [1180, 768]]) {
       await phone.setViewport({ width, height, isMobile: true, hasTouch: true, isLandscape: width > height });
       if (width <= 1024) await waitForMobileNavigation(phone);

@@ -14,6 +14,7 @@ export function addUploadedMedia(item: MediaItem) {
   mediaError.value = ''; mediaVersion.value++;
 }
 let request: Promise<void> | undefined, generation = 0, loadedAt = 0;
+export function hasLoadedMediaListing(): boolean { return loadedAt > 0; }
 let preview: (() => Promise<MediaListing | null>) | undefined;
 export function setMediaPreviewLoader(load?: () => Promise<MediaListing | null>) { preview = load; }
 export function invalidateMediaListing() {

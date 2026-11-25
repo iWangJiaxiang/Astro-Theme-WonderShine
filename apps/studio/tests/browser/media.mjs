@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdir, cp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, cp, readFile, unlink, writeFile } from 'node:fs/promises';
 import { parse } from 'smol-toml';
 import { splitDocument } from '../../server/content.ts';
+import { chooser } from './controls.mjs';
 import { openImagePicker } from './image-picker.mjs';
 
 export async function checkMedia({ page, base, theme, screenshots, click, heading, fill }) {
@@ -17,15 +18,38 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
     await page.click(`dialog.media-dialog[open] [data-media-path="${path}"]`);
     if (confirm) { await click('使用这张图片'); await page.waitForFunction(() => !document.querySelector('dialog.media-dialog[open]')); }
   };
+  const deepFolder = 'public/choice-test/one/two';
+  const deepImage = base + '/site/' + deepFolder + '/image.webp';
+  await mkdir(base + '/site/' + deepFolder, { recursive: true });
+  await cp(theme + '/public/img/logo.webp', deepImage);
   await click('媒体库'); await heading('媒体库');
   // These files were written outside Studio after earlier visits cached the listing.
-  await click('刷新仓库');
+  await page.locator('.topbar .navigation-refresh[aria-label="刷新仓库"][aria-disabled=false]').click();
+  const folderButton = path => `.directory-choice[title="${path}"]`;
+  const disclosure = path => `.media-directory-row:has(> ${folderButton(path)}) > .directory-disclosure`;
+  for (const path of ['public/choice-test', 'public/choice-test/one'])
+    await page.locator(disclosure(path) + '[aria-expanded=false]').click();
+  await page.locator(folderButton(deepFolder)).click();
+  await page.locator(disclosure('public')).click();
+  await page.locator(disclosure('public')).click();
+  await page.waitForSelector(folderButton(deepFolder) + '[aria-current=location]', { visible: true });
+  await page.locator('.directory-all').click();
+  await chooser(page)('upload-directory', deepFolder);
+  await fill('[aria-label="搜索仓库图片"]', 'image.webp');
+  await page.waitForSelector('[data-media-path="' + deepFolder + '/image.webp"]');
+  assert.ok((await page.$eval('.upload-destination', node => node.textContent)).includes(deepFolder));
+  await unlink(deepImage);
+  await page.locator('.topbar .navigation-refresh[aria-label="刷新仓库"][aria-disabled=false]').click();
+  await page.waitForFunction(() => document.querySelector('.upload-destination')?.textContent === '请选择保存位置');
+  assert.equal(await page.$eval('.upload-file-input', node => node.disabled), true);
+  await chooser(page)('upload-directory', 'public/uploads');
+  await page.waitForSelector('.upload-file-input:not(:disabled)');
   await fill('[aria-label="搜索仓库图片"]', '媒体 配图');
   await page.waitForSelector(`[data-media-path="${shared}"] img`);
   await page.waitForFunction(path => document.querySelector(`[data-media-path="${path}"] img`)?.naturalWidth > 0, {}, shared);
   await page.click(`[data-media-path="${shared}"]`);
   assert.equal(await page.$eval(`[data-media-path="${shared}"]`, el => el.getAttribute('aria-pressed')), 'true');
-  assert.equal(await page.$$eval(`[data-media-path="${shared}"] .media-selected-mark`, nodes => nodes.length), 1);
+  assert.ok(await page.$(`[data-media-path="${shared}"].selected`));
   await click('复制站点路径');
   await page.waitForSelector('[aria-label="已复制的图片路径"]');
   assert.equal(await page.$eval('[aria-label="已复制的图片路径"]', el => el.value), '/img/媒体 配图.webp');
@@ -37,7 +61,7 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   await page.waitForFunction(() => document.querySelector('[data-media-path="public/img/preview.svg"] img')?.naturalWidth > 0);
   assert.equal(await page.evaluate(() => window.mediaScriptExecuted), undefined, 'SVG previews must not execute scripts');
   await cp(theme + '/public/img/logo.webp', base + '/site/public/img/new-from-git.webp');
-  await click('刷新仓库'); await fill('[aria-label="搜索仓库图片"]', 'new-from-git');
+  await page.locator('.topbar .navigation-refresh[aria-label="刷新仓库"][aria-disabled=false]').click(); await fill('[aria-label="搜索仓库图片"]', 'new-from-git');
   await page.waitForSelector('[data-media-path="public/img/new-from-git.webp"]');
 
   await click('站点信息'); await heading('站点信息');
@@ -114,7 +138,7 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
     assert.equal(await page.$eval(currentCard, el => el.getAttribute('aria-label')), `${english ? 'Current image · Choose image: ' : '当前图片 · 选择图片：'}${shared}`);
     assert.equal(await page.$eval(currentCard, el => el.classList.contains('selected')), false);
     assert.ok((await page.$eval(currentCard, el => el.textContent)).includes(english ? 'Current image' : '当前图片'));
-    assert.equal(await page.$$eval(`${picker} .media-selected-mark`, nodes => nodes.length), 0);
+    assert.equal(await page.$(`${picker} .media-card.selected`), null);
     assert.equal(await page.$eval(`${picker} .media-pending`, el => el.textContent), english ? 'Unchanged. Choose an image to confirm.' : '尚未更改；选择图片后确认');
     assert.equal(await page.$eval(`${picker} .selection-footer .primary`, el => el.disabled), true);
   };
@@ -129,12 +153,43 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   await page.click(currentCard);
   await page.waitForFunction(selector => document.querySelector(selector)?.disabled === false, {}, `${picker} .selection-footer .primary`);
   assert.equal(await page.$eval(currentCard, el => el.getAttribute('aria-pressed')), 'true');
-  assert.equal(await page.$$eval(`${currentCard} .media-selected-mark`, nodes => nodes.length), 1);
+  assert.ok(await page.$(`${currentCard}.selected`));
+  await fill(`${picker} input[type=search]`, 'no-match-for-pending-image');
+  await page.waitForSelector(`${picker} .selection-footer button:disabled`);
+  assert.equal(await page.$(currentCard), null);
+  await fill(`${picker} input[type=search]`, '媒体 配图');
+  await page.waitForSelector(`${picker} .selection-footer button:not(:disabled)`);
+  assert.ok(await page.$(`${currentCard}.selected`));
+  await page.screenshot({ path: screenshots + '/media-picker-selected-mobile.png' });
+  const contrast = await page.createCDPSession();
+  try {
+    await contrast.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'active' }] });
+    await page.waitForFunction(selector =>
+      matchMedia('(forced-colors: active)').matches && getComputedStyle(document.querySelector(selector)).forcedColorAdjust === 'none',
+      {}, currentCard);
+    assert.ok(await page.$eval(currentCard, card => {
+      const style = getComputedStyle(card);
+      return style.color !== style.backgroundColor && style.borderTopColor === style.backgroundColor;
+    }));
+    const currentTab = '.mobile-tabbar button[aria-current]';
+    assert.ok(await page.$eval(currentTab, button => {
+      const selected = getComputedStyle(button);
+      const other = getComputedStyle(button.parentElement.querySelector('button:not([aria-current])'));
+      const icon = getComputedStyle(button.querySelector('svg'));
+      return selected.forcedColorAdjust === 'none' && selected.backgroundColor !== other.backgroundColor
+        && icon.stroke === selected.color && icon.backgroundColor === 'rgba(0, 0, 0, 0)'
+        && selected.color !== selected.backgroundColor;
+    }));
+    await page.screenshot({ path: screenshots + '/media-picker-forced-colors.png' });
+  } finally {
+    await contrast.send('Emulation.setEmulatedMedia', { features: [] });
+    await contrast.detach();
+  }
   assert.equal(await page.$$eval(`${currentCard} .media-path`, nodes => nodes.filter(node => node.textContent === '当前图片').length), 0);
   assert.equal(await page.$eval(`${picker} .media-pending`, el => el.textContent), '将填写：/img/媒体 配图.webp');
   assert.equal(await page.$eval('[name="extra.site.logo"]', el => el.value), savedLogo, 'clicking current only stages the image');
   assert.equal(await page.$eval('.page-heading .primary', el => el.disabled), true);
-  await page.click(`${picker} .card-heading button`);
+  await page.click(`${picker} .card-heading > button.text-button`);
   await page.waitForFunction(() => !document.querySelector('dialog.media-dialog[open]'));
   assert.equal(await page.$eval('[name="extra.site.logo"]', el => el.value), savedLogo, 'cancel discards the pending current image');
   assert.equal(await page.$eval('.page-heading .primary', el => el.disabled), true);

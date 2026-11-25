@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { parse } from 'smol-toml';
 import { splitDocument } from '../../server/content.ts';
-import { revealField } from './controls.mjs';
+import { chooser, revealField } from './controls.mjs';
 import { openImagePicker } from './image-picker.mjs';
 
 export async function checkUploads({ page, base, theme, screenshots, click, heading, fill }) {
@@ -172,7 +172,8 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   assert.ok(await page.$$eval('.media-library .media-card', nodes => nodes.length > 0 && nodes.every(node => node.dataset.mediaPath.startsWith('public/')) && nodes.some(node => node.dataset.mediaPath.slice('public/'.length).includes('/'))), 'library directory selection still includes descendant directories');
   assert.match(await page.$eval(`${libraryDisclosure} > summary`, node => node.textContent), /public/, 'directory summary shows the active path');
   await page.locator(`${libraryDisclosure} .directory-all`).click();
-  await page.waitForSelector(`${libraryDisclosure} .directory-all.active`);
+  await page.waitForSelector(`${libraryDisclosure} .directory-all.active[aria-current=location]`);
+  assert.equal(await page.$$eval(`${libraryDisclosure} [aria-current]`, items => items.length), 1);
   await upload(['上传 配图.webp', 'invalid.webp']); await finished();
   assert.equal(await page.$$eval('.upload-results li', nodes => nodes.length), 2);
   assert.match(await page.$eval('.upload-error', el => el.textContent), /格式不匹配/);
@@ -318,8 +319,8 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
           };
         };
         return {
-          toolbar: rect('.media-toolbar'), search: rect('.media-search input'), refresh: rect('.media-toolbar > button'),
-          touchControls: [...dialog.querySelectorAll('.media-search input, .media-toolbar > button, .upload-actions > button, .upload-directory-control .choice-trigger, .media-filter-control .choice-trigger')]
+          toolbar: rect('.media-toolbar'), search: rect('.media-search input'), refresh: rect('.picker-navigation button'), heading: rect('.media-dialog-panel > .card-heading'),
+          touchControls: [...dialog.querySelectorAll('.media-search input, .picker-navigation button, .upload-actions > button, .upload-directory-control .choice-trigger, .media-filter-control .choice-trigger')]
             .map(node => ({ name: node.getAttribute('name') || node.type, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })),
           directory: compact('.upload-directory-control'), folder: compact('.media-filter-control'),
           folderValue: (() => {
@@ -334,8 +335,8 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
       });
       assert.ok(layout.search.width >= layout.toolbar.width - 2, `${width}px search uses the full toolbar row`);
       assert.ok(Math.abs(layout.search.left - layout.toolbar.left) <= 2 && Math.abs(layout.search.right - layout.toolbar.right) <= 2, `${width}px search aligns with toolbar edges`);
-      assert.ok(layout.refresh.top >= layout.search.bottom, `${width}px refresh moves below search`);
-      assert.ok(Math.abs(layout.refresh.right - layout.toolbar.right) <= 2, `${width}px refresh aligns right on its own row`);
+      assert.ok(layout.refresh.top >= layout.heading.top && layout.refresh.bottom <= layout.heading.bottom, `${width}px refresh stays in picker navigation`);
+      assert.ok(layout.refresh.bottom <= layout.search.top, `${width}px refresh leaves the search row clear`);
       for (const control of layout.touchControls) assert.ok(control.width >= 44 && control.height >= 44, `${width}px ${control.name} has a nonzero 44px touch target`);
       assert.equal(layout.touchControls.length, 5, 'search, refresh, upload, directory and folder controls are measured');
       for (const [control, label] of [[layout.directory, 'Save to'], [layout.folder, 'Folder']]) {
@@ -486,6 +487,12 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
     { label: '文件夹', visible: true, compact: true, flatOptions: 0 },
   ], 'document picker source and folder filters both use labelled compact triggers');
   await checkResponsiveChooserClose('media-source', 'public');
+  const folderFilter = 'dialog.media-dialog[open] button[name="media-folder"]';
+  await revealField(page, folderFilter);
+  await page.locator(folderFilter).click();
+  await page.waitForSelector('.selection-dialog[open] input[value^="public"]');
+  assert.equal(await page.$('.selection-dialog[open] input[value^="content/"]'), null);
+  await page.keyboard.press('Escape');
   await revealField(page, 'dialog.media-dialog[open] button[name="media-source"]');
   await page.locator('dialog.media-dialog[open] button[name="media-source"]').click();
   await page.waitForSelector('.selection-dialog[open]', { visible: true });
@@ -494,13 +501,47 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
   assert.equal(await page.$eval('dialog.media-dialog[open] button[name="media-source"]', node => node === document.activeElement), true, 'ordinary source confirmation still restores its visible trigger');
   await page.setViewport({ width: 1440, height: 1000 });
+  const documentFolder = base + '/site/content/articles/studio-browser-test';
+  await Promise.all(Array.from({ length: 24 }, (_, i) => writeFile(documentFolder + '/00-page-' + i + '.png', png)));
+  const refreshPicker = () => Promise.all([
+    page.waitForResponse(response => response.url().includes('/api/media?refresh=1')),
+    page.locator('dialog.media-dialog[open] .picker-navigation button[aria-disabled=false]').click(),
+  ]);
+  await refreshPicker();
+  await page.waitForSelector('dialog.media-dialog[open] .media-pagination button:not(:disabled)');
+  await chooser(page)('media-folder', 'public/img');
+  assert.match(await page.$eval('dialog.media-dialog[open] .upload-destination', node => node.textContent), /content\/articles\/studio-browser-test$/);
   await upload(['上传 配图.webp']); await finished();
-  assert.equal(await selected(), 'content/articles/studio-browser-test/上传 配图.webp');
+  const uploadedPath = 'content/articles/studio-browser-test/上传 配图.webp';
+  assert.equal(await selected(), uploadedPath);
+  assert.deepEqual(await readFile(base + '/site/' + uploadedPath), await readFile(source + '/上传 配图.webp'));
+  const pickerFooter = 'dialog.media-dialog[open] .selection-footer .primary';
+  const pagination = 'dialog.media-dialog[open] .media-pagination';
+  await page.focus(pagination + ' button:first-child:not(:disabled)');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector(pickerFooter + ':disabled');
+  await page.waitForSelector(pagination + ' button:last-child:focus');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector(pickerFooter + ':not(:disabled)');
+  await refreshPicker();
+  await page.waitForSelector(pickerFooter + ':not(:disabled)');
+  assert.equal(await selected(), uploadedPath, 'refresh keeps the staged image visible and confirmable');
   await click('使用这张图片'); await click('本地保存'); await page.waitForSelector('.editor-page > .notice.success');
   const saved = splitDocument(await readFile(base + '/site/content/articles/studio-browser-test/index.md', 'utf8'));
   assert.equal(parse(saved.header).extra.cover, 'cover-upload.png');
   assert.match(saved.body, /!\[上传 配图.webp\]\(%E4%B8%8A%E4%BC%A0%20%E9%85%8D%E5%9B%BE.webp\)/);
   assert.deepEqual(await readFile(base + '/site/content/articles/studio-browser-test/cover-upload.png'), png);
+  await openImagePicker(page, 'extra.cover');
+  await page.waitForSelector('dialog.media-dialog[open] [data-media-path="content/articles/studio-browser-test/cover-upload.png"]');
+  assert.equal(await page.$eval(pagination + ' button:first-child', button => button.disabled), false, 'stored cover opens on its later page');
+  assert.equal(await page.$eval(pickerFooter, button => button.disabled), true, 'locating the current image does not stage it');
+  await page.keyboard.press('Escape');
+  const coverField = '[data-image-field="extra.cover"]';
+  await page.waitForSelector(coverField + ' button[aria-expanded=false]:focus');
+  await page.focus(coverField + ' button.text-button');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector(coverField + ' button[aria-haspopup=dialog]:focus');
+  await fill('[name="extra.cover"]', 'cover-upload.png');
   // A cloud capability response must lower the client limit without changing the local server.
   await click('媒体库'); await heading('媒体库');
   await page.evaluate(() => {
@@ -514,7 +555,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
       return response;
     };
   });
-  await click('刷新仓库');
+  await page.locator('.topbar .navigation-refresh[aria-label="刷新仓库"][aria-disabled=false]').click();
   await revealUpload();
   await page.waitForFunction(() => document.querySelector('.upload-actions')?.textContent.includes('4 MB'));
   await writeFile(source + '/cloud-too-large.png', Buffer.alloc(4 * 1024 * 1024 + 1));
@@ -526,7 +567,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   assert.deepEqual(uploadRequests, [], 'oversized cloud uploads must be rejected before sending');
   page.off('request', track);
   await page.evaluate(() => { window.fetch = window.originalUploadTestFetch; delete window.originalUploadTestFetch; });
-  await click('刷新仓库');
+  await page.locator('.topbar .navigation-refresh[aria-label="刷新仓库"][aria-disabled=false]').click();
   await page.waitForFunction(() => document.querySelector('.upload-actions')?.textContent.includes('20 MB'));
   console.log('PASS: batch and drag uploads, mixed failures, duplicate renaming, public and bundle paths, picker cancel/confirm, responsive directory/filter disclosure defaults and focus, meaningful initial 320x568 previews, upload queue/node/result retention, 320/390px English layout, bidirectional browser wheel scrolling, nested compact chooser cancel/confirm and focus, and saved cover/Markdown.');
 }

@@ -54,6 +54,23 @@ try {
      }
      if(e.matches('dialog')&&(r.top< -1||r.bottom>innerHeight+1))bad.push({type:'dialog-height',height:Math.round(r.height),top:Math.round(r.top)});
     }
+    const modal = [...document.querySelectorAll('dialog:modal')].at(-1);
+    for (const group of (modal || document).querySelectorAll('.radio-options')) {
+      const tiles = [...group.querySelectorAll(':scope > .choice-tile, :scope > [role=radio]')].filter(visible);
+      if (!tiles.length || !visible(group)) continue;
+      const groupStyle = getComputedStyle(group);
+      const width = group.clientWidth - parseFloat(groupStyle.paddingLeft) - parseFloat(groupStyle.paddingRight);
+      const gap = parseFloat(groupStyle.columnGap) || 0;
+      const boxes = tiles.map(tile => tile.getBoundingClientRect());
+      if (boxes.every(box => box.width > 0) && boxes.reduce((sum, box) => sum + box.width, gap * (tiles.length - 1)) <= width - 1
+        && boxes.some(box => Math.abs(box.top - boxes[0].top) > 1))
+        bad.push({type:'radio-unnecessary-wrap', name:tiles[0].textContent.trim()});
+      for (const tile of tiles) {
+        const input = tile.querySelector('input[type=radio]');
+        if (input && (tile.classList.contains('selected') !== input.checked || getComputedStyle(input).opacity !== '0'))
+          bad.push({type:'radio-state', name:input.name, value:input.value});
+      }
+    }
     for(const field of document.querySelectorAll('.field-inline')){
      const [label,control]=field.children;if(!label||!control||!visible(label)||!visible(control)||document.querySelector('dialog[open]')&&!field.closest('dialog[open]'))continue;
      const a=label.getBoundingClientRect(),b=control.getBoundingClientRect();

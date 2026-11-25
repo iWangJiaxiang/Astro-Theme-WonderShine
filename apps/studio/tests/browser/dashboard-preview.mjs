@@ -55,7 +55,7 @@ window.fixture = {
   },
   logout() { session.value = null; },
   login(id) { session.value = identity(id); },
-  changed: notifyWorkspaceChanged,
+  changed() { void notifyWorkspaceChanged(); },
 };
 createRoot(document.getElementById('root')).render(<App />);
 ` },
