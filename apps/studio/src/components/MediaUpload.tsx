@@ -140,7 +140,7 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
       return choices;
     });
     watch(
-      () => [props.mode, props.documentPath],
+      [() => props.mode, () => props.documentPath],
       () => {
         directory.value =
           bundle.value && ["document", "colocated"].includes(props.mode)
@@ -312,7 +312,7 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
             drop($event as never);
           }),
         },
-        allowed.value
+        destinations.value.length > 0
           ? element(
               Fragment,
               null,
@@ -360,7 +360,7 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
                 { className: classes("upload-directory-control") },
                 element("span", { "aria-hidden": "true" }, t("保存位置")),
                 element(SelectionField, {
-                  modelValue: directory.value,
+                  modelValue: allowed.value ? directory.value : "",
                   allowCustomValues: false,
                   name: "upload-directory",
                   label: t("保存位置"),
@@ -378,9 +378,7 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
               element(
                 "small",
                 { className: classes("muted upload-destination") },
-                t("文件位置"),
-                "：",
-                directory.value,
+                allowed.value ? t("文件位置") + "：" + directory.value : t("请选择保存位置"),
               ),
               mediaUploading.value
                 ? element(

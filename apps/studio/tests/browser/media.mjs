@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
-import { mkdir, cp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, cp, readFile, unlink, writeFile } from 'node:fs/promises';
 import { parse } from 'smol-toml';
 import { splitDocument } from '../../server/content.ts';
+import { chooser } from './controls.mjs';
 import { openImagePicker } from './image-picker.mjs';
 
 export async function checkMedia({ page, base, theme, screenshots, click, heading, fill }) {
@@ -17,9 +18,32 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
     await page.click(`dialog.media-dialog[open] [data-media-path="${path}"]`);
     if (confirm) { await click('使用这张图片'); await page.waitForFunction(() => !document.querySelector('dialog.media-dialog[open]')); }
   };
+  const deepFolder = 'public/choice-test/one/two';
+  const deepImage = base + '/site/' + deepFolder + '/image.webp';
+  await mkdir(base + '/site/' + deepFolder, { recursive: true });
+  await cp(theme + '/public/img/logo.webp', deepImage);
   await click('媒体库'); await heading('媒体库');
   // These files were written outside Studio after earlier visits cached the listing.
   await click('刷新仓库');
+  const folderButton = path => `.directory-choice[title="${path}"]`;
+  const disclosure = path => `.media-directory-row:has(> ${folderButton(path)}) > .directory-disclosure`;
+  for (const path of ['public/choice-test', 'public/choice-test/one'])
+    await page.locator(disclosure(path) + '[aria-expanded=false]').click();
+  await page.locator(folderButton(deepFolder)).click();
+  await page.locator(disclosure('public')).click();
+  await page.locator(disclosure('public')).click();
+  await page.waitForSelector(folderButton(deepFolder) + '[aria-current=location]', { visible: true });
+  await page.locator('.directory-all').click();
+  await chooser(page)('upload-directory', deepFolder);
+  await fill('[aria-label="搜索仓库图片"]', 'image.webp');
+  await page.waitForSelector('[data-media-path="' + deepFolder + '/image.webp"]');
+  assert.ok((await page.$eval('.upload-destination', node => node.textContent)).includes(deepFolder));
+  await unlink(deepImage);
+  await click('刷新仓库');
+  await page.waitForFunction(() => document.querySelector('.upload-destination')?.textContent === '请选择保存位置');
+  assert.equal(await page.$eval('.upload-file-input', node => node.disabled), true);
+  await chooser(page)('upload-directory', 'public/uploads');
+  await page.waitForSelector('.upload-file-input:not(:disabled)');
   await fill('[aria-label="搜索仓库图片"]', '媒体 配图');
   await page.waitForSelector(`[data-media-path="${shared}"] img`);
   await page.waitForFunction(path => document.querySelector(`[data-media-path="${path}"] img`)?.naturalWidth > 0, {}, shared);

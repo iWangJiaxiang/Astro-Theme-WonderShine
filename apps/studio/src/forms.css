@@ -187,6 +187,7 @@
   color: var(--studio-on-accent);
   font-weight: inherit;
 }
+.reference-results .choice-tile:has(> input:disabled) { color: var(--studio-muted); cursor: not-allowed; }
 .reference-results .choice-tile.selected small { color: inherit; }
 @media (forced-colors: active) {
   .media-card.selected {

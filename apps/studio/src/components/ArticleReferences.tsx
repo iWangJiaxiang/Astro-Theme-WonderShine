@@ -326,11 +326,11 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                                   {
                                     key: key(item),
                                     className: classes("choice-tile", {
-                                      selected: selected.value === key(item),
+                                      selected: item === visibleChoice.value,
                                     }),
                                   },
                                   element("input", {
-                                    checked: selected.value === key(item),
+                                    checked: item === visibleChoice.value,
                                     type: "radio",
                                     disabled: linkedArticles.value.has(key(item)),
                                     name: "reference-article",

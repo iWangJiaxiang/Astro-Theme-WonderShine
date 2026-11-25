@@ -274,6 +274,33 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   assert.ok(await page.$eval(createButton, button => button === document.activeElement), 'closing creation returns focus to the opener');
   await page.setViewport({ width: 1440, height: 1000 });
 
+  // Resume the same creation draft after its saved language disappears.
+  await page.locator(createButton).click();
+  await choose('create-language', 'zh-CN');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.creation-dialog', { hidden: true });
+  await choose('library-language', 'zh-CN');
+  await page.evaluate(() => {
+    const fetchOriginal = window.fetch;
+    window.fetch = async (...args) => {
+      const response = await fetchOriginal(...args);
+      if (new URL(response.url).pathname !== '/api/content-languages') return response;
+      window.fetch = fetchOriginal;
+      return Response.json({ defaultLanguage: 'en', languages: ['en'] });
+    };
+  });
+  await click('刷新内容');
+  await page.waitForSelector('[name="library-language"][value="en"]:checked');
+  assert.equal(await page.$('[name="library-language"][value="zh-CN"]'), null);
+  await page.locator(createButton).click();
+  assert.equal(await page.$('.creation-dialog [name="create-language"][value="zh-CN"]'), null);
+  await page.waitForSelector('.creation-dialog .primary:disabled');
+  assert.equal(await page.$eval('[name="creation-title"]', node => node.value), 'Enter should not create');
+  await choose('create-language', 'en');
+  await page.waitForSelector('.creation-dialog .primary:not(:disabled)');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('.creation-dialog', { hidden: true });
+
   await mkdir(base + '/site/content/articles/date-control', { recursive: true });
   const dateFile = base + '/site/content/articles/date-control/index.md';
   await writeFile(dateFile, '+++\ntitle="Calendar control test"\ndate=2026-10-24T00:30:12.123456+08:00\nupdated=2026-10-25T10:20:30Z\n[taxonomies]\ntags=[]\ncategories=[]\n+++\nCalendar body.');

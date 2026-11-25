@@ -311,6 +311,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
             languages.value
               ? element(SelectionField, {
                   modelValue: language.value,
+                  allowCustomValues: false,
                   name: "thread-language",
                   label: t("内容语言"),
                   options: languages.value.languages.map((value) => ({

@@ -37,6 +37,8 @@ import MediaPreviewImage from "./MediaPreviewImage";
 import MediaUpload, { type MediaUploadFeedback } from "./MediaUpload";
 import SelectionField from "./SelectionField";
 
+const pageSize = 24;
+
 type Props = {
   mode: MediaMode;
   documentPath: string;
@@ -119,10 +121,10 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
       ),
     );
     const pages = computed(() =>
-      Math.max(1, Math.ceil(filtered.value.length / 24)),
+      Math.max(1, Math.ceil(filtered.value.length / pageSize)),
     );
     const items = computed(() =>
-      filtered.value.slice((page.value - 1) * 24, page.value * 24),
+      filtered.value.slice((page.value - 1) * pageSize, page.value * pageSize),
     );
     watch(() => props.mode !== "library" && items.value.some(item =>
       item.path === props.selected && !item.unavailable) ? props.selected : "",
@@ -152,7 +154,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
       source.value = "all";
       folder.value = props.mode === "library" ? item.directory : "";
       const index = filtered.value.findIndex(candidate => candidate.path === item.path);
-      page.value = Math.max(1, Math.floor(index / 24) + 1);
+      page.value = Math.max(1, Math.floor(index / pageSize) + 1);
       const value = mediaValue(item, props.mode, props.documentPath);
       if (value !== null) emit("select", item, value);
     }
