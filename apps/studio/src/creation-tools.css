@@ -41,7 +41,7 @@
 .media-filter-disclosure .media-filters { margin: 0; padding: 4px 0 14px; }
 .media-directory-tree ul { list-style: none; padding: 0; margin: 0; }
 .media-directory-row { display: flex; align-items: center; border-radius: 6px; min-width: 0; }
-.media-directory-row.active,.directory-all.active { color: var(--wjx-theme); background: color-mix(in srgb,var(--wjx-theme) 9%,var(--studio-card)); }
+.media-directory-row.active,.directory-all.active { color: var(--studio-choice-ink); background: color-mix(in srgb,var(--studio-choice-ink) 9%,var(--studio-card)); }
 .directory-all,.directory-choice,.directory-disclosure { background: transparent; border: 0; color: inherit; cursor: pointer; }
 .directory-disclosure,.directory-spacer { display: inline-flex; width: 20px; min-width: 20px; align-items: center; justify-content: center; padding: 6px 0; }
 .directory-choice { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-width: 0; padding: 9px 7px 9px 0; text-align: left; font-size: 12px; }

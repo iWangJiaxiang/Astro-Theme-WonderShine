@@ -26,6 +26,7 @@ type Props = {
   mode: MediaMode;
   documentPath: string;
   selected: string;
+  returnFocus?: HTMLElement;
   svgOnly: boolean;
 };
 type Events = { select: [item: MediaItem, value: string]; close: [] };
@@ -45,7 +46,7 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
     let wantsOpen = true;
     const modal = createBusinessModal(() => dialog.value, () => wantsOpen);
     onMounted(() => {
-      previousFocus = document.activeElement as HTMLElement;
+      previousFocus = props.returnFocus ?? document.activeElement as HTMLElement;
       modal.open();
     });
     function close() {

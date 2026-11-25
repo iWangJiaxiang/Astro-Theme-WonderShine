@@ -152,15 +152,25 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       opened.value = true;
       modal.open();
     }
-    function close(confirmed?: string) {
-      if (creating.value && !props.disabled) return;
-      modal.close();
-      opened.value = false;
+    const isInline = computed(() => !props.compact && !props.createOption && options.value.length <= 5);
+    function fieldTarget(confirmed?: string) {
       let target: HTMLElement | null | undefined = trigger.value;
       if (!target && inline.value && !inline.value.disabled) {
         const inputs = [...inline.value.querySelectorAll<HTMLInputElement>("input:not(:disabled)")];
         target = inputs.find(input => input.value === confirmed) ?? inputs.find(input => input.checked) ?? inputs[0] ?? inline.value;
       }
+      return target;
+    }
+    watch(isInline, () => {
+      const active = document.activeElement;
+      if (!opened.value && active instanceof HTMLElement && (active === trigger.value || inline.value?.contains(active)))
+        followChoiceChange(active, fieldTarget);
+    });
+    function close(confirmed?: string) {
+      if (creating.value && !props.disabled) return;
+      modal.close();
+      opened.value = false;
+      let target = fieldTarget(confirmed);
       // A portaled chooser can outlive a responsive disclosure's open state.
       // Use the outermost folded ancestor's summary, never reopen its contents.
       for (let parent = target?.parentElement; parent; parent = parent.parentElement) {
@@ -237,7 +247,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
           },
           props.label,
         ),
-        !props.compact && !props.createOption && options.value.length <= 5
+        isInline.value
           ? element(
               "fieldset",
               {
@@ -379,8 +389,10 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                     onClick: domEvent(($event: Event) => {
                       const button = $event.currentTarget as HTMLButtonElement;
                       const group = button.parentElement;
-                      followChoiceChange(button, () => (group?.isConnected ? group.querySelectorAll("button")[index] ?? group.querySelector<HTMLButtonElement>("button:last-child") : null) ?? trigger.value
-                        ?? inline.value?.querySelector<HTMLInputElement>("input:checked") ?? inline.value?.querySelector("input"));
+                      followChoiceChange(button, () => {
+                        if (group?.isConnected) return group.querySelectorAll("button")[index] ?? group.querySelector<HTMLButtonElement>("button:last-child");
+                        return fieldTarget();
+                      });
                       publish(selected.value.filter((_, i) => i !== index));
                     }),
                   },

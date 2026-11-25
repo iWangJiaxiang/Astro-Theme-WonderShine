@@ -109,8 +109,8 @@ body:has(.mobile-tabbar:not([hidden])) { padding-bottom: var(--tabbar-height); }
   color: var(--studio-muted); font-size: .6875rem; font-weight: 500; line-height: 1.15;
 }
 .mobile-tabbar svg { width: 44px; height: 24px; padding: 2px 12px; border-radius: 14px; }
-.mobile-tabbar [aria-current] { color: var(--wjx-theme); font-weight: 700; }
-.mobile-tabbar [aria-current] svg { background: color-mix(in srgb, var(--wjx-theme) 13%, var(--studio-card)); stroke-width: 2; }
+.mobile-tabbar [aria-current] { color: var(--studio-choice-ink); font-weight: 700; }
+.mobile-tabbar [aria-current] svg { background: color-mix(in srgb, var(--studio-choice-ink) 13%, var(--studio-card)); stroke-width: 2; }
 .mobile-tabbar .mobile-menu svg { stroke-width: 3.5; }
 .mobile-tabbar button:active svg { background: var(--form-surface); }
 .mobile-tabbar button:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: -3px; border-radius: 6px; }

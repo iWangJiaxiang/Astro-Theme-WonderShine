@@ -183,7 +183,7 @@
 .radio-options > .choice-tile.selected,
 .radio-options > button[aria-checked=true] {
   background: var(--wjx-theme);
-  border-color: color-mix(in srgb, var(--wjx-theme) 75%, var(--studio-on-accent));
+  border-color: var(--studio-choice-ink);
   color: var(--studio-on-accent);
   font-weight: inherit;
 }

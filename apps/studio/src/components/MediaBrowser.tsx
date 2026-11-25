@@ -1,3 +1,4 @@
+import { followPageChange } from "../choice-focus";
 import { ErrorDetails, ErrorNotice } from "./ErrorNotice";
 import {
   formatBytes,
@@ -141,6 +142,13 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
       const index = filtered.value.findIndex(item => item.path === path && !item.unavailable);
       return index < 0 ? undefined : Math.floor(index / pageSize) + 1;
     }
+    // Locate the stored image once, without staging it or resetting later browsing.
+    let locateCurrent = props.mode !== "library" && !!props.current;
+    function locateStoredImage() {
+      if (!locateCurrent || !mediaListing.value.items.length) return;
+      locateCurrent = false;
+      page.value = pageContaining(props.current || "") ?? page.value;
+    }
     watch(mediaVersion, () => {
       failed.value = new Set();
       if (
@@ -150,8 +158,10 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
         folder.value = "";
       page.value = props.mode === "library" ? 1
         : pageContaining(props.selected) ?? Math.min(page.value, pages.value);
+      locateStoredImage();
     });
     onMounted(() => {
+      locateStoredImage();
       void loadMedia();
     });
     onBeforeUnmount(subscribeWorkspaceChanged(() => loadMedia()));
@@ -601,6 +611,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                             disabled: page.value <= 1,
                             className: classes("text-button"),
                             onClick: domEvent(($event: Event) => {
+                              followPageChange($event.currentTarget as HTMLButtonElement);
                               page.value--;
                             }),
                           },
@@ -614,6 +625,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                             disabled: page.value >= pages.value,
                             className: classes("text-button"),
                             onClick: domEvent(($event: Event) => {
+                              followPageChange($event.currentTarget as HTMLButtonElement);
                               page.value++;
                             }),
                           },

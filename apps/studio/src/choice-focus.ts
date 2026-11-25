@@ -9,3 +9,10 @@ export function followChoiceChange(origin: HTMLElement, target: () => HTMLElemen
     target()?.focus({ preventScroll: true });
   });
 }
+
+/** The current page button can become disabled when it reaches either end. */
+export function followPageChange(button: HTMLButtonElement) {
+  followChoiceChange(button, () => button.disabled
+    ? button.parentElement?.querySelector<HTMLButtonElement>("button:not(:disabled)")
+    : undefined);
+}

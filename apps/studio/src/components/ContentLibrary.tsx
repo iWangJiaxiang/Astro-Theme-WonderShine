@@ -1,3 +1,4 @@
+import { followPageChange } from "../choice-focus";
 import { ErrorDetails, ErrorNotice } from "./ErrorNotice";
 import { collectionChoices, taxonomyChoices } from "../../shared/choices";
 import {
@@ -824,6 +825,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                           disabled: pageNumber.value <= 1,
                           className: classes("text-button"),
                           onClick: domEvent(($event: Event) => {
+                            followPageChange($event.currentTarget as HTMLButtonElement);
                             pageNumber.value--;
                           }),
                         },
@@ -842,6 +844,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                           disabled: pageNumber.value >= pages.value,
                           className: classes("text-button"),
                           onClick: domEvent(($event: Event) => {
+                            followPageChange($event.currentTarget as HTMLButtonElement);
                             pageNumber.value++;
                           }),
                         },

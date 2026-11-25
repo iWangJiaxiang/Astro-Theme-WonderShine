@@ -86,6 +86,22 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   for (const [accent, foreground] of [['#222222', 'rgb(255, 255, 255)'], ['#eeeeee', 'rgb(0, 0, 0)']]) {
     await fill('[name="extra.style.theme_dark_skin"]', accent);
     await page.waitForFunction(color => getComputedStyle(document.querySelector('.brand-mark')).color === color, {}, foreground);
+    const ratio = await page.$eval('.studio-preferences [aria-current=page]', button => {
+      const ctx = document.createElement('canvas').getContext('2d');
+      function luminance(colors) {
+        for (const color of colors) { ctx.fillStyle = color; ctx.fillRect(0, 0, 1, 1); }
+        const [r, g, b] = [...ctx.getImageData(0, 0, 1, 1).data].map(byte => {
+          const value = byte / 255;
+          return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4;
+        });
+        return .2126 * r + .7152 * g + .0722 * b;
+      }
+      const style = getComputedStyle(button);
+      const background = luminance([getComputedStyle(button.closest('.sidebar')).backgroundColor, style.backgroundColor]);
+      const text = luminance([style.color]);
+      return (Math.max(background, text) + .05) / (Math.min(background, text) + .05);
+    });
+    assert.ok(ratio >= 4.5, 'active navigation text stays readable on its tinted surface');
   }
   await click('恢复站点默认外观');
   await click('主题维护'); await heading('主题维护');

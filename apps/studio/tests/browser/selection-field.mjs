@@ -268,6 +268,11 @@ window.selectionFixture = {
         await page.keyboard.press('Escape');
         await page.waitForSelector('[data-field="plain"] input[value="option-2"]:checked:focus');
 
+        await page.evaluate(() => window.selectionFixture.resizePlain(6));
+        await page.waitForSelector(trigger('plain') + ':focus');
+        await page.evaluate(() => window.selectionFixture.resizePlain(5));
+        await page.waitForSelector('[data-field="plain"] input[value="option-2"]:checked:focus');
+
         await open('multi');
         await page.click('.selection-dialog input[type="checkbox"][value="c"]');
         assert.equal(await page.$eval(`${trigger('multi')} .choice-count`, node => node.textContent === '2'), true);

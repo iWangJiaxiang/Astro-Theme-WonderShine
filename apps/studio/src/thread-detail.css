@@ -5,7 +5,7 @@
 .detail-language-tabs { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-bottom: 24px; border-bottom: 1px solid var(--studio-line); }
 .detail-language-tabs > span { margin-right: 15px; }
 .detail-language-tabs > button { display: inline-flex; align-items: center; gap: 8px; padding: 11px 14px; border-radius: 0; font-size: 13px; border-bottom: 2px solid transparent; }
-.detail-language-tabs > button.active { color: var(--wjx-theme); border-bottom-color: var(--wjx-theme); }
+.detail-language-tabs > button.active { color: var(--studio-choice-ink); border-bottom-color: var(--studio-choice-ink); }
 .detail-language-tabs > .text-button:last-child { margin-left: auto; }
 .detail-draft-dot { width: 5px; height: 5px; background: var(--studio-muted); border-radius: 50%; }
 .thread-detail-layout { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 24px; align-items: start; }

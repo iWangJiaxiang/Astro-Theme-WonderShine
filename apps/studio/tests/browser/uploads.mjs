@@ -517,9 +517,11 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   assert.deepEqual(await readFile(base + '/site/' + uploadedPath), await readFile(source + '/上传 配图.webp'));
   const pickerFooter = 'dialog.media-dialog[open] .selection-footer .primary';
   const pagination = 'dialog.media-dialog[open] .media-pagination';
-  await page.locator(pagination + ' button:first-child:not(:disabled)').click();
+  await page.focus(pagination + ' button:first-child:not(:disabled)');
+  await page.keyboard.press('Enter');
   await page.waitForSelector(pickerFooter + ':disabled');
-  await page.locator(pagination + ' button:last-child:not(:disabled)').click();
+  await page.waitForSelector(pagination + ' button:last-child:focus');
+  await page.keyboard.press('Enter');
   await page.waitForSelector(pickerFooter + ':not(:disabled)');
   await refreshPicker();
   await page.waitForSelector(pickerFooter + ':not(:disabled)');
@@ -529,6 +531,17 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   assert.equal(parse(saved.header).extra.cover, 'cover-upload.png');
   assert.match(saved.body, /!\[上传 配图.webp\]\(%E4%B8%8A%E4%BC%A0%20%E9%85%8D%E5%9B%BE.webp\)/);
   assert.deepEqual(await readFile(base + '/site/content/articles/studio-browser-test/cover-upload.png'), png);
+  await openImagePicker(page, 'extra.cover');
+  await page.waitForSelector('dialog.media-dialog[open] [data-media-path="content/articles/studio-browser-test/cover-upload.png"]');
+  assert.equal(await page.$eval(pagination + ' button:first-child', button => button.disabled), false, 'stored cover opens on its later page');
+  assert.equal(await page.$eval(pickerFooter, button => button.disabled), true, 'locating the current image does not stage it');
+  await page.keyboard.press('Escape');
+  const coverField = '[data-image-field="extra.cover"]';
+  await page.waitForSelector(coverField + ' button[aria-expanded=false]:focus');
+  await page.focus(coverField + ' button.text-button');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector(coverField + ' button[aria-haspopup=dialog]:focus');
+  await fill('[name="extra.cover"]', 'cover-upload.png');
   // A cloud capability response must lower the client limit without changing the local server.
   await click('媒体库'); await heading('媒体库');
   await page.evaluate(() => {

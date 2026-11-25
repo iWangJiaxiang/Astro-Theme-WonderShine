@@ -1,3 +1,4 @@
+import { followPageChange } from "../choice-focus";
 import { ErrorDetails, ErrorNotice } from "./ErrorNotice";
 import { isLibraryItem } from "../../shared/library";
 import type { ArticleSummary, Json } from "../../shared/types";
@@ -499,6 +500,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
                           disabled: page.value <= 1,
                           className: classes("text-button"),
                           onClick: domEvent(($event: Event) => {
+                            followPageChange($event.currentTarget as HTMLButtonElement);
                             page.value--;
                           }),
                         },
@@ -511,6 +513,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
                           disabled: page.value >= pages.value,
                           className: classes("text-button"),
                           onClick: domEvent(($event: Event) => {
+                            followPageChange($event.currentTarget as HTMLButtonElement);
                             page.value++;
                           }),
                         },

@@ -38,7 +38,7 @@ section.native-ai-settings { max-width: 960px; }
 .native-ai-disclosure { margin: 16px 0 0; }
 .connection-modes { display: flex; gap: 4px; margin-top: 24px; padding: 4px; background: var(--form-surface); border-radius: 10px; }
 .connection-modes button { flex: 1; min-height: 40px; padding: 8px 12px; border-radius: 7px; font-size: 13px; }
-.connection-modes button[aria-pressed=true] { background: var(--studio-card); color: var(--wjx-theme); box-shadow: 0 1px 4px #0000000d; font-weight: 600; }
+.connection-modes button[aria-pressed=true] { background: var(--studio-card); color: var(--studio-choice-ink); box-shadow: 0 1px 4px #0000000d; font-weight: 600; }
 .connection-storage-note { margin: 20px 0 0; }
 .workspace-panel .workspace-sync-card { padding: 28px; }
 /* Keep the heading from covering fields during reverse keyboard navigation. */
