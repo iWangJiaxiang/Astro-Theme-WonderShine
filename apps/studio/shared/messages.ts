@@ -661,7 +661,7 @@ export const english: Record<string, string> = {
   "同一语言中动态 id 不能重复": "Thread IDs must be unique within a language",
   "首次打开可能需要稍等片刻。": "The first load may take a moment.",
   "加载比平时久一些，仍在等待服务器响应。": "This is taking longer than usual. Waiting for the server to respond.",
-  "刷新编辑器选项": "Refresh editor options",
+  "同步 Git 并刷新当前内容": "Sync Git and refresh current content",
   "刷新页面": "Refresh page",
   "图片导航": "Image navigation",
   "刷新内容": "Refresh content",

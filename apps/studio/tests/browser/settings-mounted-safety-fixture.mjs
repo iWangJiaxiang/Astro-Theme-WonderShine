@@ -93,12 +93,12 @@ function observeSettings(source) {
   source = exact(source, setup, setup + '\n    const __mountedOwner = globalThis.__mountedTrace.owner();\n    onBeforeUnmount(() => globalThis.__mountedTrace.retire(__mountedOwner));');
   // Match the approved setup/render anchors, never wildcard business function
   // bodies or install a replacement ownership check.
-  source = exact(source, '    return () =>\n', `    globalThis.__mountedTrace.model(__mountedOwner, () => ({ values: values.value, baseline: baseline.value,
+  source = exact(source, '    return () => <>\n', `    globalThis.__mountedTrace.model(__mountedOwner, () => ({ values: values.value, baseline: baseline.value,
       revision: settings.value?.revision ?? null, dirty: dirty.value, busy: busy.value, error: error.value,
       message: message.value, branchPending: branchPending.value, savedBranch: savedBranch.value,
       unknown: unknownSaveObligation.value, saveMode: saveMode.value }),
       { save, reload, load, relations: loadRelations });
-    return () =>\n`);
+    return () => <>\n`);
   const tree = ts.createSourceFile('SettingsView.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const edits = [], counts = { persist: 0, text: 0, structured: 0 }, emits = new Map();
   const capture = (node, kind) => {

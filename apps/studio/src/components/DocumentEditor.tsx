@@ -605,11 +605,13 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       };
     });
     let removeBackupListeners = () => {};
-    async function loadDocument() {
+    async function loadDocument(refresh = false) {
       loading.value = true;
       error.value = "";
       ready.value = false;
-      void loadChoices();
+      if (refresh) await loadChoices(true);
+      else void loadChoices();
+      if (!alive) return;
       try {
         if (props.initial) {
           body.value = props.initialBody || "";
@@ -725,7 +727,18 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       emit("dirty", false);
     }
     expose({
-      refresh: () => { if (!choicesLoading.value && !loading.value) void loadChoices(true); },
+      refresh: async () => {
+        if (!alive || loading.value || choicesLoading.value) return;
+        flush();
+        if (props.initial || dirty.value || branchPending.value || settingsDirty.value) {
+          await loadChoices(true);
+          return;
+        }
+        const restoreRich = mode.value === "rich";
+        if (restoreRich) destroyEditor(false);
+        await loadDocument(true);
+        if (alive && ready.value && restoreRich) await changeMode("rich");
+      },
       refreshing: () => choicesLoading.value || loading.value,
       flush,
       forget,

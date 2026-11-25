@@ -1,4 +1,4 @@
-import { NavigationRefresh, RefreshHost } from "./navigation-refresh";
+import { NavigationGitSync, NavigationRefresh, RefreshHost, type GitSyncAction } from "./navigation-refresh";
 import QuickSync from "./components/QuickSync";
 import { ErrorDetails, ErrorNotice } from "./components/ErrorNotice";
 import { LegacyRecovery } from "../platform/LegacyRecovery";
@@ -29,7 +29,7 @@ import { navigationPosition } from "./navigation-position";
 import { mediaUploading } from "./media-store";
 import { subscribeWorkspaceChanged } from "./workspace-events";
 import { locale, t, type Message } from "./i18n";
-import { ref, watch, onMounted, onBeforeUnmount, computed } from "./reactivity";
+import { ref, shallowRef, watch, onMounted, onBeforeUnmount, computed } from "./reactivity";
 import type { Json, ArticleSummary } from "../shared/types";
 import { blogStyleFields } from "../shared/settings";
 import { api, session, reauthentication, errorMessage, pendingMutations } from "./api";
@@ -85,6 +85,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       nativeAi?: boolean;
       groups: { id: string; title: string }[];
     };
+    const navigationGit = shallowRef<GitSyncAction | null>(null);
     const refreshHost = ref<HTMLSpanElement | null>(null);
     const editorView = ref<{
       flush: () => void;
@@ -596,7 +597,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
           ? element(LoadingState, { label: "正在打开创作中心…" })
           : !session.value
             ? element(LoginView, null)
-            : element(
+            : <NavigationGitSync.Provider value={navigationGit}>{element(
                 "div",
                 {
                   inert: reauthentication.value,
@@ -669,13 +670,15 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                       { className: classes("row topbar-actions") },
                       <span className="nav-refresh-slot" ref={domRef(refreshHost)}>
                         {document.value && editorView.value?.refresh &&
-                          <NavigationRefresh label={document.value.mode === "edit" ? "刷新编辑器选项" : "刷新内容"}
+                          <NavigationRefresh label="刷新内容"
                             busy={editorView.value.refreshing?.()} blocked={editorView.value.isBusy?.()}
                             onRefresh={() => editorView.value?.refresh?.()} />}
                         {!document.value && ["home", "more", "help", "appearance"].includes(view.value) &&
-                          <NavigationRefresh label="刷新页面" busy={loadingSite.value || loadingArticles.value} onRefresh={reloadWorkspace} />}
+                          <NavigationRefresh label="刷新页面" followsWorkspace busy={loadingSite.value || loadingArticles.value} onRefresh={reloadWorkspace} />}
                       </span>,
-                      data.value?.quickSync ? <QuickSync key={session.value.identity.id} editing={() => dirty.value || !!editorView.value?.isBusy?.()} onManage={() => navigate("workspace")} /> : null,
+                      data.value?.quickSync && data.value.workspaceCanSync !== false ? <QuickSync
+                        key={JSON.stringify([session.value.identity.id, session.value.identity.method, data.value.saveScope])}
+                        action={navigationGit} editing={() => dirty.value || mediaUploading.value || pendingMutations.value > 0 || !!editorView.value?.isBusy?.()} onManage={() => navigate("workspace")} /> : null,
                       data.value
                         ? element(
                             "span",
@@ -1185,7 +1188,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                     " ",
                   ),
                 ),
-              ),
+              )}</NavigationGitSync.Provider>,
         reauthentication.value && session.value
           ? element(
               Modal,

@@ -885,7 +885,7 @@ try {
   await page.waitForSelector('.thread-composer textarea');
   assert.deepEqual([...reviewClaims], claimsBeforeReload, 'Mobile reload resumes without new recovery claims');
   await page.click('.visit-site');
-  await page.waitForFunction(() => !!document.querySelector('.quick-sync button:not(:disabled)'));
+  await page.waitForFunction(() => !!document.querySelector('.topbar button.navigation-refresh[aria-disabled=false][aria-label="同步 Git 并刷新当前内容"]'));
   await Promise.race([openedSite, new Promise((_, reject) => { const deadline = setTimeout(() => reject(new Error('Native URL handler did not receive the site URL')), 5000); deadline.unref(); })]);
   await screenshot('phone-composer', false);
   assert.ok(await page.$eval('.composer-tools .choice-compact .choice-trigger', button => {
@@ -936,11 +936,23 @@ try {
   assert.equal(worktreeScans - scansBeforePublish, 1, 'An uninterrupted mobile publish visits unrelated tracked assets only during initial discovery');
   console.log('Mobile publish worktree scans:', worktreeScans - scansBeforePublish);
   await click('完成');
-  execFileSync('git', ['-C', phoneRepo, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.org', 'commit', '--allow-empty', '-m', 'Quick sync fixture']);
-  await page.click('.quick-sync button');
+  const syncArticle = 'content/articles/quick-sync-fixture/index.md';
+  await fs.mkdir(join(phoneRepo, 'content/articles/quick-sync-fixture'), { recursive: true });
+  const syncBody = '+++\ntitle = "Navigation sync article"\ndate = 2030-01-01\n+++\nBody';
+  await fs.writeFile(join(phoneRepo, syncArticle), syncBody);
+  execFileSync('git', ['-C', phoneRepo, 'add', syncArticle]);
+  execFileSync('git', ['-C', phoneRepo, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.org', 'commit', '-m', 'Quick sync fixture']);
+  assert.equal(await page.$$eval('.topbar .navigation-refresh', buttons => buttons.length), 1);
+  await page.locator('.topbar .navigation-refresh[aria-disabled=false][aria-label="同步 Git 并刷新当前内容"]').click();
   await page.waitForFunction(() => document.querySelector('.quick-sync-progress')?.textContent.includes('分支已同步'));
   assert.equal(execFileSync('git', [...remoteArgs, 'log', '-1', '--format=%s', 'release/blog']).toString().trim(), 'Quick sync fixture');
   await page.waitForSelector('.quick-sync-progress', { hidden: true });
+  await page.waitForFunction(() => document.querySelector('.home-grid')?.textContent.includes('Navigation sync article'));
+  await fs.writeFile(join(phoneRepo, syncArticle), syncBody.replace('Navigation sync article', 'Local refresh without a commit'));
+  await page.locator('.topbar .navigation-refresh[aria-disabled=false]').click();
+  await page.waitForFunction(() => document.querySelector('.home-grid')?.textContent.includes('Local refresh without a commit'));
+  assert.equal(phoneGit('log', '-1', '--format=%s'), 'Quick sync fixture');
+  await fs.writeFile(join(phoneRepo, syncArticle), syncBody);
   await click('切换工作区'); await heading('连接创作工作区');
   assert.equal(await page.$('.studio-shell'), null, 'Explicit switching leaves the chooser open');
   await click('添加工作区');
@@ -978,7 +990,7 @@ try {
       keyring.set(key, expired);
       await restartNativeFixture();
       await heading('今天，写点什么？');
-      await page.waitForSelector('.quick-sync button:not(:disabled)');
+      await page.waitForSelector('.topbar button.navigation-refresh[aria-disabled=false][aria-label="同步 Git 并刷新当前内容"]');
     };
     const startReauthorization = async () => {
       oauthApproved = false;
@@ -998,7 +1010,7 @@ try {
 
     await reopenWithExpiredGrant();
     commitOffline('CNB quick sync after reauthorization');
-    await page.click('.quick-sync button');
+    await page.locator('.topbar .navigation-refresh[aria-disabled=false][aria-label="同步 Git 并刷新当前内容"]').click();
     await page.waitForFunction(() => document.querySelector('.quick-sync-progress [role=alert]')?.textContent.includes('授权已过期'));
     await screenshot('cnb-quick-sync-expired', false);
     await startReauthorization();

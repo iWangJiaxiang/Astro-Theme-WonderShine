@@ -173,7 +173,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
       void loadMedia();
       locateStoredImage();
     });
-    onBeforeUnmount(subscribeWorkspaceChanged(() => loadMedia()));
+    onBeforeUnmount(subscribeWorkspaceChanged(() => loadMedia(true)));
     function uploaded(item: MediaItem) {
       locateCurrent = false;
       search.value = "";
@@ -361,7 +361,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                   onKeyDown: preventSearchSubmit,
                 }),
               ),
-              <NavigationRefresh label="刷新仓库" busy={mediaLoading.value} blocked={mediaUploading.value} onRefresh={() => loadMedia(true)} />,
+              <NavigationRefresh label="刷新仓库" followsWorkspace busy={mediaLoading.value} blocked={mediaUploading.value} onRefresh={() => loadMedia(true)} />,
             ),
             props.mode !== "library"
               ? element(

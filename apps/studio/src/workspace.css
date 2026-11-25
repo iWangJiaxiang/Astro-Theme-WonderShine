@@ -265,11 +265,11 @@ h1 { font-size: var(--studio-page-title); margin-bottom: 8px; }
 .studio-preferences summary { padding: 8px; cursor: pointer; }
 .sidebar .preference-controls > :is(button, label, .language-switcher) { display: flex; align-items: center; gap: 8px; margin: 6px 8px; }
 .sidebar .preference-controls > .appearance-link { width: 100%; margin-inline: 0; min-height: 36px; padding: 8px 12px; border-radius: 8px; font-size: 13px; }
-.quick-sync { position: relative; }
-.quick-sync [aria-busy=true] svg { animation: sync-rotate 1s linear infinite; }
+.navigation-refresh { position: relative; }
+.navigation-refresh[aria-busy=true] svg { animation: sync-rotate 1s linear infinite; }
 @keyframes sync-rotate { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .quick-sync [aria-busy=true] svg { animation: none; opacity: .6; } }
-.quick-sync [data-updates]::after { content: ""; position: absolute; inset: 3px 3px auto auto; width: 7px; height: 7px; background: var(--wjx-theme); border-radius: 50%; }
+@media (prefers-reduced-motion: reduce) { .navigation-refresh[aria-busy=true] svg { animation: none; opacity: .6; } }
+.navigation-refresh[data-updates]::after { content: ""; position: absolute; inset: 3px 3px auto auto; width: 7px; height: 7px; background: var(--wjx-theme); border-radius: 50%; }
 .quick-sync-progress { margin: auto; width: min(360px, calc(100vw - 32px)); padding: 18px; border: 1px solid var(--form-rule); border-radius: 8px; background: var(--studio-card); box-shadow: 0 4px 16px #0002; z-index: 2; }
 .quick-sync-progress h2 { margin: 0 0 12px; font-size: var(--studio-dialog-title); }
 .quick-sync-progress ol { color: var(--studio-muted); font-size: .875rem; line-height: 1.5; }
