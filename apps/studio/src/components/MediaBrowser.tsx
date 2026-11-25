@@ -12,6 +12,7 @@ import { session } from "../api";
 import { t } from "../i18n";
 import { subscribeWorkspaceChanged } from "../workspace-events";
 import {
+  hasLoadedMediaListing,
   loadMedia,
   mediaError,
   mediaListing,
@@ -135,19 +136,20 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
       if (props.mode !== "library" && !choices.some(choice => choice.value === folder.value))
         folder.value = "";
     });
+    let locateCurrent = props.mode !== "library" && !!props.current;
     watch([search, source, folder], () => {
+      locateCurrent = false;
       page.value = 1;
     });
     function pageContaining(path: string) {
       const index = filtered.value.findIndex(item => item.path === path && !item.unavailable);
       return index < 0 ? undefined : Math.floor(index / pageSize) + 1;
     }
-    // Locate the stored image once, without staging it or resetting later browsing.
-    let locateCurrent = props.mode !== "library" && !!props.current;
     function locateStoredImage() {
-      if (!locateCurrent || !mediaListing.value.items.length) return;
-      locateCurrent = false;
+      if (!locateCurrent) return;
       page.value = pageContaining(props.current || "") ?? page.value;
+      // A preview can omit the image or place it on a different page.
+      if (!mediaLoading.value && hasLoadedMediaListing()) locateCurrent = false;
     }
     watch(mediaVersion, () => {
       failed.value = new Set();
@@ -158,14 +160,15 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
         folder.value = "";
       page.value = props.mode === "library" ? 1
         : pageContaining(props.selected) ?? Math.min(page.value, pages.value);
-      locateStoredImage();
     });
+    watch([mediaVersion, mediaLoading], locateStoredImage);
     onMounted(() => {
-      locateStoredImage();
       void loadMedia();
+      locateStoredImage();
     });
     onBeforeUnmount(subscribeWorkspaceChanged(() => loadMedia()));
     function uploaded(item: MediaItem) {
+      locateCurrent = false;
       search.value = "";
       source.value = "all";
       folder.value = props.mode === "library" ? item.directory : "";
@@ -612,6 +615,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                             className: classes("text-button"),
                             onClick: domEvent(($event: Event) => {
                               followPageChange($event.currentTarget as HTMLButtonElement);
+                              locateCurrent = false;
                               page.value--;
                             }),
                           },
@@ -626,6 +630,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                             className: classes("text-button"),
                             onClick: domEvent(($event: Event) => {
                               followPageChange($event.currentTarget as HTMLButtonElement);
+                              locateCurrent = false;
                               page.value++;
                             }),
                           },

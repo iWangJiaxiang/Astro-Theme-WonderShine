@@ -81,20 +81,23 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       },
       { immediate: true },
     );
-    const options = computed<Choice[]>(() => [
-      ...props.options,
-      ...addedOptions.value.filter(
-        (option) => !props.options.some((item) => item.value === option.value),
-      ),
-      ...(props.allowCustomValues === false ? [] : known.value)
-        .filter(
-          (value) =>
-            ![...props.options, ...addedOptions.value].some(
-              (option) => option.value === value,
-            ),
-        )
-        .map((value) => ({ value, label: t("{value}（自定义）", { value }) })),
-    ]);
+    const options = computed<Choice[]>(() => {
+      const choices = [...props.options];
+      const values = new Set(choices.map(option => option.value));
+      for (const option of addedOptions.value) {
+        if (values.has(option.value)) continue;
+        choices.push(option);
+        values.add(option.value);
+      }
+      if (props.allowCustomValues !== false) {
+        for (const value of known.value) {
+          if (!values.has(value)) choices.push({ value, label: t("{value}（自定义）", { value }) });
+        }
+      }
+      return choices;
+    });
+    const checkedValues = computed(() => new Set(selected.value));
+    const pendingValues = computed(() => new Set(pending.value));
     const filtered = computed(() =>
       options.value.filter((option) =>
         normalized(
@@ -153,18 +156,24 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       modal.open();
     }
     const isInline = computed(() => !props.compact && !props.createOption && options.value.length <= 5);
-    function fieldTarget(confirmed?: string) {
+    function fieldTarget(confirmed?: string, index = 0) {
       let target: HTMLElement | null | undefined = trigger.value;
       if (!target && inline.value && !inline.value.disabled) {
         const inputs = [...inline.value.querySelectorAll<HTMLInputElement>("input:not(:disabled)")];
-        target = inputs.find(input => input.value === confirmed) ?? inputs.find(input => input.checked) ?? inputs[0] ?? inline.value;
+        target = inputs.find(input => input.value === confirmed) ?? inputs.find(input => input.checked) ?? inputs[Math.min(index, inputs.length - 1)] ?? inline.value;
       }
       return target;
     }
-    watch(isInline, () => {
+    watch([isInline, options], ([nowInline, choices], [wasInline]) => {
       const active = document.activeElement;
-      if (!opened.value && active instanceof HTMLElement && (active === trigger.value || inline.value?.contains(active)))
+      if (opened.value || !(active instanceof HTMLElement)) return;
+      if (nowInline !== wasInline && (active === trigger.value || inline.value?.contains(active))) {
         followChoiceChange(active, fieldTarget);
+      } else if (nowInline && active instanceof HTMLInputElement && inline.value?.contains(active)
+        && !choices.some(option => option.value === active.value)) {
+        const index = [...inline.value.querySelectorAll("input")].indexOf(active);
+        followChoiceChange(active, () => fieldTarget(undefined, index));
+      }
     });
     function close(confirmed?: string) {
       if (creating.value && !props.disabled) return;
@@ -263,14 +272,14 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                   {
                     key: option.value,
                     className: classes("choice-tile", {
-                      selected: selected.value.includes(option.value),
+                      selected: checkedValues.value.has(option.value),
                     }),
                   },
                   element("input", {
                     type: props.multiple ? "checkbox" : "radio",
                     name: props.name,
                     value: option.value,
-                    checked: selected.value.includes(option.value),
+                    checked: checkedValues.value.has(option.value),
                     onChange: domEvent(($event: Event) => {
                       publish(toggle(selected.value, option.value));
                     }),
@@ -534,14 +543,14 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                             {
                               key: option.value,
                               className: classes("choice-tile", {
-                                selected: pending.value.includes(option.value),
+                                selected: pendingValues.value.has(option.value),
                               }),
                             },
                             element("input", {
                               type: props.multiple ? "checkbox" : "radio",
                               name: `${props.name}-dialog`,
                               value: option.value,
-                              checked: pending.value.includes(option.value),
+                              checked: pendingValues.value.has(option.value),
                               onChange: domEvent(($event: Event) => {
                                 pending.value = toggle(
                                   pending.value,

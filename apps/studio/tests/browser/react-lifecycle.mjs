@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { checkWorkspaceNotice } from './workspace-notice.mjs';
 import { checkDashboardPreview } from './dashboard-preview.mjs';
 import { checkLegacyRecovery } from './legacy-recovery.mjs';
+import { checkMediaPickerPreview } from './media-picker-preview.mjs';
 import { checkMediaDisclosureRace } from './media-disclosure-race.mjs';
 import { checkSelectionField } from './selection-field.mjs';
 import { checkAppLocaleScope } from './app-locale-scope.mjs';
@@ -63,6 +64,7 @@ try {
   await checkDashboardPreview(browser);
   await checkLegacyRecovery(browser);
   await checkMediaDisclosureRace(browser);
+  await checkMediaPickerPreview(browser);
   await checkSelectionField(browser);
   await checkAppLocaleScope(browser);
   await checkAppLocaleEditors(browser);

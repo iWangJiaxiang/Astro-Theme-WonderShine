@@ -82,9 +82,18 @@ function Fixture() {
     <button id="after-disabled" type="button">After disabled</button>
   </main>;
 }
+let choiceReads = 0;
+function manyTags() {
+  const options = Array.from({ length: 1000 }, (_, i) => ({
+    get value() { choiceReads++; return 'tag-' + i; }, label: 'Tag ' + i,
+  }));
+  const selected = [...Array.from({ length: 500 }, (_, i) => 'tag-' + (500 + i)), 'legacy'];
+  root.render(<Field name="large-tags" label="Tags" initial={selected} options={options} multiple compact />);
+}
 const root = createRoot(document.getElementById('root'));
 root.render(<Fixture />);
 window.selectionFixture = {
+  manyTags, choiceReads() { return choiceReads; },
   changing() { root.render(<ChangingControls />); },
   lock(value) { setLocked(value); }, showModes(value) { setShowModes(value); },
   finishCreate() { finishCreate(); },
@@ -273,6 +282,17 @@ window.selectionFixture = {
         await page.evaluate(() => window.selectionFixture.resizePlain(5));
         await page.waitForSelector('[data-field="plain"] input[value="option-2"]:checked:focus');
 
+        const inlineFocused = '[data-field="plain"] input:focus';
+        await page.focus('[data-field="plain"] input[value="option-4"]');
+        await page.evaluate(() => window.selectionFixture.resizePlain(4));
+        await page.waitForSelector(inlineFocused + '[value="option-2"]:checked');
+        const beforeRemoval = await updates('plain');
+        await page.evaluate(() => window.selectionFixture.resizePlain(2));
+        await page.waitForSelector(inlineFocused + '[value="option-1"]:not(:checked)');
+        assert.equal(await updates('plain'), beforeRemoval, 'moving focus leaves selection to the user');
+        await page.evaluate(() => window.selectionFixture.resizePlain(0));
+        await page.waitForSelector('[data-field="plain"] fieldset:focus');
+
         await open('multi');
         await page.click('.selection-dialog input[type="checkbox"][value="c"]');
         assert.equal(await page.$eval(`${trigger('multi')} .choice-count`, node => node.textContent === '2'), true);
@@ -295,6 +315,16 @@ window.selectionFixture = {
         assert.equal(await page.evaluate(() => document.activeElement?.id === 'after-disabled'), true, `${label}: keyboard skips disabled trigger`);
         assert.equal(await updates('disabled'), 0);
         assert.equal(await valueIs('disabled', 'Public images (default)'), true, `${label}: disabled value untouched`);
+
+        await page.evaluate(() => window.selectionFixture.manyTags());
+        await page.waitForSelector(trigger('large-tags'));
+        const optionReads = await page.evaluate(() => window.selectionFixture.choiceReads());
+        assert.ok(optionReads >= 1000 && optionReads < 20000, 'building 1,000 choices with 501 selected tags stays linear');
+        await open('large-tags');
+        await page.waitForSelector('.selection-dialog input[value=legacy]:checked');
+        assert.equal(await page.$$eval('.selection-dialog input:checked', inputs => inputs.length), 501);
+        assert.equal(await page.$$eval('.selection-dialog .choice-tile', tiles => tiles.length), 1001);
+        await page.keyboard.press('Escape');
 
         await page.evaluate(() => window.selectionFixture.changing());
         for (const selector of ['.thread-date-trigger', '.reference-heading button']) {
