@@ -162,6 +162,7 @@
   justify-content: center;
   line-height: 1.4;
 }
+.choice-options.radio-options > .choice-tile { padding-inline: 6px; }
 .radio-options .choice-tile > input[type=radio] {
   position: absolute;
   inset: 0;
