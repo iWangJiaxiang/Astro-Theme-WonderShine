@@ -2,6 +2,10 @@ name: Lighthouse preview audit
 on:
   workflow_dispatch:
     inputs:
+      deployed_url:
+        description: 'Optional public HTTPS page to audit instead of the demo preview'
+        type: string
+        required: false
       report_run_id:
         description: 'Optional completed run ID: read existing summaries without rerunning audits'
         type: string
@@ -59,7 +63,9 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+        if: inputs.deployed_url == ''
       - name: Reuse responsive image encodings
+        if: inputs.deployed_url == ''
         uses: actions/cache@v6.1.0
         with:
           path: .astro/image-cache
@@ -67,6 +73,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-theme-images-v1-${{ hashFiles('package-lock.json', 'packages/theme/scripts/responsive-images.ts') }}-
       - run: npm run build
+        if: inputs.deployed_url == ''
         env:
           ASTRO_IMAGE_CACHE_DIR: ${{ github.workspace }}/.astro/image-cache
       - uses: browser-actions/setup-chrome@v2.2.0
@@ -74,9 +81,10 @@ jobs:
       - name: Enable Chromium sandbox namespaces on the ephemeral runner
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - uses: ./.github/actions/browser-fonts
-      - name: Audit production preview (three cold runs per page)
+      - name: Audit page (three cold runs per page)
         run: node scripts/lighthouse-audit.mjs
         env:
+          AUDIT_URL: ${{ inputs.deployed_url }}
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
           AUDIT_DEVICE: ${{ matrix.device }}
       - name: Publish score summary

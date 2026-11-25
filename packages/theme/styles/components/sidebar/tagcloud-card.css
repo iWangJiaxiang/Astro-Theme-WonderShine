@@ -185,6 +185,6 @@ span.tags-punctuation::before {
 }
 
 #aside-content .card-tag-cloud a sup {
-    opacity: 0.4;
+    color: var(--wjx-fontcolor);
     margin-left: 2px;
 }

@@ -30,6 +30,7 @@ const featured=today.post_path ? featuredDocument(site,today.post_path,lang) : !
 const daily=top.banner_right.today_recommend.enable ? (featured
   ? {url:featured.url,title:featured.title,cover:cover(featured,site)}
   : !today.post_path && today.url ? {...today,url:url(today.url)} : undefined) : undefined;
+const aboveFold=!(top.above?.enable_above??top.above?.enable);
 const posts=selected.filter(post=>post.url!==daily?.url).slice(0,Math.min(6,settings.max_posts||6));
 const colorStyle=(group:any)=>({'--group-light-one':group.colors?.light_one,'--group-light-two':group.colors?.light_two,'--group-dark-one':group.colors?.dark_one,'--group-dark-two':group.colors?.dark_two});
 ---
@@ -50,7 +51,9 @@ const colorStyle=(group:any)=>({'--group-light-one':group.colors?.light_one,'--g
   </div>
   {(daily||posts.length>0)&&<div id="topGroup" class:list={{'has-recommendations':posts.length>0}}>
     {daily&&<a class="todayCard" id="todayCard" href={daily.url}>
-      {daily.cover&&<ResponsiveImage site={site} class="todayCard-cover" src={daily.cover} alt="" width={700} sizes="(min-width: 1400px) 680px, 50vw"/>}
+      {daily.cover&&<ResponsiveImage site={site} class="todayCard-cover" src={daily.cover} alt="" width={700}
+        preloadMedia={aboveFold ? posts.length ? '(min-width: 1200px)' : 'all' : undefined}
+        sizes="(min-width: 1400px) 680px, (min-width: 1200px) 50vw, 200px"/>}
       <div class="todayCard-info"><div class="todayCard-tips">{today.small_title||t('featured',lang,site,'activity')}</div><div class="todayCard-title">{daily.title}</div></div>
     </a>}
     {daily&&posts.length>0&&<button id="recommendations-toggle" type="button" aria-controls="home-recommendations" aria-expanded="false">
@@ -58,10 +61,12 @@ const colorStyle=(group:any)=>({'--group-light-one':group.colors?.light_one,'--g
       <i class="icon-circle-xmark" aria-hidden="true"/><span class="hide-recommendations">{tr('ui_collapse_recommendations')}</span>
     </button>}
     {posts.length>0&&<ul id="home-recommendations">
-      {posts.map(post=>{
+      {posts.map((post,index)=>{
         const thumbnail=cover(post,site);
         return <li><a class="recommendation-link" href={post.url}>
-          {thumbnail ? <ResponsiveImage site={site} class="recommendation-cover" src={thumbnail} alt="" width={240} sizes="(min-width: 1400px) 224px, 200px"/> : <span class="recommendation-cover" aria-hidden="true"/>}
+          {thumbnail ? <ResponsiveImage site={site} class="recommendation-cover" src={thumbnail} alt="" width={240}
+            preloadMedia={aboveFold && index===0 ? daily ? '(width < 1200px)' : 'all' : undefined}
+            sizes="(min-width: 1400px) 224px, 200px"/> : <span class="recommendation-cover" aria-hidden="true"/>}
           <span class="recommendation-title">{post.title}</span>
         </a></li>;
       })}
