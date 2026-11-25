@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
+import {checkThreadImpressions} from './test-thread-impressions.mjs';
 
 const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const demo = {
@@ -52,6 +53,7 @@ export async function checkBrowser(options = demo) {
     ].find(existsSync);
     assert.ok(executablePath, 'Set STUDIO_TEST_BROWSER to a Chrome executable');
     browser = await puppeteer.launch({ headless: true, executablePath });
+    if (options === demo) await checkThreadImpressions(browser, origin);
     const page = await browser.newPage();
     await page.setCacheEnabled(false);
     await page.setViewport({ width: 1440, height: 900 });

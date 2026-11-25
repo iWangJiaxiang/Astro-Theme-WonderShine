@@ -133,7 +133,7 @@ if(doc?.html.trim()&&!styles.includes('post'))styles.push('post');
   {e.comments.enable&&e.comments.barrage?.enable&&<><link rel="stylesheet" href="/css/commentBarrage.css"/><script is:inline data-astro-rerun defer src="/js/commentBarrage.js"/></>}
   <slot name="scripts"/>
   <RecentComments site={site} lang={lang}/>
-  {e.site.analytics?.umami?.enable&&<script is:inline defer src={e.site.analytics.umami.js} data-website-id={e.site.analytics.umami.id} data-host-url={e.site.analytics.umami.remote_url||undefined} data-domains={e.site.analytics.umami.domain||undefined}/>}
+  {e.site.analytics?.umami?.enable&&<script is:inline type="module" src="/js/analytics.js" data-umami-src={e.site.analytics.umami.js} data-website-id={e.site.analytics.umami.id} data-host-url={e.site.analytics.umami.remote_url||undefined} data-domains={e.site.analytics.umami.domain||undefined}/>}
   {e.site.analytics?.clarity?.enable&&<script is:inline define:vars={{clarityId:e.site.analytics.clarity.id}}>
     (function(c,l,a,r,i){c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};const s=l.createElement(r);s.async=true;s.src='https://www.clarity.ms/tag/'+i;l.head.appendChild(s)})(window,document,'clarity','script',clarityId);
   </script>}

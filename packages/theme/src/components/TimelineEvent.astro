@@ -13,7 +13,7 @@ const discussion=kind==='thread'&&commentsEnabled(localizeConfig(site,lang),item
 const published=timestamp(item.date),updated=timestamp(item.updated);
 const tr=(key:string)=>t(key,lang,site,'activity');
 ---
-<article class="timeline-event" data-activity-item data-kind={kind} data-published={published} data-active={updated>published&&updated<=Date.now()/1000?updated:published} data-id={item.url}>
+<article class="timeline-event" data-activity-item data-kind={kind} data-published={published} data-active={updated>published&&updated<=Date.now()/1000?updated:published} data-id={item.url} data-thread-id={kind==='thread'?item.extra.id:undefined}>
 <div class="timeline-date"><time datetime={item.date} title={utcDateTitle(item.date)}>{kind==='thread'?formatDateTime(item.date,lang):formatDate(item.date,lang)}</time><span class="event-kind">{tr(kind)}</span></div>
 <div class:list={['timeline-content',{'timeline-content--covered':!!image}]}><div class="timeline-copy">
 {item.extra.ai_translation&&<span class="ai-translation-label">{tr('ai_translation')}</span>}
