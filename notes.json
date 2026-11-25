@@ -28,56 +28,56 @@
     {
       "issue": 13,
       "pr": null,
-      "branch": "repo-assist/fix-issue-13-css-process-failures",
+      "branch": "repo-assist/fix-issue-13-css-process-failures-5866d74f1ac4b7fa",
       "status": "open",
       "updated_at": "2026-11-25",
-      "note": "CSS subprocess fix and injected-runner regression test source committed. Draft PR requested this run; reconcile live PR next run. Syntax/diff checks passed; build/tests not run; remote CI required."
+      "note": "PR creation denied by repository Actions permissions; existing branch and patch handed off in issue #42, not a PR. Reviewed helper and test source; remote validation pending. Do not duplicate or retry PR creation without changed permissions."
     }
   ],
   "checks": [
     {
       "area": "performance",
-      "checked_at": "2026-11-24",
-      "result": "Task 8: reviewed responsive image digest promises, recipe and four-worker limit; no measured new opportunity.",
-      "follow_up": "Benchmark remotely before proposing performance changes."
+      "checked_at": "2026-11-25",
+      "result": "Task 8 fallback: read image-assets.ts stat-version manifest cache and responsive variants; no measured new opportunity.",
+      "follow_up": "Require remote measurements before optimization."
     },
     {
       "area": "build",
-      "checked_at": "2026-11-24",
+      "checked_at": "2026-11-25",
       "result": "Task 9 fallback: read theme-build-channel.test.ts; covers moved next/canary tags, pinning and lock persistence; no verified additional gap beyond tracked #13.",
       "follow_up": "No local installation, build or tests executed."
     },
     {
       "area": "docs",
-      "checked_at": "2026-11-24",
-      "result": "Task 7 fallback: releasing.md stale Starter text remains covered by existing #15 patch; avoid duplicate PR.",
-      "follow_up": "Maintainer review of #15 remains pending."
+      "checked_at": "2026-11-25",
+      "result": "Tasks 10,7 fallback: #15 already covers stale Starter text; found #14 incorrectly presents #42 handoff as temporary PR.",
+      "follow_up": "Correct monthly summary to actual issue #42; preserve history and pending actions."
     },
     {
       "area": "ci",
-      "checked_at": "2026-11-24",
-      "result": "Task 4: reviewed ci.yml build, starter, type, integration, package and browser steps; no new actionable proposal. No remote dispatch capability.",
-      "follow_up": "Remote CI required for future source fixes."
+      "checked_at": "2026-11-25",
+      "result": "Task 4: reviewed ci.yml build/starter/type/integration/package/browser checks; no new change proposed.",
+      "follow_up": "No CI dispatch capability; local builds/tests prohibited."
     },
     {
       "area": "code",
       "checked_at": "2026-11-25",
-      "result": "Tasks 10,3,5: implemented #13 with stop-on-failure CSS helper; reviewed final diff. No fallback needed after substantive fix.",
-      "follow_up": "Draft PR requires remote validation; no local build/test allowed."
+      "result": "Tasks 3,5: reconciled #13 fix to handoff issue #42; read branch helper/tests and main routes. No new independent fix.",
+      "follow_up": "Maintainer PR creation and remote validation pending; no duplicate branch."
     },
     {
       "area": "tests",
       "checked_at": "2026-11-25",
-      "result": "Added mocked-runner cases for success, nonzero exit, startup failure and signal termination; verifies no later CSS jobs run.",
-      "follow_up": "Test source only; npm test, theme build and tgz consumer validation pending remote CI."
+      "result": "Task 9 fallback: read theme-build-channel.test.ts tag movement/pinning/lock assertions and #42 failure-path test source.",
+      "follow_up": "No test execution; existing #42 validation awaits remote CI."
     }
   ],
   "completed_actions": [],
   "priorities": [
     {
       "task": 6,
-      "item": "Validate CSS subprocess fix",
-      "note": "Reconcile draft PR request for #13 branch; review remote CI and run failure-path, theme and tgz acceptance. Do not duplicate fix."
+      "item": "Review existing #42 CSS fix handoff",
+      "note": "Await maintainer PR creation from existing branch and remote CI; #15 likewise holds existing docs branch. No duplicate PR attempts."
     }
   ]
 }
