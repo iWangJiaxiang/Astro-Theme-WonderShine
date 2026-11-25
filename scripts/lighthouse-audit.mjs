@@ -1,3 +1,4 @@
+import { startUmamiFixture } from './lighthouse-umami-fixture.mjs';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -16,13 +17,14 @@ if (deployedUrl && (deployedUrl.protocol !== 'https:' || deployedUrl.username ||
   throw new Error('Use a public HTTPS page URL without credentials');
 }
 const origin = deployedUrl?.origin || 'http://127.0.0.1:4399';
-const pages = deployedUrl ? [['deployed', deployedUrl.pathname + deployedUrl.search]] : [
+const comparison = ['on', 'off'].includes(process.env.AUDIT_ANALYTICS);
+const pages = comparison ? [['home','/'], ['threads','/threads/'], ['timeline','/timeline/']] : deployedUrl ? [['deployed', deployedUrl.pathname + deployedUrl.search]] : [
   ['home', '/'], ['article', '/articles/welcome/'], ['timeline', '/timeline/'],
   ['collection', '/collections/field-notes/'], ['chinese-home', '/zh-CN/'],
 ];
-const fixture = deployedUrl ? 'deployed-page' : 'theme-demo';
+const fixture = comparison ? 'umami-' + process.env.AUDIT_ANALYTICS : deployedUrl ? 'deployed-page' : 'theme-demo';
 const description = deployedUrl ? `Deployed page at ${deployedUrl.href}.` : 'Theme demo production preview.';
-let preview;
+let preview, collector;
 let current;
 async function run(args) {
   await new Promise((resolve, reject) => {
@@ -35,6 +37,7 @@ async function run(args) {
 const metricIds = ['first-contentful-paint', 'largest-contentful-paint', 'total-blocking-time', 'cumulative-layout-shift', 'speed-index'];
 const results = [];
 try {
+  if (process.env.AUDIT_ANALYTICS === 'on') collector = await startUmamiFixture();
   if (!deployedUrl) {
     const requireSite = createRequire(path.join(site, 'package.json'));
     const astro = path.join(path.dirname(requireSite.resolve('astro/package.json')), 'bin/astro.mjs');
@@ -57,12 +60,14 @@ try {
     if (!response.ok) throw new Error(`Audit page ${route}: HTTP ${response.status}`);
     const runs = [];
     for (let repeat = 1; repeat <= 3; repeat++) {
+      const visitCount = collector?.visits.length;
       const basename = path.join(output, `${name}-${repeat}`);
       console.log(`Audit ${device} ${route}, run ${repeat}/3`);
       await run([origin + route, '--output=json', '--output=html', `--output-path=${basename}`,
         '--only-categories=performance,accessibility,best-practices,seo', '--chrome-flags=--headless --disable-dev-shm-usage',
         '--quiet', ...(device === 'desktop' ? ['--preset=desktop'] : [])]);
       const report = JSON.parse(await readFile(basename + '.report.json', 'utf8'));
+      if (collector && !collector.visits.slice(visitCount).includes(route)) throw new Error('Missing Umami PV for ' + route);
       if (report.runtimeError) throw new Error(JSON.stringify(report.runtimeError));
       const categories = Object.fromEntries(Object.entries(report.categories).map(([key, value]) => [key, value.score === null ? null : Math.round(value.score * 100)]));
       if (Object.values(categories).some(value => value === null)) throw new Error(`Incomplete categories for ${name}`);
@@ -84,6 +89,7 @@ try {
   const rows = results.map(({ name, performanceRange, representative: run }) => `| ${name} | ${run.categories.performance} (${performanceRange.join('–')}) | ${run.categories.accessibility} | ${run.categories['best-practices']} | ${run.categories.seo} | ${run.metrics['largest-contentful-paint'].display} | ${run.metrics['total-blocking-time'].display} | ${run.metrics['cumulative-layout-shift'].display} |`);
   await writeFile(path.join(output, 'summary.md'), `# Lighthouse ${device}\n\n${description} Median performance run of three.\n\n| Page | Performance (range) | Accessibility | Best practices | SEO | LCP | TBT | CLS |\n|---|---:|---:|---:|---:|---:|---:|---:|\n${rows.join('\n')}\n`);
 } finally {
+  collector?.server.close();
   current?.kill('SIGTERM');
   preview?.kill('SIGTERM');
 }

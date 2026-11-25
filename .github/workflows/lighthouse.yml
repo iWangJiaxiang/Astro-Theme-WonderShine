@@ -6,6 +6,10 @@ on:
         description: 'Optional public HTTPS page to audit instead of the demo preview'
         type: string
         required: false
+      compare_umami:
+        description: 'Compare demo analytics on/off for home, threads and timeline'
+        type: boolean
+        default: false
       report_run_id:
         description: 'Optional completed run ID: read existing summaries without rerunning audits'
         type: string
@@ -54,6 +58,7 @@ jobs:
       fail-fast: false
       matrix:
         device: [mobile, desktop]
+        analytics: ${{ fromJSON(inputs.compare_umami && inputs.deployed_url == '' && '["off","on"]' || '["default"]') }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -72,6 +77,16 @@ jobs:
           key: ${{ runner.os }}-theme-images-v1-${{ hashFiles('package-lock.json', 'packages/theme/scripts/responsive-images.ts') }}-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-theme-images-v1-${{ hashFiles('package-lock.json', 'packages/theme/scripts/responsive-images.ts') }}-
+      - name: Enable the loopback Umami fixture
+        if: matrix.analytics == 'on'
+        run: |
+          cat >> examples/demo/config.toml <<'EOF'
+
+          [extra.site.analytics.umami]
+          enable = true
+          js = "http://127.0.0.1:4400/script.js"
+          id = "11111111-2222-4333-8444-555555555555"
+          EOF
       - run: npm run build
         if: inputs.deployed_url == ''
         env:
@@ -84,6 +99,7 @@ jobs:
       - name: Audit page (three cold runs per page)
         run: node scripts/lighthouse-audit.mjs
         env:
+          AUDIT_ANALYTICS: ${{ matrix.analytics }}
           AUDIT_URL: ${{ inputs.deployed_url }}
           CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
           AUDIT_DEVICE: ${{ matrix.device }}
@@ -95,6 +111,6 @@ jobs:
       - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
-          name: lighthouse-${{ matrix.device }}
+          name: lighthouse-${{ matrix.device }}${{ matrix.analytics != 'default' && format('-{0}', matrix.analytics) || '' }}
           path: temp/lighthouse/${{ matrix.device }}/
           retention-days: 14

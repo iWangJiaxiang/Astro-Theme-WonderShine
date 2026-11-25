@@ -27,7 +27,7 @@ const topicActivity=isTopic?lastActivity(items):0;
 const topicActivityDate=topicActivity?new Date(topicActivity*1000).toISOString():undefined;
 ---
 <main class:list={['activity-layout', (isThreads||isDetail)&&['thread-layout',config.extra.sidebar.location]]} id="content-inner">
-<div class="activity-main" data-activity-list={(!isThreads&&!isDetail)||undefined} data-page-size="12" data-sort={isTopics?'active':'published'} data-topic-id={isTopic?document.extra.id:undefined}>
+<div class="activity-main" data-thread-surface={isThreads?'threads':isTimeline?'timeline':undefined} data-activity-list={(!isThreads&&!isDetail)||undefined} data-page-size="12" data-sort={isTopics?'active':'published'} data-topic-id={isTopic?document.extra.id:undefined}>
 {isDetail ? <>
   <header class="activity-heading"><h1>{title}</h1></header>
   <ThreadCard site={site} document={document} lang={lang} detail/>
