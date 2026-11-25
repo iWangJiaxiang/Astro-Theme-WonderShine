@@ -166,11 +166,6 @@ const AiAssistant: StudioComponent<Props, Events> = component<Props, Events>(
                 "div",
                 null,
                 element(
-                  "p",
-                  { className: classes("eyebrow") },
-                  t("AI 创作助手"),
-                ),
-                element(
                   "h2",
                   null,
                   t(props.kind === "summary" ? "AI 摘要" : "AI 文章封面"),

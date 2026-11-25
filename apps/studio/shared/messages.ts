@@ -541,6 +541,7 @@ export const english: Record<string, string> = {
   "翻译服务返回格式不正确，请重试": "The translation service returned an invalid format. Please retry",
   "翻译服务暂时不可用或返回格式错误，请重试": "The translation service is unavailable or returned an invalid format. Please retry",
 
+  "文件操作": "File actions",
   "文件位置": "File location",
   "内容标识": "Content ID",
   "动态文件 {path} 的 TOML 格式需要检查": "Check the TOML format of thread file {path}",

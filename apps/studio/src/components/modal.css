@@ -3,7 +3,7 @@
   color: inherit;
   overscroll-behavior: contain;
 }
-.shared-modal::backdrop { background: #10162a66; }
+
 .creation-modal {
   width: min(480px, calc(100vw - 32px));
   max-width: none;

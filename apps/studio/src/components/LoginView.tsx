@@ -168,7 +168,7 @@ const LoginView: StudioComponent<Props, Events> = component<Props, Events>(
                   "a",
                   {
                     href: "/api/auth/oidc/start",
-                    className: classes("button secondary wide"),
+                    className: classes("button wide", methods.value.password ? "secondary" : "primary"),
                   },
                   element(Icon, { name: "lock" }),
                   methods.value.oidc.label === "统一身份登录"

@@ -164,7 +164,7 @@ html:has(.studio-shell[data-swipe-back]) { overscroll-behavior-x: contain; }
 
 .more-page { max-width: 42rem; margin-inline: auto; }
 .more-groups { display: grid; gap: 8px; }
-.more-groups > .nav-label { margin: 14px 0 0; }
+.more-groups > .nav-label { margin: 14px 0 0; font-size: var(--studio-section-title); font-weight: 650; letter-spacing: normal; color: var(--wjx-fontcolor); }
 .more-groups > nav {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
   gap: 1px; border: 1px solid var(--studio-line); border-radius: 12px;
