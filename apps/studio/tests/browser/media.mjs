@@ -189,7 +189,7 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   assert.equal(await page.$eval(`${picker} .media-pending`, el => el.textContent), '将填写：/img/媒体 配图.webp');
   assert.equal(await page.$eval('[name="extra.site.logo"]', el => el.value), savedLogo, 'clicking current only stages the image');
   assert.equal(await page.$eval('.page-heading .primary', el => el.disabled), true);
-  await page.click(`${picker} .card-heading button`);
+  await page.click(`${picker} .card-heading > button.text-button`);
   await page.waitForFunction(() => !document.querySelector('dialog.media-dialog[open]'));
   assert.equal(await page.$eval('[name="extra.site.logo"]', el => el.value), savedLogo, 'cancel discards the pending current image');
   assert.equal(await page.$eval('.page-heading .primary', el => el.disabled), true);
