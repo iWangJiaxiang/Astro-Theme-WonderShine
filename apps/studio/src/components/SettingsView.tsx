@@ -738,7 +738,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                           "header",
                           { className: classes("settings-group-heading") },
 
-                          element("h3", null, t(section.title)),
+                          element(props.embedded ? "h4" : "h2", null, t(section.title)),
                         )
                       : null,
                     element(

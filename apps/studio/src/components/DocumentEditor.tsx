@@ -1064,16 +1064,15 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                               t("新动态")
                           : values.value.title || t("未命名内容"),
                       ),
-                      element(
-                        "details",
-                        { className: classes("editor-file-location"), hidden: isThread && !threadAdvanced.value },
-                        element("summary", null, t("文件位置")),
-                        element(
-                          "p",
-                          { className: classes("muted path-label") },
-                          props.path,
-                        ),
-                      ),
+                      <details className="editor-file-location" hidden={isThread && !threadAdvanced.value}>
+                        <summary>{t("文件操作")}</summary>
+                        <p className="muted path-label">{props.path}</p>
+                        <div className="row editor-file-actions">
+                          <button type="button" className="text-button" onClick={() => download()}>{t("下载备份")}</button>
+                          {revision.value && <button type="button" className="text-button danger"
+                            disabled={busy.value || translating.value || settingsDirty.value} onClick={() => remove()}>{t("删除内容")}</button>}
+                        </div>
+                      </details>,
                     ),
                     element(
                       "div",
@@ -1119,34 +1118,6 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                             ),
                           )
                         : null,
-                      revision.value
-                        ? element(
-                            "button",
-                            {
-                              disabled:
-                                busy.value ||
-                                translating.value ||
-                                settingsDirty.value,
-                              hidden: isThread && !threadAdvanced.value,
-                              className: classes("secondary danger"),
-                              onClick: domEvent(($event: Event) => {
-                                remove();
-                              }),
-                            },
-                            t("删除内容"),
-                          )
-                        : null,
-                      element(
-                        "button",
-                        {
-                          hidden: isThread && !threadAdvanced.value,
-                          className: classes("secondary"),
-                          onClick: domEvent(($event: Event) => {
-                            download();
-                          }),
-                        },
-                        t("下载备份"),
-                      ),
                       isLocalized ? saveAction(true) : saveAction(),
                     ),
                   )

@@ -74,7 +74,7 @@ export default function QuickSync({ editing, onManage }: { editing: () => boolea
       {oauth && isGitAuthFailure(error) && <AccountLogin disabled={busy} reauthorize={oauth} onAuthorized={() => {
         setError(''); setSteps(['仓库授权已更新']); setReconnected(true); setHint('同步 Git');
       }} />}
-      {error && <><button onClick={() => { setSteps([]); setError(''); onManage(); }}>{t('工作区同步')}</button> <button onClick={() => { setSteps([]); setError(''); }}>{t('关闭')}</button></>}
+      {error && <div className="error-actions"><button className="secondary" onClick={() => { setSteps([]); setError(''); onManage(); }}>{t('工作区同步')}</button> <button className="secondary" onClick={() => { setSteps([]); setError(''); }}>{t('关闭')}</button></div>}
       {reconnected && <button className="primary" type="button" disabled={busy} onClick={() => void sync()}>{t('重试同步')}</button>}
     </Modal>}
   </div>;

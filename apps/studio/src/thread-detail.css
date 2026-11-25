@@ -17,8 +17,9 @@
 .thread-reading-header time { font-size: 11px; color: var(--studio-muted); }
 .thread-reading-header .badge { margin-left: auto; }
 .thread-reading-title { font-size: 24px; line-height: 1.4; margin: 0 0 20px; overflow-wrap: anywhere; }
-.thread-reading-card .thread-reading-body { padding: 0; min-height: 96px; font-size: 16px; line-height: 1.85; overflow-wrap: anywhere; }
+.thread-reading-card .thread-reading-body { padding: 0; min-height: 0; max-inline-size: 72ch; font-size: 16px; line-height: 1.85; overflow-wrap: anywhere; }
 .thread-reading-body > :first-child { margin-top: 0; }
+.thread-reading-body > :last-child { margin-bottom: 0; }
 .thread-reading-body img { max-width: 100%; max-height: 560px; object-fit: contain; border-radius: 8px; }
 .thread-reading-body pre { overflow-x: auto; max-width: 100%; }
 .thread-reading-body table { display: block; overflow-x: auto; }
@@ -36,7 +37,7 @@
 .detail-topics { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 14px; }
 .detail-topics button { padding: 0; }
 .detail-properties { padding: 23px; }
-.detail-properties h2 { margin: 0 0 20px; font-size: 14px; }
+.detail-properties h2 { margin: 0 0 20px; font-size: var(--studio-section-title); }
 .detail-properties dl { display: grid; gap: 17px; margin: 0; }
 .detail-properties dl > div { display: grid; grid-template-columns: 70px minmax(0,1fr); gap: 8px; font-size: 12px; line-height: 1.6; }
 .detail-properties dt { color: var(--studio-muted); }
@@ -49,7 +50,7 @@
 .library-item-actions .text-button { font-size: 12px; }
 @media(min-width:1600px) { .thread-reading-card { padding: 38px 44px; } .thread-detail-layout { gap: 32px; grid-template-columns: minmax(0,1fr) 300px; } }
 @media(max-width:1000px) { .thread-detail-layout { grid-template-columns: minmax(0,1fr); } .detail-properties dl { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-@media(max-width:760px) { .thread-reading-card { padding: 22px; } .detail-language-tabs > span { width: 100%; } .detail-properties dl { grid-template-columns: minmax(0,1fr); } .library-item-actions { flex-direction: column; gap: 0; padding-right: 10px; } }
+@media(max-width:760px) { .thread-reading-card { padding: 22px; } .detail-properties dl { grid-template-columns: minmax(0,1fr); } .library-item-actions { flex-direction: column; gap: 0; padding-right: 10px; } }
 
 @media (max-width: 760px) {
   .thread-detail-page .page-heading .row > :is(button, a) { flex: 1 1 max-content; }

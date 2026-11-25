@@ -477,7 +477,7 @@ export async function checkLocalizedContentOwnership(browser) {
           assert.equal(await page.evaluate(() => window.ownership.sameEditor()), true);
           assert.equal(await page.$eval(manual, node => node.disabled), true, 'Pending translation stays busy across locale');
           assert.equal(await page.$eval(ai, node => node.disabled), true);
-          assert.equal(await page.$eval('.editor-save-actions button.danger', node => node.disabled), true, 'Real DocumentEditor receives translation working state');
+          assert.equal(await page.$eval('.editor-file-actions button.danger', node => node.disabled), true, 'Real DocumentEditor receives translation working state');
           assert.deepEqual((await observe(page)).jobs, before, 'Locale never replays a POST or starts a loaded GET');
         }
         assert.equal(await page.evaluate(kind => window.ownership.matchesMutation(kind), kind), true, 'POST uses the original saved revision and selected target exactly once');
@@ -493,7 +493,7 @@ export async function checkLocalizedContentOwnership(browser) {
           assert.equal(await page.evaluate(() => window.ownership.hasConflict()), true, 'Current HTTP 409 is visible');
           assert.equal(await page.evaluate(() => window.ownership.sameEditor()), true, 'Conflict cannot navigate or rebase the editor');
           assert.equal(await page.$eval(source, node => node.value === 'Synthetic saved body'), true);
-          assert.equal(await page.$eval('.editor-save-actions button.danger', node => node.disabled), false, 'Conflict clears working state');
+          assert.equal(await page.$eval('.editor-file-actions button.danger', node => node.disabled), false, 'Conflict clears working state');
           const failed = (await observe(page)).jobs;
           await locale(page, 'en');
           assert.equal(await page.evaluate(() => window.ownership.hasConflict()), true, 'Translation conflict persists on locale change');

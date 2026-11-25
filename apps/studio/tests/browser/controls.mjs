@@ -71,6 +71,10 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await page.screenshot({ path: screenshots + '/studio-appearance-mobile.png' });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.setViewport({ width: 1440, height: 1000 });
+  for (const [accent, foreground] of [['#222222', 'rgb(255, 255, 255)'], ['#eeeeee', 'rgb(0, 0, 0)']]) {
+    await fill('[name="extra.style.theme_dark_skin"]', accent);
+    await page.waitForFunction(color => getComputedStyle(document.querySelector('.brand-mark')).color === color, {}, foreground);
+  }
   await click('恢复站点默认外观');
   await click('主题维护'); await heading('主题维护');
   assert.equal(await page.$$eval('[data-field="extra.style.color_scheme"] input[type=radio]', nodes => nodes.length), 3);

@@ -223,9 +223,19 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       const root = window.document.documentElement;
       root.dataset.theme = dark.value ? "dark" : "light";
       const color = style[dark.value ? "extra.style.theme_dark_skin" : "extra.style.theme_light_skin"];
-      if (typeof color === "string" && /^#[a-f0-9]{6}$/i.test(color))
+      if (typeof color === "string" && /^#[a-f0-9]{6}$/i.test(color)) {
         root.style.setProperty("--wjx-theme", color);
-      else root.style.removeProperty("--wjx-theme");
+        // Pick the higher WCAG contrast ratio for the configured accent.
+        const [red, green, blue] = [1, 3, 5].map(offset => {
+          const value = parseInt(color.slice(offset, offset + 2), 16) / 255;
+          return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+        });
+        const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+        root.style.setProperty("--studio-on-accent", (luminance + 0.05) / 0.05 > 1.05 / (luminance + 0.05) ? "#000" : "#fff");
+      } else {
+        root.style.removeProperty("--wjx-theme");
+        root.style.removeProperty("--studio-on-accent");
+      }
       const font = style["extra.style.font_family"];
       if (typeof font === "string")
         root.style.fontFamily = `${font}, -apple-system, BlinkMacSystemFont, sans-serif`;

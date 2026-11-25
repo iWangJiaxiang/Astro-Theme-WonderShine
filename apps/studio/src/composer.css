@@ -6,7 +6,7 @@
 }
 .thread-composer .composer-heading { border: 0; padding: 19px 24px 8px; gap: 12px; }
 .thread-composer .composer-heading > div:first-child { align-items: center; gap: 10px; }
-.thread-composer .composer-heading h2 { font-size: 16px; font-weight: 650; letter-spacing: -.2px; }
+.thread-composer .composer-heading h2 { font-size: var(--studio-section-title); font-weight: 650; letter-spacing: -.2px; }
 .composer-mark { display: grid; place-items: center; width: 32px; height: 32px; color: var(--wjx-theme); background: color-mix(in srgb,var(--wjx-theme) 7%,var(--studio-card)); border-radius: 10px; }
 .thread-composer .composer-initial-language { display: flex; align-items: center; gap: 5px; color: var(--studio-muted); }
 .thread-composer .composer-initial-language select { width: auto; min-height: 30px; padding: 4px 5px; border: 0; background: transparent; font-size: 12px; cursor: pointer; }
@@ -120,9 +120,9 @@
 .thread-date-edit { display: inline-flex; align-items: center; gap: 5px; color: var(--wjx-theme); white-space: nowrap; font-size: 11px; }
 .date-missing { color: var(--wjx-theme); }
 .publication-date-dialog { padding: 0; width: min(420px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; color: var(--wjx-fontcolor); background: var(--studio-card); border: 1px solid var(--studio-line); border-radius: 14px; box-shadow: 0 20px 80px #10162a33; }
-.publication-date-dialog::backdrop { background: #10162a70; backdrop-filter: blur(3px); }
+
 .publication-date-dialog .card-heading { padding: 18px 22px; }
-.publication-date-dialog h2 { font-size: 15px; }
+.publication-date-dialog h2 { font-size: var(--studio-dialog-title); }
 .publication-date-fields { grid-template-columns: minmax(0, 1fr); display: grid; gap: 16px; padding: 22px; }
 .publication-date-fields > .field { grid-template-columns: 48px minmax(0, 1fr); gap: 14px; margin: 0; }
 .publication-date-dialog .publication-date-fields .field input[type] { min-width: 0; max-width: 100%; width: 100%; box-sizing: border-box; min-height: 40px; padding: 8px 11px; border: 1px solid var(--studio-line); border-radius: 7px; box-shadow: none; }

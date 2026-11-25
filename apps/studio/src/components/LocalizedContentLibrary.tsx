@@ -173,11 +173,12 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
               "button",
               {
                 disabled: loading.value,
-                className: classes("secondary"),
+                className: classes("text-button library-refresh"),
                 onClick: domEvent(($event: Event) => {
                   load(true);
                 }),
               },
+              element(Icon, { name: "sync" }),
               t("刷新内容"),
             ),
             props.kind === "topic"
