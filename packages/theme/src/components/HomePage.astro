@@ -19,19 +19,19 @@ const latest=activity ? threads(site,lang)[0] : undefined;
 const latestDate=latest && (activeTimestamp(latest)>timestamp(latest.date) ? latest.updated : latest.date);
 const tr=(key:string)=>t(key,lang,site,'activity');
 ---
-<div id="home_top">
+<div id="home_top" data-thread-surface="home">
   {first&&config.extra.top.recent_top&&<RecentTop site={site} lang={lang}/>}
   {activity&&<section class="home-threads" aria-labelledby="home-threads-title">
     <header>
       <h2 id="home-threads-title"><span class="activity-dot" aria-hidden="true"/>{tr('latest_thread')}</h2>
       <a class="home-threads-more" href={localizeUrl('/threads/',lang,site)}>{tr('all_threads')} <span aria-hidden="true">→</span></a>
     </header>
-    {latest ? <a class="home-thread" href={latest.url}>
+    {latest ? <a class="home-thread" data-thread-id={latest.extra.id} href={latest.url}>
       {latest.title&&<strong>{latest.title}</strong>}
       <p>{latest.description || plain(latest.html) || tr('read_thread')}</p>
       {latestDate&&<time datetime={latestDate} title={utcDateTitle(latestDate)}>{formatDate(latestDate,lang)}</time>}
     </a> : <p class="home-threads-empty">{tr('empty')}</p>}
   </section>}
 </div>
-<main class={`layout ${config.extra.sidebar.location}`} id="content-inner"><div class="recent-posts" id="recent-posts"><ContentBar site={site} lang={lang}/>
+<main class={`layout ${config.extra.sidebar.location}`} id="content-inner"><div class="recent-posts" id="recent-posts" data-thread-surface="home"><ContentBar site={site} lang={lang}/>
 {route.items?.length?<PostCards site={site} items={route.items} lang={lang} preloadFirstOnMobile={first && !(config.extra.top.above?.enable_above??config.extra.top.above?.enable)}/>:<LocalizedEmpty site={site} lang={lang} document={route.document}/>}<Pagination {...route} site={site}/></div>{config.extra.sidebar.location!=='hide-aside'&&<Sidebar site={site} lang={lang}/>}</main>

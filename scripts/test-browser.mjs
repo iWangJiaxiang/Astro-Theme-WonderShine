@@ -52,6 +52,10 @@ export async function checkBrowser(options = demo) {
     ].find(existsSync);
     assert.ok(executablePath, 'Set STUDIO_TEST_BROWSER to a Chrome executable');
     browser = await puppeteer.launch({ headless: true, executablePath });
+    if (options === demo) {
+      const {checkThreadImpressions} = await import('./test-thread-impressions.mjs');
+      await checkThreadImpressions(browser, origin);
+    }
     const page = await browser.newPage();
     await page.setCacheEnabled(false);
     await page.setViewport({ width: 1440, height: 900 });
@@ -102,6 +106,13 @@ export async function checkBrowser(options = demo) {
       const response = await page.goto(origin + route, { waitUntil: 'networkidle0' });
       assert.equal(response.status(), 200, route);
       await settled();
+      if (options === demo) {
+        assert.equal(await page.$('script[data-umami-src]'), null, 'Demo analytics default to off');
+        const surface = {home:'home', chinese:'home', threads:'threads', timeline:'timeline'}[name];
+        if (surface) assert.ok(await page.$(`[data-thread-surface="${surface}"] [data-thread-id]`));
+        else assert.equal(await page.$('[data-thread-surface] [data-thread-id]'), null);
+        assert.equal(await page.$('[data-kind="article"][data-thread-id], aside [data-thread-surface]'), null);
+      }
       if (options === demo && ['home', 'chinese'].includes(name)) {
         const prefix = name === 'chinese' ? '/zh-CN' : '';
         const thread = prefix + '/threads/11111111-2222-4333-8444-555555555555/';
