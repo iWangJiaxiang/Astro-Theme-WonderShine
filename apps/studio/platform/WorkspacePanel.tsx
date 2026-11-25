@@ -1,3 +1,4 @@
+import { containModalFocus } from '../src/modal-layer';
 import { ErrorNotice } from "../src/components/ErrorNotice";
 import LoadingState from '../src/components/LoadingState';
 import { useEffect, useRef, useState } from 'react';
@@ -31,8 +32,9 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
     if (publishPath) {
       const node = dialog.current!;
       node.showModal();
+      const releaseFocus = containModalFocus(node);
       void review('publish');
-      return () => { requestSequence.current++; node.close(); };
+      return () => { requestSequence.current++; releaseFocus(); node.close(); };
     }
     let active = true;
     const sequence = ++requestSequence.current;
@@ -47,8 +49,10 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
     if (publishPath || !pending) return;
     const node = dialog.current!;
     node.showModal();
+    const releaseFocus = containModalFocus(node);
     node.querySelector('h2')?.focus();
     return () => {
+      releaseFocus();
       node.close();
       reviewTrigger.current?.focus();
     };

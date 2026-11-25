@@ -49,10 +49,12 @@ function Field({ name, initial, ...props }) {
 let setLocked, setShowModes, finishCreate;
 function ChangingControls() {
   const [locked, lock] = useState(false), [modes, showModes] = useState(true);
+  const [references, setReferences] = useState(Array.from({ length: 11 }, (_, i) => ({ kind: 'external', url: 'https://example.com/' + i, title: String(i) })));
   setLocked = lock; setShowModes = showModes;
   return <main>
     <PublicationDateField modelValue="2026-11-25" disabled={locked} onUpdateModelValue={() => updates.date = 1} />
-    <ArticleReferences modelValue={[]} items={[]} language="en" disabled={locked} onUpdateModelValue={() => updates.reference = 1} />
+    <ArticleReferences modelValue={references} items={[]} language="en" disabled={locked} onUpdateModelValue={value => { updates.reference = 1; setReferences(value); }} />
+    <Field name="chips" label="Selected topics" initial={['a','b','c']} multiple options={tags} />
     <Field name="create" label="Topic" initial={[]} multiple options={[]} disabled={locked}
       createOption={title => new Promise(resolve => { finishCreate = () => resolve({ value: 'new', label: title }); })} />
     <SaveButton mode="local" showModes={modes} onModeChange={() => {}} onSave={() => {}} />
@@ -299,7 +301,32 @@ window.selectionFixture = {
           await page.evaluate(() => window.selectionFixture.lock(false));
         }
 
+        for (const expected of ['B', 'C']) {
+          const chip = '[data-field="chips"] .selected-choices button:first-child';
+          await page.focus(chip);
+          await page.keyboard.press('Enter');
+          await page.waitForFunction(expected => document.activeElement?.closest('.selected-choices')
+            && document.activeElement.textContent.startsWith(expected), {}, expected);
+        }
+        await page.keyboard.press('Enter');
+        await page.waitForSelector('[data-field="chips"] input:focus');
+
+        await page.locator('.reference-heading button').click();
+        await page.waitForSelector('dialog:modal');
+        await page.locator('dialog [aria-pressed=false]').click();
+        await page.type('dialog input[type=url]', 'https://example.com/last');
+        await page.locator('dialog .selection-footer button').click();
+        await page.waitForSelector('.reference-heading button:disabled');
+        await page.waitForSelector('.reference-chips li:last-child button:focus');
+        await page.keyboard.press('Enter');
+        await page.waitForSelector('.reference-chips li:last-child button:focus');
+        assert.equal(await page.$$eval('.reference-chips li', items => items.length), 11);
         await open('create');
+        const enterAllowed = await page.$eval('.selection-dialog input[type=search]', input =>
+          [true, false].map(isComposing => input.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter', isComposing, bubbles: true, cancelable: true,
+          }))));
+        assert.deepEqual(enterAllowed, [true, false]);
         await page.type('.selection-dialog input[type=search]', 'New topic');
         await page.locator('.selection-create-action').click();
         await page.waitForSelector('.selection-dialog[aria-busy=true]');

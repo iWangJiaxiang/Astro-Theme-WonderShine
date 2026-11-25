@@ -3,11 +3,13 @@ import type { Choice } from "../../shared/choices";
 import type { Json } from "../../shared/types";
 import { errorMessage } from "../api";
 import { t, type Message } from "../i18n";
+import { followChoiceChange } from "../choice-focus";
 import { createBusinessModal } from "../modal-layer";
 import {
   classes,
   component,
   domEvent,
+  preventSearchSubmit,
   domRef,
   element,
   Fragment,
@@ -375,6 +377,10 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                       p1: labels.value.get(value) || value,
                     }),
                     onClick: domEvent(($event: Event) => {
+                      const button = $event.currentTarget as HTMLButtonElement;
+                      const group = button.parentElement;
+                      followChoiceChange(button, () => (group?.isConnected ? group.querySelectorAll("button")[index] ?? group.querySelector<HTMLButtonElement>("button:last-child") : null) ?? trigger.value
+                        ?? inline.value?.querySelector<HTMLInputElement>("input:checked") ?? inline.value?.querySelector("input"));
                       publish(selected.value.filter((_, i) => i !== index));
                     }),
                   },
@@ -446,10 +452,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                             $event.target as HTMLInputElement
                           ).value;
                         }),
-                        onKeyDown: domEvent(($event: Event) => {
-                          if (($event as KeyboardEvent).key !== "Enter") return;
-                          $event.preventDefault();
-                        }),
+                        onKeyDown: preventSearchSubmit,
                       }),
                     ),
                     props.createOption

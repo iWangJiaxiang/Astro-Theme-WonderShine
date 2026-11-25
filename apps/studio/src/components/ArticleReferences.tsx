@@ -1,11 +1,13 @@
 import { ErrorNotice } from "./ErrorNotice";
 import type { ArticleSummary, Json } from "../../shared/types";
 import { t } from "../i18n";
+import { followChoiceChange } from "../choice-focus";
 import { createBusinessModal } from "../modal-layer";
 import {
   classes,
   component,
   domEvent,
+  preventSearchSubmit,
   domRef,
   element,
   Fragment,
@@ -35,7 +37,8 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
       | { kind: "external"; url: string; title: string };
     const id = useId(),
       dialog = ref<HTMLDialogElement>(),
-      trigger = ref<HTMLButtonElement>();
+      trigger = ref<HTMLButtonElement>(),
+      chips = ref<HTMLUListElement>();
     const opened = ref(false),
       mode = ref<"internal" | "external">("internal"),
       search = ref(""),
@@ -132,8 +135,11 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
         error.value = "已添加此引用";
         return;
       }
+      const fillsList = references.value.length === 11;
       emit("update:modelValue", [...references.value, reference]);
       close();
+      if (fillsList && trigger.value)
+        followChoiceChange(trigger.value, () => chips.value?.querySelector<HTMLButtonElement>("li:last-child button"));
     }
     watch(unavailable, blocked => {
       if (blocked && opened.value) close();
@@ -181,7 +187,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
         references.value.length
           ? element(
               "ul",
-              { className: classes("reference-chips") },
+              { ref: domRef(chips), className: classes("reference-chips") },
               renderList(references.value).map((reference, index) =>
                 element(
                   "li",
@@ -201,6 +207,9 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                       }),
                       className: classes("text-button"),
                       onClick: domEvent(($event: Event) => {
+                        followChoiceChange($event.currentTarget as HTMLButtonElement, () =>
+                          chips.value?.querySelectorAll("button")[index]
+                            ?? chips.value?.querySelector<HTMLButtonElement>("li:last-child button") ?? trigger.value);
                         emit(
                           "update:modelValue",
                           references.value.filter((_, i) => i !== index),
@@ -301,9 +310,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                               value: search.value ?? "",
                               type: "search",
                               placeholder: t("搜索标题、标签或文件位置…"),
-                              onKeyDown: domEvent((event: Event) => {
-                                if ((event as KeyboardEvent).key === "Enter") event.preventDefault();
-                              }),
+                              onKeyDown: preventSearchSubmit,
                               onInput: domEvent(($event: Event) => {
                                 search.value = (
                                   $event.target as HTMLInputElement

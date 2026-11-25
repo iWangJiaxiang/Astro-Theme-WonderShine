@@ -523,6 +523,11 @@ try {
   await nextAfterSave.dispose();
   await page.click('.save-button-toggle'); await page.waitForSelector('.save-mode-menu');
   await page.waitForFunction(() => document.activeElement?.matches('.save-mode-menu [value=local]'));
+  assert.ok(await page.evaluate(() => {
+    const before = document.activeElement;
+    return before.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true, cancelable: true }))
+      && document.activeElement === before;
+  }), 'modified arrow remains available to the browser');
   await page.keyboard.press('ArrowRight');
   await page.waitForFunction(() => document.activeElement?.matches('.save-mode-menu [value=branch][aria-checked=true]'));
   assert.equal(await page.$$eval('.save-mode-menu [role=radio]', items => items.filter(item => item.tabIndex === 0).length), 1);

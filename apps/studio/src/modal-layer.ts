@@ -76,9 +76,13 @@ export function containModalFocus(dialog: HTMLDialogElement): () => void {
     const stops = tabStops(dialog);
     const first = stops[0], last = stops[stops.length - 1];
     const outside = !active || active === dialog || !dialog.contains(active);
+    // An initially focused heading can precede every sequential stop.
+    const nonSequential = active instanceof HTMLElement && active.tabIndex < 0 && !outside;
+    const beforeFirst = nonSequential && first && !!(active.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const afterLast = nonSequential && last && !!(active.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_PRECEDING);
     const target = !first ? dialog : event.shiftKey
-      ? (outside || active === first ? last : undefined)
-      : (outside || active === last ? first : undefined);
+      ? (outside || beforeFirst || active === first ? last : undefined)
+      : (outside || afterLast || active === last ? first : undefined);
     if (!target) return;
     // Prevent before the UA's boundary navigation, not after body/chrome focus.
     event.preventDefault();

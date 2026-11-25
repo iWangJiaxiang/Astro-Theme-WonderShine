@@ -23,6 +23,7 @@ import {
   classes,
   component,
   domEvent,
+  preventSearchSubmit,
   domRef,
   element,
   renderList,
@@ -337,10 +338,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                   onInput: domEvent(($event: Event) => {
                     search.value = ($event.target as HTMLInputElement).value;
                   }),
-                  onKeyDown: domEvent(($event: Event) => {
-                    if (($event as KeyboardEvent).key !== "Enter") return;
-                    $event.preventDefault();
-                  }),
+                  onKeyDown: preventSearchSubmit,
                 }),
               ),
               element(

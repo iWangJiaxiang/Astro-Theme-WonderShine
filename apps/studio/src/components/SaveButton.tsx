@@ -86,7 +86,7 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
         trigger.current.focus({ preventScroll: true });
       }}>
       <div className="radio-options" role="radiogroup" aria-label={t('保存方式')} onKeyDown={event => {
-        if (!allowed() || !panel.current || !['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey || !allowed() || !panel.current || !['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();
         const items = [...panel.current!.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)')];
         const current = items.indexOf(document.activeElement as HTMLButtonElement);

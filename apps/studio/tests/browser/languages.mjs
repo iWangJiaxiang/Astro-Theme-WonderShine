@@ -76,6 +76,11 @@ export async function checkLanguages({ browser, origin, screenshots, base }) {
     const selectedTab = '.language-version-tabs [aria-selected="true"]';
     await page.waitForSelector('.language-version-tabs [aria-selected="false"]:not(:disabled)');
     await page.focus(selectedTab);
+    assert.ok(await page.evaluate(() => {
+    const before = document.activeElement;
+    return before.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true, cancelable: true }))
+      && document.activeElement === before;
+  }), 'modified arrow remains available to the browser');
     await page.keyboard.press('ArrowRight');
     assert.equal(await page.$eval('.language-version-tabs :focus', el => el.getAttribute('aria-selected')), 'false');
     await page.keyboard.press('Enter');

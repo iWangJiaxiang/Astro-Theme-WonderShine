@@ -335,6 +335,8 @@ async function reviewCase(page, row, record) {
   // Do not programmatically seed a focus boundary. Native Tab must make both
   // confirmation controls reachable while all original actions stay disabled.
   need(await page.evaluate(() => document.activeElement === document.querySelector('.workspace-confirm h2')), 'focus-identity');
+  await page.keyboard.down('Shift'); await page.keyboard.press('Tab'); await page.keyboard.up('Shift');
+  need(await page.evaluate(() => document.activeElement === document.querySelector('.workspace-confirm .publish-actions button:last-child')), 'focus-order');
   await page.keyboard.press('Tab');
   need(await page.evaluate(() => document.activeElement === document.querySelector('.workspace-confirm summary')), 'focus-order');
   const seen = [];

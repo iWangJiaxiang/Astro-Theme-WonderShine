@@ -342,7 +342,8 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
                   "aria-label": t("语言版本"),
                   className: classes("language-version-tabs"),
                   onKeyDown: domEvent((event: Event) => {
-                    const { key } = event as KeyboardEvent;
+                    const { key, altKey, ctrlKey, metaKey, shiftKey } = event as KeyboardEvent;
+                    if (altKey || ctrlKey || metaKey || shiftKey) return;
                     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(key)) return;
                     const tabs = [...(event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
                     const index = tabs.indexOf(event.target as HTMLButtonElement);
