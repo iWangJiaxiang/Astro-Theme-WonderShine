@@ -98,6 +98,12 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
         ).includes(normalized(search.value)),
       ),
     );
+    const visibleChoice = computed(() =>
+      filtered.value.find((option) => option.value === pending.value[0]),
+    );
+    const canConfirm = computed(() =>
+      !creating.value && !props.disabled && (props.multiple || !!visibleChoice.value),
+    );
     const canCreate = computed(
       () =>
         !!props.createOption &&
@@ -162,7 +168,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       target.focus({ preventScroll: true });
     }
     function confirm() {
-      if (creating.value) return;
+      if (!canConfirm.value) return;
       publish(pending.value);
       close();
     }
@@ -549,10 +555,13 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                       { className: classes("selection-footer") },
                       element(
                         "small",
-                        { className: classes("muted") },
+                        { className: classes("muted", { "pending-choice-label": !props.multiple && !!visibleChoice.value }),
+                          title: props.multiple ? undefined : visibleChoice.value?.label },
                         props.multiple
                           ? t("已选 {p0} 项", { p0: pending.value.length })
-                          : t("单选"),
+                          : visibleChoice.value
+                            ? t("已选：{label}", { label: visibleChoice.value.label })
+                            : t("单选"),
                         " · ",
                         t("共 {count} 项", { count: options.value.length }),
                       ),
@@ -560,13 +569,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                         "button",
                         {
                           type: "button",
-                          disabled:
-                            creating.value ||
-                            props.disabled ||
-                            (!props.multiple &&
-                              !options.value.some(
-                                (option) => option.value === pending.value[0],
-                              )),
+                          disabled: !canConfirm.value,
                           className: classes("primary"),
                           onClick: domEvent(($event: Event) => {
                             confirm();

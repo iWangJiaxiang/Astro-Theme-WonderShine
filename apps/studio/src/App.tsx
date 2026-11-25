@@ -461,7 +461,6 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         return <button key={id} type="button" aria-current={active ? "page" : undefined}
           className={classes({ active })} onClick={() => navigate(id)}>
           <Icon name={icon} size={18} />{t(title)}
-          {!more && active ? <span className="nav-indicator" /> : null}
         </button>;
       }
       const content = availableNavigation().filter(item => !more || !primaryNavigation.includes(item));
@@ -473,7 +472,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         <nav aria-label={t("站点设置")}>{siteGroups().map(group => destination(group.id, group.title, icons[group.id] || "file"))}</nav>
         <details className="studio-preferences" open={more || undefined}><summary>{t("界面设置")}</summary>
           <div className="preference-controls"><LanguageSwitcher />
-          <button type="button" aria-current={view.value === "appearance" ? "page" : undefined} onClick={() => navigate("appearance")}><Icon size={18} name="palette" />{t("外观样式")}</button>
+          <button type="button" className="appearance-link" aria-current={view.value === "appearance" ? "page" : undefined} onClick={() => navigate("appearance")}><Icon size={18} name="palette" />{t("外观样式")}</button>
           <button type="button" className="theme-switch" aria-pressed={dark.value} onClick={() => {
             saveStudioAppearance({ ...studioAppearance.value, [schemePath]: dark.value ? "light" : "dark" });
           }}><Icon name={dark.value ? "sun" : "moon"} size={18} />{t("切换明暗模式")}</button>

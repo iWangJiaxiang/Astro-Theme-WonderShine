@@ -266,6 +266,7 @@ h1 { font-size: var(--studio-page-title); margin-bottom: 8px; }
 .studio-preferences { margin: 12px 0; }
 .studio-preferences summary { padding: 8px; cursor: pointer; }
 .sidebar .preference-controls > :is(button, label, .language-switcher) { display: flex; align-items: center; gap: 8px; margin: 6px 8px; }
+.sidebar .preference-controls > .appearance-link { width: 100%; margin-inline: 0; min-height: 36px; padding: 8px 12px; border-radius: 8px; font-size: 13px; }
 .quick-sync { position: relative; }
 .quick-sync [aria-busy=true] svg { animation: sync-rotate 1s linear infinite; }
 @keyframes sync-rotate { to { transform: rotate(360deg); } }

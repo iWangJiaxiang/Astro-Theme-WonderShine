@@ -74,6 +74,9 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
           .includes(search.value.trim().toLowerCase()),
       ),
     );
+    const visibleChoice = computed(() =>
+      filtered.value.find((item) => key(item) === selected.value),
+    );
     function label(reference: Reference) {
       return reference.kind === "external"
         ? reference.title || reference.url
@@ -100,7 +103,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
       if (props.disabled) return;
       let reference: Reference;
       if (mode.value === "internal") {
-        if (!selected.value) return;
+        if (!visibleChoice.value) return;
         reference = { kind: "internal", path: selected.value };
       } else {
         try {
@@ -298,6 +301,9 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                               value: search.value ?? "",
                               type: "search",
                               placeholder: t("搜索标题、标签或文件位置…"),
+                              onKeyDown: domEvent((event: Event) => {
+                                if ((event as KeyboardEvent).key === "Enter") event.preventDefault();
+                              }),
                               onInput: domEvent(($event: Event) => {
                                 search.value = (
                                   $event.target as HTMLInputElement
@@ -416,14 +422,16 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                       "div",
                       { className: classes("selection-footer") },
                       mode.value === "internal" ? (
-                        <small className="muted">{t("本站引用自动匹配内容语言；缺少公开译文时显示原文。")}</small>
+                        <small className={classes("muted", { "pending-choice-label": !!visibleChoice.value })} title={visibleChoice.value?.title}>{visibleChoice.value
+                          ? t("已选：{label}", { label: visibleChoice.value.title })
+                          : t("本站引用自动匹配内容语言；缺少公开译文时显示原文。")}</small>
                       ) : null,
                       element(
                         "button",
                         {
                           disabled:
                             props.disabled ||
-                            (mode.value === "internal" && !selected.value),
+                            (mode.value === "internal" && !visibleChoice.value),
                           className: classes("primary"),
                         },
                         t("添加引用"),

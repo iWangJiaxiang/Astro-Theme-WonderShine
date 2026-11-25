@@ -18,6 +18,11 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
   const trigger = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null);
   const id = useId();
   const context = saveContext.value;
+  function selectMode(choice: SaveMode) {
+    if (!allowed()) return false;
+    onModeChange(choice);
+    return allowed();
+  }
   function rememberPreference() {
     if (!allowed()) return false;
     if (!canInteract) return rememberSaveMode(mode);
@@ -75,9 +80,12 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
         const items = [...panel.current!.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)')];
         const current = items.indexOf(document.activeElement as HTMLButtonElement);
         const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length;
-        items[next]?.focus();
+        const target = items[next];
+        if (!target) return;
+        const choice = context.modes.find(value => value === target.value);
+        if (choice && selectMode(choice)) target.focus();
       }}>
-        {(['local', 'branch', ...(context.modes.includes('remote') ? ['remote'] : [])] as SaveMode[]).map(choice => <button type="button" key={choice} role="radio" aria-checked={mode === choice} disabled={!context.modes.includes(choice)} title={!context.modes.includes(choice) ? t('当前连接不支持此保存方式') : undefined} onClick={() => { if (!allowed()) return; onModeChange(choice); if (!allowed()) return; setOpen(false); trigger.current?.focus(); }}>
+        {(['local', 'branch', ...(context.modes.includes('remote') ? ['remote'] : [])] as SaveMode[]).map(choice => <button type="button" key={choice} role="radio" value={choice} tabIndex={mode === choice ? 0 : -1} aria-checked={mode === choice} disabled={!context.modes.includes(choice)} title={!context.modes.includes(choice) ? t('当前连接不支持此保存方式') : undefined} onClick={() => { if (!selectMode(choice)) return; setOpen(false); trigger.current?.focus(); }}>
           <span>{t(saveModeLabel[choice])}</span>{context.defaultMode === choice && <small>{t('默认')}</small>}
         </button>)}
       </div>

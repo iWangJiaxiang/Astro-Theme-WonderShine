@@ -230,6 +230,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                   element(
                     "button",
                     {
+                      "aria-current": folder.value ? undefined : "location",
                       className: classes("directory-all", {
                         active: !folder.value,
                       }),

@@ -172,6 +172,10 @@ window.selectionFixture = {
         await page.click('.selection-dialog input[type="radio"][value="public"]');
         assert.equal(await valueIs('folder', 'All folders'), true, `${label}: pending single does not update parent`);
         assert.equal(await updates('folder'), 0);
+        await page.type('.selection-dialog input[type=search]', 'no-matching-folder');
+        await page.waitForSelector('.selection-dialog .primary:disabled');
+        await page.keyboard.press('Enter');
+        assert.equal(await updates('folder'), 0, 'a filtered-out single choice cannot be published');
         await page.click('.selection-dialog .card-heading button');
         await closed('folder');
         assert.equal(await updates('folder'), 0, `${label}: pointer cancel publishes nothing`);

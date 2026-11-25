@@ -131,6 +131,21 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   assert.equal(await page.$eval(currentCard, el => el.getAttribute('aria-pressed')), 'true');
   assert.ok(await page.$(`${currentCard}.selected`));
   await page.screenshot({ path: screenshots + '/media-picker-selected-mobile.png' });
+  const contrast = await page.createCDPSession();
+  try {
+    await contrast.send('Emulation.setEmulatedMedia', { features: [{ name: 'forced-colors', value: 'active' }] });
+    await page.waitForFunction(selector =>
+      matchMedia('(forced-colors: active)').matches && getComputedStyle(document.querySelector(selector)).forcedColorAdjust === 'none',
+      {}, currentCard);
+    assert.ok(await page.$eval(currentCard, card => {
+      const style = getComputedStyle(card);
+      return style.color !== style.backgroundColor && style.borderTopColor === style.backgroundColor;
+    }));
+    await page.screenshot({ path: screenshots + '/media-picker-forced-colors.png' });
+  } finally {
+    await contrast.send('Emulation.setEmulatedMedia', { features: [] });
+    await contrast.detach();
+  }
   assert.equal(await page.$$eval(`${currentCard} .media-path`, nodes => nodes.filter(node => node.textContent === '当前图片').length), 0);
   assert.equal(await page.$eval(`${picker} .media-pending`, el => el.textContent), '将填写：/img/媒体 配图.webp');
   assert.equal(await page.$eval('[name="extra.site.logo"]', el => el.value), savedLogo, 'clicking current only stages the image');

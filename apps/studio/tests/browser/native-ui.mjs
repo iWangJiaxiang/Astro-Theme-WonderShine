@@ -508,8 +508,13 @@ try {
   const originalHead = git(['rev-parse', 'HEAD']);
   const originalIndex = await fs.readFile(join(root, '.git/index'));
   await page.click('.save-button-toggle'); await page.waitForSelector('.save-mode-menu');
-  await page.click('.save-mode-menu [role="radio"]:nth-child(2)');
-  await page.click('.save-button-toggle'); await click('将当前方式设为默认');
+  await page.waitForFunction(() => document.activeElement?.matches('.save-mode-menu [value=local]'));
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => document.activeElement?.matches('.save-mode-menu [value=branch][aria-checked=true]'));
+  assert.equal(await page.$$eval('.save-mode-menu [role=radio]', items => items.filter(item => item.tabIndex === 0).length), 1);
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement?.matches('.save-mode-default')), true);
+  await page.keyboard.press('Enter');
   await click('Git 分支保存'); await page.waitForSelector('.saved-branch');
   const branch = await page.$eval('.saved-branch', e => e.textContent);
   assert.match(branch, /^studio\/save-/);

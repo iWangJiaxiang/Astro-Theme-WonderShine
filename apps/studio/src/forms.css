@@ -143,6 +143,7 @@
 .selection-footer { padding: 12px 22px; background: var(--studio-card); border-top-color: var(--studio-line); z-index: 2; }
 .selection-footer .primary { min-height: 35px; padding: 7px 15px; font-size: 12px; }
 .selection-footer > small { font-size: 11px; }
+.selection-footer .pending-choice-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .selection-visual .choice-tile { gap: 12px; }
 .reference-dialog .selection-result-options, .selection-creatable .selection-result-options { grid-template-columns: minmax(0, 1fr); }
 
@@ -188,6 +189,16 @@
 }
 .reference-results .choice-tile.selected small { color: inherit; }
 @media (forced-colors: active) {
+  .media-card.selected {
+    forced-color-adjust: none;
+    background: Highlight;
+    border-color: Highlight;
+    color: HighlightText;
+    box-shadow: none;
+  }
+  .media-card.selected :is(.media-path, .media-size) { color: inherit; }
+  .media-card.selected .media-thumbnail { forced-color-adjust: auto; }
+  .media-card.selected:focus-visible { outline-color: CanvasText; }
   .radio-options > .choice-tile.selected,
   .radio-options > button[aria-checked=true] {
     forced-color-adjust: none;

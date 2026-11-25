@@ -172,7 +172,8 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   assert.ok(await page.$$eval('.media-library .media-card', nodes => nodes.length > 0 && nodes.every(node => node.dataset.mediaPath.startsWith('public/')) && nodes.some(node => node.dataset.mediaPath.slice('public/'.length).includes('/'))), 'library directory selection still includes descendant directories');
   assert.match(await page.$eval(`${libraryDisclosure} > summary`, node => node.textContent), /public/, 'directory summary shows the active path');
   await page.locator(`${libraryDisclosure} .directory-all`).click();
-  await page.waitForSelector(`${libraryDisclosure} .directory-all.active`);
+  await page.waitForSelector(`${libraryDisclosure} .directory-all.active[aria-current=location]`);
+  assert.equal(await page.$$eval(`${libraryDisclosure} [aria-current]`, items => items.length), 1);
   await upload(['上传 配图.webp', 'invalid.webp']); await finished();
   assert.equal(await page.$$eval('.upload-results li', nodes => nodes.length), 2);
   assert.match(await page.$eval('.upload-error', el => el.textContent), /格式不匹配/);
