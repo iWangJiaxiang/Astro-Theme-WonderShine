@@ -151,7 +151,8 @@ body:has(.mobile-tabbar:not([hidden])) { padding-bottom: var(--tabbar-height); }
   .settings-page > .page-heading { top: var(--studio-header-height); }
 }
 @media (max-width: 760px), (max-width: 1024px) and (pointer: coarse) {
-  html:has(.topbar) { --studio-header-height: calc(3.5rem + env(safe-area-inset-top, 0px)); }
+  /* Reserve the six-pixel focus ring on both sides of the touch target and the header border. */
+  html:has(.topbar) { --studio-header-height: calc(max(3.5rem, var(--studio-touch-target, 44px) + 13px) + env(safe-area-inset-top, 0px)); }
 }
 @media (max-height: 500px) and (pointer: coarse) {
   .settings-page > .page-heading { position: static; }
