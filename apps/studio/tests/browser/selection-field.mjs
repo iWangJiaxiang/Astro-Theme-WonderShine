@@ -169,7 +169,7 @@ window.selectionFixture = {
         const updates = name => page.evaluate(name => window.selectionFixture.updates(name), name);
         const valueIs = (name, value) => page.$eval(`${trigger(name)} > .choice-value`, (node, value) => node.textContent === value, value);
         const open = async name => {
-          await page.click(trigger(name));
+          await page.locator(trigger(name)).click();
           await page.waitForSelector('.selection-dialog[open]');
         };
         await open('folder');
