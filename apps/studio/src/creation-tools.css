@@ -86,6 +86,7 @@
 @media (max-width: 760px) {
   .media-toolbar .media-search { flex: 1 0 100%; width: 100%; }
   .media-toolbar > button { margin-left: auto; }
+  .media-results:has(> .media-upload-disclosure:not([open])) > .media-toolbar .media-search { flex: 1 1 10rem; width: auto; }
   .media-workspace.has-directory-tree { grid-template-columns: minmax(0, 1fr); }
   .media-directory-disclosure { position: static; border-right: 0; border-bottom: 1px solid var(--studio-line); }
   .media-directory-tree { max-height: 220px; }

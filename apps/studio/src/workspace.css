@@ -21,12 +21,13 @@ h1 { font-size: var(--studio-page-title); margin-bottom: 8px; }
 .stat-card { padding: 16px 18px; gap: 12px; }
 .stat-card strong { margin-top: 5px; font-size: 24px; }
 .stat-icon { width: 36px; height: 36px; border-radius: 9px; }
-.getting-started:not(.guide-page) { padding: 16px 20px; margin-bottom: 20px; }
-.getting-started:not(.guide-page) .guide-heading { align-items: center; margin-bottom: 0; }
-.getting-started:not(.guide-page) .guide-heading .eyebrow { display: none; }
-.getting-started:not(.guide-page) .guide-heading h2 { font-size: 15px; margin-bottom: 4px; }
-.getting-started:not(.guide-page) .guide-heading p { margin-bottom: 4px; font-size: 12px; }
-.guide-toggle { padding: 4px 0; }
+.getting-started:not(.guide-page) { padding: 8px 16px; margin-bottom: 20px; }
+.getting-started:not(.guide-page) .guide-heading { align-items: center; }
+.getting-started:not(.guide-page) .guide-heading h2 { margin: 0; min-width: 0; font-size: 15px; }
+.guide-toggle { display: inline-flex; align-items: center; gap: 8px; padding: 8px 0; font-weight: inherit; text-align: start; }
+.guide-toggle svg { width: 16px; color: var(--studio-muted); }
+.guide-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.guide-heading > .text-button { color: var(--studio-muted); }
 .getting-started:not(.guide-page) .guide-steps { margin-top: 16px; }
 .library-toolbar { padding: 14px 20px; gap: 16px; align-items: center; flex-wrap: wrap; }
 .library-toolbar > .choice-field { grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
@@ -37,6 +38,13 @@ h1 { font-size: var(--studio-page-title); margin-bottom: 8px; }
 .content-info strong { font-size: .9375rem; font-weight: 650; line-height: 1.45; }
 .library-toolbar { background: var(--form-surface); border-radius: 13px 13px 0 0; }
 .library-toolbar .search-box { background: var(--studio-card); }
+.content-library .library-refresh { display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--studio-muted); }
+.library-refresh svg { width: 15px; }
+@media (max-width: 760px) {
+  .content-library > .page-heading { gap: 8px 16px; align-items: center; }
+  .content-library > .page-heading > .row { width: auto; margin-inline-start: auto; flex-wrap: wrap; }
+  .content-library > .page-heading > .row > button { flex: 0 1 auto; }
+}
 .content-library .content-description { color: var(--studio-muted); }
 .stats-grid .stat-card:hover { background: var(--studio-card); }
 .home-grid .quick-links { background: transparent; border-color: transparent; }

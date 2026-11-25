@@ -261,6 +261,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                         "button",
                         {
                           type: "button",
+                          "aria-pressed": mode.value === "internal",
                           className: classes({
                             active: mode.value === "internal",
                           }),
@@ -274,6 +275,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                         "button",
                         {
                           type: "button",
+                          "aria-pressed": mode.value === "external",
                           className: classes({
                             active: mode.value === "external",
                           }),
@@ -413,11 +415,9 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                     element(
                       "div",
                       { className: classes("selection-footer") },
-                      element(
-                        "small",
-                        { className: classes("muted") },
-                        t("本站引用自动匹配内容语言；缺少公开译文时显示原文。"),
-                      ),
+                      mode.value === "internal" ? (
+                        <small className="muted">{t("本站引用自动匹配内容语言；缺少公开译文时显示原文。")}</small>
+                      ) : null,
                       element(
                         "button",
                         {

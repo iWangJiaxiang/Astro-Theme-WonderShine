@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 
 export async function checkOnboarding({ page, click, heading, screenshots }) {
   await page.waitForSelector('.getting-started:not(.guide-page)');
-  await click('查看入门步骤');
+  const toggle = '.getting-started .guide-toggle';
+  assert.equal(await page.$eval(toggle, el => el.getAttribute('aria-expanded')), 'false');
+  await click('从这里开始');
+  assert.equal(await page.$eval(toggle, el => el.getAttribute('aria-expanded')), 'true');
   assert.match(await page.$eval('.getting-started', el => el.innerText), /保存会直接修改站点文件/);
   await page.select('.language-switcher select', 'en');
   await page.waitForFunction(() => document.querySelector('#guide-title')?.textContent === 'Start here');

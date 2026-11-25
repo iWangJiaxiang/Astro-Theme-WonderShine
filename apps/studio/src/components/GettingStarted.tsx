@@ -93,15 +93,20 @@ const GettingStarted: StudioComponent<Props, Events> = component<Props, Events>(
             element(
               "div",
               { className: classes("guide-heading") },
-              element(
-                "div",
-                null,
-
-                element(
-                  props.expanded ? "h1" : "h2",
-                  { id: "guide-title" },
-                  props.expanded ? t("使用指南") : t("从这里开始"),
-                ),
+              props.expanded ? (
+                <h1 id="guide-title">{t("使用指南")}</h1>
+              ) : (
+                <h2 id="guide-title">
+                  <button
+                    type="button"
+                    className="guide-toggle"
+                    aria-expanded={showingSteps.value}
+                    onClick={() => { showingSteps.value = !showingSteps.value; }}
+                  >
+                    {t("从这里开始")}
+                    <Icon name="chevron-down" />
+                  </button>
+                </h2>
               ),
               !props.expanded
                 ? element(
@@ -112,7 +117,7 @@ const GettingStarted: StudioComponent<Props, Events> = component<Props, Events>(
                         dismiss();
                       }),
                     },
-                    t("收起入门指引"),
+                    t("隐藏入门指引"),
                   )
                 : null,
             ),
@@ -124,19 +129,6 @@ const GettingStarted: StudioComponent<Props, Events> = component<Props, Events>(
                   props.mode === "git"
                     ? t("正在使用 Git 内容仓库。保存会提交到配置的分支。")
                     : t("正在使用本地站点。保存会直接修改站点文件。"),
-                )
-              : null,
-            !props.expanded
-              ? element(
-                  "button",
-                  {
-                    "aria-expanded": showingSteps.value,
-                    className: classes("text-button guide-toggle"),
-                    onClick: domEvent(($event: Event) => {
-                      showingSteps.value = !showingSteps.value;
-                    }),
-                  },
-                  showingSteps.value ? t("收起步骤") : t("查看入门步骤"),
                 )
               : null,
             props.expanded || showingSteps.value
@@ -198,7 +190,7 @@ const GettingStarted: StudioComponent<Props, Events> = component<Props, Events>(
               ? element(
                   "p",
                   { className: classes("muted small") },
-                  t("收起后，可从导航中的「使用指南」重新打开。"),
+                  t("隐藏后，可从导航中的「使用指南」重新打开。"),
                 )
               : null,
             props.expanded
