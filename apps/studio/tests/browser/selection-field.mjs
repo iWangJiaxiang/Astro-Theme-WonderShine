@@ -42,9 +42,12 @@ function Field({ name, initial, ...props }) {
   return <SelectionField {...props} name={name} modelValue={value}
     onUpdateModelValue={next => { updates[name] = (updates[name] || 0) + 1; setValue(next); }} />;
 }
+let resizePlain;
 function Fixture() {
+  const [options, setOptions] = useState(many);
+  resizePlain = size => setOptions(Array.from({ length: size }, (_, i) => ({ value: 'option-' + i, label: 'Option ' + (i + 1) })));
   return <main style={{ padding: 16, display: 'grid', gap: 14, maxWidth: 800, margin: '0 auto' }}>
-    <Field name="plain" label="Plain chooser" initial="option-0" options={many} />
+    <Field name="plain" label="Plain chooser" initial="option-0" options={options} allowCustomValues={false} />
     <Field name="folder" label="Folder" initial="" options={folders} compact />
     <Field name="destination" label="Upload destination" initial="public" options={folders} compact icon="folder" />
     <Field name="multi" label="Topics" initial={['', 'a', 'b']} options={tags} compact multiple />
@@ -63,6 +66,7 @@ function Fixture() {
 const root = createRoot(document.getElementById('root'));
 root.render(<Fixture />);
 window.selectionFixture = {
+  resizePlain(size) { resizePlain(size); },
   updates(name) { return updates[name] || 0; },
   cleanup() { root.unmount(); disposeShell(); },
 };
@@ -214,6 +218,33 @@ window.selectionFixture = {
         await closed('plain');
         assert.equal(await valueIs('plain', 'Option 6'), true);
         assert.equal(await updates('plain'), 1, `${label}: pointer confirm publishes once`);
+
+        await page.evaluate(() => window.selectionFixture.resizePlain(1000));
+        await open('plain');
+        await page.waitForFunction(() => document.querySelectorAll('.selection-dialog input[type=radio]').length === 1000);
+        const restoreName = await page.evaluateHandle(() => {
+          const prototype = HTMLInputElement.prototype;
+          const descriptor = Object.getOwnPropertyDescriptor(prototype, 'name');
+          let reads = 0;
+          Object.defineProperty(prototype, 'name', { ...descriptor, get() { reads++; return descriptor.get.call(this); } });
+          return () => { Object.defineProperty(prototype, 'name', descriptor); return reads; };
+        });
+        await page.keyboard.press('Tab');
+        const reads = await restoreName.evaluate(restore => restore());
+        await restoreName.dispose();
+        assert.ok(reads >= 1000 && reads < 10000, 'one Tab groups 1,000 radios without repeated full-list scans');
+        await page.click('.selection-dialog input[value="option-2"]');
+        await page.evaluate(() => window.selectionFixture.resizePlain(5));
+        await page.waitForSelector('[data-field="plain"] fieldset');
+        await page.click('.selection-dialog .selection-footer .primary');
+        await page.waitForSelector('[data-field="plain"] input[value="option-2"]:checked:focus');
+
+        await page.evaluate(() => window.selectionFixture.resizePlain(6));
+        await open('plain');
+        await page.evaluate(() => window.selectionFixture.resizePlain(5));
+        await page.waitForSelector('[data-field="plain"] fieldset');
+        await page.keyboard.press('Escape');
+        await page.waitForSelector('[data-field="plain"] input[value="option-2"]:checked:focus');
 
         await open('multi');
         await page.click('.selection-dialog input[type="checkbox"][value="c"]');

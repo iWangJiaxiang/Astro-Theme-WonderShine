@@ -49,7 +49,8 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
   (props, emit, expose) => {
     const id = useId(),
       dialog = ref<HTMLDialogElement>(),
-      trigger = ref<HTMLButtonElement>();
+      trigger = ref<HTMLButtonElement>(),
+      inline = ref<HTMLFieldSetElement>();
     const opened = ref(false),
       search = ref(""),
       pending = ref<string[]>([]),
@@ -149,11 +150,15 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       opened.value = true;
       modal.open();
     }
-    function close() {
+    function close(confirmed?: string) {
       if (creating.value) return;
       modal.close();
       opened.value = false;
       let target: HTMLElement | null | undefined = trigger.value;
+      if (!target && inline.value && !inline.value.disabled) {
+        const inputs = [...inline.value.querySelectorAll<HTMLInputElement>("input:not(:disabled)")];
+        target = inputs.find(input => input.value === confirmed) ?? inputs.find(input => input.checked) ?? inputs[0] ?? inline.value;
+      }
       // A portaled chooser can outlive a responsive disclosure's open state.
       // Use the outermost folded ancestor's summary, never reopen its contents.
       for (let parent = target?.parentElement; parent; parent = parent.parentElement) {
@@ -171,7 +176,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
     function confirm() {
       if (!canConfirm.value) return;
       publish(pending.value);
-      close();
+      close(props.multiple ? undefined : pending.value[0]);
     }
     async function create() {
       if (
@@ -234,6 +239,8 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
           ? element(
               "fieldset",
               {
+                ref: domRef(inline),
+                tabIndex: -1,
                 disabled: props.disabled,
                 "aria-labelledby": `${id}-label`,
                 className: classes("choice-options", { "radio-options": !props.multiple }),

@@ -50,6 +50,7 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
       translationError = ref<Message>(""),
       preparing = ref(false);
     const error = computed(() => translationError.value || loadError.value);
+    const focusedLanguage = ref("");
     const adding = ref(false),
       targetLanguage = ref("");
     const capabilities = ref<TranslationCapabilities>({ enabled: false });
@@ -176,6 +177,7 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
       loadPending = true;
       // A replacement inherits the forced read until its entire group settles.
       pendingRefresh = pendingRefresh || refresh;
+      focusedLanguage.value = "";
       loading.value = true;
       loadError.value = "";
       try {
@@ -333,6 +335,10 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
                 "div",
                 {
                   role: "tablist",
+                  onBlur: domEvent((event: Event) => {
+                    if (!(event.currentTarget as HTMLElement).contains((event as FocusEvent).relatedTarget as Node | null))
+                      focusedLanguage.value = "";
+                  }),
                   "aria-label": t("语言版本"),
                   className: classes("language-version-tabs"),
                   onKeyDown: domEvent((event: Event) => {
@@ -357,7 +363,8 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
                     {
                       key: target,
                       role: "tab",
-                      tabIndex: target === language.value ? 0 : -1,
+                      tabIndex: target === ((!blocked.value && focusedLanguage.value) || language.value) ? 0 : -1,
+                      onFocus: () => { focusedLanguage.value = target; },
                       "aria-selected": target === language.value,
                       disabled: target !== language.value && blocked.value,
                       className: classes({ active: target === language.value }),

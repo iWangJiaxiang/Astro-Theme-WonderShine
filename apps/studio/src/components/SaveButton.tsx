@@ -5,6 +5,7 @@ import type { SaveMode } from '../../shared/save';
 import { rememberSaveMode, saveContext, saveModeLabel } from '../save-preferences';
 import { t } from '../i18n';
 import { useSignals } from '../reactivity';
+import { tabStops } from '../modal-layer';
 import { overlayPosition } from '../overlay-position';
 
 type Props = { mode: SaveMode; onModeChange(mode: SaveMode): void; onSave(): void; disabled?: boolean; busy?: boolean; label?: string; showModes?: boolean; canInteract?(): boolean };
@@ -73,7 +74,17 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
       {busy ? t('正在保存…') : label || t(saveModeLabel[mode])}
     </button>
     {showModes && <button type="button" className="primary save-button-toggle" ref={trigger} disabled={busy} aria-label={t('选择保存方式')} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => { if (!allowed()) return; setError(false); setOpen(!open); }}>⌄</button>}
-    {open && createPortal(<div id={id} className="save-mode-menu" role="dialog" aria-label={t('保存方式')} ref={panel} style={{ top: position.top, left: position.left }}>
+    {open && createPortal(<div id={id} className="save-mode-menu" role="dialog" aria-label={t('保存方式')} ref={panel} style={{ top: position.top, left: position.left }}
+      onKeyDown={event => {
+        if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey || event.defaultPrevented || !allowed() || !trigger.current) return;
+        if ((event.target as HTMLElement).closest('dialog:modal')) return;
+        const stops = tabStops(event.currentTarget);
+        if (event.target !== (event.shiftKey ? stops[0] : stops.at(-1))) return;
+        // Forward Tab continues natively from the opener. Backward Tab lands on it.
+        if (event.shiftKey) event.preventDefault();
+        trigger.current.focus({ preventScroll: true });
+        setOpen(false);
+      }}>
       <div className="radio-options" role="radiogroup" aria-label={t('保存方式')} onKeyDown={event => {
         if (!allowed() || !panel.current || !['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();

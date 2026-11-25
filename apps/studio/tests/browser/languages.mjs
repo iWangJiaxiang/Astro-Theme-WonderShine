@@ -83,6 +83,12 @@ export async function checkLanguages({ browser, origin, screenshots, base }) {
     await page.waitForSelector('.language-version-tabs [aria-selected="false"]:not(:disabled)');
     await page.focus(selectedTab);
     await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.$eval('.language-version-tabs :focus', tab => tab.tabIndex), 0);
+    await page.keyboard.press('Tab');
+    assert.equal(await page.$('.language-version-tabs :focus'), null, 'Tab exits after browsing an inactive version');
+    await page.keyboard.down('Shift'); await page.keyboard.press('Tab'); await page.keyboard.up('Shift');
+    assert.equal(await page.$eval(selectedTab, tab => tab === document.activeElement), true);
+    await page.keyboard.press('ArrowLeft');
     await page.keyboard.press('Enter');
     await heading('标签与分类');
     await page.waitForSelector('.markdown-source');
