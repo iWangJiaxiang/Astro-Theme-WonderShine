@@ -21,8 +21,10 @@ const ready = new Promise(resolve => { window.finishListing = resolve; });
 let refreshes = 0;
 setApiTransport(async (path) => {
   if (path === '/media?refresh=1') {
+    await new Promise(resolve => { window.finishRefresh = resolve; });
     const extra = { ...items[0], path: 'public/extra.svg', name: 'extra.svg' };
-    const refreshed = ++refreshes === 1 ? [...items, extra] : [...items.slice(1), extra, items[0]];
+    if (++refreshes === 3) return Response.json({ error: "Refresh failed" }, { status: 503 });
+    const refreshed = refreshes === 1 ? [...items, extra] : [...items.slice(1), extra, items[0]];
     return Response.json({ items: refreshed, truncated: false });
   }
   if (path !== '/media') throw new Error('Unexpected request ' + path);
@@ -61,14 +63,32 @@ window.openPicker = previewIndex => {
         await page.waitForSelector('.media-dialog .selection-footer button:enabled');
         await page.click('.media-pagination button:last-child');
         await page.waitForSelector('.media-dialog .selection-footer button:disabled');
-        await page.click('.media-toolbar > button');
+        await page.focus('.picker-navigation .navigation-refresh');
+        await page.keyboard.press('Enter');
+        await page.waitForSelector('.picker-navigation button[aria-busy=true]:focus');
+        await page.evaluate(() => window.finishRefresh());
         await page.waitForSelector('[data-media-path="public/extra.svg"]');
+        assert.ok(await page.$('.picker-navigation button[aria-busy=false]:focus'), 'refresh keeps keyboard focus after loading');
+        assert.equal(await page.$('.media-toolbar button'), null);
         assert.ok(await page.$('.media-dialog .selection-footer button:disabled'), 'refresh preserves the page browsed away from the staged image');
         await page.click('.media-pagination button:first-child');
         await page.waitForSelector('[data-media-path="public/0.svg"][aria-pressed=true]');
-        await page.click('.media-toolbar > button');
+        await page.focus('.picker-navigation .navigation-refresh');
+        await page.keyboard.press('Enter');
+        await page.waitForSelector('.picker-navigation button[aria-busy=true]:focus');
+        await page.evaluate(() => window.finishRefresh());
         await page.waitForSelector('[data-media-path="public/extra.svg"]');
         assert.ok(await page.$('[data-media-path="public/0.svg"][aria-pressed=true]'), 'refresh follows a visible staged image when its page changes');
+        await page.keyboard.press('Enter');
+        await page.waitForSelector('.picker-navigation button[aria-busy=true]:focus');
+        await page.evaluate(() => window.finishRefresh());
+        await page.waitForSelector('.media-browser [role=alert]');
+        await page.waitForSelector('.picker-navigation button[aria-busy=false]:focus');
+        await page.keyboard.press('Enter');
+        await page.waitForSelector('.picker-navigation button[aria-busy=true]:focus');
+        await page.evaluate(() => window.finishRefresh());
+        await page.waitForSelector('.media-browser [role=alert]', { hidden: true });
+        await page.waitForSelector('.picker-navigation button[aria-busy=false]:focus');
       }
     } finally {
       await page.close();

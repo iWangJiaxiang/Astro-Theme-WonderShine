@@ -305,7 +305,7 @@ export async function checkControls({ page, click, heading, fill, base, screensh
       return Response.json({ defaultLanguage: 'en', languages: ['en'] });
     };
   });
-  await click('刷新内容');
+  await page.locator('.topbar .navigation-refresh[aria-label="刷新内容"][aria-disabled=false]').click();
   await page.waitForSelector('[name="library-language"][value="en"]:checked');
   assert.equal(await page.$('[name="library-language"][value="zh-CN"]'), null);
   await page.locator(createButton).click();

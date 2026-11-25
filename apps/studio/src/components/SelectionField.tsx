@@ -19,6 +19,7 @@ import {
 } from "../react-component";
 import {
   computed,
+  nextTick,
   onBeforeUnmount,
   ref,
   useId,
@@ -211,7 +212,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       publish(pending.value);
       close(props.multiple ? undefined : pending.value[0]);
     }
-    async function create() {
+    async function create(button: HTMLButtonElement) {
       if (
         !props.createOption ||
         !canCreate.value ||
@@ -219,6 +220,9 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
         props.disabled
       )
         return;
+      const owner = dialog.value;
+      const restoreFocus = document.activeElement === button;
+      let createdValue: string | undefined;
       creating.value = true;
       createError.value = "";
       created.value = false;
@@ -233,10 +237,19 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
           ? [...new Set([...pending.value, option.value])]
           : [option.value];
         created.value = true;
+        createdValue = option.value;
       } catch (error) {
         if (alive && opened.value && !props.disabled) createError.value = errorMessage(error);
       } finally {
         creating.value = false;
+        if (restoreFocus) {
+          await nextTick();
+          if (owner?.open && owner === dialog.value && opened.value && !props.disabled &&
+              [document.body, owner, button].some(node => node === document.activeElement)) {
+            const option = [...owner.querySelectorAll<HTMLInputElement>(".selection-result-options input")].find(input => input.value === createdValue);
+            (option ?? owner.querySelector<HTMLInputElement>('input[type="search"]'))?.focus();
+          }
+        }
       }
     }
     watch(
@@ -502,7 +515,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                                   disabled: creating.value || props.disabled,
                                   className: classes("selection-create-action"),
                                   onClick: domEvent(($event: Event) => {
-                                    create();
+                                    void create($event.currentTarget as HTMLButtonElement);
                                   }),
                                 },
                                 element(Icon, { name: "plus", size: 17 }),

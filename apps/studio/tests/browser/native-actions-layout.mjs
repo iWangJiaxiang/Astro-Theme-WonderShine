@@ -316,7 +316,7 @@ async function reviewCase(page, row, record) {
   // Dirty status leaves only commit and commit-sync enabled. Preserve that guard.
   need(JSON.stringify(initial.buttons.map(b => b.disabled)) === '[false,true,false]', 'busy');
   await pointer(page, '.workspace-sync-actions > button:nth-child(3)');
-  await wait(page, () => window.nativeActions.snapshot().held && window.nativeActions.snapshot().review === 1 && [...document.querySelectorAll('.workspace-sync-actions > button')].every(b => b.disabled) && document.querySelector('.workspace-panel .field input')?.disabled && document.querySelector('.workspace-panel .page-heading button')?.disabled);
+  await wait(page, () => window.nativeActions.snapshot().held && window.nativeActions.snapshot().review === 1 && [...document.querySelectorAll('.workspace-sync-actions > button')].every(b => b.disabled) && document.querySelector('.workspace-panel .field input')?.disabled && document.querySelector('.topbar .navigation-refresh')?.getAttribute('aria-disabled') === 'true');
   need(await page.evaluate(() => window.nativeActions.messagePreserved() && !document.querySelector('dialog.workspace-confirm:modal')), 'busy');
   sameGeometry(initial, await measurement(page, row, 'workspace'));
   await capture(page, record, 'busy', '.workspace-sync-actions');
@@ -324,7 +324,7 @@ async function reviewCase(page, row, record) {
   await wait(page, () => document.querySelector('dialog.workspace-confirm:modal') && window.nativeActions.snapshot().mutations === 0);
   const pending = await measurement(page, row, 'workspace'); sameGeometry(initial, pending);
   need(pending.buttons.every(b => b.disabled), 'pending');
-  need(await page.evaluate(() => window.nativeActions.messagePreserved() && document.querySelector('.workspace-panel .field input').disabled && document.querySelector('.workspace-panel .page-heading button').disabled), 'draft');
+  need(await page.evaluate(() => window.nativeActions.messagePreserved() && document.querySelector('.workspace-panel .field input').disabled && document.querySelector('.topbar .navigation-refresh').getAttribute('aria-disabled') === 'true'), 'draft');
   const confirmation = 'dialog.workspace-confirm:modal';
   await page.$eval(confirmation, group => {
     const buttons = [...group.querySelectorAll('button')];

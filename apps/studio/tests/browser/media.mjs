@@ -24,7 +24,7 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   await cp(theme + '/public/img/logo.webp', deepImage);
   await click('媒体库'); await heading('媒体库');
   // These files were written outside Studio after earlier visits cached the listing.
-  await click('刷新仓库');
+  await page.locator('.topbar .navigation-refresh[aria-label="刷新仓库"][aria-disabled=false]').click();
   const folderButton = path => `.directory-choice[title="${path}"]`;
   const disclosure = path => `.media-directory-row:has(> ${folderButton(path)}) > .directory-disclosure`;
   for (const path of ['public/choice-test', 'public/choice-test/one'])
@@ -39,7 +39,7 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   await page.waitForSelector('[data-media-path="' + deepFolder + '/image.webp"]');
   assert.ok((await page.$eval('.upload-destination', node => node.textContent)).includes(deepFolder));
   await unlink(deepImage);
-  await click('刷新仓库');
+  await page.locator('.topbar .navigation-refresh[aria-label="刷新仓库"][aria-disabled=false]').click();
   await page.waitForFunction(() => document.querySelector('.upload-destination')?.textContent === '请选择保存位置');
   assert.equal(await page.$eval('.upload-file-input', node => node.disabled), true);
   await chooser(page)('upload-directory', 'public/uploads');
@@ -61,7 +61,7 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   await page.waitForFunction(() => document.querySelector('[data-media-path="public/img/preview.svg"] img')?.naturalWidth > 0);
   assert.equal(await page.evaluate(() => window.mediaScriptExecuted), undefined, 'SVG previews must not execute scripts');
   await cp(theme + '/public/img/logo.webp', base + '/site/public/img/new-from-git.webp');
-  await click('刷新仓库'); await fill('[aria-label="搜索仓库图片"]', 'new-from-git');
+  await page.locator('.topbar .navigation-refresh[aria-label="刷新仓库"][aria-disabled=false]').click(); await fill('[aria-label="搜索仓库图片"]', 'new-from-git');
   await page.waitForSelector('[data-media-path="public/img/new-from-git.webp"]');
 
   await click('站点信息'); await heading('站点信息');

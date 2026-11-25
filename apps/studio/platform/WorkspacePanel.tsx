@@ -9,6 +9,7 @@ import { isGitAuthFailure, nativeGitCredential } from './git-credential';
 import { api, errorMessage, session } from '../src/api';
 import { t, type Message } from '../src/i18n';
 import { useSignals } from '../src/reactivity';
+import { NavigationRefresh } from "../src/navigation-refresh";
 import { notifyWorkspaceChanged } from '../src/workspace-events';
 
 type Operation = 'commit' | 'sync' | 'publish' | 'discard';
@@ -177,7 +178,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
     </dialog>;
   }
   return <section className="settings-page workspace-panel">
-    <div className="page-heading"><div><h1>{t('工作区同步')}</h1></div><button className="secondary" disabled={busy || !!pending} onClick={() => void action('refresh')}>{t('刷新状态')}</button></div>
+    <div className="page-heading"><div><h1>{t('工作区同步')}</h1></div><NavigationRefresh label="刷新状态" busy={busy} blocked={!!pending} onRefresh={() => void action('refresh')} /></div>
     {error && <ErrorNotice source="WorkspacePanel" message={error} />}{notice && <p role="status" className="notice success">{t(notice)}</p>}
     {reauthorize}
     {authFailed && credential && !pending && <button className="secondary" disabled={busy} onClick={() => void review(retryOperation.current)}>{t('使用访问令牌')}</button>}

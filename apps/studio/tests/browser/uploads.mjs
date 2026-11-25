@@ -319,8 +319,8 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
           };
         };
         return {
-          toolbar: rect('.media-toolbar'), search: rect('.media-search input'), refresh: rect('.media-toolbar > button'),
-          touchControls: [...dialog.querySelectorAll('.media-search input, .media-toolbar > button, .upload-actions > button, .upload-directory-control .choice-trigger, .media-filter-control .choice-trigger')]
+          toolbar: rect('.media-toolbar'), search: rect('.media-search input'), refresh: rect('.picker-navigation button'), heading: rect('.media-dialog-panel > .card-heading'),
+          touchControls: [...dialog.querySelectorAll('.media-search input, .picker-navigation button, .upload-actions > button, .upload-directory-control .choice-trigger, .media-filter-control .choice-trigger')]
             .map(node => ({ name: node.getAttribute('name') || node.type, width: node.getBoundingClientRect().width, height: node.getBoundingClientRect().height })),
           directory: compact('.upload-directory-control'), folder: compact('.media-filter-control'),
           folderValue: (() => {
@@ -335,8 +335,8 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
       });
       assert.ok(layout.search.width >= layout.toolbar.width - 2, `${width}px search uses the full toolbar row`);
       assert.ok(Math.abs(layout.search.left - layout.toolbar.left) <= 2 && Math.abs(layout.search.right - layout.toolbar.right) <= 2, `${width}px search aligns with toolbar edges`);
-      assert.ok(layout.refresh.top >= layout.search.bottom, `${width}px refresh moves below search`);
-      assert.ok(Math.abs(layout.refresh.right - layout.toolbar.right) <= 2, `${width}px refresh aligns right on its own row`);
+      assert.ok(layout.refresh.top >= layout.heading.top && layout.refresh.bottom <= layout.heading.bottom, `${width}px refresh stays in picker navigation`);
+      assert.ok(layout.refresh.bottom <= layout.search.top, `${width}px refresh leaves the search row clear`);
       for (const control of layout.touchControls) assert.ok(control.width >= 44 && control.height >= 44, `${width}px ${control.name} has a nonzero 44px touch target`);
       assert.equal(layout.touchControls.length, 5, 'search, refresh, upload, directory and folder controls are measured');
       for (const [control, label] of [[layout.directory, 'Save to'], [layout.folder, 'Folder']]) {
@@ -505,7 +505,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await Promise.all(Array.from({ length: 24 }, (_, i) => writeFile(documentFolder + '/00-page-' + i + '.png', png)));
   const refreshPicker = () => Promise.all([
     page.waitForResponse(response => response.url().includes('/api/media?refresh=1')),
-    page.locator('dialog.media-dialog[open] .media-toolbar > button').click(),
+    page.locator('dialog.media-dialog[open] .picker-navigation button[aria-disabled=false]').click(),
   ]);
   await refreshPicker();
   await page.waitForSelector('dialog.media-dialog[open] .media-pagination button:not(:disabled)');
@@ -555,7 +555,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
       return response;
     };
   });
-  await click('刷新仓库');
+  await page.locator('.topbar .navigation-refresh[aria-label="刷新仓库"][aria-disabled=false]').click();
   await revealUpload();
   await page.waitForFunction(() => document.querySelector('.upload-actions')?.textContent.includes('4 MB'));
   await writeFile(source + '/cloud-too-large.png', Buffer.alloc(4 * 1024 * 1024 + 1));
@@ -567,7 +567,7 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   assert.deepEqual(uploadRequests, [], 'oversized cloud uploads must be rejected before sending');
   page.off('request', track);
   await page.evaluate(() => { window.fetch = window.originalUploadTestFetch; delete window.originalUploadTestFetch; });
-  await click('刷新仓库');
+  await page.locator('.topbar .navigation-refresh[aria-label="刷新仓库"][aria-disabled=false]').click();
   await page.waitForFunction(() => document.querySelector('.upload-actions')?.textContent.includes('20 MB'));
   console.log('PASS: batch and drag uploads, mixed failures, duplicate renaming, public and bundle paths, picker cancel/confirm, responsive directory/filter disclosure defaults and focus, meaningful initial 320x568 previews, upload queue/node/result retention, 320/390px English layout, bidirectional browser wheel scrolling, nested compact chooser cancel/confirm and focus, and saved cover/Markdown.');
 }

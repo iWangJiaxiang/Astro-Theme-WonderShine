@@ -1,3 +1,4 @@
+import { NavigationRefresh } from "../src/navigation-refresh";
 import { ErrorNotice } from "../src/components/ErrorNotice";
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from '../src/api';
@@ -29,10 +30,11 @@ export function NativeAiSettings({ onDirty }: { onDirty?: (dirty: boolean) => vo
     finally { setBusy(false); }
   }
   return <section className="settings-page native-ai-settings">
+    <NavigationRefresh label="刷新页面" busy={loading || busy} blocked={dirty} onRefresh={() => setAttempt(value => value + 1)} />
     <div className="page-heading"><h1>{t('客户端 API 设置')}</h1></div>
     {error && <ErrorNotice source="NativeAiSettings" message={error} />}{notice && <p className="notice success" role="status">{t(notice)}</p>}
     {!settings ? loading ? <p role="status">{t('正在读取内容…')}</p> : <button onClick={() => setAttempt(value => value + 1)}>{t('重试')}</button> : <form className="card native-ai-form" onSubmit={save}>
-      <fieldset disabled={busy}>
+      <fieldset disabled={busy || loading}>
         <legend className="sr-only">{t('接口与模型')}</legend>
         <div className="native-ai-credentials">
           <label className="field"><span>{t('API 地址')}</span><input type="url" required value={settings.baseUrl} placeholder="https://api.example.com/v1" onChange={event => update('baseUrl', event.target.value)} /></label>

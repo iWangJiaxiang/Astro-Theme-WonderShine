@@ -1,3 +1,4 @@
+import { NavigationRefresh } from "../navigation-refresh";
 import { followPageChange } from "../choice-focus";
 import { ErrorDetails, ErrorNotice } from "./ErrorNotice";
 import {
@@ -360,18 +361,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                   onKeyDown: preventSearchSubmit,
                 }),
               ),
-              element(
-                "button",
-                {
-                  type: "button",
-                  disabled: mediaLoading.value || mediaUploading.value,
-                  className: classes("secondary"),
-                  onClick: domEvent(($event: Event) => {
-                    loadMedia(true);
-                  }),
-                },
-                mediaLoading.value ? t("读取中…") : t("刷新仓库"),
-              ),
+              <NavigationRefresh label="刷新仓库" busy={mediaLoading.value} blocked={mediaUploading.value} onRefresh={() => loadMedia(true)} />,
             ),
             props.mode !== "library"
               ? element(
@@ -482,18 +472,6 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
               ? element(
                   ErrorNotice,
                   { source: "MediaBrowser", message: mediaError.value },
-                  " ",
-                  element(
-                    "button",
-                    {
-                      type: "button",
-                      className: classes("text-button"),
-                      onClick: domEvent(($event: Event) => {
-                        loadMedia(true);
-                      }),
-                    },
-                    t("重试"),
-                  ),
                 )
               : null,
             mediaListing.value.truncated

@@ -1,3 +1,4 @@
+import { NavigationRefresh } from "../navigation-refresh";
 import type { ReactNode } from 'react';
 import { ErrorNotice } from "./ErrorNotice";
 import Modal from "./Modal";
@@ -604,8 +605,12 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
       className: classes("text-button settings-exit"),
       onClick: domEvent(exit),
     }, t("返回工作台"));
-    return () =>
-      !ownsInstance()
+    return () => <>
+      {!props.embedded && ownsInstance() && <NavigationRefresh label="刷新页面"
+        busy={busy.value || (!settings.value && !error.value && !mainNeedsReload.value)}
+        blocked={dirty.value || branchPending.value || unknownSaveObligation.value}
+        onRefresh={reload} />}
+      {!ownsInstance()
         ? element("section", { className: classes("notice settings-retired"), role: "status" },
             element("p", null, t("当前会话或连接已更换，此设置页已停用。")),
             exitControl())
@@ -824,7 +829,8 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                 t("重试"),
               ),
             )
-          : element(LoadingState, { label: "正在读取配置…" });
+          : element(LoadingState, { label: "正在读取配置…" })}
+    </>;
   },
   {},
 );

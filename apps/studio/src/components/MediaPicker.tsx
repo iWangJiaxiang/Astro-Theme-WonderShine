@@ -1,3 +1,4 @@
+import { RefreshHost } from "../navigation-refresh";
 import type { MediaItem, MediaMode } from "../../shared/media";
 import { createBusinessModal } from "../modal-layer";
 import { t } from "../i18n";
@@ -38,6 +39,7 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
         item: MediaItem;
         value: string;
       }>();
+    const refreshHost = ref<HTMLElement | null>(null);
     const visiblePath = ref("");
     const visibleChoice = computed(() => pending.value?.item.path === visiblePath.value ? pending.value : undefined);
     const canConfirm = computed(() => !!visibleChoice.value && !mediaLoading.value && !mediaUploading.value && !mediaError.value);
@@ -103,6 +105,7 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
                 "div",
                 { className: classes("card-heading") },
                 element("h2", { id: id }, t("选择或上传图片")),
+                <nav className="picker-navigation" ref={domRef(refreshHost)} aria-label={t("图片导航")} />,
                 element(
                   "button",
                   {
@@ -119,7 +122,7 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
               element(
                 "div",
                 { className: classes("media-dialog-body") },
-                element(MediaBrowser, {
+                <RefreshHost.Provider value={refreshHost.value}>{element(MediaBrowser, {
                   mode: props.mode,
                   documentPath: props.documentPath,
                   selected: pending.value?.item.path || "",
@@ -131,7 +134,7 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
                     typeof MediaBrowser,
                     "onSelect"
                   >,
-                }),
+                })}</RefreshHost.Provider>,
               ),
               element(
                 "div",

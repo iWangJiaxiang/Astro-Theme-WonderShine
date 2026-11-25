@@ -725,6 +725,8 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       emit("dirty", false);
     }
     expose({
+      refresh: () => { if (!choicesLoading.value && !loading.value) void loadChoices(true); },
+      refreshing: () => choicesLoading.value || loading.value,
       flush,
       forget,
       isBusy: () =>

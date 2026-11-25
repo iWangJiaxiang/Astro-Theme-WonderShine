@@ -188,7 +188,11 @@ const ThreadDetail: StudioComponent<Props, Events> = component<Props, Events>(
       }
     }
     onMounted(load);
-    expose({ flush: () => {}, isBusy: () => busy.value });
+    expose({
+      flush: () => {}, isBusy: () => busy.value,
+      refreshing: () => loading.value,
+      refresh: () => { if (!loading.value && !busy.value) void load(true); },
+    });
     return () =>
       element(
         "section",

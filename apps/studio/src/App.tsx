@@ -1,3 +1,4 @@
+import { NavigationRefresh, RefreshHost } from "./navigation-refresh";
 import QuickSync from "./components/QuickSync";
 import { ErrorDetails, ErrorNotice } from "./components/ErrorNotice";
 import { LegacyRecovery } from "../platform/LegacyRecovery";
@@ -84,9 +85,12 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
       nativeAi?: boolean;
       groups: { id: string; title: string }[];
     };
+    const refreshHost = ref<HTMLSpanElement | null>(null);
     const editorView = ref<{
       flush: () => void;
       isBusy?: () => boolean;
+      refresh?: () => void;
+      refreshing?: () => boolean;
     } | null>(null);
     const checking = ref(true),
       data = ref<Bootstrap | null>(null),
@@ -663,6 +667,14 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                     element(
                       "div",
                       { className: classes("row topbar-actions") },
+                      <span className="nav-refresh-slot" ref={domRef(refreshHost)}>
+                        {document.value && editorView.value?.refresh &&
+                          <NavigationRefresh label={document.value.mode === "edit" ? "刷新编辑器选项" : "刷新内容"}
+                            busy={editorView.value.refreshing?.()} blocked={editorView.value.isBusy?.()}
+                            onRefresh={() => editorView.value?.refresh?.()} />}
+                        {!document.value && ["home", "more", "help", "appearance"].includes(view.value) &&
+                          <NavigationRefresh label="刷新页面" busy={loadingSite.value || loadingArticles.value} onRefresh={reloadWorkspace} />}
+                      </span>,
                       data.value?.quickSync ? <QuickSync key={session.value.identity.id} editing={() => dirty.value || !!editorView.value?.isBusy?.()} onManage={() => navigate("workspace")} /> : null,
                       data.value
                         ? element(
@@ -738,7 +750,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                           ),
                         )
                       : null,
-                    <ViewTransition
+                    <RefreshHost.Provider value={refreshHost.value}><ViewTransition
                       viewId={document.value?.path ?? view.value}
                       mode={document.value?.mode ?? "section"}
                     >
@@ -1164,7 +1176,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
                                               "onSaved"
                                             >,
                                         })}
-                    </ViewTransition>,
+                    </ViewTransition></RefreshHost.Provider>,
                   ),
                   !props.workspaceSwitcher && element(
                     "footer",
