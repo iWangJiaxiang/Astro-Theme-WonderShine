@@ -98,6 +98,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
   function field(key: keyof WorkspaceProfile, value: string) { if (key === 'url' || key === 'provider' || key === 'username') setToken(''); setProfile(current => ({ ...current, [key]: value })); }
   function switchConnection(value: Connection) {
     if (value === 'local' && !folderAvailable) value = 'clone';
+    if (value === connection && showForm) return;
     setConnection(value); setError(''); setToken(''); setService(null); setAddress(''); setShowForm(true); setIncludeSubmodules(false);
     setProfile(profiles.find(item => value === 'local' ? item.source === 'local' : item.source !== 'local') || blank());
   }
@@ -182,10 +183,10 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
   if (resuming) return <main className="native-connect"><LoadingState label="正在打开工作区…" compact /></main>;
   return <main className="native-connect"><section className="card connection-card">
     <div className="connection-brand"><details className="connection-about"><summary>WonderShine Studio</summary>{updateControls}</details><LanguageSwitcher /></div><h1>{t('连接创作工作区')}</h1>
-    <div className="connection-modes" role="group" aria-label={t('连接方式')}>
-      {folderAvailable && <button disabled={busy} aria-pressed={local} onClick={() => switchConnection('local')}><Icon name="folder" size={19} />{t('本地文件夹')}</button>}
+    {folderAvailable && <div className="connection-modes" role="group" aria-label={t('连接方式')}>
+      <button disabled={busy} aria-pressed={local} onClick={() => switchConnection('local')}><Icon name="folder" size={19} />{t('本地文件夹')}</button>
       <button disabled={busy} aria-pressed={connection === 'clone'} onClick={() => switchConnection('clone')}><Icon name="link" size={19} />{t('远程仓库')}</button>
-    </div>
+    </div>}
     {(error || initial.error) && <ErrorNotice source="NativeConnection" message={error || initial.error} />}
     {records.length > 0 && <section className="workspace-chooser" aria-label={t('工作区')}>
       {records.filter(item => !item.archived).map(renderRecord)}

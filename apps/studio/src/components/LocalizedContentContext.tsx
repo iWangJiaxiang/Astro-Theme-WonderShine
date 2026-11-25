@@ -335,6 +335,17 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
                   role: "tablist",
                   "aria-label": t("语言版本"),
                   className: classes("language-version-tabs"),
+                  onKeyDown: domEvent((event: Event) => {
+                    const { key } = event as KeyboardEvent;
+                    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(key)) return;
+                    const tabs = [...(event.currentTarget as HTMLElement).querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+                    const index = tabs.indexOf(event.target as HTMLButtonElement);
+                    if (index < 0) return;
+                    event.preventDefault();
+                    const next = key === "Home" ? 0 : key === "End" ? tabs.length - 1
+                      : (index + (key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+                    tabs[next].focus();
+                  }),
                 },
                 renderList(
                   languages.value?.languages.filter(
@@ -346,6 +357,7 @@ const LocalizedContentContext: StudioComponent<Props, Events> = component<
                     {
                       key: target,
                       role: "tab",
+                      tabIndex: target === language.value ? 0 : -1,
                       "aria-selected": target === language.value,
                       disabled: target !== language.value && blocked.value,
                       className: classes({ active: target === language.value }),

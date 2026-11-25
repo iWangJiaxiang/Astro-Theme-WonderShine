@@ -529,13 +529,6 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                               { className: classes("muted small") },
                               t(item.unavailable) || t("暂时无法预览"),
                             ),
-                        props.selected === item.path
-                          ? element(
-                              "span",
-                              { className: classes("media-selected-mark") },
-                              element(Icon, { name: "check", size: 16 }),
-                            )
-                          : null,
                       ),
                       element(
                         "span",

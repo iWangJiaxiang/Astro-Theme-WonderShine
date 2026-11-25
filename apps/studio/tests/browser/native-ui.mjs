@@ -458,6 +458,8 @@ try {
   await page.click('.folder-picker');
   assert.equal(await page.$('.selected-repository'), null, 'cancelled picker does not select a folder');
   selectedFolder = localRoot; await page.click('.folder-picker'); await page.waitForSelector('.selected-repository');
+  await click('本地文件夹');
+  assert.ok(await page.$('.selected-repository'), 'Reselecting the active mode preserves the unsaved folder');
   await screenshot('connection-folder-selected-desktop');
   await page.click('.connection-options summary'); await screenshot('connection-folder-options-desktop');
   await setViewport({width:390,height:844}); await screenshot('connection-folder-options-mobile'); await noOverflow('local folder options');
@@ -694,8 +696,8 @@ try {
   await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36');
   await setViewport({width:390,height:844,isMobile:true,hasTouch:true});
   await page.reload({waitUntil:'networkidle0'});await heading('连接创作工作区');
-  assert.equal(await page.$eval('.connection-modes button[aria-pressed=true]',node=>node.textContent.trim()),'远程仓库','mobile first launch starts with usable repository URL entry');
-  assert.equal(await page.$$eval('.connection-modes button', buttons => buttons.some(button => button.textContent.includes('本地文件夹'))), false, 'Mobile does not offer an unsupported folder picker');
+  assert.equal(await page.$('.connection-modes'), null, 'Mobile omits the single repository mode');
+  await page.waitForSelector('.connection-url input', { visible: true });
   await click('连接自建创作中心'); await page.waitForSelector('input[placeholder="https://studio.example.com"]');
   await click('返回仓库连接'); await page.waitForSelector('.connection-url input');
   assert.equal(await page.$('.folder-picker'), null, 'Returning from remote service uses the mobile repository URL mode');
@@ -762,7 +764,8 @@ try {
       assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('oauth-fixture-token')), false);
     }
     allowOAuthHttp = false;
-    await click('远程仓库');
+    await click('连接自建创作中心');
+    await click('返回仓库连接');
   }
   await page.waitForSelector('.connection-url input');
   const submoduleOption = '.connection-form-fields input[type=checkbox]';

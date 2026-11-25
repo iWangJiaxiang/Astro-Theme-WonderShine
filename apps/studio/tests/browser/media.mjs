@@ -25,7 +25,7 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   await page.waitForFunction(path => document.querySelector(`[data-media-path="${path}"] img`)?.naturalWidth > 0, {}, shared);
   await page.click(`[data-media-path="${shared}"]`);
   assert.equal(await page.$eval(`[data-media-path="${shared}"]`, el => el.getAttribute('aria-pressed')), 'true');
-  assert.equal(await page.$$eval(`[data-media-path="${shared}"] .media-selected-mark`, nodes => nodes.length), 1);
+  assert.ok(await page.$(`[data-media-path="${shared}"].selected`));
   await click('复制站点路径');
   await page.waitForSelector('[aria-label="已复制的图片路径"]');
   assert.equal(await page.$eval('[aria-label="已复制的图片路径"]', el => el.value), '/img/媒体 配图.webp');
@@ -114,7 +114,7 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
     assert.equal(await page.$eval(currentCard, el => el.getAttribute('aria-label')), `${english ? 'Current image · Choose image: ' : '当前图片 · 选择图片：'}${shared}`);
     assert.equal(await page.$eval(currentCard, el => el.classList.contains('selected')), false);
     assert.ok((await page.$eval(currentCard, el => el.textContent)).includes(english ? 'Current image' : '当前图片'));
-    assert.equal(await page.$$eval(`${picker} .media-selected-mark`, nodes => nodes.length), 0);
+    assert.equal(await page.$(`${picker} .media-card.selected`), null);
     assert.equal(await page.$eval(`${picker} .media-pending`, el => el.textContent), english ? 'Unchanged. Choose an image to confirm.' : '尚未更改；选择图片后确认');
     assert.equal(await page.$eval(`${picker} .selection-footer .primary`, el => el.disabled), true);
   };
@@ -129,7 +129,8 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   await page.click(currentCard);
   await page.waitForFunction(selector => document.querySelector(selector)?.disabled === false, {}, `${picker} .selection-footer .primary`);
   assert.equal(await page.$eval(currentCard, el => el.getAttribute('aria-pressed')), 'true');
-  assert.equal(await page.$$eval(`${currentCard} .media-selected-mark`, nodes => nodes.length), 1);
+  assert.ok(await page.$(`${currentCard}.selected`));
+  await page.screenshot({ path: screenshots + '/media-picker-selected-mobile.png' });
   assert.equal(await page.$$eval(`${currentCard} .media-path`, nodes => nodes.filter(node => node.textContent === '当前图片').length), 0);
   assert.equal(await page.$eval(`${picker} .media-pending`, el => el.textContent), '将填写：/img/媒体 配图.webp');
   assert.equal(await page.$eval('[name="extra.site.logo"]', el => el.value), savedLogo, 'clicking current only stages the image');

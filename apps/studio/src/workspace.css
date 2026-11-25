@@ -41,6 +41,7 @@ h1 { font-size: var(--studio-page-title); margin-bottom: 8px; }
 .content-library .library-refresh { display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--studio-muted); }
 .library-refresh svg { width: 15px; }
 @media (max-width: 760px) {
+  .library-toolbar { justify-content: flex-start; }
   .content-library > .page-heading { gap: 8px 16px; align-items: center; }
   .content-library > .page-heading > .row { width: auto; margin-inline-start: auto; flex-wrap: wrap; }
   .content-library > .page-heading > .row > button { flex: 0 1 auto; }

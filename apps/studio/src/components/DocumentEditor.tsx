@@ -1227,6 +1227,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     element(
                       "button",
                       {
+                        "aria-pressed": pageTab.value === "content",
                         className: classes({
                           active: pageTab.value === "content",
                         }),
@@ -1240,6 +1241,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       "button",
                       {
                         disabled: busy.value,
+                        "aria-pressed": pageTab.value === "settings",
                         className: classes({
                           active: pageTab.value === "settings",
                         }),
@@ -1420,6 +1422,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     element(
                       "button",
                       {
+                        "aria-pressed": mode.value === "source",
                         className: classes({ active: mode.value === "source" }),
                         onClick: domEvent(($event: Event) => {
                           changeMode("source");
@@ -1431,6 +1434,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                       "button",
                       {
                         disabled: shortcode.value,
+                        "aria-pressed": mode.value === "rich",
                         className: classes({ active: mode.value === "rich" }),
                         onClick: domEvent(($event: Event) => {
                           changeMode("rich");
@@ -1441,6 +1445,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     element(
                       "button",
                       {
+                        "aria-pressed": mode.value === "preview",
                         className: classes({
                           active: mode.value === "preview",
                         }),
