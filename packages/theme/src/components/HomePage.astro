@@ -34,4 +34,4 @@ const tr=(key:string)=>t(key,lang,site,'activity');
   </section>}
 </div>
 <main class={`layout ${config.extra.sidebar.location}`} id="content-inner"><div class="recent-posts" id="recent-posts"><ContentBar site={site} lang={lang}/>
-{route.items?.length?<PostCards site={site} items={route.items} lang={lang}/>:<LocalizedEmpty site={site} lang={lang} document={route.document}/>}<Pagination {...route} site={site}/></div>{config.extra.sidebar.location!=='hide-aside'&&<Sidebar site={site} lang={lang}/>}</main>
+{route.items?.length?<PostCards site={site} items={route.items} lang={lang} preloadFirstOnMobile={first && !(config.extra.top.above?.enable_above??config.extra.top.above?.enable)}/>:<LocalizedEmpty site={site} lang={lang} document={route.document}/>}<Pagination {...route} site={site}/></div>{config.extra.sidebar.location!=='hide-aside'&&<Sidebar site={site} lang={lang}/>}</main>
