@@ -66,6 +66,8 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
         (a, b) => (Date.parse(b.date) || 0) - (Date.parse(a.date) || 0),
       );
     });
+    const linkedArticles = computed(() => new Set(references.value.flatMap(reference =>
+      reference.kind === "internal" ? [reference.path] : [])));
     const filtered = computed(() =>
       articles.value.filter((item) =>
         [item.title, item.path, ...item.tags]
@@ -75,7 +77,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
       ),
     );
     const visibleChoice = computed(() =>
-      filtered.value.find((item) => key(item) === selected.value),
+      filtered.value.find((item) => key(item) === selected.value && !linkedArticles.value.has(key(item))),
     );
     function label(reference: Reference) {
       return reference.kind === "external"
@@ -100,7 +102,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
       trigger.value?.focus();
     }
     function add() {
-      if (props.disabled) return;
+      if (props.disabled || references.value.length >= 12) return;
       let reference: Reference;
       if (mode.value === "internal") {
         if (!visibleChoice.value) return;
@@ -124,18 +126,12 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
           return;
         }
       }
-      if (
-        !references.value.some(
-          (item) =>
-            item.kind === reference.kind &&
-            (item.kind === "internal" && reference.kind === "internal"
-              ? item.path === reference.path
-              : item.kind === "external" &&
-                reference.kind === "external" &&
-                item.url === reference.url),
-        )
-      )
-        emit("update:modelValue", [...references.value, reference]);
+      if (reference.kind === "external" && references.value.some(item =>
+        item.kind === "external" && item.url === reference.url)) {
+        error.value = "已添加此引用";
+        return;
+      }
+      emit("update:modelValue", [...references.value, reference]);
       close();
     }
     onBeforeUnmount(() => modal.dispose());
@@ -336,6 +332,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                                   element("input", {
                                     checked: selected.value === key(item),
                                     type: "radio",
+                                    disabled: linkedArticles.value.has(key(item)),
                                     name: "reference-article",
                                     value: key(item),
                                     onChange: domEvent(($event: Event) => {
@@ -351,6 +348,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                                     element(
                                       "small",
                                       null,
+                                      linkedArticles.value.has(key(item)) ? t("已添加此引用") + " · " : "",
                                       item.lang,
                                       " · ",
                                       t(item.draft ? "草稿" : "已发布"),
@@ -391,6 +389,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                               required: true,
                               placeholder: "https://example.com/article",
                               onInput: domEvent(($event: Event) => {
+                                error.value = "";
                                 url.value = (
                                   $event.target as HTMLInputElement
                                 ).value;

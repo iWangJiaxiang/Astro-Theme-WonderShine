@@ -31,6 +31,7 @@ type Props = {
   name: string;
   label: string;
   multiple?: boolean;
+  allowCustomValues?: boolean;
   disabled?: boolean;
   hint?: string;
   preview?: string;
@@ -82,7 +83,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       ...addedOptions.value.filter(
         (option) => !props.options.some((item) => item.value === option.value),
       ),
-      ...known.value
+      ...(props.allowCustomValues === false ? [] : known.value)
         .filter(
           (value) =>
             ![...props.options, ...addedOptions.value].some(

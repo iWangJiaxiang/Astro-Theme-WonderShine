@@ -487,6 +487,12 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
     { label: '文件夹', visible: true, compact: true, flatOptions: 0 },
   ], 'document picker source and folder filters both use labelled compact triggers');
   await checkResponsiveChooserClose('media-source', 'public');
+  const folderFilter = 'dialog.media-dialog[open] button[name="media-folder"]';
+  await revealField(page, folderFilter);
+  await page.locator(folderFilter).click();
+  await page.waitForSelector('.selection-dialog[open] input[value^="public"]');
+  assert.equal(await page.$('.selection-dialog[open] input[value^="content/"]'), null);
+  await page.keyboard.press('Escape');
   await revealField(page, 'dialog.media-dialog[open] button[name="media-source"]');
   await page.locator('dialog.media-dialog[open] button[name="media-source"]').click();
   await page.waitForSelector('.selection-dialog[open]', { visible: true });
@@ -495,8 +501,21 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await page.waitForFunction(() => !document.querySelector('.selection-dialog[open]'));
   assert.equal(await page.$eval('dialog.media-dialog[open] button[name="media-source"]', node => node === document.activeElement), true, 'ordinary source confirmation still restores its visible trigger');
   await page.setViewport({ width: 1440, height: 1000 });
+  const documentFolder = base + '/site/content/articles/studio-browser-test';
+  await Promise.all(Array.from({ length: 24 }, (_, i) => writeFile(documentFolder + '/00-page-' + i + '.png', png)));
+  await Promise.all([
+    page.waitForResponse(response => response.url().includes('/api/media?refresh=1')),
+    page.locator('dialog.media-dialog[open] .media-toolbar > button').click(),
+  ]);
+  await page.waitForSelector('dialog.media-dialog[open] .media-pagination button:not(:disabled)');
   await upload(['上传 配图.webp']); await finished();
   assert.equal(await selected(), 'content/articles/studio-browser-test/上传 配图.webp');
+  const pickerFooter = 'dialog.media-dialog[open] .selection-footer .primary';
+  const pagination = 'dialog.media-dialog[open] .media-pagination';
+  await page.locator(pagination + ' button:first-child:not(:disabled)').click();
+  await page.waitForSelector(pickerFooter + ':disabled');
+  await page.locator(pagination + ' button:last-child:not(:disabled)').click();
+  await page.waitForSelector(pickerFooter + ':not(:disabled)');
   await click('使用这张图片'); await click('本地保存'); await page.waitForSelector('.editor-page > .notice.success');
   const saved = splitDocument(await readFile(base + '/site/content/articles/studio-browser-test/index.md', 'utf8'));
   assert.equal(parse(saved.header).extra.cover, 'cover-upload.png');

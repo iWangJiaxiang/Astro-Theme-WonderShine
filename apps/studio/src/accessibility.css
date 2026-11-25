@@ -207,3 +207,19 @@ html:has(.studio-shell[data-swipe-back]) { overscroll-behavior-x: contain; }
 .theme-progress { display: grid; gap: 12px; }
 .theme-progress h2 { margin: 0; }
 .theme-progress > button { justify-self: end; }
+
+@media (forced-colors: active) {
+  /* State belongs to the control; keep its keyboard outline independently visible. */
+  button:is([aria-current], [aria-selected=true], [aria-pressed=true]):not(.media-card) {
+    forced-color-adjust: none;
+    background: Highlight !important;
+    color: HighlightText !important;
+    box-shadow: none;
+  }
+  button:is([aria-current], [aria-selected=true], [aria-pressed=true]) :is(svg, small) {
+    background: transparent;
+    color: inherit;
+  }
+  button:is([aria-current], [aria-selected=true], [aria-pressed=true], [aria-checked=true]):focus-visible,
+  .radio-options > .choice-tile:has(> input:focus-visible) { outline-color: CanvasText; }
+}

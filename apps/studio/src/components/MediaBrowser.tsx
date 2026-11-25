@@ -44,7 +44,10 @@ type Props = {
   current?: string;
   svgOnly: boolean;
 };
-type Events = { select: [item: MediaItem, value: string, trigger?: HTMLButtonElement] };
+type Events = {
+  select: [item: MediaItem, value: string, trigger?: HTMLButtonElement];
+  visibleSelection: [path: string];
+};
 const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
   "MediaBrowser",
   (props, emit, expose) => {
@@ -95,20 +98,21 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
         browseExpanded.value = ($event.currentTarget as HTMLDetailsElement).open;
       }),
     });
+    const sourceItems = computed(() => source.value === "all"
+      ? eligible.value
+      : eligible.value.filter(item => item.path.startsWith(source.value + "/")));
     const folders = computed(() => [
       { value: "", label: t("全部文件夹") },
-      ...[...new Set(eligible.value.map((item) => item.directory))]
+      ...[...new Set(sourceItems.value.map((item) => item.directory))]
         .sort()
         .map((value) => ({ value, label: `${t("文件位置")}：${value}` })),
     ]);
     const filtered = computed(() =>
-      eligible.value.filter(
+      sourceItems.value.filter(
         (item) =>
           (props.mode === "library"
             ? inMediaDirectory(item, folder.value)
             : !folder.value || item.directory === folder.value) &&
-          (source.value === "all" ||
-            item.path.startsWith(source.value + "/")) &&
           item.path
             .toLocaleLowerCase()
             .includes(search.value.trim().toLocaleLowerCase()),
@@ -120,6 +124,13 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
     const items = computed(() =>
       filtered.value.slice((page.value - 1) * 24, page.value * 24),
     );
+    watch(() => props.mode !== "library" && items.value.some(item =>
+      item.path === props.selected && !item.unavailable) ? props.selected : "",
+      path => emit("visibleSelection", path));
+    watch(folders, choices => {
+      if (props.mode !== "library" && !choices.some(choice => choice.value === folder.value))
+        folder.value = "";
+    });
     watch([search, source, folder], () => {
       page.value = 1;
     });
@@ -140,7 +151,8 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
       search.value = "";
       source.value = "all";
       folder.value = props.mode === "library" ? item.directory : "";
-      page.value = 1;
+      const index = filtered.value.findIndex(candidate => candidate.path === item.path);
+      page.value = Math.max(1, Math.floor(index / 24) + 1);
       const value = mediaValue(item, props.mode, props.documentPath);
       if (value !== null) emit("select", item, value);
     }
@@ -401,6 +413,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                       element("span", { "aria-hidden": "true" }, t("文件夹")),
                       element(SelectionField, {
                         modelValue: folder.value,
+                        allowCustomValues: false,
                         name: "media-folder",
                         label: t("文件夹"),
                         compact: true,

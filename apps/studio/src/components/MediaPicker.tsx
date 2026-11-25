@@ -19,7 +19,7 @@ import {
   type EventHandler,
   type StudioComponent,
 } from "../react-component";
-import { onBeforeUnmount, onMounted, ref, useId, watch } from "../reactivity";
+import { computed, onBeforeUnmount, onMounted, ref, useId, watch } from "../reactivity";
 import MediaBrowser from "./MediaBrowser";
 
 type Props = {
@@ -37,6 +37,9 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
         item: MediaItem;
         value: string;
       }>();
+    const visiblePath = ref("");
+    const visibleChoice = computed(() => pending.value?.item.path === visiblePath.value ? pending.value : undefined);
+    const canConfirm = computed(() => !!visibleChoice.value && !mediaLoading.value && !mediaUploading.value && !mediaError.value);
     const id = useId();
     let previousFocus: HTMLElement | null = null;
     let wantsOpen = true;
@@ -52,13 +55,9 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
       emit("close");
     }
     function confirm() {
-      if (
-        pending.value &&
-        !mediaLoading.value &&
-        !mediaUploading.value &&
-        !mediaError.value
-      ) {
-        emit("select", pending.value.item, pending.value.value);
+      const choice = visibleChoice.value;
+      if (canConfirm.value && choice) {
+        emit("select", choice.item, choice.value);
         close();
       }
     }
@@ -125,6 +124,7 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
                   selected: pending.value?.item.path || "",
                   current: props.selected,
                   svgOnly: props.svgOnly,
+                  onVisibleSelection: (path: string) => { visiblePath.value = path; },
                   onSelect: ((item, value) =>
                     (pending.value = { item, value })) satisfies EventHandler<
                     typeof MediaBrowser,
@@ -138,8 +138,8 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
                 element(
                   "small",
                   { className: classes("muted media-pending") },
-                  pending.value
-                    ? t("将填写：{p0}", { p0: pending.value.value })
+                  visibleChoice.value
+                    ? t("将填写：{p0}", { p0: visibleChoice.value.value })
                     : props.selected
                       ? t("尚未更改；选择图片后确认")
                       : t("选中图片后确认，取消不会修改表单"),
@@ -148,11 +148,7 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
                   "button",
                   {
                     type: "button",
-                    disabled:
-                      !pending.value ||
-                      mediaLoading.value ||
-                      mediaUploading.value ||
-                      !!mediaError.value,
+                    disabled: !canConfirm.value,
                     className: classes("primary"),
                     onClick: domEvent(($event: Event) => {
                       confirm();

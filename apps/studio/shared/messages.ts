@@ -1031,6 +1031,7 @@ export const english: Record<string, string> = {
   "输入名称搜索…": "Search by name…",
   "没有匹配的选项": "No matching options",
   "已选 {p0} 项": "{p0} selected",
+  "已添加此引用": "This reference has already been added.",
   "已选：{label}": "Selected: {label}",
   "单选": "Select one",
   "确认选择": "Confirm selection",

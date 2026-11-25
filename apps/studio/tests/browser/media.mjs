@@ -130,6 +130,12 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
   await page.waitForFunction(selector => document.querySelector(selector)?.disabled === false, {}, `${picker} .selection-footer .primary`);
   assert.equal(await page.$eval(currentCard, el => el.getAttribute('aria-pressed')), 'true');
   assert.ok(await page.$(`${currentCard}.selected`));
+  await fill(`${picker} input[type=search]`, 'no-match-for-pending-image');
+  await page.waitForSelector(`${picker} .selection-footer button:disabled`);
+  assert.equal(await page.$(currentCard), null);
+  await fill(`${picker} input[type=search]`, '媒体 配图');
+  await page.waitForSelector(`${picker} .selection-footer button:not(:disabled)`);
+  assert.ok(await page.$(`${currentCard}.selected`));
   await page.screenshot({ path: screenshots + '/media-picker-selected-mobile.png' });
   const contrast = await page.createCDPSession();
   try {
@@ -140,6 +146,12 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
     assert.ok(await page.$eval(currentCard, card => {
       const style = getComputedStyle(card);
       return style.color !== style.backgroundColor && style.borderTopColor === style.backgroundColor;
+    }));
+    const currentTab = '.mobile-tabbar button[aria-current]';
+    assert.ok(await page.$eval(currentTab, button => {
+      const selected = getComputedStyle(button);
+      const other = getComputedStyle(button.parentElement.querySelector('button:not([aria-current])'));
+      return selected.forcedColorAdjust === 'none' && selected.backgroundColor !== other.backgroundColor;
     }));
     await page.screenshot({ path: screenshots + '/media-picker-forced-colors.png' });
   } finally {

@@ -361,6 +361,7 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
                 element("span", { "aria-hidden": "true" }, t("保存位置")),
                 element(SelectionField, {
                   modelValue: directory.value,
+                  allowCustomValues: false,
                   name: "upload-directory",
                   label: t("保存位置"),
                   compact: true,
