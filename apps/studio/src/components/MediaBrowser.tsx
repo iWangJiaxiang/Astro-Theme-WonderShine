@@ -151,15 +151,21 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
       // A preview can omit the image or place it on a different page.
       if (!mediaLoading.value && hasLoadedMediaListing()) locateCurrent = false;
     }
-    watch(mediaVersion, () => {
+    watch([mediaListing, items], ([listing], [previousListing, previousPage]) => {
+      if (listing === previousListing) return;
       failed.value = new Set();
       if (
         folder.value &&
         !eligible.value.some((item) => inMediaDirectory(item, folder.value))
       )
         folder.value = "";
-      page.value = props.mode === "library" ? 1
-        : pageContaining(props.selected) ?? Math.min(page.value, pages.value);
+      if (props.mode === "library") {
+        page.value = 1;
+      } else {
+        const wasVisible = previousPage.some(item => item.path === props.selected && !item.unavailable);
+        const selectedPage = wasVisible ? pageContaining(props.selected) : undefined;
+        page.value = selectedPage ?? Math.min(page.value, pages.value);
+      }
     });
     watch([mediaVersion, mediaLoading], locateStoredImage);
     onMounted(() => {

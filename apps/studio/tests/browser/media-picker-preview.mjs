@@ -18,7 +18,13 @@ const items = Array.from({ length: 25 }, (_, i) => ({
 }));
 setMediaResolver(() => 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>'));
 const ready = new Promise(resolve => { window.finishListing = resolve; });
+let refreshes = 0;
 setApiTransport(async (path) => {
+  if (path === '/media?refresh=1') {
+    const extra = { ...items[0], path: 'public/extra.svg', name: 'extra.svg' };
+    const refreshed = ++refreshes === 1 ? [...items, extra] : [...items.slice(1), extra, items[0]];
+    return Response.json({ items: refreshed, truncated: false });
+  }
   if (path !== '/media') throw new Error('Unexpected request ' + path);
   await ready;
   return Response.json({ items, truncated: false });
@@ -50,6 +56,20 @@ window.openPicker = previewIndex => {
         await page.waitForSelector('[data-media-path="public/0.svg"]');
       }
       assert.ok(await page.$('.media-dialog .selection-footer button:disabled'), 'locating the stored image does not stage a selection');
+      if (scenario === 'user searching') {
+        await page.click('[data-media-path="public/0.svg"]');
+        await page.waitForSelector('.media-dialog .selection-footer button:enabled');
+        await page.click('.media-pagination button:last-child');
+        await page.waitForSelector('.media-dialog .selection-footer button:disabled');
+        await page.click('.media-toolbar > button');
+        await page.waitForSelector('[data-media-path="public/extra.svg"]');
+        assert.ok(await page.$('.media-dialog .selection-footer button:disabled'), 'refresh preserves the page browsed away from the staged image');
+        await page.click('.media-pagination button:first-child');
+        await page.waitForSelector('[data-media-path="public/0.svg"][aria-pressed=true]');
+        await page.click('.media-toolbar > button');
+        await page.waitForSelector('[data-media-path="public/extra.svg"]');
+        assert.ok(await page.$('[data-media-path="public/0.svg"][aria-pressed=true]'), 'refresh follows a visible staged image when its page changes');
+      }
     } finally {
       await page.close();
     }

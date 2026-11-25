@@ -66,7 +66,7 @@ function Fixture() {
   const [options, setOptions] = useState(many);
   resizePlain = size => setOptions(Array.from({ length: size }, (_, i) => ({ value: 'option-' + i, label: 'Option ' + (i + 1) })));
   return <main style={{ padding: 16, display: 'grid', gap: 14, maxWidth: 800, margin: '0 auto' }}>
-    <Field name="plain" label="Plain chooser" initial="option-0" options={options} allowCustomValues={false} />
+    <Field name="plain" label="Plain chooser" initial="option-0" options={options} allowCustomValues={false} hint="Choose one option." />
     <Field name="folder" label="Folder" initial="" options={folders} compact />
     <Field name="destination" label="Upload destination" initial="public" options={folders} compact icon="folder" />
     <Field name="multi" label="Topics" initial={['', 'a', 'b']} options={tags} compact multiple />
@@ -203,6 +203,10 @@ window.selectionFixture = {
           await page.locator(trigger(name)).click();
           await page.waitForSelector('.selection-dialog[open]');
         };
+        const description = selector => page.$eval(selector, control =>
+          document.getElementById(control.getAttribute('aria-describedby'))?.textContent);
+        assert.equal(await description(trigger('plain')), 'Choose one option.');
+        assert.equal(await page.$eval(trigger('folder'), button => button.hasAttribute('aria-describedby')), false);
         await open('folder');
         await page.click('.selection-dialog input[type="radio"][value="public"]');
         assert.equal(await valueIs('folder', 'All folders'), true, `${label}: pending single does not update parent`);
@@ -292,6 +296,20 @@ window.selectionFixture = {
         assert.equal(await updates('plain'), beforeRemoval, 'moving focus leaves selection to the user');
         await page.evaluate(() => window.selectionFixture.resizePlain(0));
         await page.waitForSelector('[data-field="plain"] fieldset:focus');
+        assert.equal(await description('[data-field="plain"] fieldset'), 'Choose one option.');
+
+        await page.evaluate(() => window.selectionFixture.resizePlain(8));
+        await open('plain');
+        const dialogOption = '.selection-dialog input[type=radio]';
+        await page.focus(dialogOption + '[value="option-6"]');
+        await page.evaluate(() => window.selectionFixture.resizePlain(6));
+        await page.waitForSelector(dialogOption + '[value="option-5"]:focus:not(:checked)');
+        await page.keyboard.press('ArrowLeft');
+        await page.waitForSelector(dialogOption + '[value="option-4"]:focus:checked');
+        await page.evaluate(() => window.selectionFixture.resizePlain(0));
+        await page.waitForSelector('.selection-dialog input[type=search]:focus');
+        assert.equal(await updates('plain'), beforeRemoval, 'dialog focus recovery leaves the form value unchanged');
+        await page.keyboard.press('Escape');
 
         await open('multi');
         await page.click('.selection-dialog input[type="checkbox"][value="c"]');

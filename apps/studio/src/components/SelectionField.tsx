@@ -166,7 +166,19 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
     }
     watch([isInline, options], ([nowInline, choices], [wasInline]) => {
       const active = document.activeElement;
-      if (opened.value || !(active instanceof HTMLElement)) return;
+      if (!(active instanceof HTMLElement)) return;
+      if (opened.value) {
+        if (!(active instanceof HTMLInputElement) || !dialog.value?.contains(active)) return;
+        const group = active.closest("fieldset");
+        if (!group || filtered.value.some(option => option.value === active.value)) return;
+        const index = [...group.querySelectorAll("input")].indexOf(active);
+        followChoiceChange(active, () => {
+          if (!dialog.value?.open) return;
+          const remaining = group.querySelectorAll<HTMLInputElement>("input:not(:disabled)");
+          return remaining[Math.min(index, remaining.length - 1)] ?? dialog.value.querySelector<HTMLInputElement>('input[type="search"]');
+        });
+        return;
+      }
       if (nowInline !== wasInline && (active === trigger.value || inline.value?.contains(active))) {
         followChoiceChange(active, fieldTarget);
       } else if (nowInline && active instanceof HTMLInputElement && inline.value?.contains(active)
@@ -264,6 +276,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                 tabIndex: -1,
                 disabled: props.disabled,
                 "aria-labelledby": `${id}-label`,
+                "aria-describedby": props.hint ? `${id}-hint` : undefined,
                 className: classes("choice-options", { "radio-options": !props.multiple }),
               },
               renderList(options.value).map((option) =>
@@ -308,6 +321,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                 disabled: props.disabled || (creating.value && !opened.value),
                 "aria-haspopup": "dialog",
                 "aria-expanded": opened.value,
+                "aria-describedby": props.hint ? `${id}-hint` : undefined,
                 "aria-labelledby":
                   props.compact && !compactValues.value.length
                     ? `${id}-label`
@@ -413,7 +427,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
             )
           : null,
         props.hint
-          ? element("small", { className: classes("muted") }, props.hint)
+          ? element("small", { id: `${id}-hint`, className: classes("muted") }, props.hint)
           : null,
         portal(
           element(
