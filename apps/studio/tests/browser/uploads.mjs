@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { parse } from 'smol-toml';
 import { splitDocument } from '../../server/content.ts';
-import { revealField } from './controls.mjs';
+import { chooser, revealField } from './controls.mjs';
 import { openImagePicker } from './image-picker.mjs';
 
 export async function checkUploads({ page, base, theme, screenshots, click, heading, fill }) {
@@ -503,19 +503,27 @@ export async function checkUploads({ page, base, theme, screenshots, click, head
   await page.setViewport({ width: 1440, height: 1000 });
   const documentFolder = base + '/site/content/articles/studio-browser-test';
   await Promise.all(Array.from({ length: 24 }, (_, i) => writeFile(documentFolder + '/00-page-' + i + '.png', png)));
-  await Promise.all([
+  const refreshPicker = () => Promise.all([
     page.waitForResponse(response => response.url().includes('/api/media?refresh=1')),
     page.locator('dialog.media-dialog[open] .media-toolbar > button').click(),
   ]);
+  await refreshPicker();
   await page.waitForSelector('dialog.media-dialog[open] .media-pagination button:not(:disabled)');
+  await chooser(page)('media-folder', 'public/img');
+  assert.match(await page.$eval('dialog.media-dialog[open] .upload-destination', node => node.textContent), /content\/articles\/studio-browser-test$/);
   await upload(['上传 配图.webp']); await finished();
-  assert.equal(await selected(), 'content/articles/studio-browser-test/上传 配图.webp');
+  const uploadedPath = 'content/articles/studio-browser-test/上传 配图.webp';
+  assert.equal(await selected(), uploadedPath);
+  assert.deepEqual(await readFile(base + '/site/' + uploadedPath), await readFile(source + '/上传 配图.webp'));
   const pickerFooter = 'dialog.media-dialog[open] .selection-footer .primary';
   const pagination = 'dialog.media-dialog[open] .media-pagination';
   await page.locator(pagination + ' button:first-child:not(:disabled)').click();
   await page.waitForSelector(pickerFooter + ':disabled');
   await page.locator(pagination + ' button:last-child:not(:disabled)').click();
   await page.waitForSelector(pickerFooter + ':not(:disabled)');
+  await refreshPicker();
+  await page.waitForSelector(pickerFooter + ':not(:disabled)');
+  assert.equal(await selected(), uploadedPath, 'refresh keeps the staged image visible and confirmable');
   await click('使用这张图片'); await click('本地保存'); await page.waitForSelector('.editor-page > .notice.success');
   const saved = splitDocument(await readFile(base + '/site/content/articles/studio-browser-test/index.md', 'utf8'));
   assert.equal(parse(saved.header).extra.cover, 'cover-upload.png');

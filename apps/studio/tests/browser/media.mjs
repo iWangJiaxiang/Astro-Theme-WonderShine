@@ -175,7 +175,10 @@ export async function checkMedia({ page, base, theme, screenshots, click, headin
     assert.ok(await page.$eval(currentTab, button => {
       const selected = getComputedStyle(button);
       const other = getComputedStyle(button.parentElement.querySelector('button:not([aria-current])'));
-      return selected.forcedColorAdjust === 'none' && selected.backgroundColor !== other.backgroundColor;
+      const icon = getComputedStyle(button.querySelector('svg'));
+      return selected.forcedColorAdjust === 'none' && selected.backgroundColor !== other.backgroundColor
+        && icon.stroke === selected.color && icon.backgroundColor === 'rgba(0, 0, 0, 0)'
+        && selected.color !== selected.backgroundColor;
     }));
     await page.screenshot({ path: screenshots + '/media-picker-forced-colors.png' });
   } finally {

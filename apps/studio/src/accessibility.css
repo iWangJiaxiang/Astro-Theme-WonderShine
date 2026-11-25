@@ -216,6 +216,7 @@ html:has(.studio-shell[data-swipe-back]) { overscroll-behavior-x: contain; }
     color: HighlightText !important;
     box-shadow: none;
   }
+  .mobile-tabbar button[aria-current] svg,
   button:is([aria-current], [aria-selected=true], [aria-pressed=true]) :is(svg, small) {
     background: transparent;
     color: inherit;

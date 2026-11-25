@@ -136,6 +136,10 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
     watch([search, source, folder], () => {
       page.value = 1;
     });
+    function pageContaining(path: string) {
+      const index = filtered.value.findIndex(item => item.path === path && !item.unavailable);
+      return index < 0 ? undefined : Math.floor(index / pageSize) + 1;
+    }
     watch(mediaVersion, () => {
       failed.value = new Set();
       if (
@@ -143,7 +147,8 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
         !eligible.value.some((item) => inMediaDirectory(item, folder.value))
       )
         folder.value = "";
-      page.value = 1;
+      page.value = props.mode === "library" ? 1
+        : pageContaining(props.selected) ?? Math.min(page.value, pages.value);
     });
     onMounted(() => {
       void loadMedia();
@@ -153,8 +158,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
       search.value = "";
       source.value = "all";
       folder.value = props.mode === "library" ? item.directory : "";
-      const index = filtered.value.findIndex(candidate => candidate.path === item.path);
-      page.value = Math.max(1, Math.floor(index / pageSize) + 1);
+      page.value = pageContaining(item.path) ?? 1;
       const value = mediaValue(item, props.mode, props.documentPath);
       if (value !== null) emit("select", item, value);
     }
@@ -306,7 +310,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
                 mode: props.mode,
                 documentPath: props.documentPath,
                 svgOnly: props.svgOnly,
-                preferredDirectory: folder.value,
+                preferredDirectory: props.mode === "library" ? folder.value : undefined,
                 feedbackMode: "external",
                 onFeedback: (($event) => {
                   uploadFeedback.value = $event;
