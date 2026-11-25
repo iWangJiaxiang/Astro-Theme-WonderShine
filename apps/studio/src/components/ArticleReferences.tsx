@@ -316,7 +316,7 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                               "fieldset",
                               {
                                 "aria-label": t("本站文章"),
-                                className: classes("selection-result-options"),
+                                className: classes("selection-result-options radio-options"),
                               },
                               renderList(filtered.value).map((item) =>
                                 element(

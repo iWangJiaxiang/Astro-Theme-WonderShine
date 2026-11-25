@@ -69,16 +69,16 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
     </button>
     {showModes && <button type="button" className="primary save-button-toggle" ref={trigger} disabled={busy} aria-label={t('选择保存方式')} aria-haspopup="dialog" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => { if (!allowed()) return; setError(false); setOpen(!open); }}>⌄</button>}
     {open && createPortal(<div id={id} className="save-mode-menu" role="dialog" aria-label={t('保存方式')} ref={panel} style={{ top: position.top, left: position.left }}>
-      <div role="radiogroup" aria-label={t('保存方式')} onKeyDown={event => {
-        if (!allowed() || !panel.current || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+      <div className="radio-options" role="radiogroup" aria-label={t('保存方式')} onKeyDown={event => {
+        if (!allowed() || !panel.current || !['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();
         const items = [...panel.current!.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)')];
         const current = items.indexOf(document.activeElement as HTMLButtonElement);
-        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (event.key === 'ArrowDown' || event.key === 'ArrowRight' ? 1 : -1) + items.length) % items.length;
         items[next]?.focus();
       }}>
         {(['local', 'branch', ...(context.modes.includes('remote') ? ['remote'] : [])] as SaveMode[]).map(choice => <button type="button" key={choice} role="radio" aria-checked={mode === choice} disabled={!context.modes.includes(choice)} title={!context.modes.includes(choice) ? t('当前连接不支持此保存方式') : undefined} onClick={() => { if (!allowed()) return; onModeChange(choice); if (!allowed()) return; setOpen(false); trigger.current?.focus(); }}>
-          <span className="save-mode-check" aria-hidden="true">{mode === choice ? '✓' : ''}</span><span>{t(saveModeLabel[choice])}</span>{context.defaultMode === choice && <small>{t('默认')}</small>}
+          <span>{t(saveModeLabel[choice])}</span>{context.defaultMode === choice && <small>{t('默认')}</small>}
         </button>)}
       </div>
       <button type="button" className="save-mode-default" disabled={mode === context.defaultMode} onClick={() => { if (!allowed()) return; const remembered = rememberPreference(); if (!allowed()) return; if (remembered) { setOpen(false); trigger.current?.focus(); } else setError(true); }}>{t('将当前方式设为默认')}</button>

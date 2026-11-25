@@ -229,7 +229,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
               {
                 disabled: props.disabled,
                 "aria-labelledby": `${id}-label`,
-                className: classes("choice-options"),
+                className: classes("choice-options", { "radio-options": !props.multiple }),
               },
               renderList(options.value).map((option) =>
                 element(
@@ -497,7 +497,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                         {
                           disabled: creating.value,
                           "aria-label": props.label,
-                          className: classes("selection-result-options"),
+                          className: classes("selection-result-options", { "radio-options": !props.multiple }),
                         },
                         renderList(filtered.value).map((option) =>
                           element(

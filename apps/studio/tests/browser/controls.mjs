@@ -68,6 +68,18 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await page.screenshot({ path: screenshots + '/studio-appearance-desktop.png' });
   await page.setViewport({ width: 390, height: 844 });
   await page.waitForFunction(() => document.querySelector('#studio-navigation').getBoundingClientRect().right <= 1);
+  const schemeChoices = '[data-field="extra.style.color_scheme"] input[type=radio]';
+  const choices = await page.$$eval(schemeChoices, inputs => inputs.map(input => {
+    const tile = input.closest('label');
+    const box = tile.getBoundingClientRect();
+    return { checked: input.checked, top: box.top, width: box.width, height: box.height,
+      indicatorOpacity: getComputedStyle(input).opacity, background: getComputedStyle(tile).backgroundColor };
+  }));
+  assert.equal(choices.length, 3);
+  assert.equal(new Set(choices.map(choice => choice.top)).size, 1, 'short radio choices share a row');
+  assert.ok(choices.every(choice => choice.indicatorOpacity === '0' && choice.width >= 44 && choice.height >= 44),
+    'the label replaces the radio circle and retains a touch target');
+  assert.notEqual(choices.find(choice => choice.checked).background, choices.find(choice => !choice.checked).background);
   await page.screenshot({ path: screenshots + '/studio-appearance-mobile.png' });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
   await page.setViewport({ width: 1440, height: 1000 });

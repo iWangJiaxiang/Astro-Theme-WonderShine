@@ -115,14 +115,13 @@
 .save-button > .save-button-main { border-radius: 9px 0 0 9px; min-width: 96px; }
 .save-button > .save-button-toggle { border-radius: 0 9px 9px 0; border-left: 1px solid #ffffff40; min-width: 36px; padding-inline: 9px; }
 .save-button > button:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: 3px; z-index: 1; }
-.save-mode-menu { position: fixed; z-index: 10000; width: 240px; max-width: calc(100vw - 16px); padding: 6px; border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-card); color: var(--wjx-fontcolor); box-shadow: var(--studio-overlay-shadow); font-size: 13px; }
+.save-mode-menu { position: fixed; z-index: 10000; width: max-content; max-width: calc(100vw - 16px); padding: 6px; border: 1px solid var(--studio-line); border-radius: 12px; background: var(--studio-card); color: var(--wjx-fontcolor); box-shadow: var(--studio-overlay-shadow); font-size: 13px; }
 .save-mode-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 9px 10px; border: 0; border-radius: 7px; text-align: left; background: transparent; color: inherit; font: inherit; cursor: pointer; }
-.save-mode-menu button:hover:not(:disabled) { background: var(--form-surface); }
+.save-mode-menu button:not([aria-checked="true"]):hover:not(:disabled) { background: var(--form-surface); }
 .save-mode-menu button:focus-visible { outline: 2px solid var(--wjx-theme); outline-offset: -2px; }
-.save-mode-menu button[aria-checked="true"] { color: var(--wjx-theme); background: color-mix(in srgb, var(--wjx-theme) 9%, var(--studio-card)); }
+.save-mode-menu [role="radio"] { width: auto; min-height: 32px; padding: 5px 9px; overflow-wrap: anywhere; }
 .save-mode-menu button:disabled { opacity: .45; cursor: default; }
-.save-mode-check { width: 16px; flex: 0 0 16px; }
-.save-mode-menu small { font-size: 10px; margin-left: auto; color: var(--studio-muted); }
+.save-mode-menu small { font-size: 10px; }
 .save-mode-menu .save-mode-default { margin-top: 5px; border-top: 1px solid var(--studio-line); border-radius: 0 0 7px 7px; font-size: 12px; justify-content: center; }
 .save-mode-menu p { margin: 6px; font-size: 12px; }
 .saved-branch { display: block; font-family: ui-monospace, monospace; overflow-wrap: anywhere; font-size: 11px; margin: 6px 0; color: var(--studio-muted); }
