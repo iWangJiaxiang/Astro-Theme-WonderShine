@@ -17,7 +17,7 @@ const preloadSrcset = image.avifSrcset || image.webpSrcset;
 const intrinsicWidth = width || image.width;
 const intrinsicHeight = height || (width && image.width && image.height ? Math.round(Number(width) * image.height / image.width) : image.height);
 ---
-{preloadMedia && <link rel="preload" as="image" media={preloadMedia} fetchpriority="high"
+{preloadMedia && src && <link rel="preload" as="image" media={preloadMedia} fetchpriority="high"
   type={image.avifSrcset ? 'image/avif' : image.webpSrcset ? 'image/webp' : undefined}
   href={preloadSrcset ? undefined : image.src}
   imagesrcset={preloadSrcset} imagesizes={preloadSrcset ? sourceSizes : undefined} />}

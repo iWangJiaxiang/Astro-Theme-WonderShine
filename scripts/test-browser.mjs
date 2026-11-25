@@ -119,7 +119,10 @@ export async function checkBrowser(options = demo) {
         const recommendations = '#recommendations-toggle';
         const recommendationLink = '#home-recommendations .recommendation-link';
         assert.equal(await page.$eval(recommendationLink, link => link.pathname), prefix + '/collections/field-notes/first/');
+        const activeRecommendationPreloads = () => page.$$eval('#topGroup link[rel="preload"][as="image"]', links =>
+          links.filter(link => matchMedia(link.media).matches).map(link => link.parentElement.className));
         await page.setViewport({width:1440,height:900});
+        assert.deepEqual(await activeRecommendationPreloads(), ['todayCard']);
         await page.waitForSelector(recommendations, {visible:true});
         await page.waitForSelector('#banners', {visible:true});
         if (!prefix) {
@@ -181,6 +184,7 @@ export async function checkBrowser(options = demo) {
         assert.equal(await page.$eval(menu, link => link.checkVisibility({visibilityProperty:true})), false);
         await page.waitForSelector(recommendationLink, {visible:true});
         assert.equal(await page.$eval('#todayCard', link => link.checkVisibility()), false);
+        assert.deepEqual(await activeRecommendationPreloads(), ['recommendation-link']);
         assert.ok(await page.$eval('#bannerGroup .banners-link', links => links.checkVisibility()));
         await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-mobile.png')});
         await page.click(trigger);
