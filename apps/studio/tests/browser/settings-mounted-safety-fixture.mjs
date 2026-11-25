@@ -144,7 +144,7 @@ function observeSaveButton(source) {
     ts.forEachChild(node, visitCalls);
   };
   visitCalls(callsTree);
-  need(['onSave', 'onModeChange', 'rememberSaveMode', 'rememberPreference'].every(name => callNames.get(name) === 1) && callNames.get('setOpen') === 7 && callNames.get('setError') === 2);
+  need(['onSave', 'onModeChange', 'rememberSaveMode', 'rememberPreference'].every(name => callNames.get(name) === 1) && callNames.get('setOpen') === 8 && callNames.get('setError') === 2);
   source = insertions(source, calls);
   const tree = ts.createSourceFile('SaveButton.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const edits = [], found = new Set();

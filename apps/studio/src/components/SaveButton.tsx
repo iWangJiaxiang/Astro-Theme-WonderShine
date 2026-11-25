@@ -82,8 +82,8 @@ export default function SaveButton({ mode, onModeChange, onSave, disabled, busy,
         if (event.target !== (event.shiftKey ? stops[0] : stops.at(-1))) return;
         // Forward Tab continues natively from the opener. Backward Tab lands on it.
         if (event.shiftKey) event.preventDefault();
-        trigger.current.focus({ preventScroll: true });
         setOpen(false);
+        trigger.current.focus({ preventScroll: true });
       }}>
       <div className="radio-options" role="radiogroup" aria-label={t('保存方式')} onKeyDown={event => {
         if (!allowed() || !panel.current || !['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
