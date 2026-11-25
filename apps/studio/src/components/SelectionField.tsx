@@ -176,7 +176,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       for (let parent = target?.parentElement; parent; parent = parent.parentElement) {
         if (!parent.matches("details:not([open])")) continue;
         const summary = parent.querySelector<HTMLElement>(":scope > summary");
-        if (!summary?.contains(target ?? null)) target = summary;
+        if (!summary?.contains(target ?? null)) target = summary ?? undefined;
       }
       if (!target?.isConnected || target.closest("[hidden], [inert]") || target.matches(":disabled") || !target.getClientRects().length) return;
       const style = getComputedStyle(target);
