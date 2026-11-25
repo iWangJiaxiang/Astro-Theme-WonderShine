@@ -1,9 +1,11 @@
 // Module scripts run once across Astro navigations. Read each page's own settings.
 const configSelector = 'script[data-umami-src]';
-let page, previousUrl = document.referrer, seen = new Set();
+let page, previousUrl = document.referrer;
+let seen = new Set();
 let observer, overlayObserver;
 const clients = new Map();
 let installing = Promise.resolve();
+let awaitingSdk = false;
 const configOf = script => JSON.stringify([script.dataset.umamiSrc, script.dataset.websiteId,
   script.dataset.hostUrl, script.dataset.domains]);
 
@@ -51,19 +53,23 @@ function tracker(config) {
     // Astro sends each PV, including visits completed before this script loads.
     script.dataset.autoTrack = 'false';
     const previous = window.umami;
+    awaitingSdk = true;
     // Each localized tracker configuration has its own Umami session and endpoint.
     if (previous && [...clients.values()].some(item => item.sdk === previous)) delete window.umami;
-    function finish() {
-      client.sdk = window.umami;
+    function finish(ok) {
+      awaitingSdk = false;
+      client.sdk = ok && window.umami;
       if (!client.sdk?.track) {
         client.failed = true;
         client.pending.length = 0;
+        clients.delete(key);
       }
       window.umami = page?.client?.sdk || client.sdk || previous;
       resolve();
       void flush(client);
     }
-    script.onload = script.onerror = finish;
+    script.onload = () => finish(true);
+    script.onerror = () => finish(false);
     document.head.append(script);
   });
   const start = () => idle(() => { installing = installing.then(install); });
@@ -116,7 +122,7 @@ function mount() {
   overlayObserver?.disconnect();
   if (!enabled) return;
   page.client = tracker(config);
-  if (page.client.sdk) window.umami = page.client.sdk;
+  if (!awaitingSdk && page.client.sdk) window.umami = page.client.sdk;
   record();
   observeCards();
   const box = document.getElementById('loading-box');
