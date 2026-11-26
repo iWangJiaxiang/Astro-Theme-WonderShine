@@ -52,6 +52,22 @@ test('link choices use public routes, respect explicit paths and distinguish bun
   assert.equal(contentLink('content/articles/你好.md', {}, {}).publicPath, undefined);
 });
 
+test('Studio links match Astro root, normalized overrides and slug segments', async () => {
+  const { contentLink } = await import('../shared/content-links.js');
+  const file = 'content/pages/detail.en.md';
+  const site = { default_language: 'zh', languages: { en: {} } };
+  for (const path of ['', '/', '///']) assert.equal(contentLink(file, { path }, site).publicPath, '/');
+  assert.equal(contentLink(file, { path: 'about//our\\team' }, site).publicPath, '/about/our/team/');
+  for (const path of ['../a', '/a/./b', 'a?mode', 'a#b']) {
+    assert.ok(contentLink(file, { path }, site).linkWarning);
+    assert.equal(contentLink(file, { path }, site).publicPath, undefined);
+  }
+  assert.equal(contentLink(file, { slug: 'one/two' }, site).publicPath, '/en/pages/one-two/');
+  for (const paths of ['safe', 'off']) {
+    assert.equal(contentLink(file, { slug: ' A?B. ' }, { ...site, slugify: { paths } }).publicPath, '/en/pages/AB./');
+  }
+});
+
 test('clearing a document date removes the field rather than writing an invalid empty datetime', async () => {
   const { updateDocument, splitDocument } = await import('../server/content.js');
   const { parse } = await import('smol-toml');
