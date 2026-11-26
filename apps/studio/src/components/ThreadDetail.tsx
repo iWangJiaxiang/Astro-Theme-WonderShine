@@ -1,8 +1,6 @@
 import { ErrorNotice } from "./ErrorNotice";
-import DOMPurify from "dompurify";
-import { marked } from "marked";
+import { markdownPreview } from "../markdown-preview";
 import { stringValues, taxonomyChoices } from "../../shared/choices";
-import { mediaURL, storedMediaPath } from "../../shared/media";
 import { translationLocation } from "../../shared/translation";
 import type {
   Article,
@@ -109,22 +107,7 @@ const ThreadDetail: StudioComponent<Props, Events> = component<Props, Events>(
       /\{%|\{\{/.test(document.value?.body || ""),
     );
     const preview = computed(() => {
-      const html = DOMPurify.sanitize(
-        marked.parse(document.value?.body || "", { async: false }) as string,
-      );
-      const parsed = new DOMParser().parseFromString(html, "text/html");
-      for (const image of parsed.querySelectorAll("img")) {
-        try {
-          const path = storedMediaPath(
-            decodeURIComponent(image.getAttribute("src") || ""),
-            "document",
-            props.path,
-          );
-          if (path) image.setAttribute("src", mediaURL(path));
-        } catch {
-          /* Keep unrecognized images unchanged. */
-        }
-      }
+      const parsed = markdownPreview(document.value?.body || "", props.path);
       for (const link of parsed.querySelectorAll("a[href]")) {
         const href = link.getAttribute("href") || "";
         if (href.startsWith("#")) continue;

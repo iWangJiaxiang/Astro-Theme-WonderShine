@@ -1,4 +1,4 @@
-import { workspaceCapabilities, type MergeChoices } from '../shared/workspace.js';
+import { workspaceCapabilities, type MergeChoices, type WorkspaceControl } from '../shared/workspace.js';
 import { requireWorkspaceConfirmation } from '../shared/workspace-confirmation.js';
 import { saveCapabilities } from './save.js';
 import { ContentService } from './content-service.js';
@@ -33,6 +33,75 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
   status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' },
 });
 
+// Bound request bodies even for in-process callers. ContentService validates fields.
+async function input<T>(request: Request): Promise<T> {
+  const bytes = await readUploadBody(request, 1024 * 1024);
+  return JSON.parse(new TextDecoder().decode(bytes)) as T;
+}
+
+async function workspaceRequest(path: string, request: Request, workspace?: WorkspaceControl): Promise<Response> {
+  if (!workspace) return json({ error: '未找到此接口' }, 404);
+  if (path === '/api/workspace' && request.method === 'GET') return json(await workspace.status());
+  if (request.method !== 'POST') return json({ error: '未找到此接口' }, 404);
+  switch (path) {
+    case '/api/workspace/check':
+      if (workspace.checkRemote) return json(await workspace.checkRemote());
+      break;
+    case '/api/workspace/review':
+      await readUploadBody(request, 1024 * 1024);
+      return json(await workspace.createReview());
+    case '/api/workspace/merge/review':
+      if (workspace.reviewMerge) return json(await workspace.reviewMerge());
+      break;
+    case '/api/workspace/discard/review':
+      if (workspace.reviewDiscard) return json(await workspace.reviewDiscard());
+      break;
+    case '/api/workspace/uncommit/review':
+      if (workspace.reviewUncommit) return json(await workspace.reviewUncommit());
+      break;
+    case '/api/workspace/merge':
+      if (workspace.resolveMerge) {
+        const body = await input<{ confirmation?: string; choices: MergeChoices }>(request);
+        return json(await workspace.resolveMerge(requireWorkspaceConfirmation(body?.confirmation), body?.choices));
+      }
+      break;
+    case '/api/workspace/discard':
+      if (workspace.discard) {
+        const body = await input<{ confirmation?: string }>(request);
+        return json(await workspace.discard(requireWorkspaceConfirmation(body?.confirmation)));
+      }
+      break;
+    case '/api/workspace/uncommit':
+      if (workspace.uncommit) {
+        const body = await input<{ confirmation?: string }>(request);
+        return json(await workspace.uncommit(requireWorkspaceConfirmation(body?.confirmation)));
+      }
+      break;
+    case '/api/workspace/publish':
+      if (workspace.publish) {
+        const body = await input<{ message: string; confirmation?: string }>(request);
+        await workspace.publish(body?.message, requireWorkspaceConfirmation(body?.confirmation));
+        return json({ published: true });
+      }
+      break;
+    case '/api/workspace/commit': {
+      const body = await input<{ message: string; confirmation?: string; followUpReview?: boolean }>(request);
+      const token = requireWorkspaceConfirmation(body?.confirmation);
+      if (body.followUpReview === true && workspace.commitForReview) {
+        await workspace.commitForReview(body.message, token);
+        return json({ committed: true });
+      }
+      return json(await workspace.commit(body?.message, token));
+    }
+    case '/api/workspace/sync': {
+      const text = new TextDecoder().decode(await readUploadBody(request, 1024 * 1024));
+      const body = text ? JSON.parse(text) as { confirmation?: string } : undefined;
+      return json(await workspace.sync(requireWorkspaceConfirmation(body?.confirmation)));
+    }
+  }
+  return json({ error: '未找到此接口' }, 404);
+}
+
 /**
  * In-process transport for a trusted native app, never a network server handler.
  * It grants access to the repository supplied by the app after local selection.
@@ -58,71 +127,21 @@ export function createContentTransport(repository: Repository, options: ContentT
       if (method === 'GET' && url.searchParams.get('refresh') === '1' && path === '/api/bootstrap') runtime.invalidate();
       if (path === '/api/auth/session' && method === 'GET') return json(session);
       if (path === '/api/auth/logout' && method === 'POST') { options.ai?.dispose(); await options.onLogout?.(); runtime.dispose(); connected = false; return json({ ok: true }); }
-      // Bound request bodies even for in-process callers. ContentService validates fields.
-      const input = async <T>(): Promise<T> => {
-        const bytes = await readUploadBody(request, 1024 * 1024);
-        return JSON.parse(new TextDecoder().decode(bytes)) as T;
-      };
       if (path === '/api/bootstrap' && method === 'GET') {
         const [site, appearance] = await Promise.all([content.settings('site'), content.settings('appearance')]);
         return json({ site: site.values, appearance: appearance.values, saveScope: session.identity.id, saveCapabilities: saveCapabilities(repository), mode: repository.mode, ...workspaceCapabilities(repository.workspace), nativeAi: !!options.ai,
           groups: settingsSchemas.map(({ id, title, description }) => ({ id, title, description })) });
       }
-      if (path === '/api/workspace' && method === 'GET' && repository.workspace) return json(await repository.workspace.status());
-      if (path === '/api/workspace/check' && method === 'POST' && repository.workspace?.checkRemote) {
-        return json(await repository.workspace.checkRemote());
-      }
-      if (path === '/api/workspace/review' && method === 'POST' && repository.workspace) {
-        await readUploadBody(request, 1024 * 1024);
-        return json(await repository.workspace.createReview());
-      }
-      if (path === '/api/workspace/merge/review' && method === 'POST' && repository.workspace?.reviewMerge) {
-        return json(await repository.workspace.reviewMerge());
-      }
-      if (path === '/api/workspace/merge' && method === 'POST' && repository.workspace?.resolveMerge) {
-        const body = await input<{ confirmation?: string; choices: MergeChoices }>();
-        return json(await repository.workspace.resolveMerge(requireWorkspaceConfirmation(body?.confirmation), body?.choices));
-      }
-      if (path === '/api/workspace/discard/review' && method === 'POST' && repository.workspace?.reviewDiscard) {
-        return json(await repository.workspace.reviewDiscard());
-      }
-      if (path === '/api/workspace/discard' && method === 'POST' && repository.workspace?.discard) {
-        const body = await input<{ confirmation?: string }>();
-        return json(await repository.workspace.discard(requireWorkspaceConfirmation(body?.confirmation)));
-      }
-      if (path === '/api/workspace/uncommit/review' && method === 'POST' && repository.workspace?.reviewUncommit) {
-        return json(await repository.workspace.reviewUncommit());
-      }
-      if (path === '/api/workspace/uncommit' && method === 'POST' && repository.workspace?.uncommit) {
-        const body = await input<{ confirmation?: string }>();
-        return json(await repository.workspace.uncommit(requireWorkspaceConfirmation(body?.confirmation)));
-      }
-      if (path === '/api/workspace/publish' && method === 'POST' && repository.workspace?.publish) {
-        const body = await input<{ message: string; confirmation: string }>();
-        await repository.workspace.publish(body?.message, requireWorkspaceConfirmation(body?.confirmation));
-        return json({ published: true });
-      }
-      if (path === '/api/workspace/commit' && method === 'POST' && repository.workspace) {
-        const body = await input<{ message: string; confirmation?: string; followUpReview?: boolean }>();
-        const token = requireWorkspaceConfirmation(body?.confirmation);
-        if (body.followUpReview === true && repository.workspace.commitForReview) {
-          await repository.workspace.commitForReview(body.message, token);
-          return json({ committed: true });
-        }
-        return json(await repository.workspace.commit(body?.message, token));
-      }
-      if (path === '/api/workspace/sync' && method === 'POST' && repository.workspace) {
-        const text = new TextDecoder().decode(await readUploadBody(request, 1024 * 1024));
-        const body = text ? JSON.parse(text) as { confirmation?: string } : undefined;
-        return json(await repository.workspace.sync(requireWorkspaceConfirmation(body?.confirmation)));
+      if (path === '/api/workspace' || path.startsWith('/api/workspace/')) {
+        return await workspaceRequest(path, request, repository.workspace);
       }
       if (path === '/api/theme-update' && method === 'GET') return json(await checkThemeUpdate(repository, options.themeFetch ?? fetch));
-      if (path === '/api/theme-update' && method === 'POST') return json(await applyThemeUpdate(repository, options.themeFetch ?? fetch, new Date(), await input()));
+      if (path === '/api/theme-update' && method === 'POST') return json(await applyThemeUpdate(repository, options.themeFetch ?? fetch, new Date(), await input(request)));
       if (path.startsWith('/api/settings/')) {
         const id = decodeURIComponent(path.slice('/api/settings/'.length)), language = url.searchParams.get('language') ?? undefined;
         if (method === 'GET') return json(await content.settings(id, language));
         if (method === 'PUT') {
-          const body = await input<{ revision: string | null; changes: unknown; saveMode?: unknown; retryPackage?: unknown }>();
+          const body = await input<{ revision: string | null; changes: unknown; saveMode?: unknown; retryPackage?: unknown }>(request);
           return json(await content.saveSettings(id, body.changes, body.revision, language, body.saveMode, body.retryPackage));
         }
       }
@@ -135,44 +154,44 @@ export function createContentTransport(repository: Repository, options: ContentT
       if (path === '/api/document/versions') {
         if (method === 'GET') return json(await content.documentVersions(url.searchParams.get('path') || ''));
         if (method === 'DELETE') {
-          const body = await input<{ path: string; revisions: unknown }>();
+          const body = await input<{ path: string; revisions: unknown }>(request);
           return json(await content.removeDocumentVersions(body.path, body.revisions));
         }
       }
       if (path === '/api/document') {
         if (method === 'GET') return json(await content.document(url.searchParams.get('path') || ''));
         if (method === 'PUT') {
-          const body = await input<{ path: string; changes: unknown; body: string; revision: string | null; saveMode?: unknown }>();
+          const body = await input<{ path: string; changes: unknown; body: string; revision: string | null; saveMode?: unknown }>(request);
           return json(await content.saveDocument(body.path, body.changes, body.body, body.revision, body.saveMode));
         }
         if (method === 'DELETE') {
-          const body = await input<{ path: string; revision: string }>();
+          const body = await input<{ path: string; revision: string }>(request);
           return json(await content.removeDocument(body.path, body.revision));
         }
       }
       if (path === '/api/native-ai' && options.ai) {
         if (method === 'GET') return json(options.ai.configuration());
-        if (method === 'PUT') return json(options.ai.configure(await input()));
+        if (method === 'PUT') return json(options.ai.configure(await input(request)));
         if (method === 'DELETE') return json(options.ai.clearKey());
       }
       if (path === '/api/ai/text' && method === 'POST' && options.ai) {
-        const body = await input<AiTextRequest>();
+        const body = await input<AiTextRequest>(request);
         const generate = () => options.ai!.text(body);
         return json(await (options.aiUsesObservedRepository ? generate() : runtime.withUnobservedMutation(generate)));
       }
       if (path === '/api/ai/image' && method === 'POST' && options.ai) {
-        const body = await input<{ prompt: string }>();
+        const body = await input<{ prompt: string }>(request);
         const generate = () => options.ai!.image(body);
         return json(await (options.aiUsesObservedRepository ? generate() : runtime.withUnobservedMutation(generate)));
       }
       if (path === '/api/translation' && method === 'POST' && options.ai) {
-        const body = await input<TranslationRequest>();
+        const body = await input<TranslationRequest>(request);
         const translate = () => options.ai!.translate(body);
         return json(await (options.aiUsesObservedRepository ? translate() : runtime.withUnobservedMutation(translate)), 201);
       }
       if (path === '/api/translation/config' && method === 'GET') return json(options.ai?.translationCapabilities() ?? { enabled: false });
       if (path === '/api/ai/config' && method === 'GET') return json(options.ai?.capabilities() ?? { text: false, image: false });
-      if (path === '/api/translation/manual' && method === 'POST') return json(await translation.createManual(await input<TranslationRequest>()), 201);
+      if (path === '/api/translation/manual' && method === 'POST') return json(await translation.createManual(await input<TranslationRequest>(request)), 201);
       if ((path === '/api/translation' || path.startsWith('/api/ai/')) && method === 'POST') throw new StudioError(503, '本地工作区尚未配置 AI 服务');
       if (path === '/api/media' && method === 'GET') {
         const listing = await repository.listMedia(url.searchParams.get('refresh') === '1');

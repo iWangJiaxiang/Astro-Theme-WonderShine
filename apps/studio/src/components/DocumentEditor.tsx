@@ -11,8 +11,8 @@ import {
   prepareEditorLanguage,
   prepareEditorLute,
 } from "../editor-assets";
-import DOMPurify from "dompurify";
-import { marked } from "marked";
+import { documentChoices } from "../document-choices";
+import { markdownPreview } from "../markdown-preview";
 import type Vditor from "vditor";
 import {
   stringValues,
@@ -21,8 +21,6 @@ import {
 } from "../../shared/choices";
 import {
   markdownImage,
-  mediaURL,
-  storedMediaPath,
   type MediaItem,
 } from "../../shared/media";
 import { childLayoutChoices, pageProfile } from "../../shared/page-settings";
@@ -385,56 +383,8 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
             )),
       ),
     );
-    const fixedChoices: Record<string, Choice[]> = {
-      layout: [
-        "post",
-        "empty",
-        "about",
-        "friends",
-        "music",
-        "equipment",
-        "wechat",
-        "archives",
-        "collection-list",
-        "collection-detail",
-        "collection-content",
-        "collection-category",
-      ].map((name, index) => ({
-        value: name,
-        label: [
-          "文章",
-          "普通页面",
-          "关于",
-          "友链",
-          "音乐",
-          "装备",
-          "微信",
-          "归档",
-          "合集分组",
-          "系列 / 专辑详情",
-          "章节 / 曲目",
-          "合集分类",
-        ][index],
-      })),
-      child_layout: [
-        { value: "collection-content", label: "章节 / 曲目" },
-        { value: "post", label: "文章" },
-        { value: "empty", label: "普通页面" },
-      ],
-      insert_anchor_links: [
-        { value: "none", label: "不显示" },
-        { value: "left", label: "标题左侧" },
-        { value: "right", label: "标题右侧" },
-        { value: "heading", label: "整个标题" },
-      ],
-    };
     function selectOptions(path: string): Choice[] {
-      const options =
-          isPage && path === "layout"
-            ? childLayoutChoices
-            : fixedChoices[path] || [],
-        value = String(values.value[path] ?? "");
-      return translateOptions(options.filter((option) => option.value !== ""));
+      return translateOptions(isPage && path === "layout" ? childLayoutChoices : documentChoices[path]);
     }
     async function loadChoices(refresh = false) {
       choicesLoading.value = true;
@@ -542,27 +492,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       flush();
       values.value["extra.translation_reviewed"] = true;
     }
-    const preview = computed(() => {
-      const parsed = new DOMParser().parseFromString(
-        DOMPurify.sanitize(
-          marked.parse(body.value, { async: false }) as string,
-        ),
-        "text/html",
-      );
-      for (const image of parsed.querySelectorAll("img")) {
-        try {
-          const path = storedMediaPath(
-            decodeURIComponent(image.getAttribute("src") || ""),
-            "document",
-            props.path,
-          );
-          if (path) image.setAttribute("src", mediaURL(path));
-        } catch {
-          /* Preserve unrecognized URLs. */
-        }
-      }
-      return parsed.body.innerHTML;
-    });
+    const preview = computed(() => markdownPreview(body.value, props.path).body.innerHTML);
     const wordCount = computed(() => body.value.replace(/\s/g, "").length);
     const get = (data: Record<string, Json>, path: string): Json | undefined =>
       path
@@ -2084,7 +2014,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                                 "onUpdateModelValue"
                               >,
                             })
-                          : fixedChoices[field.path]
+                          : documentChoices[field.path]
                             ? element(SelectionField, {
                                 modelValue: values.value[field.path],
                                 options: selectOptions(field.path),
