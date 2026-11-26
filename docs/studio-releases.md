@@ -32,7 +32,7 @@ GitHub Releases 是当前桌面/Android 的部署入口；Google Play 上架需�
 
 Studio 支持全平台构建和独立 iOS 构建。独立 iOS 的 TestFlight 上传只依赖 Studio 验证和 iOS 构建，不依赖桌面或 Android，也不创建 GitHub Release。全平台发行仍要求全部平台成功；其中启用的 TestFlight 上传可在其他平台完成前执行。
 
-iOS 构建与 TestFlight 上传使用 GitHub Actions 的 `xcode-27` runner 和 Xcode 27.2。为满足 Apple 自 2027 年 4 月起的提交要求，CI 在构建前检查设备 SDK，并在上传前从签名 IPA 的 `Info.plist` 读取 `DTSDKName`；两处均要求 iPhoneOS SDK 27 或更高版本。
+iOS 构建与 TestFlight 上传使用 GitHub Actions 的 `xcode-27` runner 和 Xcode 27.2。为满足 Apple 自 2027 年 4 月起的提交要求，CI 在构建前检查设备 SDK，并在上传前从签名 IPA 的 `Info.plist` 读取 `DTSDKName`；两处均要求 iPhoneOS SDK 27 或更高版本。启动验收在独立的 `macos-15` runner 上，将同一提交用 Xcode 27.2 编译的模拟器 App 安装到 iOS 26 模拟器，检查浅色和深色界面。
 
 仓库变量 `STUDIO_UPLOAD_TESTFLIGHT=true` 启用自动内测。每次推送到 `main`，CI 比较本次推送前后的提交；`apps/studio/` 中除 Markdown 文档和 `tests/` 目录以外的文件发生变更时，构建签名 IPA。Studio 验证、模拟器启动和 IPA 检查都通过后，CI 上传同一提交的 IPA，并查询 Apple 处理状态。PR 和功能分支仅验证，测试组沿用 App Store Connect 配置。
 

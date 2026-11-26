@@ -496,14 +496,21 @@ jobs:
       - name: Simulator app (no distribution credentials)
         if: github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true'
         run: npm exec -w @wondershine/studio -- tauri ios build --ci --debug --target aarch64-sim --no-sign
-      - name: Inspect and launch iOS simulator app
+      - name: Collect the simulator app for launch verification
         if: github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true'
-        run: node apps/studio/scripts/release/simulator-smoke.mjs
+        env:
+          STUDIO_RELEASE: 'false'
+          STUDIO_BUNDLE_DIR: apps/studio/src-tauri/gen/apple/build
+        run: |
+          node apps/studio/scripts/release/collect.mjs
+          mv temp/studio-artifacts temp/studio-simulator
+          cp apps/studio/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png temp/studio-simulator/app-icon-1024.png
       - uses: actions/upload-artifact@v7.0.2
-        if: always() && (github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true')
+        if: github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true'
         with:
-          name: studio-ios-screenshots
-          path: apps/studio/test-results/ios-simulator/
+          name: ${{ needs.prepare.outputs.iosRelease == 'true' && 'studio-ios-simulator' || 'studio-app-ios' }}
+          path: temp/studio-simulator/
+          if-no-files-found: error
           retention-days: 7
       - name: Signed App Store IPA
         if: needs.prepare.outputs.iosRelease == 'true'
@@ -514,20 +521,56 @@ jobs:
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
           IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
       - run: node apps/studio/scripts/release/collect.mjs
+        if: needs.prepare.outputs.iosRelease == 'true'
         env:
           STUDIO_BUNDLE_DIR: apps/studio/src-tauri/gen/apple/build
       - name: Verify SDK and encryption declaration in signed IPA
         if: needs.prepare.outputs.iosRelease == 'true'
         run: node apps/studio/scripts/release/verify-ios-sdk.mjs
       - uses: actions/upload-artifact@v7.0.2
+        if: needs.prepare.outputs.iosRelease == 'true'
         with:
           name: studio-app-ios
           path: temp/studio-artifacts/
           if-no-files-found: error
           retention-days: 7
+  ios-simulator:
+    needs: [prepare, ios]
+    if: github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true'
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: ${{ needs.prepare.outputs.iosRelease == 'true' && 'studio-ios-simulator' || 'studio-app-ios' }}
+          path: temp/studio-simulator
+      - name: Launch the Xcode 27 app on the iOS 26 simulator
+        run: |
+          tar -xzf temp/studio-simulator/ios-simulator-*.app.tar.gz -C temp/studio-simulator
+          node apps/studio/scripts/release/simulator-smoke.mjs temp/studio-simulator
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: studio-ios-screenshots
+          path: apps/studio/test-results/ios-simulator/
+          retention-days: 7
   testflight:
-    needs: [prepare, verify, ios]
-    if: needs.prepare.outputs.testflight == 'true'
+    needs: [prepare, verify, ios, ios-simulator]
+    if: >-
+      !cancelled() && needs.prepare.outputs.testflight == 'true' &&
+      needs.verify.result == 'success' && needs.ios.result == 'success' &&
+      (needs.ios-simulator.result == 'success' || (github.event_name != 'push' && needs.ios-simulator.result == 'skipped'))
     runs-on: xcode-27
     timeout-minutes: 20
     env:
