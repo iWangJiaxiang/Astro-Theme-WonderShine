@@ -1075,8 +1075,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                         "h1",
                         null,
                         isThread
-                          ? contentLabel(body.value, values.value.title) ||
-                              t("新动态")
+                          ? String(values.value.title || "").trim() || t(revision.value ? "编辑动态" : "新动态")
                           : values.value.title || t("未命名内容"),
                       ),
                       <details className="editor-file-location" hidden={pageTab.value === "settings" || (isThread && !threadAdvanced.value)}>

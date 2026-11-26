@@ -8,7 +8,7 @@ import { checkLanguages } from './languages.mjs';
 import { checkOnboarding } from './onboarding.mjs';
 import { checkMedia } from './media.mjs';
 import { checkUploads } from './uploads.mjs';
-import { chooser, checkControls } from './controls.mjs';
+import { chooser, checkControls, revealField } from './controls.mjs';
 import { checkPageManagement } from './pages.mjs';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm, cp, mkdir, readFile, writeFile, symlink } from 'node:fs/promises';
@@ -97,10 +97,11 @@ try {
   await page.setViewport({ width: 1440, height: 1000, deviceScaleFactor: 1 });
   await page.setRequestInterception(true);
   let holdDocumentWrite = false, releaseDocumentWrite;
+  let aiCapabilities = { text: true, image: false };
   let holdEditorEngine = false, editorEngineRequest;
   const delayNextDocumentSave = () => { holdDocumentWrite = true; return () => { holdDocumentWrite = false; releaseDocumentWrite?.(); releaseDocumentWrite = undefined; }; };
   page.on('request', request => {
-    if (request.url() === origin + '/api/ai/config') return request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: true, image: false }) });
+    if (request.url() === origin + '/api/ai/config') return request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify(aiCapabilities) });
     if (request.url() === origin + '/api/ai/text') return request.respond({ status: 200, contentType: 'application/json', body: JSON.stringify({ text: 'Reviewed browser summary fixture.' }) });
     if (holdDocumentWrite && request.url() === origin + '/api/document' && request.method() === 'PUT') { releaseDocumentWrite = () => request.continue(); return; }
     if (holdEditorEngine && request.url().endsWith('/vendor/vditor/dist/js/lute/lute.min.js')) {
@@ -185,6 +186,26 @@ try {
  await page.waitForSelector('.ai-assistant-dialog', { hidden: true });
  assert.equal(await page.$eval('#article-description', node => node.value), 'Reviewed browser summary fixture.');
  console.log('PASS: AI summary application updates the document and closes the dialog.');
+ for (const config of [{text:true,image:false}, {text:false,image:true}, {text:false,image:false}]) {
+   aiCapabilities = config;
+   await revealField(page, '.ai-cover-action');
+   await page.click('.ai-cover-action');
+   await page.waitForSelector('.ai-assistant-dialog[open] .notice');
+   const dialog = '.ai-assistant-dialog[open]';
+   assert.equal(await page.$$eval(dialog + ' .notice', nodes => nodes.length), 1);
+   assert.equal(Boolean(await page.$(dialog + ' textarea')), config.text || config.image);
+   assert.equal(Boolean(await page.$(dialog + ' .ai-image-preview')), false);
+   const buttons = await page.$$eval(dialog + ' button', nodes => nodes.map(node => node.textContent));
+   assert.equal(buttons.includes('生成提示词'), config.text);
+   assert.equal(buttons.includes('生成图片'), config.image);
+   if (config.image) {
+     await page.type(dialog + ' textarea', 'Handwritten cover prompt');
+     assert.equal(await page.$eval(dialog + ' .ai-step-heading button', button => button.disabled), false);
+   }
+   await page.click(dialog + ' .card-heading button');
+   await page.waitForSelector(dialog, {hidden:true});
+ }
+ aiCapabilities = { text: true, image: false };
  await page.$eval('.metadata-card input[type=checkbox]',el=>el.click());
  await click('本地保存');await page.waitForSelector('.notice.success');
  let source=await readFile(base+'/site/content/articles/studio-browser-test/index.md','utf8');assert.match(source,/draft = false/);assert.match(source,/# A new story/);

@@ -37,6 +37,7 @@ import {
 import { batch, computed, onBeforeUnmount, onMounted, ref, useId, watch } from "../reactivity";
 import DeleteContentDialog from "./DeleteContentDialog";
 import Icon from "./Icon";
+import LibraryFilterToggle from "./LibraryFilterToggle";
 import LoadingState from "./LoadingState";
 import Modal from "./Modal";
 import SelectionField from "./SelectionField";
@@ -609,6 +610,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 }),
               }),
             ),
+            <LibraryFilterToggle language={language.value} status={status.value} />,
             languages.value
               ? element(SelectionField, {
                   modelValue: language.value,

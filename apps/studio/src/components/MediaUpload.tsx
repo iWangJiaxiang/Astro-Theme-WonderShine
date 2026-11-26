@@ -440,7 +440,7 @@ const MediaUpload: StudioComponent<Props, Events> = component<Props, Events>(
               element(
                 "p",
                 { className: classes("muted small upload-note") },
-                t("上传即保存到仓库，选用后请保存表单。"),
+                t(props.mode === "library" ? "上传即保存到仓库。" : "上传即保存到仓库，选用后请保存表单。"),
               ),
             )
           : element(

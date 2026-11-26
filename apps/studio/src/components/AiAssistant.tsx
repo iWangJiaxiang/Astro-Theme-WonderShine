@@ -19,7 +19,7 @@ import {
   portal,
   type StudioComponent,
 } from "../react-component";
-import { onBeforeUnmount, onMounted, ref } from "../reactivity";
+import { computed, onBeforeUnmount, onMounted, ref } from "../reactivity";
 
 type Props = {
   kind: "summary" | "cover";
@@ -45,6 +45,15 @@ const AiAssistant: StudioComponent<Props, Events> = component<Props, Events>(
     const result = ref(""),
       image = ref<AiImageResult>(),
       imagePrompt = ref("");
+    const missingService = computed(() => {
+      const config = capabilities.value;
+      if (!config) return "";
+      if (props.kind === "cover" && !config.image) {
+        return config.text ? "尚未配置 AI 图片服务，请联系管理员" : "尚未配置 AI 文本和图片服务，请联系管理员";
+      }
+      return config.text ? "" : "尚未配置 AI 文本服务，请联系管理员";
+    });
+    const canWrite = computed(() => props.kind === "summary" || capabilities.value?.text || capabilities.value?.image);
     const previousFocus = document.activeElement as HTMLElement | null;
     let alive = true, wantsOpen = true;
     const modal = createBusinessModal(() => dialog.value, () => alive && wantsOpen);
@@ -195,90 +204,79 @@ const AiAssistant: StudioComponent<Props, Events> = component<Props, Events>(
                     { className: classes("muted") },
                     t("正在读取 AI 配置…"),
                   )
-                : !capabilities.value?.text
-                  ? element(
-                      "p",
-                      { className: classes("notice") },
-                      t("尚未配置 AI 文本服务，请联系管理员"),
-                    )
+                : missingService.value
+                  ? element("p", { className: classes("notice"), role: "status" }, t(missingService.value))
                   : null,
-              props.kind === "cover" &&
-                capabilities.value &&
-                !capabilities.value.image
-                ? element(
-                    "p",
-                    { className: classes("notice") },
-                    t("尚未配置 AI 图片服务，请联系管理员"),
-                  )
-                : null,
               error.value
                 ? element(
                     ErrorNotice,
                     { source: "AiAssistant", message: error.value },
                   )
                 : null,
-              element(
-                "div",
-                { className: classes("ai-source") },
+              canWrite.value && element(
+                Fragment,
+                null,
                 element(
-                  "span",
-                  null,
-                  t(
-                    props.kind === "summary"
-                      ? "根据当前正文生成"
-                      : "根据当前摘要生成",
+                  "div",
+                  { className: classes("ai-source") },
+                  element(
+                    "span",
+                    null,
+                    t(
+                      props.kind === "summary"
+                        ? "根据当前正文生成"
+                        : "根据当前摘要生成",
+                    ),
+                  ),
+                  element("strong", null, props.title || t("未命名内容")),
+                  element(
+                    "p",
+                    null,
+                    props.text.slice(0, 260),
+                    props.text.length > 260 ? "…" : "",
                   ),
                 ),
-                element("strong", null, props.title || t("未命名内容")),
                 element(
-                  "p",
-                  null,
-                  props.text.slice(0, 260),
-                  props.text.length > 260 ? "…" : "",
-                ),
-              ),
-              element(
-                "div",
-                { className: classes("ai-step-heading") },
-                element(
-                  "strong",
-                  null,
-                  t(props.kind === "summary" ? "摘要预览" : "1 · 图片提示词"),
-                ),
-                element(
-                  "button",
-                  {
-                    disabled:
-                      busy.value ||
-                      !capabilities.value?.text ||
-                      !props.text.trim(),
-                    className: classes("secondary"),
-                    onClick: domEvent(($event: Event) => {
-                      generateText();
-                    }),
-                  },
-                  t(
-                    result.value
-                      ? "重新生成"
-                      : props.kind === "summary"
-                        ? "生成摘要"
-                        : "生成提示词",
+                  "div",
+                  { className: classes("ai-step-heading") },
+                  element(
+                    "strong",
+                    null,
+                    t(props.kind === "summary" ? "摘要预览" : "1 · 图片提示词"),
+                  ),
+                  capabilities.value?.text && element(
+                    "button",
+                    {
+                      disabled: busy.value || !props.text.trim(),
+                      className: classes("secondary"),
+                      onClick: domEvent(($event: Event) => {
+                        generateText();
+                      }),
+                    },
+                    t(
+                      result.value
+                        ? "重新生成"
+                        : props.kind === "summary"
+                          ? "生成摘要"
+                          : "生成提示词",
+                    ),
                   ),
                 ),
-              ),
-              element("textarea", {
-                value: result.value ?? "",
-                "aria-label": t(
-                  props.kind === "summary" ? "AI 摘要结果" : "图片提示词",
-                ),
-                disabled: busy.value,
-                rows: props.kind === "cover" ? 3 : 5,
-                placeholder: t("生成后可以直接修改，再决定是否应用。"),
-                onInput: domEvent(($event: Event) => {
-                  result.value = ($event.target as HTMLInputElement).value;
+                element("textarea", {
+                  value: result.value ?? "",
+                  "aria-label": t(
+                    props.kind === "summary" ? "AI 摘要结果" : "图片提示词",
+                  ),
+                  disabled: busy.value,
+                  rows: props.kind === "cover" ? 3 : 5,
+                  placeholder: t(props.kind === "cover" && !capabilities.value?.text
+                    ? "输入图片提示词" : "生成后可以直接修改，再决定是否应用。"),
+                  onInput: domEvent(($event: Event) => {
+                    result.value = ($event.target as HTMLInputElement).value;
+                  }),
                 }),
-              }),
-              props.kind === "cover"
+              ),
+              props.kind === "cover" && capabilities.value?.image
                 ? element(
                     Fragment,
                     null,
@@ -289,10 +287,7 @@ const AiAssistant: StudioComponent<Props, Events> = component<Props, Events>(
                       element(
                         "button",
                         {
-                          disabled:
-                            busy.value ||
-                            !capabilities.value?.image ||
-                            !result.value.trim(),
+                          disabled: busy.value || !result.value.trim(),
                           className: classes("secondary"),
                           onClick: domEvent(($event: Event) => {
                             generateImage();
@@ -301,19 +296,13 @@ const AiAssistant: StudioComponent<Props, Events> = component<Props, Events>(
                         t(image.value ? "重新生成图片" : "生成图片"),
                       ),
                     ),
-                    element(
+                    image.value && element(
                       "div",
                       { className: classes("ai-image-preview") },
-                      image.value
-                        ? element("img", {
-                            src: `data:${image.value.mime};base64,${image.value.base64}`,
-                            alt: t("AI 封面预览"),
-                          })
-                        : element(
-                            "span",
-                            { className: classes("muted") },
-                            t("确认提示词后生成图片"),
-                          ),
+                      element("img", {
+                        src: `data:${image.value.mime};base64,${image.value.base64}`,
+                        alt: t("AI 封面预览"),
+                      }),
                     ),
                     image.value && result.value !== imagePrompt.value
                       ? element(
@@ -332,7 +321,7 @@ const AiAssistant: StudioComponent<Props, Events> = component<Props, Events>(
                   )
                 : null,
             ),
-            element(
+            (props.kind === "summary" || image.value) && element(
               "footer",
               { className: classes("selection-footer") },
               element(

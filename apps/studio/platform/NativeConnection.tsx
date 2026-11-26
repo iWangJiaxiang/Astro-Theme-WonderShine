@@ -217,11 +217,11 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
           {profile.localPath && <div className="selected-repository"><span className="repository-path">{profile.localPath}</span><span className="repository-branch">{profile.branch}</span></div>}
           {!folderAvailable && <p className="muted small">{t('此设备请使用远程仓库，下载后可离线编辑。')}</p>}
         </div> : <label className="field connection-url"><span>{t('仓库地址')}</span><input type="url" required readOnly={existing} placeholder="https://github.com/owner/blog.git" value={profile.url} onChange={e => field('url', e.target.value)} autoCapitalize="none" spellCheck={false} /></label>}
-        {!local && !existing && <label className="field checkbox-field">
-          <input type="checkbox" checked={includeSubmodules} onChange={event => setIncludeSubmodules(event.target.checked)} />
-          <span>{t('下载子模块')}</span>
-        </label>}
         {(!local || profile.localPath) && <details className="connection-options"><summary>{t('连接与提交设置')}</summary><div className="connection-option-fields">
+          {!local && !existing && <label className="field checkbox-field">
+            <input type="checkbox" checked={includeSubmodules} onChange={event => setIncludeSubmodules(event.target.checked)} />
+            <span>{t('下载子模块')}</span>
+          </label>}
           <div className="connection-fields"><label className="field"><span>{t('工作区名称')}</span><input value={profile.label} onChange={e => field('label', e.target.value)} /></label><label className="field"><span>{t('分支')}</span><input required={existing || local} placeholder={t('自动识别默认分支')} readOnly={existing || local} value={profile.branch} onChange={e => field('branch', e.target.value)} /></label></div>
           {!local && <label className="field"><span>{t('Git 服务')}</span><select value={profile.provider} onChange={e => field('provider', e.target.value as HostingKind)}>{hostingProviders.map(item => <option key={item.id} value={item.id}>{t(item.label)}</option>)}</select></label>}
           <div className="connection-fields"><label className="field"><span>{t('Git 用户名')}</span><input autoComplete="username" value={profile.username} onChange={e => field('username', e.target.value)} /></label><label className="field"><span>{t('访问令牌')}</span><input type="password" autoComplete="off" placeholder={t('保存到系统凭据存储')} value={token} onChange={e => setToken(e.target.value)} /></label></div>

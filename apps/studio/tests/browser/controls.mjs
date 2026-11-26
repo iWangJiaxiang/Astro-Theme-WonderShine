@@ -295,6 +295,16 @@ export async function checkControls({ page, click, heading, fill, base, screensh
   await choose('create-language', 'zh-CN');
   await page.keyboard.press('Escape');
   await page.waitForSelector('.creation-dialog', { hidden: true });
+  await page.setViewport({ width: 320, height: 568 });
+  const filters = '.content-library .library-filter-toggle';
+  await page.waitForSelector(filters, { visible: true });
+  assert.equal(await page.$eval('[data-field="status"]', el => el.getClientRects().length), 0);
+  await page.click(filters);
+  await choose('status', 'draft');
+  await page.click(filters);
+  assert.match(await page.$eval(filters, el => el.textContent), /草稿/);
+  await page.setViewport({ width: 1440, height: 1000 });
+  await choose('status', 'all');
   await choose('library-language', 'zh-CN');
   await page.evaluate(() => {
     const fetchOriginal = window.fetch;

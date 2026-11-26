@@ -840,7 +840,9 @@ try {
   await page.click('.error-actions .secondary');
   await page.waitForFunction(() => !document.querySelector('.error-dialog[open]'));
   await screenshot('clone-error-mobile'); console.log('PASS: clone error releases connection state.');
+  await page.click('.connection-options summary');
   await page.click(submoduleOption);
+  await page.click('.connection-options summary');
   assert.equal(await page.$eval(submoduleOption, input => input.checked), true);
   downloadGate = new Promise(resolve => { releaseDownload = resolve; });
   checkoutGate = new Promise(resolve => { releaseCheckout = resolve; });
