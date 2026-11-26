@@ -14,7 +14,7 @@ const demo = {
   pages: [
     ['home', '/'], ['article', '/articles/welcome/'],
     ['threads', '/threads/'], ['thread', '/threads/11111111-2222-4333-8444-555555555555/'],
-    ['series', '/collections/field-notes/'], ['tags', '/tags/design/'], ['timeline', '/timeline/'], ['topics', '/topics/'],
+    ['series', '/collections/field-notes/'], ['category', '/categories/journal/'], ['tags', '/tags/design/'], ['timeline', '/timeline/'], ['topics', '/topics/'],
     ['chinese', '/zh-CN/'],
   ],
   navigation: { path: '/articles/', language: 'zh-CN', translatedPath: '/zh-CN/articles/' },
@@ -404,6 +404,35 @@ export async function checkBrowser(options = demo) {
       if (options === demo && ['home', 'timeline'].includes(name)) {
         assert.deepEqual(requests.filter(url => /\/libs\/(prism\/.*\.js|katex\/|qrcode\/)/.test(url)), [], 'Reading libraries must not load on '+name);
         assert.ok(!requests.some(url => url.endsWith('/dist/css/global.css')), 'Split styles must not also request all-page global.css');
+      }
+      if (options === demo && ['home', 'chinese', 'category', 'tags'].includes(name)) {
+        for (const width of [375, 390, 768]) {
+          await page.setViewport({width, height:844});
+          await finishLayout();
+          const geometry = await page.$eval('#recent-posts > [data-post-url]', card => {
+            const bounds = selector => card.querySelector(selector).getBoundingClientRect();
+            const bar = document.querySelector('#category-bar').getBoundingClientRect();
+            const box = card.getBoundingClientRect();
+            const cover = bounds('img.post_bg');
+            const title = bounds('.article-title');
+            const meta = bounds('.article-meta-wrap');
+            return {
+              gutter:box.left, rightGutter:innerWidth - box.right,
+              barOffset:Math.abs(bar.left - box.left) + Math.abs(bar.right - box.right),
+              coverInset:Math.abs(cover.left - box.left) + Math.abs(cover.right - box.right),
+              stacked:cover.bottom <= title.top && title.bottom <= meta.top && meta.bottom <= box.bottom,
+            };
+          });
+          assert.ok(geometry.gutter >= 12 && Math.abs(geometry.gutter - geometry.rightGutter) <= 2
+            && geometry.barOffset <= 2 && geometry.coverInset <= 3 && geometry.stacked,
+            JSON.stringify({route, width, ...geometry}));
+          if (width === 390) {
+            await page.$eval('#category-bar', bar => bar.scrollIntoView({behavior:'instant', block:'start'}));
+            await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-post-cards.png')});
+            await page.evaluate(() => window.scrollTo({top:0, behavior:'instant'}));
+          }
+        }
+        await page.setViewport({width:1440, height:900});
       }
     }
     if (options === demo) {
