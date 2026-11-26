@@ -46,6 +46,7 @@ section.native-ai-settings { max-width: 960px; }
 .workspace-panel .workspace-sync-card { padding: 28px; }
 /* Keep the heading from covering fields during reverse keyboard navigation. */
 .settings-page.workspace-panel > .page-heading { position: static; }
+.workspace-file-list > summary, .workspace-sync-actions > button { scroll-margin-block: 8px; }
 .workspace-file-list > summary:focus-visible { outline: 3px solid var(--wjx-theme); outline-offset: 3px; }
 .workspace-file-list > summary { min-height: 44px; align-content: center; cursor: pointer; font-weight: 600; }
 .workspace-sync-card h2 { font-size: var(--studio-section-title); margin-bottom: 0; overflow-wrap: anywhere; }
@@ -53,7 +54,7 @@ section.native-ai-settings { max-width: 960px; }
 .workspace-sync-card li { overflow-wrap: anywhere; }
 .workspace-sync-card ul { padding-inline-start: 1.25rem; }
 .workspace-sync-card .workspace-status-grid { padding-bottom: 24px; border-bottom: 1px solid var(--studio-line); }
-.workspace-panel .workspace-sync-actions { justify-content: flex-end; flex-wrap: wrap; margin-top: 24px; }
+.workspace-panel .workspace-sync-actions { justify-content: flex-end; flex-wrap: wrap; margin-top: 12px; }
 .account-login-buttons > button, .workspace-panel .workspace-sync-actions > button { flex: 0 1 auto; inline-size: max-content; max-inline-size: 100%; min-inline-size: 0; white-space: normal; overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   .native-ai-settings .native-ai-form, .workspace-panel .workspace-sync-card { padding: 20px; }
