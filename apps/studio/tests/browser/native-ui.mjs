@@ -983,7 +983,29 @@ try {
   await assert.rejects(fs.stat(join(appData, 'workspaces', mainProfile.id, 'repo', themePath, 'theme.txt')), { code: 'ENOENT' });
   assert.deepEqual(await mobile.invoke({ profile: mainProfile, job: { action: 'checkRemote' } }), { ahead: 0, behind: 0 });
   assert.equal(execFileSync('git', ['-C', join(appData, 'workspaces', mainProfile.id, 'repo'), 'rev-parse', '--is-shallow-repository']).toString().trim(), 'true');
-  await mobile.verifySync(mainProfile);
+  const conflictRefs = await mobile.verifySync(mainProfile);
+  await page.evaluate(profile => localStorage.setItem('wondershine.native.workspaces.v1', JSON.stringify([profile])), mainProfile);
+  await restartNativeFixture();
+  await heading('今天，写点什么？');
+  await click('工作区同步');
+  await click('同步 Git');
+  await click('确认执行');
+  await page.waitForSelector('.workspace-panel [role=alert]');
+  await screenshot('workspace-merge-conflict-mobile', false);
+  await click('处理合并冲突');
+  const resolver = '.workspace-confirm[open]';
+  await page.waitForSelector(resolver + ' .merge-file select');
+  assert.equal(await page.$eval(resolver + ' .publish-actions .primary', button => button.disabled), true);
+  await page.select(resolver + ' .merge-file select', 'remote');
+  await screenshot('workspace-merge-review-mobile', false);
+  await click('提交本地合并');
+  await page.waitForFunction(() => document.querySelector('.workspace-panel .notice')?.textContent.includes('冲突已合并到本地'));
+  const mainRepo = join(appData, 'workspaces', mainProfile.id, 'repo');
+  const parents = execFileSync('git', ['-C', mainRepo, 'log', '-1', '--format=%P']).toString().trim();
+  assert.equal(parents, conflictRefs.head + ' ' + conflictRefs.remote);
+  assert.equal(await fs.readFile(join(mainRepo, 'data.toml'), 'utf8'), 'title="remote change"');
+  assert.equal(execFileSync('git', [...remoteArgs, 'rev-parse', 'main']).toString().trim(), conflictRefs.remote);
+
 
   if (process.env.STUDIO_TEST_OAUTH === 'fixture') {
     const cnb = { ...saved[0], id: crypto.randomUUID(), label: 'CNB fixture', provider: 'cnb', username: cnbUsername, url: cnbRemote };
@@ -1021,7 +1043,7 @@ try {
     await reopenWithExpiredGrant();
     commitOffline('CNB quick sync after reauthorization');
     await page.locator('.topbar .navigation-refresh[aria-disabled=false][aria-label="同步 Git 并刷新当前内容"]').click();
-    await page.waitForFunction(() => document.querySelector('.quick-sync-progress [role=alert]')?.textContent.includes('授权已过期'));
+    await page.waitForFunction(() => document.querySelector('.quick-sync-progress .account-reauthorize button') && !document.querySelector('.quick-sync-progress [role=alert]'));
     await screenshot('cnb-quick-sync-expired', false);
     await startReauthorization();
     cnbUsername = 'another-fixture-account'; oauthApproved = true;

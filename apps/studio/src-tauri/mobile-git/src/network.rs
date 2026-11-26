@@ -318,6 +318,33 @@ pub(super) fn fetch_current(repo: &Repository, p: &Profile, state: &Path, passwo
     Ok(())
 }
 
+pub(super) fn checkout_merge(repo: &Repository, p: &Profile, state: &Path, before: Oid, target: Oid) -> Result<()> {
+    let object = repo.find_commit(target).map_err(|_| READ)?.into_object();
+    let mut check = git2::build::CheckoutBuilder::new();
+    check.safe().dry_run();
+    repo.checkout_tree(&object, Some(&mut check))
+        .map_err(|_| CHANGED)?;
+    let journal = state.join("sync.json");
+    fs::write(
+        state.join("sync.json.tmp"),
+        json!({"before":before.to_string(),"target":target.to_string()}).to_string(),
+    )
+    .map_err(|_| WRITE)?;
+    fs::rename(state.join("sync.json.tmp"), &journal).map_err(|_| WRITE)?;
+    repo.checkout_tree(&object, Some(git2::build::CheckoutBuilder::new().safe()))
+        .map_err(|_| RECOVER)?;
+    repo.reference_matching(
+        &format!("refs/heads/{}", p.branch),
+        target,
+        true,
+        before,
+        "Studio sync",
+    )
+    .map_err(|_| RECOVER)?;
+    fs::remove_file(journal).map_err(|_| RECOVER)?;
+    Ok(())
+}
+
 pub(super) fn sync(repo: &Repository, p: &Profile, state: &Path, password: &str) -> std::result::Result<bool, Value> {
     let no_progress = |_: &str, _: usize, _: usize| {};
     fetch_current(repo, p, state, password, true)?;
@@ -334,7 +361,7 @@ pub(super) fn sync(repo: &Repository, p: &Profile, state: &Path, password: &str)
                 .merge_commits(&ours, &theirs, None)
                 .map_err(|_| MERGE)?;
             if index.has_conflicts() {
-                return Err(MERGE.into());
+                return Err("文件存在合并冲突，请在工作区同步中处理".into());
             }
             let tree_id = index.write_tree_to(repo).map_err(|_| WRITE)?;
             let tree = repo.find_tree(tree_id).map_err(|_| READ)?;
@@ -351,29 +378,7 @@ pub(super) fn sync(repo: &Repository, p: &Profile, state: &Path, password: &str)
         } else {
             target
         };
-        let object = repo.find_commit(target).map_err(|_| READ)?.into_object();
-        let mut check = git2::build::CheckoutBuilder::new();
-        check.safe().dry_run();
-        repo.checkout_tree(&object, Some(&mut check))
-            .map_err(|_| CHANGED)?;
-        let journal = state.join("sync.json");
-        fs::write(
-            state.join("sync.json.tmp"),
-            json!({"before":before.to_string(),"target":target.to_string()}).to_string(),
-        )
-        .map_err(|_| WRITE)?;
-        fs::rename(state.join("sync.json.tmp"), &journal).map_err(|_| WRITE)?;
-        repo.checkout_tree(&object, Some(git2::build::CheckoutBuilder::new().safe()))
-            .map_err(|_| RECOVER)?;
-        repo.reference_matching(
-            &format!("refs/heads/{}", p.branch),
-            target,
-            true,
-            before,
-            "Studio sync",
-        )
-        .map_err(|_| RECOVER)?;
-        fs::remove_file(journal).map_err(|_| RECOVER)?;
+        checkout_merge(repo, p, state, before, target)?;
     }
     if ahead != 0 {
         let accepted = Cell::new(None);

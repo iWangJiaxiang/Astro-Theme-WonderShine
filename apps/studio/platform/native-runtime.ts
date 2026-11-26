@@ -103,7 +103,7 @@ export async function connectNativeWorkspace(profile: WorkspaceProfile, token: s
     const endpoint = new URL(request.url).pathname;
     if (request.method === 'GET' && endpoint === '/api/content') return diagnostics.measure('content-request', () => transport(request));
     if (request.method === 'GET' && endpoint === '/api/media') return diagnostics.measure('media-request', () => transport(request));
-    if (request.method === 'POST' && ['/api/workspace/sync', '/api/workspace/publish', '/api/workspace/discard'].includes(endpoint)) {
+    if (request.method === 'POST' && ['/api/workspace/sync', '/api/workspace/publish', '/api/workspace/discard', '/api/workspace/merge'].includes(endpoint)) {
       return transport(request).finally(() => { if (!disposed) invalidateMediaListing(); });
     }
     return transport(request);

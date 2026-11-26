@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:https';
 import { spawn, execFileSync } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 // Only Tauri IPC and the remote host are replaced. The Linux harness links the same
@@ -142,8 +142,20 @@ export async function mobileGitFixture(base, appData, studio) {
     const divergent = local(), theirs = remoteHead();
     await assert.rejects(sync(), /合并/);
     assert.equal(local(),divergent); assert.equal(remoteHead(),theirs);
+    const refs = { head: divergent, remote: theirs };
+    const review = await invoke({ profile, job: { action: 'reviewMerge', ...refs } });
+    assert.deepEqual(review, [{ path: 'data.toml', local: true, remote: true }]);
+    const resolve = (params, choices) => invoke({ profile, job: { action: 'resolveMerge', ...params, choices } });
+    await assert.rejects(resolve(refs, {}));
+    await assert.rejects(resolve({ ...refs, remote: divergent }, { 'data.toml': 'remote' }));
+    await writeFile(join(repo, 'unpublished.txt'), 'keep');
+    await assert.rejects(resolve(refs, { 'data.toml': 'remote' }));
+    assert.equal(await readFile(join(repo, 'unpublished.txt'), 'utf8'), 'keep');
+    await unlink(join(repo, 'unpublished.txt'));
+    assert.equal(local(), divergent);
     privateRemote = false;
     console.log('PASS: libgit2 authenticated HTTPS, fast-forward, merged publication, rejected/retried push and conflicting history.');
+    return refs;
   }
   return { url, invoke, verifySync, setOnline(value) { online = value; }, close() { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); } };
 }

@@ -3,8 +3,8 @@ import { ErrorNotice } from "../src/components/ErrorNotice";
 import LoadingState from '../src/components/LoadingState';
 import { useEffect, useRef, useState } from 'react';
 import { workspaceCommitNotice } from './workspace-notice';
-import type { WorkspaceStatus } from '../shared/workspace';
-import AccountLogin from './AccountLogin';
+import type { MergeChoices, WorkspaceStatus } from '../shared/workspace';
+import { GitFailure } from './GitFailure';
 import { isGitAuthFailure, nativeGitCredential } from './git-credential';
 import { api, errorMessage, session } from '../src/api';
 import { t, type Message } from '../src/i18n';
@@ -12,7 +12,7 @@ import { useSignals } from '../src/reactivity';
 import { NavigationRefresh } from "../src/navigation-refresh";
 import { notifyWorkspaceChanged } from '../src/workspace-events';
 
-type Operation = 'commit' | 'sync' | 'publish' | 'discard';
+type Operation = 'commit' | 'sync' | 'publish' | 'discard' | 'merge';
 
 export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string; onClose?: (pushed: boolean) => void } = {}) {
   useSignals();
@@ -27,6 +27,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
   const tokenInput = useRef<HTMLInputElement>(null);
   const [authFailed, setAuthFailed] = useState(false);
   const retryOperation = useRef<'publish' | 'sync'>('sync');
+  const [choices, setChoices] = useState<MergeChoices>({});
   const [pushed, setPushed] = useState(false);
   const requestSequence = useRef(0);
   useEffect(() => {
@@ -63,11 +64,16 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
     const sequence = ++requestSequence.current;
     setStage('正在检查工作区…'); setError(''); setNotice('');
     try {
-      const reviewed = await api<WorkspaceStatus>(kind === 'discard' ? '/workspace/discard/review' : '/workspace/review', 'POST');
+      const endpoint = kind === 'discard' || kind === 'merge' ? '/workspace/' + kind + '/review' : '/workspace/review';
+      const reviewed = await api<WorkspaceStatus>(endpoint, 'POST');
       if (sequence !== requestSequence.current) return;
       if (!reviewed.confirmation) throw new Error('工作区已变化，请刷新并重新确认提交范围');
       setStatus(reviewed);
-      if (kind === 'discard' && !reviewed.discardPaths?.length) {
+      if (kind === 'merge') {
+        setChoices({});
+        if (reviewed.mergeFiles?.length) setPending('merge');
+        else setNotice('没有需要手动处理的文件，可以同步 Git。');
+      } else if (kind === 'discard' && !reviewed.discardPaths?.length) {
         setPending(null); setNotice('工作区没有未提交的修改');
       } else if (kind !== 'publish') setPending(kind);
       else if (!reviewed.dirty) setPending('sync');
@@ -77,13 +83,17 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
   }
   async function action(kind: 'refresh' | Operation) {
     requestSequence.current++;
-    setStage(kind === 'discard' ? '正在还原工作区…' : kind === 'publish' ? (publishPath ? '正在发布…' : '正在同步仓库…') : kind === 'sync' ? '正在同步仓库…' : kind === 'refresh' ? '正在检查工作区…' : '正在保存版本…'); setError(''); setNotice('');
+    setStage(kind === 'merge' ? '正在合并冲突文件…' : kind === 'discard' ? '正在还原工作区…' : kind === 'publish' ? (publishPath ? '正在发布…' : '正在同步仓库…') : kind === 'sync' ? '正在同步仓库…' : kind === 'refresh' ? '正在检查工作区…' : '正在保存版本…'); setError(''); setNotice('');
     let syncing = false;
     try {
       let current = status;
       if (kind === 'refresh') current = await api<WorkspaceStatus>('/workspace');
       else {
         if (!current?.confirmation) throw new Error('工作区已变化，请刷新并重新确认提交范围');
+        if (kind === 'merge') {
+          current = await api<WorkspaceStatus>('/workspace/merge', 'POST', { confirmation: current.confirmation, choices });
+          setNotice('冲突已合并到本地，等待同步。');
+        }
         if (kind === 'discard') {
           current = await api<WorkspaceStatus>('/workspace/discard', 'POST', { confirmation: current.confirmation });
           setNotice('已还原工作区');
@@ -114,29 +124,31 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       if (kind === 'commit') setNotice('已提交到工作区，尚未推送到远端。');
       if (kind === 'sync' || kind === 'publish') setNotice('已与 Git 远端同步；网站上线状态请以部署平台为准。');
     } catch (reason) {
-      if (kind === 'publish') setNotice('内容已保存在工作区。请核对远端状态后再重试。');
-      else if (syncing) setNotice(workspaceCommitNotice('unconfirmed'));
       const failure = errorMessage(reason);
+      if (typeof failure === 'object' && failure.key === '文件存在合并冲突，请在工作区同步中处理') setNotice('');
+      else if (kind === 'publish') setNotice('内容已保存在工作区。请核对远端状态后再重试。');
+      else if (syncing) setNotice(workspaceCommitNotice('unconfirmed'));
       setError(failure);
       if (syncing) {
         retryOperation.current = kind === 'publish' ? 'publish' : 'sync';
         setAuthFailed(isGitAuthFailure(failure));
       }
-      setStatus(null);
+      if (kind !== 'refresh') {
+        try { setStatus(await api<WorkspaceStatus>('/workspace')); }
+        catch { setStatus(null); }
+      } else setStatus(null);
     }
     finally {
-      if (syncing || kind === 'discard') notifyWorkspaceChanged();
+      if (syncing || kind === 'discard' || kind === 'merge') notifyWorkspaceChanged();
       setStage(''); setPending(null);
     }
   }
   const manualMerge = status?.diverged && !status.canMerge;
   const mergeNotice = '同步时会合并远端更新。如有冲突，双方提交都会保留。';
   const credential = nativeGitCredential.current?.id === session.value?.identity.id ? nativeGitCredential.current : undefined;
-  const reauthorize = authFailed && !pending && credential?.oauth && <AccountLogin key={credential.id}
-    disabled={busy} reauthorize={credential.oauth} onAuthorized={() => {
-      setAuthFailed(false);
-      void review(publishPath ? 'publish' : retryOperation.current);
-    }} />;
+  const failure = error && <GitFailure source="WorkspacePanel" message={error} disabled={busy}
+    onToken={() => void review(publishPath ? 'publish' : retryOperation.current)}
+    onAuthorized={() => { setAuthFailed(false); void review(publishPath ? 'publish' : retryOperation.current); }} />;
   const credentialField = credential && (pending === 'sync' || pending === 'publish') &&
     <details className="publish-credential" open={authFailed || !credential.hasToken()}>
       <summary>{t('仓库登录')}</summary>
@@ -165,8 +177,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         </details>}
       </>}
       {notice && (pushed || pending !== 'sync') && <p role="status">{t(pushed ? '网站部署后即可查看。' : notice)}</p>}
-      {error && <ErrorNotice source="WorkspacePanel" message={error} />}
-      {reauthorize}
+      {failure}
       {blocked && !pushed && <ErrorNotice source="WorkspacePanel" message={blocked} />}
       {credentialField}
       <div className="publish-actions">
@@ -179,15 +190,16 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
   }
   return <section className="settings-page workspace-panel">
     <div className="page-heading"><div><h1>{t('工作区同步')}</h1></div><NavigationRefresh label="刷新状态" busy={busy} blocked={!!pending} onRefresh={() => void action('refresh')} /></div>
-    {error && <ErrorNotice source="WorkspacePanel" message={error} />}{notice && <p role="status" className="notice success">{t(notice)}</p>}
-    {reauthorize}
-    {authFailed && credential && !pending && <button className="secondary" disabled={busy} onClick={() => void review(retryOperation.current)}>{t('使用访问令牌')}</button>}
+    {failure}
+    {notice && <p role="status" className={error ? "notice" : "notice success"}>{t(notice)}</p>}
     {busy && (status
       ? <p role="status" className="muted small">{t(stage)}</p>
       : <div className="card"><LoadingState label={stage} compact={false} /></div>)}
     {status && <div className="card workspace-sync-card"><h2>{status.branch}</h2>
       <dl className="workspace-status-grid"><div><dt>{t('本地修改')}</dt><dd>{status.changes}</dd></div><div><dt>{t('待推送提交')}</dt><dd>{status.ahead}</dd></div><div><dt>{t('远端新提交（上次获取）')}</dt><dd>{status.behind}</dd></div></dl>
         {status.diverged && status.canMerge && <p>{t(mergeNotice)}</p>}
+        {status.canResolveMerge && status.diverged && !status.dirty &&
+          <button type="button" className="secondary" disabled={busy || !!pending} onClick={() => void review('merge')}>{t('处理合并冲突')}</button>}
         {manualMerge && <ErrorNotice source="WorkspacePanel" message="双方都有新提交。请先在 Git 工具中合并，本地内容会保留。" />}
         <label className="field"><span>{t('提交说明')}</span><input disabled={busy || !!pending} value={message} maxLength={500} onChange={event => setMessage(event.target.value)} /></label>
         {status.canSync === false && <p className="muted small">{t('App 同步需要 HTTPS 远端；本地保存和提交仍可使用')}</p>}
@@ -202,18 +214,28 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         {status.canDiscard && <button type="button" className="secondary danger workspace-discard" disabled={busy || !!pending} onClick={() => void review('discard')}>{t('还原工作区')}</button>}
         {pending && <dialog ref={dialog} className="publish-dialog workspace-confirm" aria-labelledby="workspace-confirm-heading"
           onCancel={event => { if (event.target === event.currentTarget) { event.preventDefault(); if (!busy) setPending(null); } }}>
-          <h2 id="workspace-confirm-heading" tabIndex={-1}>{t(pending === 'discard' ? '还原工作区' : pending === 'commit' ? '本地保存' : pending === 'sync' ? '同步 Git' : '保存并同步')}</h2>
+          <h2 id="workspace-confirm-heading" tabIndex={-1}>{t(pending === 'merge' ? '处理合并冲突' : pending === 'discard' ? '还原工作区' : pending === 'commit' ? '本地保存' : pending === 'sync' ? '同步 Git' : '保存并同步')}</h2>
           <p><strong>{status.branch}</strong>{(pending === 'sync' || pending === 'publish') && <> · {t('待推送提交')} {status.ahead}</>}</p>
           {(pending === 'commit' || pending === 'publish') && <p>{t('提交说明')} · {message}</p>}
+          {pending === 'merge' && <>
+            <p>{t('为每个冲突文件选择要保留的版本。合并只提交到本地。')}</p>
+            {status.mergeFiles?.map(file => <label className="merge-file" key={file.path}>
+              <code>{file.path}</code><select disabled={busy} value={Object.hasOwn(choices, file.path) ? choices[file.path] : ''}
+                onChange={event => setChoices({ ...choices, [file.path]: event.currentTarget.value as MergeChoices[string] })}>
+                <option value="" disabled>{t('选择版本')}</option>
+                <option value="local">{t(file.local ? '保留本地版本' : '采用本地删除')}</option>
+                <option value="remote">{t(file.remote ? '保留远端版本' : '采用远端删除')}</option>
+              </select></label>)}
+          </>}
           {pending === 'discard' && <p>{t('以下修改将被撤销，新增文件将被移除。已提交的版本会保留。')}</p>}
           {(pending === 'discard' || !!status.managedChanges?.length) && <details open>
             <summary>{t('查看文件')}</summary><ul>{(pending === 'discard' ? status.discardPaths : status.managedChanges)?.map(path => <li key={path}><code>{path}</code></li>)}</ul>
           </details>}
           {(pending === 'publish' || pending === 'sync') && status.diverged && status.canMerge && <p>{t(mergeNotice)}</p>}
-          {pending !== 'discard' && <p>{t('请核对以上文件范围与待推送提交。未保存的编辑不会包含在内；失败时本地文件和提交会保留。')}</p>}
+          {pending !== 'discard' && pending !== 'merge' && <p>{t('请核对以上文件范围与待推送提交。未保存的编辑不会包含在内；失败时本地文件和提交会保留。')}</p>}
           {(pending === 'sync' || pending === 'publish') && blocked && <ErrorNotice source="WorkspacePanel" message={blocked} />}
           {credentialField}
-          <div className="publish-actions"><button className={pending === 'discard' ? "primary destructive" : "primary"} disabled={busy || (!!blocked && (pending === 'sync' || pending === 'publish'))} onClick={() => void action(pending)}>{busy ? t('处理中…') : t('确认执行')}</button>
+          <div className="publish-actions"><button className={pending === 'discard' ? "primary destructive" : "primary"} disabled={busy || (pending === 'merge' && Object.keys(choices).length !== status.mergeFiles?.length) || (!!blocked && (pending === 'sync' || pending === 'publish'))} onClick={() => void action(pending)}>{busy ? t('处理中…') : t(pending === 'merge' ? '提交本地合并' : '确认执行')}</button>
           <button className="secondary" disabled={busy} onClick={() => setPending(null)}>{t('取消')}</button></div>
         </dialog>}
     </div>}
