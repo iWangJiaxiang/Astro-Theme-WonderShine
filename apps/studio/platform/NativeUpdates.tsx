@@ -166,7 +166,7 @@ export function NativeUpdates({ children }: { children?: (controls: ReactNode) =
           <progress aria-label={t('正在下载更新')} value={progress.total ? progress.bytes : undefined} max={progress.total || 1} /></div>}
         {feedback}
       </div>
-      <button type="button" className="primary" disabled={busy} onClick={() => void act()}>{t(!supported ? '查看更新' : prepared ? '安装并重新打开' : '下载并安装')}</button>
+      <button type="button" className="primary" disabled={busy} onClick={() => void act()}>{t(!supported ? '查看更新' : prepared ? (platform === 'android' ? '安装更新' : '安装并重新打开') : '下载并安装')}</button>
       <button type="button" disabled={busy} onClick={() => dismiss(false)}>{t('稍后')}</button>
       <button type="button" disabled={busy} className="native-update-skip" onClick={() => dismiss(true)}>{t('跳过此版本')}</button>
       {supported && message && <button type="button" disabled={busy} onClick={() => void openRelease()}>{t('查看更新')}</button>}

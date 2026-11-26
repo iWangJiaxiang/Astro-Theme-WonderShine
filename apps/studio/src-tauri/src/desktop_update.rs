@@ -19,11 +19,12 @@ pub async fn download_studio_update(
     let repo = option_env!("VITE_STUDIO_RELEASE_REPOSITORY").unwrap_or("iWangJiaxiang/Astro-Theme-WonderShine");
     let prefix = format!("https://github.com/{repo}/releases/download/studio-v{target}/");
     let endpoint = format!("{prefix}studio-updater.json").parse().map_err(|_| "Invalid Studio release URL")?;
-    let updater = app.updater_builder().endpoints(vec![endpoint]).and_then(|b| b.build()).map_err(|e| e.to_string())?;
-    let update = updater.check().await.map_err(|e| e.to_string())?.ok_or("No newer Studio release")?;
+    let updater = app.updater_builder().timeout(Duration::from_secs(20)).endpoints(vec![endpoint]).and_then(|b| b.build()).map_err(|e| e.to_string())?;
+    let mut update = updater.check().await.map_err(|e| e.to_string())?.ok_or("No newer Studio release")?;
     if update.version != version || !update.download_url.as_str().starts_with(&prefix) {
         return Err("Invalid Studio update manifest".into());
     }
+    update.timeout = Some(Duration::from_secs(15 * 60));
     let mut count = 0;
     let mut last = Instant::now();
     let bytes = update.download(|n, total| {

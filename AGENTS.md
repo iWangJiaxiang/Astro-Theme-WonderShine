@@ -96,6 +96,7 @@
 ## 发布约定
 
 - Studio 的发行名称是 **WonderShine Studio**，Tauri identifier 为 `wang.jiaxiang.wondershine-studio`；Android 生成的 applicationId 为 `wang.jiaxiang.wondershine_studio`。更改应用身份必须评估旧数据目录、签名与升级影响。
+- Studio 桌面更新使用 Tauri updater 和按发行 tag 生成的签名清单；Android 使用相同证书签名的 APK 与系统安装器。保留完成标记、安装前编辑保护和设备级下载偏好。密钥配置见 `docs/studio-releases.md`。
 - Studio 使用 `studio-vX.Y.Z`，主题 npm 包使用 `theme-vX.Y.Z`，互不混用版本或发布触发器。
 - 所有新发行（主题和 Studio，包括稳定版与预发布）必须先将发行代码及版本变更合入远端 `main`，确认该提交通过对应的远程验证，主题 canary 直接发 npm，其余发行从 `main` 的已验证提交创建 `theme-v*` 或 `studio-v*` tag 和 GitHub Release（target 为 `main`）。禁止直接从 feature 或其他非 main 分支创建发行 tag 或 Release。已发布的 tag、npm 版本及 Studio 发行不得移动、覆盖或重发；发现违反流程时先说明事实，再通过合并和新版本纠正。
 - 主题修复通过对应的远程验证和代码审查后，合并到远端 `main`。对触发 canary 的改动，跟踪自动发布并核对 npm 的 `canary` 标签，确认它指向包含该修复的版本。

@@ -125,6 +125,7 @@ export const english: Record<string, string> = {
 
   "自动下载更新，安装前确认": "Download updates automatically and ask before installing",
   "下载并安装": "Download and install",
+  "安装更新": "Install update",
   "安装并重新打开": "Install and reopen",
   "正在下载更新": "Downloading update",
   "正在安装更新": "Installing update",

@@ -275,8 +275,8 @@ jobs:
         include:
           - { platform: linux-x64, runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu, bundles: 'deb,rpm,appimage' }
           - { platform: linux-arm64, runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, bundles: 'deb,rpm,appimage' }
-          - { platform: macos-x64, runner: macos-15, target: x86_64-apple-darwin, bundles: app,dmg }
-          - { platform: macos-arm64, runner: macos-15, target: aarch64-apple-darwin, bundles: app,dmg }
+          - { platform: macos-x64, runner: macos-15, target: x86_64-apple-darwin, bundles: 'app,dmg' }
+          - { platform: macos-arm64, runner: macos-15, target: aarch64-apple-darwin, bundles: 'app,dmg' }
           - { platform: windows-x64, runner: windows-2022, target: x86_64-pc-windows-msvc, bundles: nsis }
           - { platform: windows-arm64, runner: windows-2022, target: aarch64-pc-windows-msvc, bundles: nsis }
     runs-on: ${{ matrix.runner }}
@@ -420,6 +420,20 @@ jobs:
           path: temp/studio-artifacts/
           if-no-files-found: error
           retention-days: 7
+      - name: Prepare emulator update and wrong-signer APKs
+        if: needs.prepare.outputs.release != 'true'
+        run: bash apps/studio/tests/native/prepare-android-update.sh
+      - name: Allow hardware-accelerated Android emulator
+        if: needs.prepare.outputs.release != 'true'
+        run: sudo chmod a+rw /dev/kvm
+      - name: Verify user-confirmed upgrade on Android
+        if: needs.prepare.outputs.release != 'true'
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          script: node apps/studio/tests/native/android-update.mjs
   ios:
     needs: prepare
     runs-on: macos-15

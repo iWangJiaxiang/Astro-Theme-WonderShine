@@ -50,3 +50,19 @@ test('HTTP failures and malformed data are reported to manual checks', async () 
   await assert.rejects(checkAppRelease('0.1.0', repository, async () => new Response('', { status: 403 }), new AbortController().signal), /403/);
   await assert.rejects(checkAppRelease('0.1.0', repository, async () => Response.json({ message: 'error' }), new AbortController().signal), /Invalid release response/);
 });
+
+test('APK metadata must belong to the selected tag and identify one complete APK', async () => {
+  const { releaseApk } = await import('../platform/app-updates');
+  const release = { version: '0.2.0', url: record('0.2.0').html_url };
+  const file = { platform: 'android', name: 'android-app-universal-release.apk', size: 300, sha256: 'f'.repeat(64) };
+  const data = { tag: 'studio-v0.2.0', version: '0.2.0', assets: [file] };
+  const load = (body: unknown) => releaseApk(release, repository, async url => {
+    assert.equal(url, 'https://github.com/example/studio/releases/download/studio-v0.2.0/studio-release.json');
+    return Response.json(body);
+  }, new AbortController().signal);
+  assert.equal((await load(data)).size, 300);
+  for (const invalid of [{ ...data, version: '0.3.0' }, { ...data, assets: [file, file] },
+    ...[{ name: '../../app.apk' }, { sha256: 'bad' }, { size: 0 }].map(value => ({ ...data, assets: [{ ...file, ...value }] }))]) {
+    await assert.rejects(load(invalid), /manifest/);
+  }
+});
