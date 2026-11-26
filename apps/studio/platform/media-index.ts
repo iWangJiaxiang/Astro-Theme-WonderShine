@@ -1,5 +1,6 @@
 import { validateMediaPath } from '../core/media-validation';
 import { imageMime, MAX_UPLOAD_SIZE, type MediaListing } from '../shared/media';
+import type { MergeChoices } from '../shared/workspace';
 import type { Repository } from '../shared/repository';
 import type { FileRepository } from './file-repository';
 import { comparePathComponents, parentPath, type FileInfo, type WorkspaceFiles } from './filesystem';
@@ -100,6 +101,10 @@ export function createNativeMediaIndex(repository: Repository & Pick<FileReposit
       if (property === 'sync') return (confirmation?: string) => serialize(async () => {
         await invalidate();
         return workspace.sync(confirmation);
+      });
+      if (property === 'resolveMerge' && workspace.resolveMerge) return (confirmation: string, choices: MergeChoices) => serialize(async () => {
+        await invalidate();
+        return workspace.resolveMerge!(confirmation, choices);
       });
       if (property === 'discard' && workspace.discard) return (confirmation: string) => serialize(async () => {
         await invalidate();

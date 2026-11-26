@@ -32,6 +32,7 @@ const reviewClaims = new Set();
 let reviewEpoch, resumeGate;
 const reviewRestart = '创作窗口已重新加载，请完全退出并重启应用后重新确认工作区';
 let allowOAuthHttp = false, oauthApproved = false, oauthFailureStage = null;
+const themeTags = 'https://registry.npmjs.org/-/package/@wondershine%2ftheme/dist-tags';
 const cnbRemote = 'https://cnb.cool/fixture-writer/blog.git';
 let reauthorizing = false, cnbUsername = 'fixture-writer';
 let accountGate = Promise.resolve(), releaseAccount = () => {};
@@ -246,14 +247,16 @@ try {
         if (operation === 'fetch') {
           const config = args.clientConfig, url = new URL(config.url);
           assert.notEqual(url.origin, 'https://api.cnb.cool', 'CNB discovery must use the narrow command, not the Origin-injecting HTTP plugin');
-          assert.ok(['https://github.com', 'https://api.github.com', 'https://cnb.cool'].includes(url.origin));
+          assert.ok(config.url === themeTags || ['https://github.com', 'https://api.github.com', 'https://cnb.cool'].includes(url.origin));
           assert.equal(config.maxRedirections, 0, 'OAuth must disable redirects in the actual native client');
-          assert.equal(new Map(config.headers).get('user-agent'), 'WonderShine-Studio');
+          if (config.url !== themeTags) assert.equal(new Map(config.headers).get('user-agent'), 'WonderShine-Studio');
           value = nextResource++; requests.set(value, config);
         } else if (operation === 'fetch_send') {
           const config = requests.get(args.rid), url = new URL(config.url), github = url.hostname.includes('github');
           let body, stage;
-          if (url.pathname === '/login/device/code' || url.pathname === '/oauth2/device/auth') {
+          if (config.url === themeTags) {
+            stage = 'theme-tags'; body = { latest: '1.2.3', canary: '1.2.4-canary.0' };
+          } else if (url.pathname === '/login/device/code' || url.pathname === '/oauth2/device/auth') {
             stage = 'device';
             body = {device_code:'device-fixture',user_code:'TEST-CODE',expires_in:600,interval:1,verification_uri:github?'https://github.com/login/device':'https://cnb.cool/oauth2/device/verify'};
           } else if (url.pathname === '/login/oauth/access_token' || url.pathname === '/oauth2/token') {
@@ -1092,6 +1095,19 @@ try {
     await click('确认执行');
     await page.waitForFunction(() => document.querySelector('.workspace-panel [role=status]')?.textContent.includes('已与 Git 远端同步'));
     assert.equal(remoteHead(), 'CNB workspace sync after reauthorization');
+    await reopenWithExpiredGrant();
+    await click('主题维护'); await click('检查更新'); await click('请求重新构建');
+    await page.waitForSelector('.theme-progress[open] .account-reauthorize button');
+    assert.equal(await page.$('.theme-progress [role=alert]'), null);
+    const rebuildTip = execFileSync('git', ['-C', cnbRepo, 'rev-parse', 'HEAD']).toString().trim();
+    const beforeThemeSync = remoteHead();
+    await screenshot('cnb-theme-update-expired-mobile', false);
+    await startReauthorization();
+    await finishReauthorization();
+    assert.equal(remoteHead(), beforeThemeSync);
+    await page.click('.theme-progress .primary');
+    await page.waitForFunction(() => document.querySelector('.theme-progress ol')?.textContent.includes('主题更新已推送'));
+    assert.equal(execFileSync('git', [...remoteArgs, 'rev-parse', cnb.branch]).toString().trim(), rebuildTip, 'Retry pushes the existing theme commit');
     assert.deepEqual(await page.evaluate(key => JSON.parse(localStorage.getItem(key)), registryKey), records, 'Reauthorization keeps the saved workspace and branch');
     assert.equal(await page.evaluate(() => JSON.stringify(localStorage).includes('oauth-fixture-token')), false);
   }
