@@ -1,4 +1,4 @@
-import {createProvider, SearchSession, type SearchConfig, type SearchPage} from '../components/search/provider';
+import {createProvider, searchMatches, SearchSession, type SearchConfig, type SearchPage} from '../components/search/provider';
 
 type SearchWindow = Window & {
   GLOBAL_CONFIG?: {search?: SearchConfig; keyboard?: boolean};
@@ -48,12 +48,13 @@ function initSearch(dialog: HTMLDialogElement) {
   }
   // Never interpret search index strings as HTML, including highlighted fragments.
   function highlighted(element: HTMLElement, content: string) {
-    const lower = content.toLocaleLowerCase(), term = query.toLocaleLowerCase();
-    let offset = 0, position = term ? lower.indexOf(term) : -1;
-    while (position !== -1) {
-      element.append(document.createTextNode(content.slice(offset, position)));
-      const mark = document.createElement('mark'); mark.textContent = content.slice(position, position + term.length); element.append(mark);
-      offset = position + term.length; position = lower.indexOf(term, offset);
+    let offset = 0;
+    for (const match of searchMatches(content, query)) {
+      element.append(document.createTextNode(content.slice(offset, match.index)));
+      const mark = document.createElement('mark');
+      mark.textContent = match[0];
+      element.append(mark);
+      offset = match.index + match[0].length;
     }
     element.append(document.createTextNode(content.slice(offset)));
   }

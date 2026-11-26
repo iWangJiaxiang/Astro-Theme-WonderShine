@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {createProvider, normalizePage, resultURL, excerpt, SearchSession, type SearchPage} from '../src/components/search/provider';
+import {createProvider, normalizePage, resultURL, excerpt, searchMatches, SearchSession, type SearchPage} from '../src/components/search/provider';
 const site = 'https://blog.example.com';
 const empty: SearchPage = {items:[],page:0,pages:0,total:0};
 test('search URLs remain on the configured site and preserve anchors safely', () => {
@@ -26,6 +26,12 @@ test('normalizes both scraper schemas, rejects malformed responses and avoids un
 test('excerpt includes a late match and caps long content', () => {
   const value = excerpt('x'.repeat(300) + 'needle' + 'y'.repeat(300),'needle');
   assert.ok(value.includes('needle'));assert.ok(value.startsWith('…'));assert.ok(value.length<=182);
+});
+test('highlights and excerpts use original offsets after Unicode case expansion', () => {
+  const content = 'İ'.repeat(201) + 'A+[b]';
+  assert.deepEqual([...searchMatches(content, 'a+[B]')].map(match => [match.index, match[0]]), [[201, 'A+[b]']]);
+  assert.ok(excerpt(content, 'a+[B]').includes('A+[b]'));
+  assert.deepEqual([...searchMatches(content, '')], []);
 });
 test('legacy Algolia records retain path and content-only results', () => {
   const page = normalizePage({hits:[{path:'/legacy/',content:'Legacy article content'}],nbHits:1,nbPages:1}, 'algolia', 'article', 0, site);

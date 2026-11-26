@@ -22,9 +22,16 @@ export function resultURL(value: unknown, siteURL: string): string | undefined {
     return `/${url.pathname.replace(/^\/+/, '')}${url.search}${url.hash}`;
   } catch { return; }
 }
+/** Match literal query text and return offsets into the original result. */
+export function* searchMatches(content: string, query: string) {
+  if (!query) return;
+  const pattern = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'giu');
+  yield* content.matchAll(pattern);
+}
+
 export function excerpt(value: string, query: string, limit = 180): string {
   const content = value.replace(/\s+/g, ' ').trim();
-  const match = content.toLocaleLowerCase().indexOf(query.toLocaleLowerCase());
+  const match = searchMatches(content, query).next().value?.index ?? -1;
   const start = match > 60 ? match - 50 : 0;
   return `${start ? '…' : ''}${content.slice(start, start + limit)}${content.length > start + limit ? '…' : ''}`;
 }
