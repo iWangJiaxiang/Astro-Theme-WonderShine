@@ -18,6 +18,7 @@ const PageSettings: StudioComponent<Props, Events> = component<Props, Events>(
   "PageSettings",
   (props, emit, expose) => {
     const profile = computed(() => pageProfile(props.layout, props.body));
+    const singleGroup = computed(() => profile.value.groups.length === 1);
     const active = ref(""),
       dirty = ref(false);
     watch(
@@ -39,7 +40,7 @@ const PageSettings: StudioComponent<Props, Events> = component<Props, Events>(
           "aria-label": t("页面专属设置"),
           className: classes("page-template-settings"),
         },
-        element(
+        !singleGroup.value && element(
           "div",
           { className: classes("template-intro") },
           element(
@@ -62,7 +63,7 @@ const PageSettings: StudioComponent<Props, Events> = component<Props, Events>(
           ? element(
               "div",
               { className: classes("template-settings-layout") },
-              element(
+              !singleGroup.value && element(
                 "nav",
                 {
                   "aria-label": t("页面配置分组"),
@@ -84,7 +85,7 @@ const PageSettings: StudioComponent<Props, Events> = component<Props, Events>(
                   ),
                 ),
               ),
-              dirty.value
+              dirty.value && !singleGroup.value
                 ? element(
                     "p",
                     { className: classes("muted small") },
@@ -99,6 +100,7 @@ const PageSettings: StudioComponent<Props, Events> = component<Props, Events>(
                     group: active.value,
                     language: props.language,
                     embedded: true,
+                    singleGroup: singleGroup.value,
                     onExit: (() => emit("exit")) satisfies EventHandler<typeof SettingsView, "onExit">,
                     onDirty: updateDirty satisfies EventHandler<
                       typeof SettingsView,

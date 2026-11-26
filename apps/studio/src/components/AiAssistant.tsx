@@ -269,8 +269,9 @@ const AiAssistant: StudioComponent<Props, Events> = component<Props, Events>(
                   ),
                   disabled: busy.value,
                   rows: props.kind === "cover" ? 3 : 5,
-                  placeholder: t(props.kind === "cover" && !capabilities.value?.text
-                    ? "输入图片提示词" : "生成后可以直接修改，再决定是否应用。"),
+                  placeholder: t(capabilities.value?.text
+                    ? "生成后可以直接修改，再决定是否应用。"
+                    : props.kind === "summary" ? "手动输入摘要" : "输入图片提示词"),
                   onInput: domEvent(($event: Event) => {
                     result.value = ($event.target as HTMLInputElement).value;
                   }),

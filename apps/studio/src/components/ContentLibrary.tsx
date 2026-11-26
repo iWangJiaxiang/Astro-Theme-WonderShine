@@ -151,6 +151,13 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
     const creatingAlbum = computed(
       () => parent.value === "album" || parent.value.startsWith("album/"),
     );
+    const createLabel = computed(() => props.kind === "article" ? "新建文章" : props.kind === "page" ? "新建页面" : "新建内容");
+    function creationHeading() {
+      if (props.kind !== "collection") return t(createLabel.value);
+      if (subtype.value === "column") return t("新建分组");
+      if (subtype.value === "chapter") return t(creatingAlbum.value ? "新建曲目" : "新建章节");
+      return t(creatingAlbum.value ? "新建专辑" : "新建系列");
+    }
     function contentLabel(item: ArticleSummary) {
       if (!isSection(item))
         return item.path.startsWith("content/collections/album/")
@@ -509,13 +516,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 }),
               },
               element(Icon, { name: "plus" }),
-              t(
-                props.kind === "article"
-                  ? t("新建文章")
-                  : props.kind === "page"
-                    ? t("新建页面")
-                    : t("新建内容"),
-              ),
+              t(createLabel.value),
             ),
           ),
         ),
@@ -868,7 +869,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 element(
                   "div",
                   { className: classes("card-heading") },
-                  element("h2", { id: creationTitleId }, t("新建内容")),
+                  element("h2", { id: creationTitleId }, creationHeading()),
                   element(
                     "button",
                     {

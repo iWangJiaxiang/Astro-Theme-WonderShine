@@ -440,8 +440,8 @@ const ArticleReferences: StudioComponent<Props, Events> = component<
                         "button",
                         {
                           disabled:
-                            props.disabled ||
-                            (mode.value === "internal" && !visibleChoice.value),
+                            unavailable.value ||
+                            (mode.value === "internal" ? !visibleChoice.value : !url.value.trim()),
                           className: classes("primary"),
                         },
                         t("添加引用"),

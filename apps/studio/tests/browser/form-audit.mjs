@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { auditViewports } from './audit-viewports.mjs';
 import { prepareBrowserFixture } from './site-fixture.mjs';
 import { hashPassword } from '../../server/password.ts';
@@ -106,7 +107,9 @@ try {
  await click('使用指南'); await page.waitForSelector('.guide-page'); await capture('guide', {expand:true});
  for(const schema of settingsSchemas){await click(schema.title);await page.waitForFunction(title=>document.querySelector('.settings-page h1')?.textContent===title,{},schema.title);await page.waitForSelector('.settings-grid');await capture('settings-'+schema.id,{expand:true});}
  for(const [kind,newLabel]of [['文章','新建文章'],['页面','新建页面'],['合集管理','新建内容']]){
-  await click(kind);await page.waitForSelector('.content-library');await capture('library-'+({'文章':'article','页面':'page','合集管理':'collection'}[kind]));await click(newLabel);await page.waitForSelector('.modal');await capture('create-'+({'文章':'article','页面':'page','合集管理':'collection'}[kind]));
+  await click(kind);await page.waitForSelector('.content-library');await capture('library-'+({'文章':'article','页面':'page','合集管理':'collection'}[kind]));await click(newLabel);await page.waitForSelector('.modal');
+  assert.equal(await page.$eval('.creation-dialog h2', node => node.textContent), kind === '合集管理' ? '新建分组' : newLabel);
+  await capture('create-'+({'文章':'article','页面':'page','合集管理':'collection'}[kind]));
   if(kind==='页面'){await page.click('button[name="page-template"]');await page.waitForSelector('.selection-dialog[open]');await capture('select-template');await closeDialog();}
   await click('取消');
  }
@@ -117,7 +120,13 @@ try {
  await capture('new-article-editor',{expand:true});
  await click('动态');await page.waitForSelector('.thread-composer textarea');await capture('threads',{expand:true});
  await page.click('.thread-composer button[name="extra.topics"]');await page.waitForSelector('dialog[open]');await capture('select-topics');await page.type('dialog[open] input[type=search]', '新话题');await capture('create-topic-inline');await closeDialog();
- await click('引用');await page.waitForSelector('dialog[open]');await capture('reference-internal');await click('外部文章');await capture('reference-external');await closeDialog();
+ await click('引用');await page.waitForSelector('dialog[open]');await capture('reference-internal');await click('外部文章');
+ const addExternal = '.reference-dialog .selection-footer button';
+ assert.equal(await page.$eval(addExternal, button => button.disabled), true);
+ await capture('reference-external');
+ await page.type('.external-reference-fields input[type=url]', 'https://example.com/post');
+ assert.equal(await page.$eval(addExternal, button => button.disabled), false);
+ await closeDialog();
  await page.click('.composer-tools > button[aria-expanded]');
  await page.waitForSelector('.thread-properties-heading', {visible:true});await capture('thread-publishing');
  await page.waitForSelector('.thread-date-trigger.date-missing');
@@ -144,7 +153,12 @@ try {
  }
  await click('＋ 添加语言');await page.waitForSelector('.language-version-create');await capture('add-language');await click('＋ 添加语言');
  await page.select('.language-switcher select','en');await capture('article-editor-en');if(await page.$eval('.autosave-control select', el=>el.selectedOptions[0].textContent)!=='Off')throw new Error('Autosave must follow the UI language');await page.select('.language-switcher select','zh-CN');
- await click('AI 摘要');await page.waitForSelector('dialog[open]');await capture('ai-summary');await click('取消');
+ await click('AI 摘要');await page.waitForSelector('dialog[open]');await capture('ai-summary');
+ const summaryField = '.ai-assistant-dialog textarea';
+ assert.equal(await page.$eval(summaryField, input => input.placeholder), '手动输入摘要');
+ await page.type(summaryField, '手动摘要');
+ assert.equal(await page.$eval('.ai-assistant-dialog .selection-footer button', button => button.disabled), false);
+ await click('取消');
  await click('AI 生成封面');await page.waitForSelector('dialog[open]');await capture('ai-cover');await click('取消');
  await click('选择或上传');await page.waitForSelector('dialog[open]');await capture('image-picker');await closeDialog();
  await click('删除内容');
@@ -173,9 +187,14 @@ try {
  await page.waitForSelector('.template-intro');
  await capture('page-without-settings');
  for(const layout of ['about','equipment','friends','music','wechat','archives','subscribe']){
-  await click('页面');await page.waitForSelector(`.content-row[data-path="content/pages/${layout}.md"]`);await page.click(`.content-row[data-path="content/pages/${layout}.md"]`);await page.waitForSelector('.page-editor-tabs');await click('页面设置');await page.waitForSelector('.settings-group-tabs button');
+  await click('页面');await page.waitForSelector(`.content-row[data-path="content/pages/${layout}.md"]`);await page.click(`.content-row[data-path="content/pages/${layout}.md"]`);await page.waitForSelector('.page-editor-tabs');await click('页面设置');await page.waitForSelector('.embedded-settings .settings-grid');
   const groups=pageProfile(layout==='subscribe'?'empty':layout,layout==='subscribe'?'{{ subscribe_list() }}':'').groups;
-  for(const [index,group] of groups.entries()){await page.click(`.settings-group-tabs button:nth-child(${index+1})`);await page.waitForSelector('.embedded-settings .settings-grid');await settle();await capture('page-'+layout+'-'+group.id,{expand:true});}
+  assert.equal(await page.$$eval('.settings-group-tabs button', buttons => buttons.length), groups.length > 1 ? groups.length : 0);
+  for(const [index,group] of groups.entries()){
+   if(groups.length > 1) await page.click(`.settings-group-tabs button:nth-child(${index+1})`);
+   await page.waitForSelector(`.embedded-settings[data-settings-group="${group.id}"] .settings-grid`);
+   await settle();await capture('page-'+layout+'-'+group.id,{expand:true});
+  }
  }
  await click('媒体库');await page.waitForSelector('.media-browser');await capture('media-library',{expand:true});
  await page.locator('[data-media-path="public/img/logo.webp"]').click();

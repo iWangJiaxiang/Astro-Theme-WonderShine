@@ -96,7 +96,7 @@ h1 { font-size: var(--studio-page-title); margin-bottom: 8px; }
 .template-intro p { margin: 3px 0; font-size: 12px; }
 .template-settings-layout .settings-group-tabs { margin-bottom: 16px; padding-bottom: 8px; }
 .embedded-settings .page-heading { margin-bottom: 14px; }
-.embedded-settings h3 { font-size: 16px; }
+.embedded-settings .page-heading h2, .embedded-settings h3 { font-size: 16px; }
 .embedded-settings .page-heading p { font-size: 12px; }
 .settings-page > .page-heading { position: sticky; top: 0; z-index: 5; background: var(--wjx-background); padding: 12px 0; }
 .settings-page:not(.embedded-settings) > .page-heading { margin-top: -12px; }

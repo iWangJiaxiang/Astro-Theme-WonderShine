@@ -42,7 +42,7 @@ import ValueEditor from "./ValueEditor";
 import type { ThemeUpdateCheck, ThemeUpdateResult } from "../../shared/theme-update";
 import { notifyWorkspaceChanged } from "../workspace-events";
 
-type Props = { group: string; embedded?: boolean; language?: string; headingControl?: ReactNode };
+type Props = { group: string; embedded?: boolean; singleGroup?: boolean; language?: string; headingControl?: ReactNode };
 type Events = { dirty: [value: boolean]; saved: []; exit: [] };
 const themeFields = ["extra.theme.channel", "extra.theme.pinned", "extra.theme.version"];
 const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
@@ -631,10 +631,11 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                 null,
 
                 element(
-                  props.embedded ? "h3" : "h1",
+                  props.singleGroup ? "h2" : props.embedded ? "h3" : "h1",
                   null,
                   t(settings.value.title),
                 ),
+                props.singleGroup && <p className="muted small">{t("同语言、同模板的页面共享设置，需单独保存。")}</p>,
                 props.headingControl,
               ),
               element(
@@ -667,7 +668,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                     ? "登录信息已更新，先前保存的结果暂时无法确认。请等待保存请求结束。"
                     : "先前保存的结果无法确认，当前表单和版本信息未更新。"))
               : null,
-            exitControl(),
+            !props.singleGroup && exitControl(),
             savedBranch.value ? element("code", { className: "saved-branch" }, savedBranch.value) : null,
             error.value
               ? element(
@@ -743,7 +744,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                           "header",
                           { className: classes("settings-group-heading") },
 
-                          element(props.embedded ? "h4" : "h2", null, t(section.title)),
+                          element(props.singleGroup ? "h3" : props.embedded ? "h4" : "h2", null, t(section.title)),
                         )
                       : null,
                     element(
@@ -801,6 +802,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
               ),
             ),
 
+            props.singleGroup && exitControl(),
             settings.value.id === "taxonomies"
               ? element(
                   "p",
