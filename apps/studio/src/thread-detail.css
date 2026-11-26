@@ -13,10 +13,9 @@
 .thread-reading-header { display: flex; align-items: center; gap: 12px; padding-bottom: 25px; }
 .detail-thread-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: color-mix(in srgb,var(--wjx-theme) 8%,var(--studio-card)); color: var(--wjx-theme); }
 .thread-reading-header > div { display: flex; flex-direction: column; gap: 5px; }
-.thread-reading-header strong { font-size: 14px; }
 .thread-reading-header time { font-size: 11px; color: var(--studio-muted); }
 .thread-reading-header .badge { margin-left: auto; }
-.thread-reading-title { font-size: 24px; line-height: 1.4; margin: 0 0 20px; overflow-wrap: anywhere; }
+.thread-detail-page .page-heading h1 { overflow-wrap: anywhere; }
 .thread-reading-card .thread-reading-body { padding: 0; min-height: 0; max-inline-size: 72ch; font-size: 16px; line-height: 1.85; overflow-wrap: anywhere; }
 .thread-reading-body > :first-child { margin-top: 0; }
 .thread-reading-body > :last-child { margin-bottom: 0; }
@@ -44,7 +43,7 @@
 .detail-properties dd { margin: 0; overflow-wrap: anywhere; }
 .detail-properties > p { border-top: 1px solid var(--studio-line); padding-top: 16px; margin: 22px 0 0; line-height: 1.7; }
 .detail-file { padding: 16px 5px; font-size: 11px; color: var(--studio-muted); }
-.detail-file summary { cursor: pointer; }
+.detail-file summary { cursor: pointer; min-height: 44px; align-content: center; }
 .detail-file p { overflow-wrap: anywhere; line-height: 1.7; }
 .library-item-actions { display: flex; flex-shrink: 0; align-items: center; gap: 6px; padding-right: 18px; }
 .library-item-actions .text-button { font-size: 12px; }
@@ -53,5 +52,9 @@
 @media(max-width:760px) { .thread-reading-card { padding: 22px; } .detail-properties dl { grid-template-columns: minmax(0,1fr); } .library-item-actions { flex-direction: column; gap: 0; padding-right: 10px; } }
 
 @media (max-width: 760px) {
+  .thread-detail-page .page-heading > div:first-child { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
+  .thread-detail-page .detail-back, .thread-detail-page .page-heading h1 { margin: 0; }
+  .thread-detail-page .page-heading, .thread-detail-page .detail-language-tabs { margin-bottom: 12px; }
+  .thread-reading-header { padding-bottom: 12px; }
   .thread-detail-page .page-heading .row > :is(button, a) { flex: 1 1 max-content; }
 }

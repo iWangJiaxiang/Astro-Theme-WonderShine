@@ -119,19 +119,30 @@ try {
  if(!await page.$eval('.metadata-card input[name="date-time"]',e=>e.value))throw new Error('New articles need a complete publication timestamp');
  await capture('new-article-editor',{expand:true});
  await click('动态');await page.waitForSelector('.thread-composer textarea');await capture('threads',{expand:true});
- await page.click('.thread-composer button[name="extra.topics"]');await page.waitForSelector('dialog[open]');await capture('select-topics');await page.type('dialog[open] input[type=search]', '新话题');await capture('create-topic-inline');await closeDialog();
+ const saveThread = '.thread-composer .save-button-main';
+ assert.equal(await page.$eval(saveThread, button => button.disabled), true);
+ await page.click('.thread-composer button[name="extra.topics"]');await page.waitForSelector('dialog[open]');await capture('select-topics');await page.type('dialog[open] input[type=search]', '新话题');assert.equal(await page.$eval('.selection-dialog[open] .selection-footer button', button => button.disabled), true);await capture('create-topic-inline');await closeDialog();
  await click('引用');await page.waitForSelector('dialog[open]');await capture('reference-internal');await click('外部文章');
  const addExternal = '.reference-dialog .selection-footer button';
  assert.equal(await page.$eval(addExternal, button => button.disabled), true);
  await capture('reference-external');
  await page.type('.external-reference-fields input[type=url]', 'https://example.com/post');
  assert.equal(await page.$eval(addExternal, button => button.disabled), false);
- await closeDialog();
+ await page.click(addExternal);
+ await page.waitForSelector('.reference-dialog', { hidden: true });
+ assert.equal(await page.$eval(saveThread, button => button.disabled), false, 'A reference is sufficient to save a thread');
+ await page.click('.thread-composer .reference-chips li button');
  await page.click('.composer-tools > button[aria-expanded]');
  await page.waitForSelector('.thread-properties-heading', {visible:true});await capture('thread-publishing');
+ const threadTitle = '.thread-composer .thread-title-field input';
+ await page.type(threadTitle, 'Title only');
+ assert.equal(await page.$eval(saveThread, button => button.disabled), false);
+ await page.click(threadTitle, {clickCount:3});await page.keyboard.press('Backspace');
+ assert.equal(await page.$eval(saveThread, button => button.disabled), true);
  await page.waitForSelector('.thread-date-trigger.date-missing');
  await page.click('.thread-composer .thread-date-trigger');await page.waitForSelector('.publication-date-dialog[open]');await capture('publication-date');
  const dateDialog = '.publication-date-dialog[open]';
+ assert.equal(await page.$$eval(dateDialog + ' button', buttons => buttons.some(button => button.textContent === '移除时间')), false);
  await click('使用当前时间');await click('应用时间');
  await page.waitForSelector('.thread-date-value');
  await page.click('.thread-composer .thread-date-trigger');await page.waitForSelector(dateDialog);
@@ -193,6 +204,7 @@ try {
   for(const [index,group] of groups.entries()){
    if(groups.length > 1) await page.click(`.settings-group-tabs button:nth-child(${index+1})`);
    await page.waitForSelector(`.embedded-settings[data-settings-group="${group.id}"] .settings-grid`);
+   if(groups.length > 1) assert.equal(await page.$eval('.embedded-settings .page-heading h3', node => node.textContent), group.label);
    await settle();await capture('page-'+layout+'-'+group.id,{expand:true});
   }
  }

@@ -215,23 +215,12 @@ const ThreadDetail: StudioComponent<Props, Events> = component<Props, Events>(
               t("← 返回动态列表"),
             ),
 
-            element("h1", null, t("动态详情")),
+            element("h1", null, String(meta("title") || "").trim() || t("动态")),
           ),
           document.value && !loading.value && !error.value
             ? element(
                 "div",
                 { className: classes("row") },
-                element(
-                  "button",
-                  {
-                    disabled: busy.value,
-                    className: classes("text-button danger"),
-                    onClick: domEvent(($event: Event) => {
-                      deleting.value = true;
-                    }),
-                  },
-                  t("删除"),
-                ),
                 publicUrl.value
                   ? element(
                       "a",
@@ -350,7 +339,6 @@ const ThreadDetail: StudioComponent<Props, Events> = component<Props, Events>(
                         element(
                           "div",
                           null,
-                          element("strong", null, t("动态")),
                           element("time", null, date(summary.value?.date)),
                         ),
                         element(
@@ -363,13 +351,6 @@ const ThreadDetail: StudioComponent<Props, Events> = component<Props, Events>(
                           t(summary.value?.draft ? "草稿" : "已发布"),
                         ),
                       ),
-                      meta("title")
-                        ? element(
-                            "h2",
-                            { className: classes("thread-reading-title") },
-                            meta("title"),
-                          )
-                        : null,
                       hasShortcode.value
                         ? element(
                             "p",
@@ -623,8 +604,19 @@ const ThreadDetail: StudioComponent<Props, Events> = component<Props, Events>(
                       element(
                         "details",
                         { className: classes("detail-file") },
-                        element("summary", null, t("文件位置")),
+                        element("summary", null, t("文件操作")),
                         element("p", null, props.path),
+                        element(
+                          "button",
+                          {
+                            disabled: busy.value,
+                            className: classes("text-button danger"),
+                            onClick: domEvent(($event: Event) => {
+                              deleting.value = true;
+                            }),
+                          },
+                          t("删除"),
+                        ),
                       ),
                     ),
                   ),

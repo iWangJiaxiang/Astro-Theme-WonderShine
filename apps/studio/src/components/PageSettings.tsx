@@ -101,6 +101,7 @@ const PageSettings: StudioComponent<Props, Events> = component<Props, Events>(
                     language: props.language,
                     embedded: true,
                     singleGroup: singleGroup.value,
+                    groupLabel: !singleGroup.value ? profile.value.groups.find(group => group.id === active.value)?.label : undefined,
                     onExit: (() => emit("exit")) satisfies EventHandler<typeof SettingsView, "onExit">,
                     onDirty: updateDirty satisfies EventHandler<
                       typeof SettingsView,

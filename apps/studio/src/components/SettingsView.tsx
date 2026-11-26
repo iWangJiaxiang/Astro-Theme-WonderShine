@@ -42,7 +42,7 @@ import ValueEditor from "./ValueEditor";
 import type { ThemeUpdateCheck, ThemeUpdateResult } from "../../shared/theme-update";
 import { notifyWorkspaceChanged } from "../workspace-events";
 
-type Props = { group: string; embedded?: boolean; singleGroup?: boolean; language?: string; headingControl?: ReactNode };
+type Props = { group: string; embedded?: boolean; singleGroup?: boolean; groupLabel?: string; language?: string; headingControl?: ReactNode };
 type Events = { dirty: [value: boolean]; saved: []; exit: [] };
 const themeFields = ["extra.theme.channel", "extra.theme.pinned", "extra.theme.version"];
 const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
@@ -633,7 +633,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                 element(
                   props.singleGroup ? "h2" : props.embedded ? "h3" : "h1",
                   null,
-                  t(settings.value.title),
+                  t(props.groupLabel || settings.value.title),
                 ),
                 props.singleGroup && <p className="muted small">{t("同语言、同模板的页面共享设置，需单独保存。")}</p>,
                 props.headingControl,

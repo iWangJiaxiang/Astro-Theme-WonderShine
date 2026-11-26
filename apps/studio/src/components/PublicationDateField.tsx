@@ -183,7 +183,7 @@ const PublicationDateField: StudioComponent<Props, Events> = component<
                       ),
                       <div className="date-shortcuts">
                         <button type="button" className="secondary" onClick={() => { pending.value = publicationDateDraft(new Date().toISOString()); }}>{t("使用当前时间")}</button>
-                        <button type="button" className="text-button" disabled={props.disabled} onClick={() => { if (!props.disabled) { emit("update:modelValue", ""); close(); } }}>{t("移除时间")}</button>
+                        {!!String(props.modelValue ?? "").trim() && <button type="button" className="text-button" disabled={props.disabled} onClick={() => { if (!props.disabled) { emit("update:modelValue", ""); close(); } }}>{t("移除时间")}</button>}
                       </div>,
                       element(
                         "details",

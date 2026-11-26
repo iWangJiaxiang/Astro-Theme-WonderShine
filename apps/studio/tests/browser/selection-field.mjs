@@ -401,6 +401,10 @@ window.selectionFixture = {
         await page.waitForSelector(trigger('create') + ':focus');
         assert.equal(await page.$('.selection-dialog[open]'), null);
         assert.equal(await updates('create'), 1);
+        await open('create');
+        await page.click('.selection-dialog input[value=new]');
+        await page.locator('.selection-footer .primary').click();
+        assert.equal(await updates('create'), 2, 'An existing topic selection can be cleared');
         await page.locator('.save-button-toggle').click();
         await page.waitForSelector('.save-mode-menu');
         await page.evaluate(() => window.selectionFixture.showModes(false));
