@@ -428,12 +428,18 @@ try {
   await page.evaluate(() => [...document.querySelectorAll('.workspace-record')].find(record => record.textContent.includes('Saved Studio')).querySelector('button').click());
   assert.equal(await page.$eval('input[placeholder="https://studio.example.com"]', input => input.value), 'https://studio.example.test');
   const recordAction = async (id, text) => {
-    await page.evaluate(({ id, text }) => {
-      const record = document.querySelector(`[data-workspace-id="${id}"]`);
-      const button = [...record.querySelectorAll('button')].find(button => button.textContent.trim() === text);
-      if (!button || button.disabled) throw new Error('Missing record action: ' + text);
-      button.click();
-    }, { id, text });
+    const record = `[data-workspace-id="${id}"]`;
+    if (text !== '恢复记录' && !await page.$(`${record} .record-management[open]`)) {
+      await page.click(`${record} .record-management > summary`);
+    }
+    const buttons = await page.$$(`${record} button`);
+    for (const button of buttons) {
+      if (await button.evaluate((node, label) => node.textContent.trim() === label && !node.disabled, text)) {
+        await button.click();
+        return;
+      }
+    }
+    throw new Error('Missing record action: ' + text);
   };
   const recoveryKey = `studio-draft:password:${profile.id}:content/articles/recovery/index.md`;
   await page.evaluate(key => localStorage.setItem(key, JSON.stringify({ body: 'Archive recovery fixture' })), recoveryKey);

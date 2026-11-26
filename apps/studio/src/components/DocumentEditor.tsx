@@ -1079,7 +1079,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                               t("新动态")
                           : values.value.title || t("未命名内容"),
                       ),
-                      <details className="editor-file-location" hidden={isThread && !threadAdvanced.value}>
+                      <details className="editor-file-location" hidden={pageTab.value === "settings" || (isThread && !threadAdvanced.value)}>
                         <summary>{t("文件操作")}</summary>
                         <p className="muted path-label">{props.path}</p>
                         <div className="row editor-file-actions">
@@ -1089,7 +1089,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                         </div>
                       </details>,
                     ),
-                    element(
+                    pageTab.value === "content" && element(
                       "div",
                       { className: classes("row editor-save-actions") },
                       element(
@@ -1137,7 +1137,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     ),
                   )
                 : null,
-              autosaveSeconds.value && (!isThread || threadAdvanced.value || autosavePaused.value)
+              autosaveSeconds.value && (pageTab.value === "content" || autosavePaused.value) && (!isThread || threadAdvanced.value || autosavePaused.value)
                 ? element(
                     "p",
                     { role: "status", className: classes("autosave-status") },

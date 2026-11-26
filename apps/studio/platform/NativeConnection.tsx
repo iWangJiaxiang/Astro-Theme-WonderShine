@@ -171,12 +171,18 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
         {item.archived ? <button className="secondary" disabled={busy} onClick={() => {
           try { persist(records.map(record => record.id === item.id ? { ...record, archived: false } : record)); setError(''); }
           catch (reason) { setError((reason as Error).message); }
-        }}>{t('恢复记录')}</button> : <>
-          <button className="secondary" disabled={busy || (item.source === 'local' && !folderAvailable)} onClick={() => selectWorkspace(item)}>{t('选择工作区')}</button>
-          <button disabled={busy} onClick={() => renameWorkspace(item)}>{t('重命名')}</button>
-          <button disabled={busy} onClick={() => archiveWorkspace(item)}>{t('归档记录')}</button>
-        </>}
-        <button className="danger" disabled={busy} onClick={() => deleteRecord(item)}>{t('删除记录')}</button>
+        }}>{t('恢复记录')}</button> :
+          <button className="secondary" disabled={busy || (item.source === 'local' && !folderAvailable)} onClick={() => selectWorkspace(item)}>{t('选择工作区')}</button>}
+        <details className="record-management">
+          <summary>{t('管理记录')}</summary>
+          <div className="row">
+            {!item.archived && <>
+              <button disabled={busy} onClick={() => renameWorkspace(item)}>{t('重命名')}</button>
+              <button disabled={busy} onClick={() => archiveWorkspace(item)}>{t('归档记录')}</button>
+            </>}
+            <button className="danger" disabled={busy} onClick={() => deleteRecord(item)}>{t('删除记录')}</button>
+          </div>
+        </details>
       </div>
     </div>;
   }

@@ -10,6 +10,9 @@
 .workspace-record { display:grid;gap:.5rem;padding:.75rem;border:1px solid var(--border,#ddd);border-radius:.75rem;min-width:0 }
 .workspace-record small { overflow-wrap:anywhere;color:var(--studio-muted) }
 .workspace-record .row { flex-wrap:wrap; gap:6px }
+.workspace-record > .row { align-items: flex-start; }
+.record-management { flex: 1 1 8rem; min-width: 0; }
+.record-management > summary { width: fit-content; min-height: var(--studio-touch-target, 44px); align-content: center; padding-inline: 8px; color: var(--studio-muted); font-size: 13px; cursor: pointer; }
 .workspace-record strong { overflow-wrap:anywhere }
 .workspace-record button, .workspace-chooser > .secondary, .connection-footer .connection-service { padding:6px 12px; border:1px solid var(--studio-line); border-radius:6px; font-size:13px; background:var(--studio-card); }
 .workspace-record .secondary, .workspace-chooser > .secondary { color:var(--wjx-theme); background:var(--form-surface); }

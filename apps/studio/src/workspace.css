@@ -57,6 +57,19 @@ h1 { font-size: var(--studio-page-title); margin-bottom: 8px; }
 .content-library .content-description { -webkit-line-clamp: 1; }
 .content-library .content-icon { width: 36px; height: 36px; border-radius: 9px; }
 .content-library .tags { gap: 6px; }
+@media (max-width: 480px) {
+  .content-library .library-row { flex-wrap: wrap; }
+  .content-library .library-row > .content-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; flex: 1 0 100%;
+    align-items: start; gap: 8px; padding: 14px 16px;
+  }
+  .content-library .content-row > .content-icon { display: none; }
+  .content-library .content-row > .content-info { grid-column: 1; }
+  .content-library .content-row > .badge { grid-column: 1; justify-self: start; max-width: none; }
+  .content-library .content-row > svg { grid-column: 2; grid-row: 1; align-self: center; }
+  .content-library .library-row > :is(.content-delete, .section-edit, .library-item-actions, .error-more) { margin: 0 8px 4px auto; }
+  .content-library .library-item-actions { flex-direction: row; padding: 0; }
+}
 .library-item-actions .danger { color: var(--studio-muted); }
 .library-item-actions .danger:hover { color: var(--studio-danger-text); }
 .collection-navigation { margin-bottom: 14px; }

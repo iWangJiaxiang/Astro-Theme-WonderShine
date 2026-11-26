@@ -5,6 +5,7 @@
 .delete-content-panel h2:focus { outline: none; }
 .delete-content-scope { margin-block: 12px; }
 .delete-content-panel > p { font-size: 13px; }
+.delete-content-panel > .delete-content-target { margin: 0 0 16px; font-size: 1rem; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
 .delete-content-details { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 18px; padding: 16px 0; border-block: 1px solid var(--studio-line); font-size: 13px; }
 .delete-content-details dt { color: var(--studio-muted); }
 .delete-content-details dd { margin: 0; overflow-wrap: anywhere; }
