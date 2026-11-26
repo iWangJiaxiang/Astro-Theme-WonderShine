@@ -18,6 +18,7 @@ export async function checkPageManagement({ page, base, screenshots, click, head
   await openPage('content/pages/equipment.md');
   await page.waitForSelector('[name="extra.equipment.big_title"]');
   assert.equal(await page.$eval('.page-editor-tabs [aria-pressed="true"]', el => el.textContent), '页面设置');
+  assert.equal(await page.$('.editor-save-actions'), null, 'template settings expose only their own save action');
   await fill('[name="extra.equipment.big_title"]', 'Studio gear banner');
   assert.equal(await page.$$eval('.settings-group-tabs button', buttons => buttons.find(button => button.textContent === '设备清单').disabled), true);
   await click('正文与属性');
@@ -105,6 +106,8 @@ export async function checkPageManagement({ page, base, screenshots, click, head
   assert.equal(await page.$('.content-row[data-path="content/collections/_index.md"]'), null);
   await page.click('.content-row[data-path="content/collections/docs/_index.md"]');
   await page.waitForSelector('.content-row[data-path="content/collections/docs/user/_index.md"]');
+  const sectionTitle = await page.$eval('.collection-navigation nav button:last-child', button => button.textContent);
+  assert.equal(await page.$eval('.content-library h1', heading => heading.textContent), sectionTitle);
   await page.click('.content-row[data-path="content/collections/docs/user/_index.md"]');
   await page.waitForSelector('.content-row[data-path="content/collections/docs/user/01 intro.md"]');
   await page.screenshot({ path: screenshots + '/collection-library.png', fullPage: true });

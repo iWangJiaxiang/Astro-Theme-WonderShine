@@ -194,13 +194,13 @@ async function tabGroup(page, surface) {
       const landing = await page.evaluate(index => window.nativeActionGeometry.landing('workspace', index, true), workspaceForward);
       if (landing < 0) continue; // Only the pre-acquisition document boundary.
       workspaceForward++;
-      if (workspaceForward < 3) continue; // Refresh/input checked, not action ids.
+      if (workspaceForward < 4) continue; // Refresh, input and file disclosure precede the actions.
     }
     const id = await page.evaluate(surface => {
       const group = document.querySelector(window.nativeActionGeometry.target(surface));
       return [...group.children].indexOf(document.activeElement);
     }, surface);
-    if (surface === 'workspace') need(id === (workspaceForward === 3 ? 0 : 2), 'focus-identity');
+    if (surface === 'workspace') need(id === (workspaceForward === 4 ? 0 : 2), 'focus-identity');
     if (id < 0) continue;
     await reveal(page, `${surface === 'login' ? '.account-login-buttons' : '.workspace-sync-actions'} > button:nth-child(${id + 1})`);
     const state = await page.evaluate(surface => window.nativeActionGeometry.focus(surface), surface);
@@ -210,7 +210,7 @@ async function tabGroup(page, surface) {
       const start = enabled.indexOf(visited[0]);
       const expected = [...enabled.slice(start), ...enabled.slice(0, start)];
       need(JSON.stringify(visited) === JSON.stringify(expected), 'focus-order');
-      if (surface === 'workspace') need(workspaceForward === 4 && JSON.stringify(visited) === '[0,2]', 'focus-order');
+      if (surface === 'workspace') need(workspaceForward === 5 && JSON.stringify(visited) === '[0,2]', 'focus-order');
       return visited;
     }
   }
@@ -218,12 +218,12 @@ async function tabGroup(page, surface) {
 }
 async function workspaceReverse(page, receive) {
   // Original action2-focused Workspace PNG is already captured. Never seed or
-  // seek a starting focus, and never reveal between these two source-route inputs.
+  // seek a starting focus, and never reveal between the reverse focus stops.
   try { await page.evaluate(() => window.nativeActionGeometry.workspaceReverseStart()); }
   catch (error) { receive(error); throw error; }
   try {
     live(page); await page.keyboard.down('Shift');
-    for (const index of [2, 1]) {
+    for (const index of [3, 2, 1]) {
       live(page); await page.keyboard.press('Tab');
       await settle(page);
       try { await page.evaluate(index => window.nativeActionGeometry.landing('workspace', index, false, true), index); }

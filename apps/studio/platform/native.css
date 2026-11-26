@@ -10,6 +10,9 @@
 .workspace-record { display:grid;gap:.5rem;padding:.75rem;border:1px solid var(--border,#ddd);border-radius:.75rem;min-width:0 }
 .workspace-record small { overflow-wrap:anywhere;color:var(--studio-muted) }
 .workspace-record .row { flex-wrap:wrap; gap:6px }
+.workspace-record > .row { align-items: flex-start; }
+.record-management { flex: 1 1 8rem; min-width: 0; }
+.record-management > summary { width: fit-content; min-height: var(--studio-touch-target, 44px); align-content: center; padding-inline: 8px; color: var(--studio-muted); font-size: 13px; cursor: pointer; }
 .workspace-record strong { overflow-wrap:anywhere }
 .workspace-record button, .workspace-chooser > .secondary, .connection-footer .connection-service { padding:6px 12px; border:1px solid var(--studio-line); border-radius:6px; font-size:13px; background:var(--studio-card); }
 .workspace-record .secondary, .workspace-chooser > .secondary { color:var(--wjx-theme); background:var(--form-surface); }
@@ -43,13 +46,15 @@ section.native-ai-settings { max-width: 960px; }
 .workspace-panel .workspace-sync-card { padding: 28px; }
 /* Keep the heading from covering fields during reverse keyboard navigation. */
 .settings-page.workspace-panel > .page-heading { position: static; }
-.workspace-sync-card h3 { font-size: .9375rem; margin: 0 0 8px; }
+.workspace-file-list > summary, .workspace-sync-actions > button { scroll-margin-block: 8px; }
+.workspace-file-list > summary:focus-visible { outline: 3px solid var(--wjx-theme); outline-offset: 3px; }
+.workspace-file-list > summary { min-height: 44px; align-content: center; cursor: pointer; font-weight: 600; }
 .workspace-sync-card h2 { font-size: var(--studio-section-title); margin-bottom: 0; overflow-wrap: anywhere; }
 .workspace-discard { margin-top: 12px; border-color: currentColor; }
 .workspace-sync-card li { overflow-wrap: anywhere; }
 .workspace-sync-card ul { padding-inline-start: 1.25rem; }
 .workspace-sync-card .workspace-status-grid { padding-bottom: 24px; border-bottom: 1px solid var(--studio-line); }
-.workspace-panel .workspace-sync-actions { justify-content: flex-end; flex-wrap: wrap; margin-top: 24px; }
+.workspace-panel .workspace-sync-actions { justify-content: flex-end; flex-wrap: wrap; margin-top: 12px; }
 .account-login-buttons > button, .workspace-panel .workspace-sync-actions > button { flex: 0 1 auto; inline-size: max-content; max-inline-size: 100%; min-inline-size: 0; white-space: normal; overflow-wrap: anywhere; }
 @media (max-width: 600px) {
   .native-ai-settings .native-ai-form, .workspace-panel .workspace-sync-card { padding: 20px; }
@@ -130,6 +135,6 @@ section.native-ai-settings { max-width: 960px; }
 .workspace-chooser .workspace-record { gap: 4px; padding: 10px 0; border: 0; border-bottom: 1px solid var(--studio-line); border-radius: 0; }
 
 .workspace-confirm .destructive { color: #fff; background: #b7283c; }
-.workspace-sync-card > ul { font-size: .8125rem; line-height: 1.6; }
+.workspace-file-list ul { font-size: .8125rem; line-height: 1.6; }
 .native-ai-settings .native-ai-disclosure, .legacy-recovery { color: var(--studio-muted); font-size: .8125rem; }
 .legacy-recovery summary, .native-ai-disclosure summary { cursor: pointer; }

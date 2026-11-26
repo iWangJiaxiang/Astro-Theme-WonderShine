@@ -140,6 +140,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
     const publishing = ref(false);
     const saveAction = (publish = false) => {
       const direct = publish && isThread && saveMode.value === "local" && saveContext.value.workspaceCanSync;
+      const readyToSync = () => direct && revision.value && !dirty.value && values.value.draft === false;
       const label = direct || (publish && isThread && saveMode.value === "remote") ? "发布动态"
         : saveMode.value === "branch" ? "分支保存 · 可发布"
         : saveMode.value === "remote" ? "远端保存 · 可发布" : isThread ? "保存动态" : "本地保存 · 可发布";
@@ -148,13 +149,13 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         showModes: !isThread || threadAdvanced.value,
         onModeChange: (value: SaveMode) => { saveMode.value = value; },
         busy: busy.value,
-        disabled: !direct && !dirty.value && !branchPending.value && saveMode.value !== "branch" && (!publish || values.value.draft === false),
+        disabled: (emptyThread.value && !readyToSync())
+          || (!direct && !dirty.value && !branchPending.value && saveMode.value !== "branch" && (!publish || values.value.draft === false)),
         label: publish ? t(label) : undefined,
         onSave: async () => {
           if (!publish) { await save(); return; }
           flush();
-          const alreadySaved = direct && revision.value && !dirty.value && values.value.draft === false;
-          if (!alreadySaved && !await saveLocalized(false)) return;
+          if (!readyToSync() && !await saveLocalized(false)) return;
           if (direct && alive && !branchPending.value && !dirty.value && session.value?.identity.id === owner) publishing.value = true;
         },
       });
@@ -187,6 +188,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
             forgotten ||
             autosavePaused.value ||
             recovery.value ||
+            emptyThread.value ||
             !!aiDialog.value ||
             imagePicker.value ||
             deleteDialog.value ||
@@ -258,6 +260,11 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       choicesLoading = ref(true),
       choicesError = ref<Message>("");
     const isThread = props.path.startsWith("content/threads/");
+    const emptyThread = computed(() => {
+      const refs = values.value["extra.references"];
+      return isThread && !body.value.trim() && !String(values.value.title || "").trim()
+        && !(Array.isArray(refs) && refs.length);
+    });
     const isTopic = props.path.startsWith("content/topics/");
     const isLocalized = isThread || isTopic;
     const supportsTranslation =
@@ -864,15 +871,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
       )
         return false;
       flush();
-      if (
-        isThread &&
-        !body.value.trim() &&
-        !String(values.value.title || "").trim() &&
-        !(
-          Array.isArray(values.value["extra.references"]) &&
-          values.value["extra.references"].length
-        )
-      ) {
+      if (emptyThread.value) {
         error.value = "请填写动态正文、标题或引用文章";
         return false;
       }
@@ -1051,6 +1050,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
               {
                 className: classes("editor-page", {
                   "thread-editor": isThread,
+                  "editing-page-settings": isPage && pageTab.value === "settings",
                   "embedded-editor": props.embedded,
                 }),
               },
@@ -1075,11 +1075,12 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                         "h1",
                         null,
                         isThread
-                          ? contentLabel(body.value, values.value.title) ||
-                              t("新动态")
-                          : values.value.title || t("未命名内容"),
+                          ? String(values.value.title || "").trim() || t(revision.value ? "编辑动态" : "新动态")
+                          : isTopic
+                            ? String(values.value.title || "").trim() || t(revision.value ? "编辑话题" : "新建话题")
+                            : values.value.title || t("未命名内容"),
                       ),
-                      <details className="editor-file-location" hidden={isThread && !threadAdvanced.value}>
+                      <details className="editor-file-location" hidden={pageTab.value === "settings" || (isThread && !threadAdvanced.value)}>
                         <summary>{t("文件操作")}</summary>
                         <p className="muted path-label">{props.path}</p>
                         <div className="row editor-file-actions">
@@ -1089,7 +1090,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                         </div>
                       </details>,
                     ),
-                    element(
+                    pageTab.value === "content" && element(
                       "div",
                       { className: classes("row editor-save-actions") },
                       element(
@@ -1120,7 +1121,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                             {
                               disabled:
                                 busy.value ||
-                                (!dirty.value && !branchPending.value && saveMode.value !== "branch" && values.value.draft === true),
+                                emptyThread.value || (!dirty.value && !branchPending.value && saveMode.value !== "branch" && values.value.draft === true),
                               className: classes("secondary"),
                               onClick: domEvent(($event: Event) => {
                                 saveLocalized(true);
@@ -1137,7 +1138,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     ),
                   )
                 : null,
-              autosaveSeconds.value && (!isThread || threadAdvanced.value || autosavePaused.value)
+              autosaveSeconds.value && (pageTab.value === "content" || autosavePaused.value) && (!isThread || threadAdvanced.value || autosavePaused.value)
                 ? element(
                     "p",
                     { role: "status", className: classes("autosave-status") },
@@ -2197,7 +2198,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                         {
                           disabled:
                             busy.value ||
-                            (!dirty.value && !branchPending.value && saveMode.value !== "branch" && values.value.draft === true),
+                            emptyThread.value || (!dirty.value && !branchPending.value && saveMode.value !== "branch" && values.value.draft === true),
                           className: classes("text-button composer-save"),
                           onClick: domEvent(($event: Event) => {
                             saveLocalized(true);

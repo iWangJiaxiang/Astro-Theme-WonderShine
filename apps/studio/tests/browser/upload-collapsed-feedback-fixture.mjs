@@ -195,7 +195,7 @@ window.uploadFeedback = {
       ? t('已处理 {completed}/{total}，已上传 {uploaded}，失败 {failed}，未尝试 {skipped}', latest) : '';
     const stateLabel = latest?.active ? t('正在处理上传') : latest?.paused ? t('上传已暂停') : t('上传处理结束');
     const localized = !!latest && (!latest.total || (text.includes(summary) && text.includes(stateLabel)))
-      && (!latest.uploaded || text.includes(t('已上传的图片已保存到仓库，选用后仍需保存表单。')))
+      && (!latest.uploaded || text.includes(t(host === 'picker' ? '已上传的图片已保存到仓库，选用后仍需保存表单。' : '已上传的图片已保存到仓库。')))
       && (!latest.validation || (text.includes(t('每次最多选择 20 张图片')) && (!latest.total || text.includes(t('上次上传')))));
     const errors = inner?.querySelectorAll('.upload-error').length || 0;
     return { activations, toggles, untrusted, listings, posts: jobs.length, held: jobs.filter(job => !job.released).length,

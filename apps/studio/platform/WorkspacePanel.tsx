@@ -191,11 +191,14 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         {manualMerge && <ErrorNotice source="WorkspacePanel" message="双方都有新提交。请先在 Git 工具中合并，本地内容会保留。" />}
         <label className="field"><span>{t('提交说明')}</span><input disabled={busy || !!pending} value={message} maxLength={500} onChange={event => setMessage(event.target.value)} /></label>
         {status.canSync === false && <p className="muted small">{t('App 同步需要 HTTPS 远端；本地保存和提交仍可使用')}</p>}
-        <h3>{t('本次托管文件范围')}</h3>
-        <ul>{status.managedChanges?.map(path => <li key={path}><code>{path}</code></li>)}</ul>
-        <p className="muted small">{t('只包含已保存的托管文件，可能包含其他文章和草稿。同步会推送当前分支已有提交，不推送保存分支，也不代表网站已部署。')}</p>
+        {!!status.managedChanges?.length && <details className="workspace-file-list">
+          <summary>{t('托管文件（{count}）', { count: status.managedChanges.length })}</summary>
+          <ul>{status.managedChanges.map(path => <li key={path}><code>{path}</code></li>)}</ul>
+        </details>}
+        {status.managedChanges?.length === 0 && <p className="muted small">{t('没有待提交的托管文件。')}</p>}
         {status.changes !== status.managedChanges?.length && <ErrorNotice source="WorkspacePanel" message="存在托管范围以外的修改，请先在 Git 工具中处理再同步。" />}
         <div className="row workspace-sync-actions"><button className={status.dirty ? "primary" : "secondary"} disabled={busy || !!pending || !status.managedChanges?.length || !message.trim()} onClick={() => void review('commit')}>{t('本地保存')}</button><button className={status.dirty ? "secondary" : "primary"} disabled={busy || !!pending || status.dirty || manualMerge || status.canSync === false} onClick={() => void review('sync')}>{t('同步 Git')}</button><button className="secondary" disabled={busy || !!pending || !status.managedChanges?.length || status.changes !== status.managedChanges.length || !message.trim() || manualMerge || status.canSync === false} onClick={() => void review('publish')}>{t('保存并同步')}</button></div>
+        <p className="muted small">{t('只包含已保存的托管文件，可能包含其他文章和草稿。同步会推送当前分支已有提交，不推送保存分支，也不代表网站已部署。')}</p>
         {status.canDiscard && <button type="button" className="secondary danger workspace-discard" disabled={busy || !!pending} onClick={() => void review('discard')}>{t('还原工作区')}</button>}
         {pending && <dialog ref={dialog} className="publish-dialog workspace-confirm" aria-labelledby="workspace-confirm-heading"
           onCancel={event => { if (event.target === event.currentTarget) { event.preventDefault(); if (!busy) setPending(null); } }}>

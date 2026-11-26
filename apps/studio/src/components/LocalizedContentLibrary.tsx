@@ -27,6 +27,7 @@ import {
 import { computed, onMounted, ref, watch } from "../reactivity";
 import DeleteContentDialog from "./DeleteContentDialog";
 import Icon from "./Icon";
+import LibraryFilterToggle from "./LibraryFilterToggle";
 import LoadingState from "./LoadingState";
 import ThreadComposer from "./ThreadComposer";
 import SelectionField from "./SelectionField";
@@ -299,6 +300,7 @@ const LocalizedContentLibrary: StudioComponent<Props, Events> = component<
                 }),
               }),
             ),
+            <LibraryFilterToggle language={language.value} status={status.value} />,
             languages.value
               ? element(SelectionField, {
                   modelValue: language.value,

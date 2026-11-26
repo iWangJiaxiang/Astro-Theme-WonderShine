@@ -223,7 +223,7 @@ const MediaBrowser: StudioComponent<Props, Events> = component<Props, Events>(
           ? element(
               "p",
               { className: classes("muted") },
-              t("已上传的图片已保存到仓库，选用后仍需保存表单。"),
+              t(props.mode === "library" ? "已上传的图片已保存到仓库。" : "已上传的图片已保存到仓库，选用后仍需保存表单。"),
             )
           : null,
       );

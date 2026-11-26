@@ -104,7 +104,7 @@ const MediaPicker: StudioComponent<Props, Events> = component<Props, Events>(
               element(
                 "div",
                 { className: classes("card-heading") },
-                element("h2", { id: id }, t("选择或上传图片")),
+                element("h2", { id: id }, t("选择图片")),
                 <nav className="picker-navigation" ref={domRef(refreshHost)} aria-label={t("图片导航")} />,
                 element(
                   "button",

@@ -195,7 +195,7 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
             {
               ref: domRef(dialog),
               "aria-labelledby": `${id}-title`,
-              "aria-describedby": `${id}-scope`,
+              "aria-describedby": `${id}-target ${id}-scope`,
               "aria-busy": busy.value,
               className: classes("delete-content-dialog"),
               onCancel: domEvent(($event: Event) => {
@@ -216,6 +216,7 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
                 }),
               },
               element("h2", { id: `${id}-title`, ref: domRef(heading), tabIndex: -1 }, t("删除内容")),
+              <p id={`${id}-target`} className="delete-content-target">{title.value}</p>,
               <label className="field delete-content-scope">
                 <span>{t("删除范围")}</span>
                 <select value={allLanguages.value ? "all" : "current"} disabled={busy.value || blocked.value}
@@ -234,8 +235,6 @@ const DeleteContentDialog: StudioComponent<Props, Events> = component<
               element(
                 "dl",
                 { className: classes("delete-content-details") },
-                element("dt", null, t("标题")),
-                element("dd", null, title.value),
                 (allLanguages.value ? versions.value : [{ language: language.value || t("正在读取…"), path }]).map(version =>
                   <Fragment key={version.path}><dt>{version.language}</dt><dd className="delete-content-path">{version.path}</dd></Fragment>
                 ),

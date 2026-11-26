@@ -42,7 +42,7 @@ import ValueEditor from "./ValueEditor";
 import type { ThemeUpdateCheck, ThemeUpdateResult } from "../../shared/theme-update";
 import { notifyWorkspaceChanged } from "../workspace-events";
 
-type Props = { group: string; embedded?: boolean; language?: string; headingControl?: ReactNode };
+type Props = { group: string; embedded?: boolean; singleGroup?: boolean; groupLabel?: string; language?: string; headingControl?: ReactNode };
 type Events = { dirty: [value: boolean]; saved: []; exit: [] };
 const themeFields = ["extra.theme.channel", "extra.theme.pinned", "extra.theme.version"];
 const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
@@ -578,6 +578,13 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           ? updatesVersion ? "确认后将提交并推送版本变更。" : "确认后将提交并推送重建请求。"
           : updatesVersion ? "确认后将写入版本设置。" : "确认后将写入重建注释，供你提交。";
       return <div className="full-width theme-update-controls">
+        {themeDirty.value ? <p className="muted small">{t("保存版本设置后可检查更新。")}</p> : check && <div role="status" className="theme-version-result">
+          {check.pinned && check.currentVersion && <p>{t("已固定版本 {version}", { version: check.currentVersion })}</p>}
+          {!check.pinned && check.packageRevision && <p>{t("仓库主题版本 {version}", { version: check.currentVersion ?? "" })}</p>}
+          <p><strong>{t("渠道当前版本 {version}", { version: check.channelVersion })}</strong></p>
+          {!updatesVersion && <p className="muted">{t("已部署版本未知。重新构建时会使用渠道当时的版本。")}</p>}
+          <p className="muted">{t(sameVersion ? "已是该渠道当前版本" : destinationHint)}</p>
+        </div>}
         <div className="row">
           <button className="secondary" type="button" disabled={disabled} onClick={() => void updateTheme(false)}>
             {t(themeOperation.value === "check" ? "正在检查更新" : "检查更新")}
@@ -592,13 +599,6 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           {error.value && <ErrorNotice source="SettingsView" message={error.value} />}
           <button type="button" className="secondary" onClick={() => { showThemeLog.value = false; }}>{t("关闭")}</button>
         </Modal>}
-        {themeDirty.value ? <p className="muted small">{t("保存版本设置后可检查更新。")}</p> : check && <div role="status" className="small">
-          {check.pinned && check.currentVersion && <p>{t("已固定版本 {version}", { version: check.currentVersion })}</p>}
-          {!check.pinned && check.packageRevision && <p>{t("仓库主题版本 {version}", { version: check.currentVersion ?? "" })}</p>}
-          <p>{t("渠道当前版本 {version}", { version: check.channelVersion })}</p>
-          {!updatesVersion && <p className="muted">{t("已部署版本未知。重新构建时会使用渠道当时的版本。")}</p>}
-          <p className="muted">{t(sameVersion ? "已是该渠道当前版本" : destinationHint)}</p>
-        </div>}
       </div>;
     }
     const exitControl = () => element("button", {
@@ -631,10 +631,11 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                 null,
 
                 element(
-                  props.embedded ? "h3" : "h1",
+                  props.singleGroup ? "h2" : props.embedded ? "h3" : "h1",
                   null,
-                  t(settings.value.title),
+                  t(props.groupLabel || settings.value.title),
                 ),
+                props.singleGroup && <p className="muted small">{t("同语言、同模板的页面共享设置，需单独保存。")}</p>,
                 props.headingControl,
               ),
               element(
@@ -667,7 +668,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                     ? "登录信息已更新，先前保存的结果暂时无法确认。请等待保存请求结束。"
                     : "先前保存的结果无法确认，当前表单和版本信息未更新。"))
               : null,
-            exitControl(),
+            !props.singleGroup && exitControl(),
             savedBranch.value ? element("code", { className: "saved-branch" }, savedBranch.value) : null,
             error.value
               ? element(
@@ -743,7 +744,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
                           "header",
                           { className: classes("settings-group-heading") },
 
-                          element(props.embedded ? "h4" : "h2", null, t(section.title)),
+                          element(props.singleGroup ? "h3" : props.embedded ? "h4" : "h2", null, t(section.title)),
                         )
                       : null,
                     element(
@@ -801,6 +802,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
               ),
             ),
 
+            props.singleGroup && exitControl(),
             settings.value.id === "taxonomies"
               ? element(
                   "p",

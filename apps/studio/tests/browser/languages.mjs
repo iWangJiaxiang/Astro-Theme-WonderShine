@@ -111,7 +111,7 @@ export async function checkLanguages({ browser, origin, screenshots, base }) {
     assert.match(await page.$eval('.markdown-source', el => el.value), /I18N unsaved source/);
     await language('en');
     await click('Insert image'); await page.waitForSelector('dialog.media-dialog[open]');
-    assert.match(await page.$eval('dialog.media-dialog[open] h2', el => el.textContent), /Choose or upload an image/);
+    assert.match(await page.$eval('dialog.media-dialog[open] h2', el => el.textContent), /^Choose image$/);
     await page.keyboard.press('Escape');
     assert.deepEqual(errors, []);
   } catch (error) { await page.screenshot({path: screenshots + '/language-failure.png', fullPage: true}); console.error((await page.evaluate(() => document.body.innerText)).slice(-1500)); throw error; } finally { await context.close(); await rm(fixture, {recursive:true,force:true}); }

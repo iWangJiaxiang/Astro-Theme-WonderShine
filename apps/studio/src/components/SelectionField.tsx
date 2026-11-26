@@ -110,7 +110,9 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
       filtered.value.find((option) => option.value === pending.value[0]),
     );
     const canConfirm = computed(() =>
-      !creating.value && !props.disabled && (props.multiple || !!visibleChoice.value),
+      !creating.value && !props.disabled && (props.multiple
+        ? !props.createOption || pending.value.length > 0 || selected.value.length > 0
+        : !!visibleChoice.value),
     );
     const canCreate = computed(
       () =>
@@ -513,7 +515,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                                 {
                                   type: "button",
                                   disabled: creating.value || props.disabled,
-                                  className: classes("selection-create-action"),
+                                  className: classes("selection-create-action", { primary: !pending.value.length && !selected.value.length }),
                                   onClick: domEvent(($event: Event) => {
                                     void create($event.currentTarget as HTMLButtonElement);
                                   }),
@@ -545,7 +547,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                                   },
                                   props.createdHint,
                                 )
-                              : props.createHint
+                              : props.createHint && canCreate.value
                                 ? element(
                                     "p",
                                     { className: classes("muted small") },
@@ -554,7 +556,7 @@ const SelectionField: StudioComponent<Props, Events> = component<Props, Events>(
                                 : null,
                         )
                       : null,
-                    element(
+                    (filtered.value.length > 0 || !canCreate.value) && element(
                       "div",
                       { className: classes("selection-results") },
                       element(
