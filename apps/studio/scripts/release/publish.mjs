@@ -1,3 +1,4 @@
+import { updaterPlatforms } from './updater-manifest.mjs';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -11,6 +12,7 @@ const root = 'temp/studio-artifacts';
 const expected = ['linux-x64', 'linux-arm64', 'macos-x64', 'macos-arm64', 'windows-x64', 'windows-arm64', 'android', 'ios'];
 const entries = await readdir(root);
 const assets = [];
+const platforms = {};
 for (const platform of expected) {
   const manifest = JSON.parse(await readFile(join(root, `${platform}.json`), 'utf8'));
   if (manifest.platform !== platform || manifest.version !== version || manifest.source !== process.env.STUDIO_SOURCE || !manifest.files.length) throw new Error(`Inconsistent ${platform} artifact`);
@@ -20,7 +22,10 @@ for (const platform of expected) {
     if (digest !== file.sha256) throw new Error(`Checksum mismatch: ${file.name}`);
     assets.push({ ...file, platform });
   }
+  if (platform.includes('-')) Object.assign(platforms, await updaterPlatforms(manifest.files, root, platform, `https://github.com/${repository}/releases/download/${tag}/`));
+  if (platform === 'android' && manifest.files.filter(file => /\.apk$/.test(file.name) && file.size > 0).length !== 1) throw new Error('Expected one universal Android APK');
 }
+await writeFile(join(root, 'studio-updater.json'), JSON.stringify({ version, platforms }, null, 2));
 const gh = args => execFileSync('gh', [...args, '--repo', repository], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 const api = path => {
   try { return JSON.parse(execFileSync('gh', ['api', `repos/${repository}/${path}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })); }
@@ -37,13 +42,13 @@ if (release) {
   if (details.assets.some(asset => asset.name === 'studio-release.json')) throw new Error('This version is complete and immutable; publish a new version');
 } else {
   const notes = 'temp/studio-release-notes.md';
-  await writeFile(notes, `WonderShine Studio ${version}\n\nWindows / macOS / Linux / Android 安装包见下方附件。iOS IPA 需要通过 TestFlight / App Store 分发，不能直接安装。\n\n下载前可核对 SHA256SUMS。应用内仅提醒更新，不自动覆盖安装。\n\nSource: ${process.env.STUDIO_SOURCE}\n`);
+  await writeFile(notes, `WonderShine Studio ${version}\n\nWindows / macOS / Linux / Android 安装包见下方附件。iOS IPA 需要通过 TestFlight / App Store 分发，不能直接安装。\n\n下载前可核对 SHA256SUMS。桌面及 Android 支持在应用内下载并确认安装。\n\nSource: ${process.env.STUDIO_SOURCE}\n`);
   gh(['release', 'create', tag, '--target', process.env.STUDIO_SOURCE, '--title', `WonderShine Studio ${version}`, '--notes-file', notes, '--draft']);
   release = { isDraft: true };
 }
 await writeFile(join(root, 'SHA256SUMS'), assets.map(file => `${file.sha256}  ${file.name}\n`).join(''));
 // Incomplete runs may be retried; the completion marker must always be uploaded last.
-gh(['release', 'upload', tag, ...assets.map(file => join(root, file.name)), join(root, 'SHA256SUMS'), '--clobber']);
+gh(['release', 'upload', tag, ...assets.map(file => join(root, file.name)), join(root, 'studio-updater.json'), join(root, 'SHA256SUMS'), '--clobber']);
 await writeFile(join(root, 'studio-release.json'), JSON.stringify({ schema: 1, version, tag, source: process.env.STUDIO_SOURCE, assets }, null, 2));
 gh(['release', 'edit', tag, '--title', `WonderShine Studio ${version}`, ...(release.isDraft ? ['--draft=false', '--latest=false'] : [])]);
 gh(['release', 'upload', tag, join(root, 'studio-release.json')]);

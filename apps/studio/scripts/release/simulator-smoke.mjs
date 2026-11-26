@@ -15,7 +15,8 @@ async function findApp(directory) {
     const found = await findApp(path); if (found) return found;
   }
 }
-const app = await findApp(resolve('apps/studio/src-tauri/gen/apple/build'));
+const bundleDirectory = process.argv[2];
+const app = await findApp(resolve(bundleDirectory || 'apps/studio/src-tauri/gen/apple/build'));
 assert.ok(app, 'Simulator .app must exist');
 const plist = JSON.parse(execFileSync('plutil', ['-convert', 'json', '-o', '-', join(app, 'Info.plist')], { encoding: 'utf8' }));
 assert.equal(plist.CFBundleIdentifier, 'wang.jiaxiang.wondershine-studio');
@@ -26,13 +27,16 @@ const files = await readdir(app);
 const compiledIcon = files.find(file => /AppIcon.*\.png$/.test(file));
 assert.ok(compiledIcon, 'Compiled icon resources must be present');
 await copyFile(join(app, compiledIcon), join(output, 'compiled-app-icon.png'));
-await copyFile(resolve('apps/studio/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png'), join(output, 'app-icon-1024.png'));
+const sourceIcon = bundleDirectory ? join(bundleDirectory, 'app-icon-1024.png')
+  : 'apps/studio/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png';
+await copyFile(sourceIcon, join(output, 'app-icon-1024.png'));
 const listing = JSON.parse(run(['simctl', 'list', 'devices', 'available', '-j']));
 const devices = Object.entries(listing.devices).filter(([runtime]) => runtime.includes('iOS'))
   .sort(([left], [right]) => right.localeCompare(left, 'en', { numeric: true }))
   .flatMap(([, list]) => list);
 const device = devices.find(device => device.name.startsWith('iPhone') && device.isAvailable);
 assert.ok(device, 'An iPhone simulator is required');
+console.log(`Launching ${plist.DTSDKName} build on ${device.name}`);
 try {
   if (device.state !== 'Booted') run(['simctl', 'boot', device.udid]);
   run(['simctl', 'bootstatus', device.udid, '-b'], 240000);
@@ -84,6 +88,11 @@ try {
         assert.ok(rgb.every(channel => channel < 55), `Dark launch painted a light background: ${rgb}`);
       }
     } while (!painted && Date.now() < deadline);
+    if (!painted) {
+      const diagnostics = run(['simctl', 'spawn', device.udid, 'log', 'show', '--last', '2m', '--style', 'compact',
+        '--predicate', 'process == "' + plist.CFBundleExecutable + '" OR (process == "com.apple.WebKit.WebContent" AND messageType == error)']);
+      await writeFile(join(output, 'launch-diagnostics.log'), diagnostics);
+    }
     assert.ok(painted, `The workspace connection screen must appear after a ${appearance} launch`);
   }
   await writeFile(join(output, 'result.json'), JSON.stringify({ identifier: plist.CFBundleIdentifier, icon: 'AppIcon', device: device.name, launch: launch.trim(), checks: ['compiled icon references', 'install', 'light launch', 'dark launch', 'screenshots'], limitation: 'Pinch, keyboard and assistive interactions still require device acceptance.' }, null, 2));

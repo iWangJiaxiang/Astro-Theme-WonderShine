@@ -275,8 +275,8 @@ jobs:
         include:
           - { platform: linux-x64, runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu, bundles: 'deb,rpm,appimage' }
           - { platform: linux-arm64, runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, bundles: 'deb,rpm,appimage' }
-          - { platform: macos-x64, runner: macos-15, target: x86_64-apple-darwin, bundles: dmg }
-          - { platform: macos-arm64, runner: macos-15, target: aarch64-apple-darwin, bundles: dmg }
+          - { platform: macos-x64, runner: macos-15, target: x86_64-apple-darwin, bundles: 'app,dmg' }
+          - { platform: macos-arm64, runner: macos-15, target: aarch64-apple-darwin, bundles: 'app,dmg' }
           - { platform: windows-x64, runner: windows-2022, target: x86_64-pc-windows-msvc, bundles: nsis }
           - { platform: windows-arm64, runner: windows-2022, target: aarch64-pc-windows-msvc, bundles: nsis }
     runs-on: ${{ matrix.runner }}
@@ -308,8 +308,16 @@ jobs:
       - run: npm ci
       - run: node apps/studio/scripts/release/version.mjs
       - run: node apps/studio/scripts/release/icons.mjs desktop
+      - name: Configure signed desktop updates
+        run: node apps/studio/scripts/release/desktop-updater.mjs
+        env:
+          STUDIO_UPDATER_PUBLIC_KEY: ${{ vars.STUDIO_UPDATER_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ needs.prepare.outputs.release == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
       - name: Build desktop installers
         run: npm exec -w @wondershine/studio -- tauri build --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ needs.prepare.outputs.release == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || env.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ needs.prepare.outputs.release == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
       - name: Native permissions regression
         if: matrix.platform == 'macos-arm64'
         run: cargo test --locked --manifest-path apps/studio/src-tauri/Cargo.toml --features custom-protocol --test http_permissions
@@ -412,12 +420,27 @@ jobs:
           path: temp/studio-artifacts/
           if-no-files-found: error
           retention-days: 7
+      - name: Prepare emulator update and wrong-signer APKs
+        if: needs.prepare.outputs.release != 'true'
+        run: bash apps/studio/tests/native/prepare-android-update.sh
+      - name: Allow hardware-accelerated Android emulator
+        if: needs.prepare.outputs.release != 'true'
+        run: sudo chmod a+rw /dev/kvm
+      - name: Verify user-confirmed upgrade on Android
+        if: needs.prepare.outputs.release != 'true'
+        uses: reactivecircus/android-emulator-runner@v2.38.0
+        with:
+          disk-size: 6G
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          script: node apps/studio/tests/native/android-update.mjs
   ios:
     needs: prepare
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 90
     env:
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
       STUDIO_VERSION: ${{ needs.prepare.outputs.version }}
       STUDIO_SOURCE: ${{ needs.prepare.outputs.sha }}
       STUDIO_RELEASE: ${{ needs.prepare.outputs.iosRelease }}
@@ -437,12 +460,7 @@ jobs:
         run: |
           sudo xcode-select --switch "$DEVELOPER_DIR"
           xcodebuild -version
-          sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
-          printf 'iOS SDK: %s\n' "$sdk_version"
-          if [ "${sdk_version%%.*}" -lt 26 ]; then
-            echo '::error::App Store Connect requires iOS SDK 26 or later.'
-            exit 1
-          fi
+          node apps/studio/scripts/release/verify-ios-sdk.mjs --toolchain
       - name: Validate iOS and TestFlight signing configuration
         if: needs.prepare.outputs.iosRelease == 'true'
         run: node apps/studio/scripts/release/signing-preflight.mjs
@@ -461,7 +479,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: apps/studio/src-tauri
-          key: ios-xcode26.3-selected
+          key: ios-xcode27.2
       - run: brew install xcodegen
       - run: npm ci
       - name: Select the next TestFlight build number
@@ -478,14 +496,21 @@ jobs:
       - name: Simulator app (no distribution credentials)
         if: github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true'
         run: npm exec -w @wondershine/studio -- tauri ios build --ci --debug --target aarch64-sim --no-sign
-      - name: Inspect and launch iOS simulator app
+      - name: Collect the simulator app for launch verification
         if: github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true'
-        run: node apps/studio/scripts/release/simulator-smoke.mjs
+        env:
+          STUDIO_RELEASE: 'false'
+          STUDIO_BUNDLE_DIR: apps/studio/src-tauri/gen/apple/build
+        run: |
+          node apps/studio/scripts/release/collect.mjs
+          mv temp/studio-artifacts temp/studio-simulator
+          cp apps/studio/src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png temp/studio-simulator/app-icon-1024.png
       - uses: actions/upload-artifact@v7.0.2
-        if: always() && (github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true')
+        if: github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true'
         with:
-          name: studio-ios-screenshots
-          path: apps/studio/test-results/ios-simulator/
+          name: ${{ needs.prepare.outputs.iosRelease == 'true' && 'studio-ios-simulator' || 'studio-app-ios' }}
+          path: temp/studio-simulator/
+          if-no-files-found: error
           retention-days: 7
       - name: Signed App Store IPA
         if: needs.prepare.outputs.iosRelease == 'true'
@@ -496,24 +521,60 @@ jobs:
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
           IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
       - run: node apps/studio/scripts/release/collect.mjs
+        if: needs.prepare.outputs.iosRelease == 'true'
         env:
           STUDIO_BUNDLE_DIR: apps/studio/src-tauri/gen/apple/build
       - name: Verify SDK and encryption declaration in signed IPA
         if: needs.prepare.outputs.iosRelease == 'true'
         run: node apps/studio/scripts/release/verify-ios-sdk.mjs
       - uses: actions/upload-artifact@v7.0.2
+        if: needs.prepare.outputs.iosRelease == 'true'
         with:
           name: studio-app-ios
           path: temp/studio-artifacts/
           if-no-files-found: error
           retention-days: 7
-  testflight:
-    needs: [prepare, verify, ios]
-    if: needs.prepare.outputs.testflight == 'true'
+  ios-simulator:
+    needs: [prepare, ios]
+    if: github.event_name == 'push' || needs.prepare.outputs.iosRelease != 'true'
     runs-on: macos-15
     timeout-minutes: 20
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: ${{ needs.prepare.outputs.iosRelease == 'true' && 'studio-ios-simulator' || 'studio-app-ios' }}
+          path: temp/studio-simulator
+      - name: Launch the Xcode 27 app on the iOS 26 simulator
+        run: |
+          tar -xzf temp/studio-simulator/ios-simulator-*.app.tar.gz -C temp/studio-simulator
+          node apps/studio/scripts/release/simulator-smoke.mjs temp/studio-simulator
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: studio-ios-screenshots
+          path: apps/studio/test-results/ios-simulator/
+          retention-days: 7
+  testflight:
+    needs: [prepare, verify, ios, ios-simulator]
+    if: >-
+      !cancelled() && needs.prepare.outputs.testflight == 'true' &&
+      needs.verify.result == 'success' && needs.ios.result == 'success' &&
+      (needs.ios-simulator.result == 'success' || (github.event_name != 'push' && needs.ios-simulator.result == 'skipped'))
+    runs-on: xcode-27
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
     steps:
       - uses: actions/checkout@v7.0.1
         with:

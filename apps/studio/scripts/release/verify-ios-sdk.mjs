@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 export function validateIOSSdk(value) {
   const match = /^iphoneos(\d+)(?:\.\d+)*$/.exec(value);
-  if (!match || Number(match[1]) < 26) throw new Error('Signed IPA must declare an iPhoneOS SDK of version 26 or later.');
+  if (!match || Number(match[1]) < 27) throw new Error(`Expected iPhoneOS SDK 27 or later, got ${value}.`);
   return value;
 }
 
@@ -24,6 +24,11 @@ export function readAppMetadata(ipa) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (process.argv[2] === '--toolchain') {
+    const sdk = execFileSync('xcrun', ['--sdk', 'iphoneos', '--show-sdk-version'], { encoding: 'utf8' }).trim();
+    console.log(`Selected device SDK: ${validateIOSSdk('iphoneos' + sdk)}`);
+    process.exit(0);
+  }
   const manifest = JSON.parse(readFileSync('temp/studio-artifacts/ios.json', 'utf8'));
   const artifact = manifest.files.find(file => /^[\w.-]+\.ipa$/.test(file.name));
   if (!artifact) throw new Error('Missing iOS IPA');

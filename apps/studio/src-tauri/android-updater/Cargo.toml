@@ -1,0 +1,13 @@
+[package]
+name = "tauri-plugin-studio-apk"
+version = "0.1.0"
+edition = "2021"
+publish = false
+links = "tauri-plugin-studio-apk"
+license = "AGPL-3.0-or-later"
+
+[dependencies]
+tauri = "2"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

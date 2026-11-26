@@ -1,4 +1,4 @@
-export interface AppRelease { version: string; url: string }
+export interface AppRelease { version: string; url: string; installer?: boolean }
 type ReleaseRecord = { tag_name?: unknown; html_url?: unknown; draft?: unknown; prerelease?: unknown; assets?: unknown };
 
 export function releaseRepository(value: string): string {
@@ -30,7 +30,9 @@ export function selectAppRelease(records: unknown, current: string, repository: 
     const url = `https://github.com/${repository}/releases/tag/${release.tag_name}`;
     if (release.html_url !== url || !Array.isArray(release.assets) || !release.assets.some(asset => asset && typeof asset === 'object' && asset.name === 'studio-release.json' && asset.state === 'uploaded' && asset.size > 0)) continue;
     try {
-      if (compareVersions(version, current) > 0 && (!newest || compareVersions(version, newest.version) > 0)) newest = { version, url };
+      if (compareVersions(version, current) > 0 && (!newest || compareVersions(version, newest.version) > 0)) newest = { version, url,
+        installer: release.assets.some(asset => asset?.name === 'studio-updater.json' && asset.state === 'uploaded' && asset.size > 0),
+      };
     } catch { /* Ignore unsupported tags without interrupting writing. */ }
   }
   return newest;
@@ -63,4 +65,18 @@ export function updateDestination(release: AppRelease, repository: string, ios: 
     return url.href;
   }
   return expected;
+}
+
+export interface ApkAsset { name: string; size: number; sha256: string }
+
+export async function releaseApk(release: AppRelease, repository: string, request: typeof fetch, signal: AbortSignal): Promise<ApkAsset> {
+  updateDestination(release, repository, false, '');
+  const tag = 'studio-v' + release.version;
+  const response = await request(`https://github.com/${repository}/releases/download/${tag}/studio-release.json`, { signal });
+  if (!response.ok) throw new Error('Invalid release response');
+  const data = await response.json();
+  if (data.tag !== tag || data.version !== release.version || !Array.isArray(data.assets)) throw new Error('Invalid APK manifest');
+  const apks = data.assets.filter((asset: ApkAsset & { platform: string }) => asset?.platform === 'android' && /^android-[\w.-]+\.apk$/.test(asset.name));
+  if (apks.length !== 1 || !Number.isSafeInteger(apks[0].size) || apks[0].size < 1 || !/^[0-9a-f]{64}$/.test(apks[0].sha256)) throw new Error('Invalid APK manifest');
+  return apks[0];
 }

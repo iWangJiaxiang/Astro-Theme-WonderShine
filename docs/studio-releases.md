@@ -21,16 +21,18 @@ Release 标题统一为 `WonderShine Studio X.Y.Z`，例如 `WonderShine Studio 
 | Windows | x64、ARM64 | NSIS `.exe` | `.exe`，当前未配置 Windows 代码签名 |
 | macOS | Intel、Apple Silicon | `.dmg` | `.dmg`，当前未配置 Developer ID 签名及公证 |
 | Linux | x64、ARM64 | `.deb`、`.rpm`、`.AppImage` | 同左 |
-| Android | ARM64、ARMv7、x86、x64 | debug APK | 固定密钥签名的 APK、AAB |
+| Android | ARM64、ARMv7、x86、x64 | debug APK | 固定密钥签名的通用 APK |
 | iOS | Apple Silicon 模拟器 / 真机 ARM64 | 模拟器验收；启用自动 TestFlight 时另产签名 IPA | App Store 签名 IPA；可选上传 TestFlight |
 
 桌面未签名安装包可能被系统拦截；当前工作流没有声称它们已经获得 Windows/macOS 签名或 macOS 公证。移动正式发行不会退化成 unsigned/debug 包。iOS 模拟器包不能装在真机，App Store IPA 也不能像 APK 一样公开侧载。
 
-GitHub Releases 是当前桌面/Android 的部署入口；Google Play 上架需要另外将 AAB 提交到 Play Console。iOS IPA 通过 App Store Connect/TestFlight 分发，商店审核和公开上架不会由本工作流自动完成。
+GitHub Releases 是当前桌面/Android 的部署入口；Google Play 上架需要另行构建并提交 AAB。iOS IPA 通过 App Store Connect/TestFlight 分发，商店审核和公开上架不会由本工作流自动完成。
 
 ## 构建与发布边界
 
 Studio 支持全平台构建和独立 iOS 构建。独立 iOS 的 TestFlight 上传只依赖 Studio 验证和 iOS 构建，不依赖桌面或 Android，也不创建 GitHub Release。全平台发行仍要求全部平台成功；其中启用的 TestFlight 上传可在其他平台完成前执行。
+
+iOS 构建与 TestFlight 上传使用 GitHub Actions 的 `xcode-27` runner 和 Xcode 27.2。为满足 Apple 自 2027 年 4 月起的提交要求，CI 在构建前检查设备 SDK，并在上传前从签名 IPA 的 `Info.plist` 读取 `DTSDKName`；两处均要求 iPhoneOS SDK 27 或更高版本。启动验收在独立的 `macos-15` runner 上，将同一提交用 Xcode 27.2 编译的模拟器 App 安装到 iOS 26 模拟器，检查浅色和深色界面。
 
 仓库变量 `STUDIO_UPLOAD_TESTFLIGHT=true` 启用自动内测。每次推送到 `main`，CI 比较本次推送前后的提交；`apps/studio/` 中除 Markdown 文档和 `tests/` 目录以外的文件发生变更时，构建签名 IPA。Studio 验证、模拟器启动和 IPA 检查都通过后，CI 上传同一提交的 IPA，并查询 Apple 处理状态。PR 和功能分支仅验证，测试组沿用 App Store Connect 配置。
 
@@ -47,8 +49,16 @@ Studio 支持全平台构建和独立 iOS 构建。独立 iOS 的 TestFlight 上
 - 仅检查当前发行仓库的 `studio-v` 稳定版本，有完成标记才提示。
 - 自动检查网络失败不打断写作；连接页展开「WonderShine Studio」后可查看版本、手动检查更新。
 - 支持「稍后」「跳过此版本」；手动检查可以重新显示跳过的版本。
-- 「查看更新」用系统浏览器打开 Release / iOS 分发页面，不替换当前页面，不丢失编辑内容。
-- 这是**自动检查与提醒**，不是后台下载、静默安装或强制重启。
+- 在连接页展开「WonderShine Studio」，或在工作区的「界面设置」中切换本机的「自动下载更新，安装前确认」。默认开启。关闭后点击「下载并安装」才下载。安装前需要保存编辑并等待上传、保存和 Git 操作完成。
+- Windows NSIS、macOS App 和 Linux AppImage、deb、rpm 按当前架构及安装格式下载。Tauri updater 校验签名和签名中记录的版本。确认安装后桌面会重启，系统包管理器可要求授权。
+- Android 使用 GitHub Release 的通用 APK。自动下载要求非计费网络；计费网络可以手动下载。应用展示大小和下载进度，按完成清单核对 SHA-256，再核对 APK 包名、签名证书以及递增的版本代码。首次安装可能要在系统设置允许 Studio 安装未知应用；返回 Studio 后再次点击安装。取消后可以重试。正式包和 debug 包的签名不同。
+- iOS 继续通过 TestFlight 或 App Store 更新。旧客户端首次升级使用既有的发行页入口。若新版客户端遇到较早的发行清单，也可打开发行页。
+
+### 桌面签名与清单
+
+在受信任的机器上运行 `npm exec -w @wondershine/studio -- tauri signer generate -w <密钥保存路径>`，设置密码并安全备份私钥和密码。将公钥文件中的完整编码值设为 GitHub Actions 仓库变量 `STUDIO_UPDATER_PUBLIC_KEY`，将私钥文件内容和密码分别设为 Secrets `TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。同一发行渠道需持续使用同一密钥；fork 正式发行使用自己的密钥。PR 和普通 push 构建使用 runner 的临时密钥。
+
+发行工作流收集各平台更新包和 `.sig`，核对签名的 key ID 与构建内置公钥，生成每个 Studio tag 专属的 `studio-updater.json`。最后上传 `studio-release.json`，内含 APK 大小及 SHA-256。更新检查仅使用带完成标记的稳定版本。桌面更新签名与 Windows 代码签名、macOS 公证分别配置。
 
 fork 的 CI 默认通过 `github.repository` 指向自己的 Release；直接源码运行默认指向上游。自定义构建可以设置 `VITE_STUDIO_RELEASE_REPOSITORY=owner/repo`。目前只支持公开 GitHub Release；私有仓库 API 需要认证，不会自动取得用户内容仓库 token。
 

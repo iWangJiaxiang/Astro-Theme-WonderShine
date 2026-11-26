@@ -6,3 +6,6 @@
 .native-update-notice .native-update-skip { margin-left:auto; color:var(--studio-muted,#576174); font-size:12px; }
 
 .native-update-notice .primary { background:var(--wjx-theme,#425aef); color:var(--studio-on-accent,#fff); }
+.native-update-controls label { display:inline-flex; align-items:center; gap:4px; }
+.native-update-notice progress { display:block; width:100%; }
+.native-update-notice [role="status"] { display:block; margin-top:4px; }
