@@ -1051,6 +1051,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
               {
                 className: classes("editor-page", {
                   "thread-editor": isThread,
+                  "editing-page-settings": isPage && pageTab.value === "settings",
                   "embedded-editor": props.embedded,
                 }),
               },

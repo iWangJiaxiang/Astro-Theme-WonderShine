@@ -309,3 +309,11 @@ body:has(.media-dialog[open]) .topbar .navigation-refresh { visibility: hidden; 
   .library-filter-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
   .library-filter-toggle[aria-expanded="false"] ~ .choice-field { display: none; }
 }
+
+@media (max-width: 480px) {
+  .editing-page-settings > .page-heading > div:first-child { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
+  .editing-page-settings > .page-heading h1 { margin: 0; }
+  .editing-page-settings > .language-versions { padding: 0; margin-bottom: 8px; border: 0; background: transparent; }
+  .editing-page-settings .page-template-settings { margin-top: 8px; }
+  .editing-page-settings .embedded-settings > .page-heading { padding-block: 4px; margin-bottom: 8px; }
+}

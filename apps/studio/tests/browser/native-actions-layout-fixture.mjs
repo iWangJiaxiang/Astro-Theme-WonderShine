@@ -275,7 +275,7 @@ function installGeometry() {
     landingVisible(span, 0, heading, false, diagnostic ? reverseLabel : undefined, fragments(span, diagnostic));
   }
   function landing(surface, index, allowBoundary = false, reverse = false) {
-    const diagnostic = reverse ? (index === 2 ? reverseButton : reverseInput) : undefined;
+    const diagnostic = reverse && index === 3 ? reverseButton : reverse && index === 1 ? reverseInput : undefined;
     const panel = document.querySelector('.workspace-panel'), heading = panel?.querySelector(':scope > .page-heading');
     const refresh = document.querySelector('.topbar .navigation-refresh'), input = panel?.querySelector('.field > input');
     const actions = [...(panel?.querySelector('.workspace-sync-actions')?.children || [])];
@@ -283,7 +283,9 @@ function installGeometry() {
     let route;
     if (surface === 'workspace') {
       need(refresh.getAttribute('aria-disabled') === 'false' && !input.disabled && !actions[0].disabled && actions[1].disabled && !actions[2].disabled, 'focus-disabled', diagnostic);
-      route = [refresh, input, actions[0], actions[2]];
+      const files = panel.querySelector('.workspace-file-list > summary');
+      need(files && !files.parentElement.open, 'focus-identity', diagnostic);
+      route = [refresh, input, files, actions[0], actions[2]];
     } else {
       need(surface === 'confirmation', 'focus-identity');
       need(refresh.getAttribute('aria-disabled') === 'true' && input.disabled && actions.every(node => node.disabled), 'pending');
