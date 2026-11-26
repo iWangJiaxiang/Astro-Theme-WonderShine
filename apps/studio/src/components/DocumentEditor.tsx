@@ -104,6 +104,7 @@ type Events = {
   exit: [];
   deleted: [paths: string[]];
   saved: [path: string];
+  published: [path: string];
   open: [path: string, initial?: Record<string, Json>, initialBody?: string];
 };
 const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
@@ -154,9 +155,12 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
         label: publish ? t(label) : undefined,
         onSave: async () => {
           if (!publish) { await save(); return; }
+          const remotePublish = isThread && saveMode.value === "remote";
           flush();
           if (!readyToSync() && !await saveLocalized(false)) return;
-          if (direct && alive && !branchPending.value && !dirty.value && session.value?.identity.id === owner) publishing.value = true;
+          if (!alive || branchPending.value || dirty.value || session.value?.identity.id !== owner) return;
+          if (direct) publishing.value = true;
+          else if (remotePublish) emit("published", props.path);
         },
       });
     };
@@ -2288,6 +2292,7 @@ const DocumentEditor: StudioComponent<Props, Events> = component<Props, Events>(
                     publishPath: props.path,
                     onClose: (pushed: boolean) => {
                       publishing.value = false;
+                      if (pushed && alive && !dirty.value && session.value?.identity.id === owner) emit("published", props.path);
                       message.value = pushed ? "动态已发送到仓库" : "动态已保存在工作区。";
                     },
                   })

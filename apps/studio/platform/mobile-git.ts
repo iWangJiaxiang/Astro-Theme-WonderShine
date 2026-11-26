@@ -1,3 +1,4 @@
+import { uncommitWorkspace } from '../shared/workspace-uncommit.js';
 import { discardState } from '../shared/workspace-discard';
 import { requireWorkspaceConfirmation } from '../shared/workspace-confirmation';
 import { Channel, invoke } from '@tauri-apps/api/core';
@@ -48,7 +49,7 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
     let lastSync = null;
     try { lastSync = String(await files.readFile(state + '/last-sync', 'utf8')); }
     catch (error) { if (!missingFile(error)) throw error; }
-    return { ...refs, branch: profile.branch, lastSync, canDiscard: true, canSync: true, canMerge: true, canResolveMerge: true, diverged: refs.ahead > 0 && refs.behind > 0,
+    return { ...refs, branch: profile.branch, lastSync, canUncommit: true, canDiscard: true, canSync: true, canMerge: true, canResolveMerge: true, diverged: refs.ahead > 0 && refs.behind > 0,
       changes: rows.length, dirty: !!rows.length, managedChanges: reviewState(current).rows.map(([path]) => path) };
   }
   // The connection owns a private checkout. Another lock holder, an error, an
@@ -73,6 +74,10 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
       if (followUp) { handoff = { after: 'commit', paths: candidates }; return; }
       return status(await inspect(candidates));
     });
+  }
+  function clearPending(token?: string) {
+    return run(null, async () => uncommitWorkspace(await status(await inspect(undefined, true)), 'native:' + root, reviews, token,
+      (head, remote) => command<void>('uncommit', { head, remote }), async () => status(await inspect())));
   }
   function discardChanges(token?: string) {
     return run(null, async () => {
@@ -109,6 +114,8 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
   return {
     reviewMerge: () => mergeChanges(),
     resolveMerge: (confirmation: string, choices: MergeChoices) => mergeChanges({ confirmation: requireWorkspaceConfirmation(confirmation), choices }),
+    reviewUncommit: () => clearPending(),
+    uncommit: (token: string) => clearPending(requireWorkspaceConfirmation(token)),
     reviewDiscard: () => discardChanges(),
     discard: (token: string) => discardChanges(requireWorkspaceConfirmation(token)),
     async open(progress?: ProgressCallback, allowClone = true, includeSubmodules = false) {

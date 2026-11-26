@@ -12,7 +12,7 @@ import { useSignals } from '../src/reactivity';
 import { NavigationRefresh } from "../src/navigation-refresh";
 import { notifyWorkspaceChanged } from '../src/workspace-events';
 
-type Operation = 'commit' | 'sync' | 'publish' | 'discard' | 'merge';
+type Operation = 'commit' | 'sync' | 'publish' | 'discard' | 'uncommit' | 'merge';
 
 export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string; onClose?: (pushed: boolean) => void } = {}) {
   useSignals();
@@ -64,7 +64,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
     const sequence = ++requestSequence.current;
     setStage('正在检查工作区…'); setError(''); setNotice('');
     try {
-      const endpoint = kind === 'discard' || kind === 'merge' ? '/workspace/' + kind + '/review' : '/workspace/review';
+      const endpoint = kind === 'discard' || kind === 'uncommit' || kind === 'merge' ? '/workspace/' + kind + '/review' : '/workspace/review';
       const reviewed = await api<WorkspaceStatus>(endpoint, 'POST');
       if (sequence !== requestSequence.current) return;
       if (!reviewed.confirmation) throw new Error('工作区已变化，请刷新并重新确认提交范围');
@@ -83,7 +83,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
   }
   async function action(kind: 'refresh' | Operation) {
     requestSequence.current++;
-    setStage(kind === 'merge' ? '正在合并冲突文件…' : kind === 'discard' ? '正在还原工作区…' : kind === 'publish' ? (publishPath ? '正在发布…' : '正在同步仓库…') : kind === 'sync' ? '正在同步仓库…' : kind === 'refresh' ? '正在检查工作区…' : '正在保存版本…'); setError(''); setNotice('');
+    setStage(kind === 'uncommit' ? '正在清空待推送记录…' : kind === 'merge' ? '正在合并冲突文件…' : kind === 'discard' ? '正在还原工作区…' : kind === 'publish' ? (publishPath ? '正在发布…' : '正在同步仓库…') : kind === 'sync' ? '正在同步仓库…' : kind === 'refresh' ? '正在检查工作区…' : '正在保存版本…'); setError(''); setNotice('');
     let syncing = false;
     try {
       let current = status;
@@ -97,6 +97,10 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         if (kind === 'discard') {
           current = await api<WorkspaceStatus>('/workspace/discard', 'POST', { confirmation: current.confirmation });
           setNotice('已还原工作区');
+        }
+        if (kind === 'uncommit') {
+          current = await api<WorkspaceStatus>('/workspace/uncommit', 'POST', { confirmation: current.confirmation });
+          setNotice('待推送记录已清空，文件内容已保留。');
         }
         if (kind === 'commit') {
           current = await api<WorkspaceStatus>('/workspace/commit', 'POST', { message, confirmation: current.confirmation });
@@ -139,7 +143,7 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
       } else setStatus(null);
     }
     finally {
-      if (syncing || kind === 'discard' || kind === 'merge') notifyWorkspaceChanged();
+      if (syncing || kind === 'uncommit' || kind === 'discard' || kind === 'merge') notifyWorkspaceChanged();
       setStage(''); setPending(null);
     }
   }
@@ -211,10 +215,13 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
         {status.changes !== status.managedChanges?.length && <ErrorNotice source="WorkspacePanel" message="存在托管范围以外的修改，请先在 Git 工具中处理再同步。" />}
         <div className="row workspace-sync-actions"><button className={status.dirty ? "primary" : "secondary"} disabled={busy || !!pending || !status.managedChanges?.length || !message.trim()} onClick={() => void review('commit')}>{t('本地保存')}</button><button className={status.dirty ? "secondary" : "primary"} disabled={busy || !!pending || status.dirty || manualMerge || status.canSync === false} onClick={() => void review('sync')}>{t('同步 Git')}</button><button className="secondary" disabled={busy || !!pending || !status.managedChanges?.length || status.changes !== status.managedChanges.length || !message.trim() || manualMerge || status.canSync === false} onClick={() => void review('publish')}>{t('保存并同步')}</button></div>
         <p className="muted small">{t('只包含已保存的托管文件，可能包含其他文章和草稿。同步会推送当前分支已有提交，不推送保存分支，也不代表网站已部署。')}</p>
+        <div className="row">
+        {status.canUncommit && <button type="button" className="secondary danger workspace-discard" disabled={busy || !!pending || !status.ahead || !status.remoteHead} onClick={() => void review('uncommit')}>{t('清空待推送记录')}</button>}
         {status.canDiscard && <button type="button" className="secondary danger workspace-discard" disabled={busy || !!pending} onClick={() => void review('discard')}>{t('还原工作区')}</button>}
+        </div>
         {pending && <dialog ref={dialog} className="publish-dialog workspace-confirm" aria-labelledby="workspace-confirm-heading"
           onCancel={event => { if (event.target === event.currentTarget) { event.preventDefault(); if (!busy) setPending(null); } }}>
-          <h2 id="workspace-confirm-heading" tabIndex={-1}>{t(pending === 'merge' ? '处理合并冲突' : pending === 'discard' ? '还原工作区' : pending === 'commit' ? '本地保存' : pending === 'sync' ? '同步 Git' : '保存并同步')}</h2>
+          <h2 id="workspace-confirm-heading" tabIndex={-1}>{t(pending === 'uncommit' ? '清空待推送记录' : pending === 'merge' ? '处理合并冲突' : pending === 'discard' ? '还原工作区' : pending === 'commit' ? '本地保存' : pending === 'sync' ? '同步 Git' : '保存并同步')}</h2>
           <p><strong>{status.branch}</strong>{(pending === 'sync' || pending === 'publish') && <> · {t('待推送提交')} {status.ahead}</>}</p>
           {(pending === 'commit' || pending === 'publish') && <p>{t('提交说明')} · {message}</p>}
           {pending === 'merge' && <>
@@ -227,15 +234,16 @@ export function WorkspacePanel({ publishPath, onClose }: { publishPath?: string;
                 <option value="remote">{t(file.remote ? '保留远端版本' : '采用远端删除')}</option>
               </select></label>)}
           </>}
+          {pending === 'uncommit' && <p>{t('将清空此分支的 {count} 条待推送记录。文件内容会保留为本地修改，远程仓库不会改变。', { count: status.ahead })}</p>}
           {pending === 'discard' && <p>{t('以下修改将被撤销，新增文件将被移除。已提交的版本会保留。')}</p>}
-          {(pending === 'discard' || !!status.managedChanges?.length) && <details open>
+          {(pending === 'discard' || (pending !== 'uncommit' && !!status.managedChanges?.length)) && <details open>
             <summary>{t('查看文件')}</summary><ul>{(pending === 'discard' ? status.discardPaths : status.managedChanges)?.map(path => <li key={path}><code>{path}</code></li>)}</ul>
           </details>}
           {(pending === 'publish' || pending === 'sync') && status.diverged && status.canMerge && <p>{t(mergeNotice)}</p>}
-          {pending !== 'discard' && pending !== 'merge' && <p>{t('请核对以上文件范围与待推送提交。未保存的编辑不会包含在内；失败时本地文件和提交会保留。')}</p>}
+          {pending !== 'discard' && pending !== 'uncommit' && pending !== 'merge' && <p>{t('请核对以上文件范围与待推送提交。未保存的编辑不会包含在内；失败时本地文件和提交会保留。')}</p>}
           {(pending === 'sync' || pending === 'publish') && blocked && <ErrorNotice source="WorkspacePanel" message={blocked} />}
           {credentialField}
-          <div className="publish-actions"><button className={pending === 'discard' ? "primary destructive" : "primary"} disabled={busy || (pending === 'merge' && Object.keys(choices).length !== status.mergeFiles?.length) || (!!blocked && (pending === 'sync' || pending === 'publish'))} onClick={() => void action(pending)}>{busy ? t('处理中…') : t(pending === 'merge' ? '提交本地合并' : '确认执行')}</button>
+          <div className="publish-actions"><button className={pending === 'discard' || pending === 'uncommit' ? "primary destructive" : "primary"} disabled={busy || (pending === 'merge' && Object.keys(choices).length !== status.mergeFiles?.length) || (!!blocked && (pending === 'sync' || pending === 'publish'))} onClick={() => void action(pending)}>{busy ? t('处理中…') : t(pending === 'merge' ? '提交本地合并' : '确认执行')}</button>
           <button className="secondary" disabled={busy} onClick={() => setPending(null)}>{t('取消')}</button></div>
         </dialog>}
     </div>}

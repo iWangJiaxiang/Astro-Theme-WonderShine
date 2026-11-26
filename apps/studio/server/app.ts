@@ -130,6 +130,17 @@ export function createApp(options: AppOptions) {
     const input = await c.req.json<{ confirmation?: string }>();
     return c.json(await control.discard(requireWorkspaceConfirmation(input?.confirmation)));
   });
+  app.post('/api/workspace/uncommit/review', async c => {
+    const control = workspace();
+    if (!control.reviewUncommit) throw new StudioError(404, '未找到此接口');
+    return c.json(await control.reviewUncommit());
+  });
+  app.post('/api/workspace/uncommit', async c => {
+    const control = workspace();
+    if (!control.uncommit) throw new StudioError(404, '未找到此接口');
+    const input = await c.req.json<{ confirmation?: string }>();
+    return c.json(await control.uncommit(requireWorkspaceConfirmation(input?.confirmation)));
+  });
   app.post('/api/workspace/publish', async c => {
     const control = workspace();
     if (!control.publish) throw new StudioError(404, '未找到此接口');

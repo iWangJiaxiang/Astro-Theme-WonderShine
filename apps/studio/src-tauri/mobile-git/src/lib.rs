@@ -63,6 +63,7 @@ pub enum Job {
     },
     ReviewMerge { head: String, remote: String },
     ResolveMerge { head: String, remote: String, choices: std::collections::BTreeMap<String, merge::Side> },
+    Uncommit { head: String, remote: String },
     ReviewDiscard,
     Discard {
         head: String,
@@ -453,6 +454,18 @@ pub fn execute(
         }
         Job::ReviewMerge { head, remote } => Ok(merge::process(&repo, p, &state, &head, &remote, None)?),
         Job::ResolveMerge { head, remote, choices } => Ok(merge::process(&repo, p, &state, &head, &remote, Some(choices))?),
+        Job::Uncommit { head: expected, remote } => {
+            let local = head(&repo)?;
+            let tip = remote_tip(&repo, branch)?.ok_or(CHANGED)?;
+            if local.to_string() != expected || tip.to_string() != remote || counts(&repo, local, Some(tip))?.0 == 0 {
+                return Err(CHANGED.into());
+            }
+            let bases = repo.merge_bases(local, tip).map_err(|_| "找不到唯一的共同版本，请在 Git 工具中处理。")?;
+            if bases.len() != 1 { return Err("找不到唯一的共同版本，请在 Git 工具中处理。".into()); }
+            repo.reference(&format!("refs/wondershine/recovery/{local}"), local, true, "Studio recovery").map_err(|_| WRITE)?;
+            repo.reference_matching(&format!("refs/heads/{branch}"), bases[0], true, local, "Undo pending updates").map_err(|_| CHANGED)?;
+            Ok(Value::Null)
+        }
         Job::ReviewDiscard => Ok(inspect(&repo, branch, None, true)?),
         Job::Discard { head: expected, paths } => {
             let oid = head(&repo)?;

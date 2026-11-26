@@ -198,6 +198,13 @@ export async function checkBrowser(options = demo) {
         assert.deepEqual(await activeRecommendationPreloads(), ['recommendation-link']);
         assert.ok(await page.$eval('#bannerGroup .banners-link', links => links.checkVisibility()));
         await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-mobile.png')});
+        await page.evaluate(() => window.scrollTo({ top: 280, behavior: 'instant' }));
+        await page.waitForSelector('#page-header.nav-fixed #randomPost_button');
+        await finishLayout();
+        assert.ok(await page.$eval('#randomPost_button button', button => button.checkVisibility({ opacityProperty: true, visibilityProperty: true })));
+        await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-fixed-nav.png')});
+        await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+        await page.waitForSelector('#page-header:not(.nav-fixed)');
         await page.click(trigger);
         await page.waitForSelector(drawer + '[open]');
         await finishLayout();

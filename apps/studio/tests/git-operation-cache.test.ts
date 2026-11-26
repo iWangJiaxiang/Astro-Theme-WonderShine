@@ -187,5 +187,19 @@ for (const backend of ['native', 'server'] as const) {
     for (const path of media) assert.equal(Number(run(['cat-file', '-s', `HEAD:${path}`])), mediaBytes);
     assert.deepEqual(run(['diff-tree', '--no-commit-id', '--name-only', '-r', 'HEAD']).split('\n'), media);
     assert.equal(run(['ls-files']).includes('studio-reviews'), false, 'review storage must remain outside the Git tree');
+
+    const uncommit = await workspace.reviewUncommit!();
+    run(['update-ref', 'refs/remotes/origin/main', 'HEAD~2']);
+    await assert.rejects(workspace.uncommit!(uncommit.confirmation!), /重新确认/);
+    const indexTree = run(['write-tree']);
+    await fs.promises.writeFile(join(root, article), 'new working copy');
+    const fresh = await workspace.reviewUncommit!();
+    const cleared = await workspace.uncommit!(fresh.confirmation!);
+    assert.equal(cleared.ahead, 0);
+    assert.equal(cleared.head, fresh.remoteHead);
+    assert.equal(run(['rev-parse', 'refs/wondershine/recovery/' + fresh.head]), fresh.head);
+    assert.equal(run(['write-tree']), indexTree);
+    assert.equal(await originalReadFile(join(root, article), 'utf8'), 'new working copy');
+    await assert.rejects(workspace.uncommit!(fresh.confirmation!), /重新确认/);
   });
 }

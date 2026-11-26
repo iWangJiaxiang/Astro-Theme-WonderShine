@@ -936,6 +936,7 @@ try {
   await auditNativePage('publish-review');
   await click('稍后');
   assert.equal(await page.$('dialog.publish-dialog[open]'), null);
+  assert.equal(await page.$eval('.thread-composer textarea', input => input.value), 'Phone publication fixture');
   const scansBeforePublish = worktreeScans;
   await click('发布动态');
   await page.waitForFunction(() => document.querySelector('.publish-actions .primary')?.textContent === '确认发布');
@@ -949,6 +950,8 @@ try {
   assert.equal(worktreeScans - scansBeforePublish, 1, 'An uninterrupted mobile publish visits unrelated tracked assets only during initial discovery');
   console.log('Mobile publish worktree scans:', worktreeScans - scansBeforePublish);
   await click('完成');
+  await page.waitForFunction(() => document.querySelector('.thread-composer textarea')?.value === '' && document.querySelector('.composer-initial-language'));
+  await screenshot('phone-composer-after-publish', false);
   const syncArticle = 'content/articles/quick-sync-fixture/index.md';
   await fs.mkdir(join(phoneRepo, 'content/articles/quick-sync-fixture'), { recursive: true });
   const syncBody = '+++\ntitle = "Navigation sync article"\ndate = 2030-01-01\n+++\nBody';
@@ -1003,7 +1006,7 @@ try {
   assert.equal(await page.$eval(resolver + ' .publish-actions .primary', button => button.disabled), true);
   await page.select(resolver + ' .merge-file select', 'remote');
   await screenshot('workspace-merge-review-mobile', false);
-  await click('提交本地合并');
+  await click('保存合并结果');
   await page.waitForFunction(() => document.querySelector('.workspace-panel .notice')?.textContent.includes('冲突已合并到本地'));
   const mainRepo = join(appData, 'workspaces', mainProfile.id, 'repo');
   const parents = execFileSync('git', ['-C', mainRepo, 'log', '-1', '--format=%P']).toString().trim();
@@ -1011,6 +1014,17 @@ try {
   assert.equal(await fs.readFile(join(mainRepo, 'data.toml'), 'utf8'), 'title="remote change"');
   assert.equal(execFileSync('git', [...remoteArgs, 'rev-parse', 'main']).toString().trim(), conflictRefs.remote);
 
+
+  await click('清空待推送记录');
+  await page.waitForSelector('.workspace-confirm[open]');
+  await screenshot('workspace-uncommit-review', false);
+  await click('取消');
+  assert.equal(execFileSync('git', ['-C', mainRepo, 'log', '-1', '--format=%P']).toString().trim(), parents);
+  await click('清空待推送记录');
+  await click('确认执行');
+  await page.waitForFunction(() => document.querySelector('.workspace-panel .notice')?.textContent.includes('待推送记录已清空'));
+  assert.equal(execFileSync('git', ['-C', mainRepo, 'rev-parse', 'HEAD']).toString().trim(), conflictRefs.remote);
+  assert.equal(await fs.readFile(join(mainRepo, 'data.toml'), 'utf8'), 'title="remote change"');
 
   if (process.env.STUDIO_TEST_OAUTH === 'fixture') {
     const cnb = { ...saved[0], id: crypto.randomUUID(), label: 'CNB fixture', provider: 'cnb', username: cnbUsername, url: cnbRemote };
