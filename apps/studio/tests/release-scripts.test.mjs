@@ -257,8 +257,8 @@ else if (args[1] === 'upload') {
 
 
 test('signed IPA SDK validation rejects old, simulator and missing metadata', () => {
-  for (const value of ['', 'iphoneos18.5', 'iphonesimulator26.2', 'iphoneos26junk', '26']) assert.throws(() => validateIOSSdk(value));
-  for (const value of ['iphoneos26', 'iphoneos26.2', 'iphoneos27.0']) assert.equal(validateIOSSdk(value), value);
+  for (const value of [undefined, '', 'iphoneos18.5', 'iphoneos26.2', 'iphoneos26.5', 'iphonesimulator27.2', 'iphoneos27junk', '27']) assert.throws(() => validateIOSSdk(value));
+  for (const value of ['iphoneos27', 'iphoneos27.0', 'iphoneos27.2', 'iphoneos28.0']) assert.equal(validateIOSSdk(value), value);
 });
 
 test('signed IPA export declaration must be the boolean false', () => {
