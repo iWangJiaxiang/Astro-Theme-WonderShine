@@ -137,7 +137,9 @@ try {
  const threadTitle = '.thread-composer .thread-title-field input';
  await page.type(threadTitle, 'Title only');
  assert.equal(await page.$eval(saveThread, button => button.disabled), false);
- await page.click(threadTitle, {clickCount:3});await page.keyboard.press('Backspace');
+ await page.$eval(threadTitle, input => input.select());
+ await page.keyboard.press('Backspace');
+ assert.equal(await page.$eval(threadTitle, input => input.value), '');
  assert.equal(await page.$eval(saveThread, button => button.disabled), true);
  await page.waitForSelector('.thread-date-trigger.date-missing');
  await page.click('.thread-composer .thread-date-trigger');await page.waitForSelector('.publication-date-dialog[open]');await capture('publication-date');
