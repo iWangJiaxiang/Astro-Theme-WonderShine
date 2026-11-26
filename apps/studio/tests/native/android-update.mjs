@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createReadStream, readFileSync, readdirSync, statSync } from 'node:fs';
-import { pipeline } from 'node:stream/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import puppeteer from 'puppeteer-core';
@@ -25,7 +24,7 @@ async function until(read, label) {
 }
 async function fileHash(file) {
   const hash = createHash('sha256');
-  await pipeline(createReadStream(file), hash);
+  for await (const chunk of createReadStream(file)) hash.update(chunk);
   return hash.digest('hex');
 }
 async function stage(file) {
@@ -74,7 +73,8 @@ try {
   async function prepare(asset) {
     return page.evaluate(args => {
       const api = window.__TAURI_INTERNALS__;
-      return api.invoke('plugin:studio-apk|download', { ...args, progress: '__CHANNEL__:' + api.transformCallback(() => {}) });
+      return api.invoke('plugin:studio-apk|download', { ...args, progress: '__CHANNEL__:' + api.transformCallback(() => {}) })
+        .catch(error => { throw Error(error?.message || JSON.stringify(error)); });
     }, asset);
   }
 

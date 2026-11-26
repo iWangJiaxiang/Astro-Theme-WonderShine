@@ -46,6 +46,7 @@
     }
   },
   "plugins": {
+    "updater": { "pubkey": "", "requireSignedVersion": true },
     "fs": {
       "requireLiteralLeadingDot": false
     }

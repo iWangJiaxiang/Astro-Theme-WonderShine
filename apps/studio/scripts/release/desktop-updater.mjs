@@ -15,6 +15,7 @@ if (env.STUDIO_RELEASE === 'true') {
   pubkey = readFileSync(key + '.pub', 'utf8').trim();
   appendFileSync(env.GITHUB_ENV, `TAURI_SIGNING_PRIVATE_KEY=${key}\n`);
 }
+appendFileSync(env.GITHUB_ENV, 'VITE_STUDIO_DESKTOP_UPDATER=true\n');
 const file = 'apps/studio/src-tauri/tauri.conf.json';
 const config = JSON.parse(readFileSync(file, 'utf8'));
 config.bundle.createUpdaterArtifacts = true;

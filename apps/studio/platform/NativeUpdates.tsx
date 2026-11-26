@@ -95,7 +95,8 @@ export function NativeUpdates({ children }: { children?: (controls: ReactNode) =
         if (manual && !latest) setMessage('未发现可用更新');
         return;
       }
-      const offer: Offer = { ...latest };
+      const offer: Offer = { ...latest, installer: latest.installer &&
+        (platform !== 'desktop' || import.meta.env.VITE_STUDIO_DESKTOP_UPDATER === 'true') };
       if (offer.installer && platform === 'android') offer.apk = await releaseApk(offer, repository, nativeFetch, controller.signal);
       if (controller.signal.aborted) return;
       setRelease(offer);

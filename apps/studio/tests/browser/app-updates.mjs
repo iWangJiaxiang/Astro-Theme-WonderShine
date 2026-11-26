@@ -25,7 +25,7 @@ const fixture = await build({
   ` },
   bundle: true, platform: 'browser', format: 'iife', write: false, outdir: 'out', jsx: 'automatic',
   loader: { '.woff': 'dataurl', '.woff2': 'dataurl', '.ttf': 'dataurl', '.png': 'dataurl', '.svg': 'dataurl', '.gif': 'dataurl' },
-  define: { 'process.env.NODE_ENV': '"development"', 'import.meta.env.VITE_STUDIO_RELEASE_REPOSITORY': '"example/studio"', 'import.meta.env.VITE_STUDIO_IOS_UPDATE_URL': '""' },
+  define: { 'process.env.NODE_ENV': '"development"', 'import.meta.env.VITE_STUDIO_RELEASE_REPOSITORY': '"example/studio"', 'import.meta.env.VITE_STUDIO_DESKTOP_UPDATER': '"true"', 'import.meta.env.VITE_STUDIO_IOS_UPDATE_URL': '""' },
   plugins: [{ name: 'native-update-fixture', setup(builder) {
     builder.onResolve({ filter: /^@tauri-apps\/(api\/app|api\/core|plugin-http|plugin-opener)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
     builder.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents:
@@ -101,6 +101,8 @@ try {
   await page.click('.native-update-controls button');
   await page.waitForFunction(() => window.updateFixture.downloads.length === 1 && !document.querySelector('.primary').disabled);
   assert.equal(await page.evaluate(() => window.updateFixture.installs), 0);
+  await page.setViewport({ width: 1024, height: 720 });
+  await page.screenshot({ path: join(out, 'desktop-ready.png') });
   await page.evaluate(() => window.addEventListener('studio:before-install', event => event.preventDefault(), { once: true }));
   await page.click('.native-update-notice .primary');
   assert.equal(await page.evaluate(() => window.updateFixture.installs), 0);
@@ -124,6 +126,8 @@ try {
   await page.click('.native-update-controls button');
   await page.waitForSelector('.native-update-notice .primary:not(:disabled)');
   assert.equal(await page.evaluate(() => window.updateFixture.downloads.length), 0);
+  await page.setViewport({ width: 360, height: 740 });
+  await page.screenshot({ path: join(out, 'android-metered.png') });
   await page.click('.native-update-notice .primary');
   await page.waitForFunction(() => window.updateFixture.installs === 1);
   assert.equal(await page.evaluate(() => window.updateFixture.downloads[0].automatic), false);
