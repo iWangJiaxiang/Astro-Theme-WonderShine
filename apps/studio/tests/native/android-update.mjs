@@ -33,24 +33,24 @@ async function stage(file) {
   privateShell('mkdir -p cache/studio-update && cp /data/local/tmp/studio-update.apk cache/studio-update/' + digest + '.apk');
   return { version, size: statSync(file).size, sha256: digest, automatic: false, name: 'android-test.apk' };
 }
-async function tapInstaller(action, page) {
-  await until(async () => {
-    const failure = await page.evaluate(() => window.studioInstallError);
-    if (failure) throw Error(failure);
+async function tapSystemControl(action) {
+  await until(() => {
     adb('shell', 'uiautomator', 'dump', '/sdcard/studio-ui.xml');
     const xml = adb('shell', 'cat', '/sdcard/studio-ui.xml');
-    const node = [...xml.matchAll(/<node\b[^>]+>/g)].map(m => m[0]).find(tag =>
-      /package="[^"]*(?:packageinstaller|permissioncontroller)"/i.test(tag) ?
-        (action === 'cancel' ? /text="Cancel"|resource-id="android:id\/button2"/i : /text="(Update|Install)"|resource-id="android:id\/button1"/i).test(tag) : false);
+    const nodes = [...xml.matchAll(/<node\b[^>]+>/g)].map(match => match[0]);
+    const node = nodes.find(tag => {
+      if (action === 'allow') return xml.includes('Allow from this source') && tag.includes('package="com.android.settings"') && tag.includes('checkable="true"') && tag.includes('checked="false"');
+      if (!/package="[^"]*(?:packageinstaller|permissioncontroller)"/i.test(tag)) return false;
+      return (action === 'cancel' ? /text="Cancel"|resource-id="android:id\/button2"/i : /text="(Update|Install)"|resource-id="android:id\/button1"/i).test(tag);
+    });
     const bounds = node?.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
     if (!bounds) return false;
     adb('shell', 'input', 'tap', String((+bounds[1] + +bounds[3]) >> 1), String((+bounds[2] + +bounds[4]) >> 1));
     return true;
-  }, action + ' system confirmation');
+  }, action + ' system control');
 }
 
 adb('install', '-r', previous);
-adb('shell', 'appops', 'set', id, 'REQUEST_INSTALL_PACKAGES', 'allow');
 adb('shell', 'monkey', '-p', id, '1');
 const browserURL = await until(async () => {
   const pid = adb('shell', 'pidof', id);
@@ -89,10 +89,15 @@ try {
     window.__TAURI_INTERNALS__.invoke('plugin:studio-apk|install', args).catch(e => { window.studioInstallError = String(e?.message || e); });
   }, { version, sha256: asset.sha256 });
   await install();
-  await tapInstaller('cancel', page);
+  await page.waitForFunction(() => window.studioInstallError === 'PERMISSION');
+  await tapSystemControl('allow');
+  adb('shell', 'input', 'keyevent', 'KEYCODE_BACK');
+  await until(() => adb('shell', 'dumpsys', 'activity', 'activities').split('\n').some(line => line.includes('topResumedActivity') && line.includes(id)), 'return to Studio');
+  await install();
+  await tapSystemControl('cancel');
   await page.waitForFunction(() => window.studioInstallError === 'CANCELLED');
   await install();
-  await tapInstaller('update', page);
+  await tapSystemControl('update');
   await until(() => adb('shell', 'dumpsys', 'package', id).includes('versionName=' + version + '\n'), 'new installed version');
   adb('shell', 'monkey', '-p', id, '1');
   assert.equal(privateShell('cat ' + repo + '/draft.md'), 'unpublished');
