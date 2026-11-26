@@ -578,6 +578,13 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           ? updatesVersion ? "确认后将提交并推送版本变更。" : "确认后将提交并推送重建请求。"
           : updatesVersion ? "确认后将写入版本设置。" : "确认后将写入重建注释，供你提交。";
       return <div className="full-width theme-update-controls">
+        {themeDirty.value ? <p className="muted small">{t("保存版本设置后可检查更新。")}</p> : check && <div role="status" className="theme-version-result">
+          {check.pinned && check.currentVersion && <p>{t("已固定版本 {version}", { version: check.currentVersion })}</p>}
+          {!check.pinned && check.packageRevision && <p>{t("仓库主题版本 {version}", { version: check.currentVersion ?? "" })}</p>}
+          <p><strong>{t("渠道当前版本 {version}", { version: check.channelVersion })}</strong></p>
+          {!updatesVersion && <p className="muted">{t("已部署版本未知。重新构建时会使用渠道当时的版本。")}</p>}
+          <p className="muted">{t(sameVersion ? "已是该渠道当前版本" : destinationHint)}</p>
+        </div>}
         <div className="row">
           <button className="secondary" type="button" disabled={disabled} onClick={() => void updateTheme(false)}>
             {t(themeOperation.value === "check" ? "正在检查更新" : "检查更新")}
@@ -592,13 +599,6 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
           {error.value && <ErrorNotice source="SettingsView" message={error.value} />}
           <button type="button" className="secondary" onClick={() => { showThemeLog.value = false; }}>{t("关闭")}</button>
         </Modal>}
-        {themeDirty.value ? <p className="muted small">{t("保存版本设置后可检查更新。")}</p> : check && <div role="status" className="small">
-          {check.pinned && check.currentVersion && <p>{t("已固定版本 {version}", { version: check.currentVersion })}</p>}
-          {!check.pinned && check.packageRevision && <p>{t("仓库主题版本 {version}", { version: check.currentVersion ?? "" })}</p>}
-          <p>{t("渠道当前版本 {version}", { version: check.channelVersion })}</p>
-          {!updatesVersion && <p className="muted">{t("已部署版本未知。重新构建时会使用渠道当时的版本。")}</p>}
-          <p className="muted">{t(sameVersion ? "已是该渠道当前版本" : destinationHint)}</p>
-        </div>}
       </div>;
     }
     const exitControl = () => element("button", {

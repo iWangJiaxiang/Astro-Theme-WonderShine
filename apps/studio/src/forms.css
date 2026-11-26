@@ -69,6 +69,7 @@
 .settings-group-index { font-size: 10px; color: var(--studio-muted); font-variant-numeric: tabular-nums; letter-spacing: .12em; }
 .settings-form-group .settings-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, max(18rem, (100% - 24px) / 2)), 1fr)); padding: 0; gap: 16px 24px; min-width: 0; }
 .theme-update-controls { display: grid; gap: 8px; }
+.theme-version-result { padding: 8px 12px; border-inline-start: 2px solid var(--studio-line); font-size: 13px; overflow-wrap: anywhere; }
 .theme-update-controls p { margin: 4px 0 0; }
 .settings-card .field { gap: 5px 12px; }
 .settings-card .field-inline { grid-template-columns: minmax(76px, 92px) minmax(0, 1fr); }
@@ -187,6 +188,8 @@
   color: var(--studio-on-accent);
   font-weight: inherit;
 }
+.reference-dialog .reference-results .radio-options { display: grid; }
+.reference-results .radio-options > .choice-tile { justify-content: flex-start; text-align: start; }
 .reference-results .choice-tile:has(> input:disabled) { color: var(--studio-muted); cursor: not-allowed; }
 .reference-results .choice-tile.selected small { color: inherit; }
 @media (forced-colors: active) {

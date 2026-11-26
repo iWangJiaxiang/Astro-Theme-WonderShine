@@ -92,7 +92,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
       pageSize = 20;
     const tagLabels = ref(new Map<string, string>()),
       categoryLabels = ref(new Map<string, string>());
-    const creationTitleId = useId();
+    const creationTitleId = useId(), slugHintId = useId();
     let creationStarted = false;
     const createError = ref<Message>("");
     const creating = ref(false),
@@ -436,12 +436,11 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
         return parents.value.some(option => option.value === parent.value);
       return true;
     });
+    const validSlug = computed(() => /^[a-z0-9][a-z0-9-]*$/.test(slug.value));
+    const canCreate = computed(() => !loading.value && validCreateLanguage.value && validLocation.value
+      && !!title.value.trim() && validSlug.value);
     function create() {
-      if (loading.value || !validCreateLanguage.value || !validLocation.value) return;
-      if (!title.value.trim() || !/^[a-z0-9][a-z0-9-]*$/.test(slug.value)) {
-        createError.value = "请填写标题，网址标识使用小写字母、数字和连字符。";
-        return;
-      }
+      if (!canCreate.value) return;
       const metadata: Record<string, Json> = {
         title: title.value.trim(),
         draft: true,
@@ -500,7 +499,8 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
             "div",
             null,
 
-            element("h1", null, t(names[props.kind])),
+            element("h1", null, props.kind === "collection" && !atRoot.value && currentSection.value && !searchable.value
+              ? displayTitle(currentSection.value) : t(names[props.kind])),
           ),
           element(
             "div",
@@ -960,7 +960,9 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                   element("input", {
                     value: slug.value ?? "",
                     required: true,
-                    pattern: "[a-z0-9][a-z0-9-]*",
+                    pattern: "[a-z0-9][a-z0-9\\-]*",
+                    "aria-invalid": slug.value && !validSlug.value ? true : undefined,
+                    "aria-describedby": slugHintId,
                     placeholder: "my-first-story",
                     onInput: domEvent(($event: Event) => {
                       slug.value = ($event.target as HTMLInputElement).value;
@@ -968,8 +970,8 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                   }),
                   element(
                     "small",
-                    { className: classes("muted") },
-                    t("用于生成地址，创建后不能在后台重命名。"),
+                    { id: slugHintId, className: classes("muted") },
+                    t("以小写字母或数字开头，可用连字符。创建后无法在 Studio 更改此标识。"),
                   ),
                 ),
                 props.kind === "page"
@@ -1031,7 +1033,7 @@ const ContentLibrary: StudioComponent<Props, Events> = component<Props, Events>(
                 element(
                   "button",
                   {
-                    disabled: loading.value || !validCreateLanguage.value || !validLocation.value,
+                    disabled: !canCreate.value,
                     className: classes("primary wide"),
                   },
                   t("进入编辑器"),

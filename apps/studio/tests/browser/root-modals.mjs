@@ -209,7 +209,11 @@ export async function checkRootModals({ page, origin, password, screenshots, out
     assert.equal(await page.$eval(creation, node => node.matches(':modal') && !!document.getElementById(node.getAttribute('aria-labelledby'))), true);
     await page.waitForFunction(selector => document.activeElement?.matches(selector), {}, title);
     await fill(page, title, 'Unfinished modal title');
+    await fill(page, slug, '-invalid');
+    await page.waitForSelector(creation + ' button.primary:disabled');
+    assert.equal(await page.$eval(slug, input => input.validity.patternMismatch), true);
     await fill(page, slug, 'unfinished-modal-slug');
+    await page.waitForSelector(creation + ' button.primary:not(:disabled)');
     await tabBoundary(page, creation, '.card-heading button', 'button.primary.wide');
     await disclosureTabStops(page, creation);
     await tabContained(page, creation);

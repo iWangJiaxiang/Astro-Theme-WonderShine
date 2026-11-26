@@ -1,5 +1,5 @@
 import { ErrorNotice } from "../src/components/ErrorNotice";
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { GitProgressEvent } from 'isomorphic-git';
 import { open } from '@tauri-apps/plugin-dialog';
 import { hostingProviders, type HostingKind, type WorkspaceProfile } from './hosting';
@@ -52,6 +52,15 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
     try { writeWorkspaces(localStorage, next); } catch { throw new Error('无法保存工作区记录，请检查存储权限。'); }
     setRecords(next);
   }
+  const connectionHeading = useRef<HTMLHeadingElement>(null);
+  const connectButton = useRef<HTMLButtonElement>(null);
+  const [focusAfterChoice, setFocusAfterChoice] = useState<'heading' | 'connect' | null>(null);
+  useLayoutEffect(() => {
+    if (!focusAfterChoice) return;
+    const target = focusAfterChoice === 'connect' ? connectButton.current : connectionHeading.current;
+    target?.focus();
+    setFocusAfterChoice(null);
+  }, [focusAfterChoice]);
   function selectWorkspace(item: SavedWorkspace) {
     setToken(''); setError(''); setShowForm(true); setIncludeSubmodules(false);
     if (item.source === 'service') { setService(item); setAddress(item.address); setConnection('remote'); }
@@ -172,7 +181,7 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
           try { persist(records.map(record => record.id === item.id ? { ...record, archived: false } : record)); setError(''); }
           catch (reason) { setError((reason as Error).message); }
         }}>{t('恢复记录')}</button> :
-          <button className="secondary" disabled={busy || (item.source === 'local' && !folderAvailable)} onClick={() => selectWorkspace(item)}>{t('选择工作区')}</button>}
+          <button className="secondary" disabled={busy || (item.source === 'local' && !folderAvailable)} onClick={() => { setFocusAfterChoice('connect'); selectWorkspace(item); }}>{t('选择工作区')}</button>}
         <details className="record-management">
           <summary>{t('管理记录')}</summary>
           <div className="row">
@@ -186,21 +195,20 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
       </div>
     </div>;
   }
+  const serviceSwitch = <div className="connection-footer">
+    <button className="secondary connection-service" disabled={busy} onClick={() => {
+      setFocusAfterChoice('heading');
+      switchConnection(connection === 'remote' ? 'local' : 'remote');
+    }}>{t(connection === 'remote' ? '返回仓库连接' : '连接自建创作中心')}<Icon name="arrow" size={16} /></button>
+  </div>;
   if (resuming) return <main className="native-connect"><LoadingState label="正在打开工作区…" compact /></main>;
   return <main className="native-connect"><section className="card connection-card">
-    <div className="connection-brand"><details className="connection-about"><summary>WonderShine Studio</summary>{updateControls}</details><LanguageSwitcher /></div><h1>{t('连接创作工作区')}</h1>
+    <div className="connection-brand"><details className="connection-about"><summary>WonderShine Studio</summary>{updateControls}</details><LanguageSwitcher /></div><h1 ref={connectionHeading} tabIndex={-1}>{t('连接创作工作区')}</h1>
     {folderAvailable && <div className="connection-modes" role="group" aria-label={t('连接方式')}>
       <button disabled={busy} aria-pressed={local} onClick={() => switchConnection('local')}><Icon name="folder" size={19} />{t('本地文件夹')}</button>
       <button disabled={busy} aria-pressed={connection === 'clone'} onClick={() => switchConnection('clone')}><Icon name="link" size={19} />{t('远程仓库')}</button>
     </div>}
     {(error || initial.error) && <ErrorNotice source="NativeConnection" message={error || initial.error} />}
-    {records.length > 0 && <section className="workspace-chooser" aria-label={t('工作区')}>
-      {records.filter(item => !item.archived).map(renderRecord)}
-      {records.some(item => item.archived) && <details className="archived-workspaces"><summary>{t('已归档工作区')}</summary>
-        {records.filter(item => item.archived).map(renderRecord)}
-      </details>}
-      <button className="secondary" disabled={busy} onClick={() => { setProfile(blank()); setService(null); setAddress(''); setToken(''); setError(''); setIncludeSubmodules(false); setConnection(folderAvailable ? 'local' : 'clone'); setShowForm(true); }}>{t('添加工作区')}</button>
-    </section>}
     {showForm && <>
     {connection === 'clone' && <AccountLogin disabled={busy} onSelect={(account, repository) => {
       setProfile({ ...blank(), provider: account.provider, url: repository.url, branch: repository.branch, label: repository.name, username: account.username, authorName: account.name, authorEmail: account.email });
@@ -228,13 +236,21 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
           <div className="connection-fields"><label className="field"><span>{t('提交者名称')}</span><input value={profile.authorName} onChange={e => field('authorName', e.target.value)} /></label><label className="field"><span>{t('提交者邮箱')}</span><input type="email" value={profile.authorEmail} onChange={e => field('authorEmail', e.target.value)} /></label></div>
         </div></details>}
       </>}
-      <button className="primary wide" type="submit" disabled={local && !profile.localPath}>{busy ? t('正在打开工作区…') : connection === 'remote' ? t('连接并登录') : local || existing ? t('打开工作区') : t('下载并开始创作')}</button>
+      <button ref={connectButton} className="primary wide" type="submit" disabled={local && !profile.localPath}>{busy ? t('正在打开工作区…') : connection === 'remote' ? t('连接并登录') : local || existing ? t('打开工作区') : t('下载并开始创作')}</button>
     </fieldset>
       {busy && connection === 'clone' && !existing && <div className="connection-progress">
         <div className="connection-progress-caption"><span role="status">{t(progressLabel)}</span>{progressValue !== undefined && <span>{progressValue}%</span>}</div>
         <progress aria-label={t(progressLabel)} max={100} value={progressValue} />
       </div>}
     </form></>}
-    <div className="connection-footer"><button className="secondary connection-service" disabled={busy} onClick={() => switchConnection(connection === 'remote' ? 'local' : 'remote')}>{connection === 'remote' ? t('返回仓库连接') : t('连接自建创作中心')}<Icon name="arrow" size={16} /></button></div>
+    {showForm && serviceSwitch}
+    {records.length > 0 && <section className="workspace-chooser" aria-label={t('工作区')}>
+      {records.filter(item => !item.archived).map(renderRecord)}
+      {records.some(item => item.archived) && <details className="archived-workspaces"><summary>{t('已归档工作区')}</summary>
+        {records.filter(item => item.archived).map(renderRecord)}
+      </details>}
+      <button className="secondary" disabled={busy} onClick={() => { setFocusAfterChoice('heading'); setProfile(blank()); setService(null); setAddress(''); setToken(''); setError(''); setIncludeSubmodules(false); setConnection(folderAvailable ? 'local' : 'clone'); setShowForm(true); }}>{t('添加工作区')}</button>
+    </section>}
+    {!showForm && serviceSwitch}
   </section></main>;
 }

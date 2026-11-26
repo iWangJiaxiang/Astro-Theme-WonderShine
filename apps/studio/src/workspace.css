@@ -72,6 +72,7 @@ h1 { font-size: var(--studio-page-title); margin-bottom: 8px; }
 }
 .library-item-actions .danger { color: var(--studio-muted); }
 .library-item-actions .danger:hover { color: var(--studio-danger-text); }
+.content-library > .page-heading h1 { overflow-wrap: anywhere; }
 .collection-navigation { margin-bottom: 14px; }
 .editor-page:not(.embedded-thread-editor) > .page-heading { align-items: flex-start; }
 .editor-page > .page-heading > .row { flex-shrink: 0; justify-content: flex-end; gap: 8px; }

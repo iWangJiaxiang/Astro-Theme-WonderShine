@@ -427,6 +427,8 @@ try {
   assert.equal(await page.$('.connection-form-fields'), null, 'saved workspaces start at the chooser');
   await page.evaluate(() => [...document.querySelectorAll('.workspace-record')].find(record => record.textContent.includes('Saved Studio')).querySelector('button').click());
   assert.equal(await page.$eval('input[placeholder="https://studio.example.com"]', input => input.value), 'https://studio.example.test');
+  await page.waitForSelector('.connection-form-fields button[type=submit]:focus');
+  assert.ok(await page.$eval('.native-connect form', form => form.getBoundingClientRect().bottom <= document.querySelector('.workspace-chooser').getBoundingClientRect().top));
   const recordAction = async (id, text) => {
     const record = `[data-workspace-id="${id}"]`;
     if (text !== '恢复记录' && !await page.$(`${record} .record-management[open]`)) {

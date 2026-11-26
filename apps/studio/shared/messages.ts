@@ -823,7 +823,6 @@ export const english: Record<string, string> = {
   "{count} 个章节": "{count} chapters",
   "内容格式异常，请打开检查": "This file has a formatting issue. Open it to check.",
   "尚未设置日期与分类": "No date or category set",
-  "请填写标题，网址标识使用小写字母、数字和连字符。": "Enter a title and a URL slug using lowercase letters, numbers, and hyphens.",
   "请选择已有合集。": "Choose an existing collection.",
   "请选择已有的专栏或合集。": "Choose an existing column or collection.",
   "内容管理": "Content",
@@ -872,7 +871,7 @@ export const english: Record<string, string> = {
   "标题": "Title",
   "给它取个名字": "Enter a title",
   "网址标识": "URL slug",
-  "用于生成地址，创建后不能在后台重命名。": "Used for the file path and default URL. It cannot be renamed in Studio after creation.",
+  "以小写字母或数字开头，可用连字符。创建后无法在 Studio 更改此标识。": "Use lowercase letters, digits, and hyphens. Start with a letter or digit. The slug cannot be changed in Studio after creation.",
   "页面类型": "Page type",
   "所属合集": "Collection",
   "独立文章（不加入合集）": "Standalone post",
@@ -1483,6 +1482,5 @@ export const chinese: Record<string, string> = {
   "让读者认识你的站点。修改会写入 config.toml 对应字段。": "设置站点名称、简介和基本信息。",
   "Git 操作失败，请检查仓库连接、权限和分支；本次修改尚未确认发布": "Git 操作失败，请检查连接、权限和分支。本次更改尚未确认保存。",
   "仅向站点管理员开放 · 内容仓库凭据由服务端保管": "仅限站点管理员登录",
-  "此模板尚未登记专属配置表单；可编辑页面正文与属性。": "此模板暂无专属设置，可编辑页面正文与属性。",
-  "用于生成地址，创建后不能在后台重命名。": "用于生成文件路径和默认网址，创建后不能在后台重命名。"
+  "此模板尚未登记专属配置表单；可编辑页面正文与属性。": "此模板暂无专属设置，可编辑页面正文与属性。"
 };

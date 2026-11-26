@@ -109,6 +109,7 @@ try {
  for(const [kind,newLabel]of [['文章','新建文章'],['页面','新建页面'],['合集管理','新建内容']]){
   await click(kind);await page.waitForSelector('.content-library');await capture('library-'+({'文章':'article','页面':'page','合集管理':'collection'}[kind]));await click(newLabel);await page.waitForSelector('.modal');
   assert.equal(await page.$eval('.creation-dialog h2', node => node.textContent), kind === '合集管理' ? '新建分组' : newLabel);
+  assert.equal(await page.$eval('.creation-dialog button.primary', button => button.disabled), true);
   await capture('create-'+({'文章':'article','页面':'page','合集管理':'collection'}[kind]));
   if(kind==='页面'){await page.click('button[name="page-template"]');await page.waitForSelector('.selection-dialog[open]');await capture('select-template');await closeDialog();}
   await click('取消');
