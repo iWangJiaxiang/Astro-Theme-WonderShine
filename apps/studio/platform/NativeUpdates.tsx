@@ -170,7 +170,7 @@ export function NativeUpdates({ children }: { children?: (controls: ReactNode) =
       <button type="button" className="primary" disabled={busy} onClick={() => void act()}>{t(!supported ? '查看更新' : prepared ? (platform === 'android' ? '安装更新' : '安装并重新打开') : '下载并安装')}</button>
       <button type="button" disabled={busy} onClick={() => dismiss(false)}>{t('稍后')}</button>
       <button type="button" disabled={busy} className="native-update-skip" onClick={() => dismiss(true)}>{t('跳过此版本')}</button>
-      {supported && message && <button type="button" disabled={busy} onClick={() => void openRelease()}>{t('查看更新')}</button>}
+      {supported && ['安装失败，请重试或从发行页下载安装', '下载更新失败，请检查网络后重试', '更新包校验失败，请重新下载'].includes(message) && <button type="button" disabled={busy} onClick={() => void openRelease()}>{t('查看更新')}</button>}
     </aside>}
     <dialog ref={dialog} onCancel={event => event.preventDefault()} aria-label={t('正在安装更新')}><p role="status">{t('正在安装更新')}</p></dialog>
   </>;

@@ -33,12 +33,14 @@ async function stage(file) {
   privateShell('mkdir -p cache/studio-update && cp /data/local/tmp/studio-update.apk cache/studio-update/' + digest + '.apk');
   return { version, size: statSync(file).size, sha256: digest, automatic: false, name: 'android-test.apk' };
 }
-async function tapInstaller(action) {
-  await until(() => {
+async function tapInstaller(action, page) {
+  await until(async () => {
+    const failure = await page.evaluate(() => window.studioInstallError);
+    if (failure) throw Error(failure);
     adb('shell', 'uiautomator', 'dump', '/sdcard/studio-ui.xml');
     const xml = adb('shell', 'cat', '/sdcard/studio-ui.xml');
     const node = [...xml.matchAll(/<node\b[^>]+>/g)].map(m => m[0]).find(tag =>
-      tag.includes('package="com.google.android.packageinstaller"') || tag.includes('package="com.android.packageinstaller"') ?
+      /package="[^"]*(?:packageinstaller|permissioncontroller)"/i.test(tag) ?
         (action === 'cancel' ? /text="Cancel"|resource-id="android:id\/button2"/i : /text="(Update|Install)"|resource-id="android:id\/button1"/i).test(tag) : false);
     const bounds = node?.match(/bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/);
     if (!bounds) return false;
@@ -83,15 +85,22 @@ try {
   const asset = await stage(next);
   await prepare(asset);
   const install = () => page.evaluate(args => {
+    window.studioInstallError = '';
     window.__TAURI_INTERNALS__.invoke('plugin:studio-apk|install', args).catch(e => { window.studioInstallError = String(e?.message || e); });
   }, { version, sha256: asset.sha256 });
   await install();
-  await tapInstaller('cancel');
+  await tapInstaller('cancel', page);
   await page.waitForFunction(() => window.studioInstallError === 'CANCELLED');
   await install();
-  await tapInstaller('update');
+  await tapInstaller('update', page);
   await until(() => adb('shell', 'dumpsys', 'package', id).includes('versionName=' + version + '\n'), 'new installed version');
   adb('shell', 'monkey', '-p', id, '1');
   assert.equal(privateShell('cat ' + repo + '/draft.md'), 'unpublished');
   assert.equal(privateShell('cat ' + repo + '/.git/' + head), commit);
+} catch (error) {
+  console.error(adb('shell', 'df', '-h', '/data'));
+  console.error(adb('shell', 'dumpsys', 'activity', 'activities').split('\n').filter(line => line.includes('ResumedActivity')).slice(-3));
+  console.error(adb('shell', 'cat', '/sdcard/studio-ui.xml').slice(-6500));
+  console.error(adb('logcat', '-d', '-t', '1500').split('\n').filter(line => /InstallResult|PackageInstaller|Background activity|ActivityTaskManager.*START|AndroidRuntime.*Exception/i.test(line)).slice(-25).join('\n'));
+  throw error;
 } finally { await browser.disconnect(); spawnSync('adb', ['forward', '--remove', 'tcp:9222']); }

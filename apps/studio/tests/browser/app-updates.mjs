@@ -43,7 +43,7 @@ const fixture = await build({
       args.path.endsWith('plugin-opener') ? 'export const openUrl = async url => { window.updateFixture.opened.push(url); };' :
       `export async function fetch(url) {
         if (url.endsWith('/studio-release.json')) return Response.json({ version: '0.2.0', tag: 'studio-v0.2.0',
-          assets: [{ platform: 'android', name: 'android-studio.apk', size: 100, sha256: 'b'.repeat(64) }] });
+          assets: [{ platform: 'android', name: 'android-studio.apk', size: 61 * 1024 * 1024, sha256: 'b'.repeat(64) }] });
         window.updateFixture.calls++;
         if (window.updateFixture.fail) return new Response('', { status: 403 });
         if (!window.updateFixture.available) return Response.json([]);
