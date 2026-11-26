@@ -1,0 +1,7 @@
+{
+  "identifier": "studio-apk-updates",
+  "webviews": ["main"],
+  "local": true,
+  "platforms": ["android"],
+  "permissions": ["studio-apk:allow-unmetered", "studio-apk:allow-download", "studio-apk:allow-install"]
+}

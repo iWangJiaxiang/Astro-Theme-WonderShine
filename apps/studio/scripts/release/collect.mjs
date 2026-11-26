@@ -1,3 +1,4 @@
+import { updaterPlatforms } from './updater-manifest.mjs';
 import { readdir, mkdir, copyFile, writeFile, readFile } from 'node:fs/promises';
 import { basename, join, dirname, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -11,7 +12,7 @@ const assets = [];
 async function visit(path) {
   for (const entry of await readdir(path, { withFileTypes: true })) {
     const full = join(path, entry.name);
-    if (entry.isSymbolicLink()) continue;
+    if (entry.isSymbolicLink() || (platform.startsWith('macos-') && entry.isDirectory() && entry.name.endsWith('.app'))) continue;
     if (platform === 'android' && entry.isFile() && entry.name.endsWith('.aab')) continue;
     const simulator = platform === 'ios' && process.env.STUDIO_RELEASE !== 'true' && entry.isDirectory() && entry.name.endsWith('.app');
     if (simulator) {
@@ -21,7 +22,7 @@ async function visit(path) {
       assets.push(name);
     } else if (entry.isDirectory()) {
       await visit(full);
-    } else if (entry.isFile() && /\.(deb|rpm|AppImage|dmg|exe|msi|apk|aab|ipa)$/.test(entry.name)) {
+    } else if (entry.isFile() && /\.(deb|rpm|AppImage|dmg|exe|msi|apk|aab|ipa|app\.tar\.gz|(?:deb|rpm|AppImage|exe|app\.tar\.gz)\.sig)$/.test(entry.name)) {
       const name = `${platform}-${entry.name.replace(/[^a-zA-Z0-9._-]/g, '-')}`;
       if (assets.includes(name)) throw new Error(`Duplicate release asset: ${name}`);
       await copyFile(full, join(output, name));
@@ -33,5 +34,12 @@ await visit(process.env.STUDIO_BUNDLE_DIR);
 if (!assets.length) throw new Error(`No installable output found for ${platform}`);
 if (platform === 'android' && process.env.STUDIO_RELEASE === 'true' && (!assets.some(n => n.endsWith('.apk')) || assets.some(n => /unsigned|debug/.test(n)))) throw new Error('Release requires signed APK outputs');
 if (platform === 'ios' && process.env.STUDIO_RELEASE === 'true' && !assets.some(n => n.endsWith('.ipa'))) throw new Error('Release requires an IPA');
-const files = await Promise.all(assets.sort().map(async name => ({ name, sha256: createHash('sha256').update(await readFile(join(output, name))).digest('hex') })));
+const files = await Promise.all(assets.sort().map(async name => {
+  const bytes = await readFile(join(output, name));
+  return { name, size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+}));
+if (platform.includes('-')) {
+  const config = JSON.parse(await readFile('apps/studio/src-tauri/tauri.conf.json', 'utf8'));
+  await updaterPlatforms(files, output, platform, '', config.plugins.updater.pubkey);
+}
 await writeFile(join(output, `${platform}.json`), JSON.stringify({ platform, version: process.env.STUDIO_VERSION, source: process.env.STUDIO_SOURCE, files }, null, 2));

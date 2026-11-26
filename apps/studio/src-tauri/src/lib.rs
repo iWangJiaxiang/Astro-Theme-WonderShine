@@ -1,3 +1,5 @@
+#[cfg(desktop)]
+mod desktop_update;
 mod cnb_account;
 mod native_review;
 mod native_workspace_stat;
@@ -22,10 +24,15 @@ pub fn run() {
     let context = tauri::generate_context!();
     #[cfg(all(debug_assertions, feature = "native-smoke", target_os = "macos"))]
     let context = native_smoke::configure(context);
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(tauri_plugin_studio_apk::init());
+    #[cfg(desktop)]
+    let builder = builder.manage(desktop_update::Downloaded::default())
+        .plugin(tauri_plugin_updater::Builder::new().build());
     #[cfg(mobile)]
     let builder = builder.invoke_handler(tauri::generate_handler![cnb_account::cnb_account_get, native_review::native_review_owner, native_workspace_stat::native_workspace_stat, mobile_git::mobile_git]);
     #[cfg(not(mobile))]
-    let builder = builder.invoke_handler(tauri::generate_handler![cnb_account::cnb_account_get, native_review::native_review_owner, native_workspace_stat::native_workspace_stat]);
+    let builder = builder.invoke_handler(tauri::generate_handler![cnb_account::cnb_account_get, native_review::native_review_owner, native_workspace_stat::native_workspace_stat, desktop_update::download_studio_update, desktop_update::install_studio_update]);
     let builder = builder
         .manage(native_review::ReviewOwnership::default())
         .plugin(tauri_plugin_fs::init())

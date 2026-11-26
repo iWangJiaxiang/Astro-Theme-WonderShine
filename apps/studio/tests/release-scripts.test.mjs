@@ -221,18 +221,27 @@ else if (args[1] === 'upload') {
     const run = name => execFileSync(process.execPath, [script(name)], { cwd: root, env, stdio: 'pipe' });
     // An absent tag must use the refs endpoint, not /commits which returns 422 for unknown refs.
     run('preflight');
+    await mkdir(join(root, 'apps/studio/src-tauri'), { recursive: true });
+    await writeFile(join(root, 'apps/studio/src-tauri/tauri.conf.json'), JSON.stringify({ plugins: { updater: { pubkey: '' } } }));
     const platforms = ['linux-x64', 'linux-arm64', 'macos-x64', 'macos-arm64', 'windows-x64', 'windows-arm64', 'android', 'ios'];
     for (const platform of platforms) {
       await rm(join(root, 'bundle'), { recursive: true });
       await mkdir(join(root, 'bundle'));
-      const files = platform === 'android' ? ['app-release.apk'] : platform === 'ios' ? ['app.ipa'] : platform.startsWith('linux') ? ['app.deb'] : platform.startsWith('macos') ? ['app.dmg'] : ['app.exe'];
+      const files = platform === 'android' ? ['app-release.apk'] : platform === 'ios' ? ['app.ipa'] : platform.startsWith('linux') ? ['app.deb', 'app.rpm', 'app.AppImage'] : platform.startsWith('macos') ? ['app.dmg', 'app.app.tar.gz'] : ['app.exe'];
       for (const file of files) await writeFile(join(root, 'bundle', file), `${platform} fixture`);
+      for (const file of files.filter(name => /\.(deb|rpm|AppImage|exe|gz)$/.test(name))) {
+        await writeFile(join(root, 'bundle', file + '.sig'), 'fixture signature');
+      }
       env.STUDIO_PLATFORM = platform;
       run('collect');
     }
     assert.throws(() => run('publish'));
     let state = JSON.parse(await readFile(stateFile));
     assert.equal(state.release.draft, false);
+    const updater = JSON.parse(await readFile(join(root, 'temp/studio-artifacts/studio-updater.json')));
+    assert.equal(Object.keys(updater.platforms).length, 10);
+    assert.match(updater.platforms['linux-aarch64-rpm'].url, /studio-v0\.2\.0\/linux-arm64-app\.rpm$/);
+    assert.equal(updater.platforms['darwin-x86_64-app'].signature, 'fixture signature');
     assert.equal(state.release.assets.some(a => a.name === 'studio-release.json'), false);
     run('preflight');
     run('publish');

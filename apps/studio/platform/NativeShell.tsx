@@ -15,7 +15,7 @@ export default function NativeShell() {
   return <div className={connected ? 'native-shell' : 'native-shell native-shell-connecting'}>
     <NativeUpdates>{controls => connected ? <>
       {!session.value && <button className="native-change-connection" disabled={pendingMutations.value > 0} onClick={disconnect}>{t('切换工作区')}</button>}
-      <App workspaceSwitcher />
+      <App workspaceSwitcher updateControls={controls} />
     </> : <NativeConnection updateControls={controls} resumeOnLaunch={resumeOnLaunch.current} onConnected={cleanup => { dispose.current = cleanup; setConnected(true); }} onDisconnect={disconnect} />}</NativeUpdates>
   </div>;
 }

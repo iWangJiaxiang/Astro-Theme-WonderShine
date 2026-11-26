@@ -1,0 +1,7 @@
+{
+  "identifier": "studio-desktop-updates",
+  "webviews": ["main"],
+  "local": true,
+  "platforms": ["windows", "macOS", "linux"],
+  "permissions": ["allow-studio-desktop-update"]
+}

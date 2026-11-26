@@ -99,6 +99,12 @@ export function NativeConnection({ onConnected, onDisconnect, resumeOnLaunch, up
   const login = useRef<{ grant: GitGrant; url: string; provider: string; username: string } | null>(null);
   function setToken(value: string) { login.current = null; updateToken(value); }
   const [busy, setBusy] = useState(false), [error, setError] = useState<Message>('');
+  useLayoutEffect(() => {
+    if (!busy) return;
+    const protect = (event: Event) => event.preventDefault();
+    window.addEventListener('studio:before-install', protect);
+    return () => window.removeEventListener('studio:before-install', protect);
+  }, [busy]);
   const [progress, setProgress] = useState<GitProgressEvent | null>(null);
   const progressLabel = progress ? progressLabels[progress.phase] || '下载仓库' : '正在连接仓库';
   const progressValue = progress?.total && progress.total > 0 ? Math.min(100, Math.max(0, Math.floor(progress.loaded / progress.total * 100))) : undefined;

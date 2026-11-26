@@ -1,0 +1,4 @@
+[[permission]]
+identifier = "allow-studio-desktop-update"
+description = "Fetch and install a signed Studio release from the configured repository."
+commands.allow = ["download_studio_update", "install_studio_update"]

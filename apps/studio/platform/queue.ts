@@ -1,5 +1,6 @@
 /** One queue per workspace serializes content saves with Git operations. */
 const queues = new Map<string, Promise<unknown>>();
+export const workspaceOperationsPending = () => queues.size > 0;
 // Handoff is valid only for consecutive acquisitions by the same session.
 let lastOwner: object | undefined;
 export function withWorkspaceLock<T>(key: string, action: (uninterrupted: boolean) => Promise<T>, owner?: object): Promise<T> {

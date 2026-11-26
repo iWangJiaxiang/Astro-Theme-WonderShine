@@ -54,7 +54,7 @@ import {
   sortLibrary,
 } from "../shared/library";
 
-type Props = { workspaceSwitcher?: boolean };
+type Props = { workspaceSwitcher?: boolean; updateControls?: import("react").ReactNode };
 type Events = {};
 const appearanceStorageKey = "studio-appearance";
 const schemePath = "extra.style.color_scheme";
@@ -483,6 +483,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
           }}><Icon name={dark.value ? "sun" : "moon"} size={18} />{t("切换明暗模式")}</button>
           {props.workspaceSwitcher && <button type="button" disabled={pendingMutations.value > 0} onClick={() => void logout()}><Icon size={18} name="switchWorkspace" />{t("切换工作区")}</button>}
           </div>
+          {props.updateControls}
         </details>
       </div>;
     }
@@ -571,7 +572,7 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         error.value = errorMessage(e);
       }
     }
-    function beforeUnload(event: BeforeUnloadEvent) {
+    function protectWork(event: Event) {
       editorView.value?.flush();
       if (
         dirty.value ||
@@ -581,13 +582,15 @@ const App: StudioComponent<Props, Events> = component<Props, Events>(
         editorView.value?.isBusy?.()
       ) {
         event.preventDefault();
-        event.returnValue = "";
+        if (event.type === "beforeunload") (event as BeforeUnloadEvent).returnValue = "";
       }
     }
-    window.addEventListener("beforeunload", beforeUnload);
+    window.addEventListener("beforeunload", protectWork);
+    window.addEventListener("studio:before-install", protectWork);
     onBeforeUnmount(() => {
       generation++;
-      window.removeEventListener("beforeunload", beforeUnload);
+      window.removeEventListener("beforeunload", protectWork);
+      window.removeEventListener("studio:before-install", protectWork);
     });
     return () =>
       element(

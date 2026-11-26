@@ -275,8 +275,8 @@ jobs:
         include:
           - { platform: linux-x64, runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu, bundles: 'deb,rpm,appimage' }
           - { platform: linux-arm64, runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, bundles: 'deb,rpm,appimage' }
-          - { platform: macos-x64, runner: macos-15, target: x86_64-apple-darwin, bundles: dmg }
-          - { platform: macos-arm64, runner: macos-15, target: aarch64-apple-darwin, bundles: dmg }
+          - { platform: macos-x64, runner: macos-15, target: x86_64-apple-darwin, bundles: app,dmg }
+          - { platform: macos-arm64, runner: macos-15, target: aarch64-apple-darwin, bundles: app,dmg }
           - { platform: windows-x64, runner: windows-2022, target: x86_64-pc-windows-msvc, bundles: nsis }
           - { platform: windows-arm64, runner: windows-2022, target: aarch64-pc-windows-msvc, bundles: nsis }
     runs-on: ${{ matrix.runner }}
@@ -308,8 +308,16 @@ jobs:
       - run: npm ci
       - run: node apps/studio/scripts/release/version.mjs
       - run: node apps/studio/scripts/release/icons.mjs desktop
+      - name: Configure signed desktop updates
+        run: node apps/studio/scripts/release/desktop-updater.mjs
+        env:
+          STUDIO_UPDATER_PUBLIC_KEY: ${{ vars.STUDIO_UPDATER_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ needs.prepare.outputs.release == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
       - name: Build desktop installers
         run: npm exec -w @wondershine/studio -- tauri build --ci --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} -- --locked
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ needs.prepare.outputs.release == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY || env.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ needs.prepare.outputs.release == 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
       - name: Native permissions regression
         if: matrix.platform == 'macos-arm64'
         run: cargo test --locked --manifest-path apps/studio/src-tauri/Cargo.toml --features custom-protocol --test http_permissions

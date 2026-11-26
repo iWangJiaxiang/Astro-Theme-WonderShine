@@ -20,22 +20,34 @@ const fixture = await build({
     import './src/style.css';
     import './src/forms.css';
     import './src/i18n';
-    window.updateFixture = { calls: 0, opened: [], fail: false, available: true };
+    window.updateFixture = { calls: 0, opened: [], fail: false, available: true, installer: false, downloads: [], installs: 0, unmetered: true };
     createRoot(document.getElementById('root')!).render(<StrictMode><NativeUpdates /></StrictMode>);
   ` },
   bundle: true, platform: 'browser', format: 'iife', write: false, outdir: 'out', jsx: 'automatic',
   loader: { '.woff': 'dataurl', '.woff2': 'dataurl', '.ttf': 'dataurl', '.png': 'dataurl', '.svg': 'dataurl', '.gif': 'dataurl' },
   define: { 'process.env.NODE_ENV': '"development"', 'import.meta.env.VITE_STUDIO_RELEASE_REPOSITORY': '"example/studio"', 'import.meta.env.VITE_STUDIO_IOS_UPDATE_URL': '""' },
   plugins: [{ name: 'native-update-fixture', setup(builder) {
-    builder.onResolve({ filter: /^@tauri-apps\/(api\/app|plugin-http|plugin-opener)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
+    builder.onResolve({ filter: /^@tauri-apps\/(api\/app|api\/core|plugin-http|plugin-opener)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
     builder.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents:
       args.path.endsWith('api/app') ? 'export const getVersion = async () => "0.1.0";' :
+      args.path.endsWith('api/core') ? `
+        export class Channel {}
+        export async function invoke(name, args) {
+          const fixture = window.updateFixture;
+          if (name.endsWith('unmetered')) return fixture.unmetered;
+          if (name.includes('download')) {
+            fixture.downloads.push(args); args.progress.onmessage(args.name ? 100 : [100, 100]);
+          } else if (name.includes('install')) fixture.installs++;
+          else throw Error('unexpected command');
+        }` :
       args.path.endsWith('plugin-opener') ? 'export const openUrl = async url => { window.updateFixture.opened.push(url); };' :
-      `export async function fetch() {
+      `export async function fetch(url) {
+        if (url.endsWith('/studio-release.json')) return Response.json({ version: '0.2.0', tag: 'studio-v0.2.0',
+          assets: [{ platform: 'android', name: 'android-studio.apk', size: 100, sha256: 'b'.repeat(64) }] });
         window.updateFixture.calls++;
         if (window.updateFixture.fail) return new Response('', { status: 403 });
         if (!window.updateFixture.available) return Response.json([]);
-        return Response.json([{ tag_name: 'studio-v0.2.0', html_url: 'https://github.com/example/studio/releases/tag/studio-v0.2.0', draft: false, prerelease: false, assets: [{ name: 'studio-release.json', state: 'uploaded', size: 200 }] }]);
+        return Response.json([{ tag_name: 'studio-v0.2.0', html_url: 'https://github.com/example/studio/releases/tag/studio-v0.2.0', draft: false, prerelease: false, assets: ['studio-release.json', ...(window.updateFixture.installer ? ['studio-updater.json'] : [])].map(name => ({ name, state: 'uploaded', size: 200 })) }]);
       }`, loader: 'js' }));
   } }],
 });
@@ -85,6 +97,36 @@ try {
   await page.click('.native-update-controls button');
   await page.waitForSelector('.native-update-controls [role=alert]');
   assert.match(await page.$eval('.native-update-controls [role=alert]', el => el.textContent), /Could not check|暂时无法/);
+  await page.evaluate(() => Object.assign(window.updateFixture, { available: true, fail: false, installer: true }));
+  await page.click('.native-update-controls button');
+  await page.waitForFunction(() => window.updateFixture.downloads.length === 1 && !document.querySelector('.primary').disabled);
+  assert.equal(await page.evaluate(() => window.updateFixture.installs), 0);
+  await page.evaluate(() => window.addEventListener('studio:before-install', event => event.preventDefault(), { once: true }));
+  await page.click('.native-update-notice .primary');
+  assert.equal(await page.evaluate(() => window.updateFixture.installs), 0);
+  await page.click('.native-update-notice .primary');
+  await page.waitForFunction(() => window.updateFixture.installs === 1);
+  await page.click('.native-update-controls input');
+  await page.reload();
+  await page.waitForSelector('.native-update-controls input');
+  assert.equal(await page.$eval('.native-update-controls input', el => el.checked), false);
+  await page.evaluate(() => { window.updateFixture.installer = true; });
+  await page.click('.native-update-controls button');
+  await page.waitForSelector('.native-update-notice .primary:not(:disabled)');
+  assert.equal(await page.evaluate(() => window.updateFixture.downloads.length), 0);
+  await page.click('.native-update-notice .primary');
+  await page.waitForFunction(() => window.updateFixture.installs === 1);
+  await page.setUserAgent('Android Studio fixture');
+  await page.reload();
+  await page.waitForSelector('.native-update-controls input');
+  await page.click('.native-update-controls input');
+  await page.evaluate(() => Object.assign(window.updateFixture, { installer: true, unmetered: false }));
+  await page.click('.native-update-controls button');
+  await page.waitForSelector('.native-update-notice .primary:not(:disabled)');
+  assert.equal(await page.evaluate(() => window.updateFixture.downloads.length), 0);
+  await page.click('.native-update-notice .primary');
+  await page.waitForFunction(() => window.updateFixture.installs === 1);
+  assert.equal(await page.evaluate(() => window.updateFixture.downloads[0].automatic), false);
   assert.deepEqual(errors, []);
 } finally {
   await browser?.close();
