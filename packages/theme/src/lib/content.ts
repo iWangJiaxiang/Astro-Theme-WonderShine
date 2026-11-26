@@ -73,6 +73,37 @@ function pathSegment(value: string, config: DataRecord): string {
 function legacyLayout(value: unknown): string | undefined {
   return typeof value === 'string' ? value.replace(/^page\//, '').replace(/\.html$/, '') : undefined;
 }
+function collectAssets(contentRoot: string, assetFiles: string[], documents: Document[], includeDrafts = false): ContentAsset[] {
+  const ownersByDirectory = new Map<string, Document[]>();
+  for (const doc of documents) {
+    if (!/(?:^|\/)_?index(?:\.[^/.]+)?\.md$/.test(doc.relativePath)) continue;
+    const directory = path.posix.dirname(doc.relativePath);
+    const owners = ownersByDirectory.get(directory);
+    if (owners) owners.push(doc);
+    else ownersByDirectory.set(directory, [doc]);
+  }
+  const allAssets = new Map<string, ContentAsset>();
+  for (const filename of assetFiles) {
+    const relative = path.relative(contentRoot, filename).split(path.sep).join('/');
+    let directory = path.posix.dirname(relative);
+    let owners = ownersByDirectory.get(directory);
+    while (!owners && directory !== '.') {
+      directory = path.posix.dirname(directory);
+      owners = ownersByDirectory.get(directory);
+    }
+    for (const owner of owners ?? []) {
+      if (owner.draft && !includeDrafts) continue;
+      const suffix = path.posix.relative(directory, relative);
+      const asset = { source: filename, path: `${owner.path}${suffix}` };
+      owner.assets.push(asset);
+      const existing = allAssets.get(asset.path);
+      if (existing && existing.source !== asset.source) throw new Error(`Content asset collision at ${asset.path}`);
+      allAssets.set(asset.path, asset);
+    }
+  }
+  return [...allAssets.values()];
+}
+
 /** Read site-owned content; layouts are rendered by Astro. */
 export async function loadSite(options: LoadSiteOptions = {}): Promise<Site> {
   const root = path.resolve(options.root || process.env.ASTRO_SITE_ROOT || process.cwd());
@@ -153,27 +184,7 @@ export async function loadSite(options: LoadSiteOptions = {}): Promise<Site> {
     }
   }
   for (const group of byGroup.values()) for (const doc of group) doc.translations = group.filter(other => other !== doc && (options.includeDrafts || !other.draft));
-  const assetFiles = files.filter(filename => !filename.endsWith('.md'));
-  const allAssets = new Map<string, ContentAsset>();
-  for (const filename of assetFiles) {
-    const relative = path.relative(contentRoot, filename).split(path.sep).join('/');
-    let directory = path.posix.dirname(relative);
-    let owners: Document[] = [];
-    while (!owners.length) {
-      owners = all.filter(doc => path.posix.dirname(doc.relativePath) === directory && /(?:^|\/)(?:_?index)(?:\.[^/.]+)?\.md$/.test(doc.relativePath));
-      if (directory === '.') break;
-      if (!owners.length) directory = path.posix.dirname(directory);
-    }
-    for (const owner of owners) {
-      if (owner.draft && !options.includeDrafts) continue;
-      const suffix = path.posix.relative(directory, relative);
-      const asset = { source: filename, path: `${owner.path}${suffix}` };
-      owner.assets.push(asset);
-      const existing = allAssets.get(asset.path);
-      if (existing && existing.source !== asset.source) throw new Error(`Content asset collision at ${asset.path}`);
-      allAssets.set(asset.path, asset);
-    }
-  }
+  const assets = collectAssets(contentRoot, files.filter(filename => !filename.endsWith('.md')), all, options.includeDrafts);
   const visible = all.filter(doc => options.includeDrafts || !doc.draft);
   const paths = new Map<string, string>();
   for (const doc of visible) {
@@ -189,5 +200,5 @@ export async function loadSite(options: LoadSiteOptions = {}): Promise<Site> {
     Object.assign(doc, rendered);
   }
   return { root, config, data, localizedData, documents: visible.filter(doc => doc.kind !== 'section'), sections,
-    languages, defaultLanguage, assets: [...allAssets.values()] };
+    languages, defaultLanguage, assets };
 }

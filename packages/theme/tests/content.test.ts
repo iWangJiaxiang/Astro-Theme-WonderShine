@@ -85,13 +85,13 @@ test('reading analytics preserve Zola Unicode counting and its 200-word reading 
 test('draft ancestors are private while metadata, explicit HTML aliases and locale paths survive', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'astro-content-'));
   try {
-    await mkdir(path.join(root, 'content', 'private', 'bundle'), { recursive: true });
+    await mkdir(path.join(root, 'content', 'private', 'bundle', 'images'), { recursive: true });
     await writeFile(path.join(root, 'config.toml'), 'base_url="https://example.com"\ndefault_language="zh-CN"\n[languages.en]\ntitle="English"\n[slugify]\npaths="safe"');
     await writeFile(path.join(root, 'content', '_index.md'), '+++\ntitle="Home"\n+++\n');
     await writeFile(path.join(root, 'content', 'private', '_index.md'), '+++\ndraft=true\nchild_layout="post"\n+++\n');
     await writeFile(path.join(root, 'content', 'private', 'bundle', 'index.md'), '+++\ntitle="Private"\npath="custom"\naliases=["old.html"]\n+++\nHello');
     await writeFile(path.join(root, 'content', 'private', 'bundle', 'index.en.md'), '+++\ntitle="English"\npath="en/custom"\n+++\nHello');
-    await writeFile(path.join(root, 'content', 'private', 'bundle', 'cover.png'), 'test-image');
+    await writeFile(path.join(root, 'content', 'private', 'bundle', 'images', 'cover.png'), 'test-image');
     const published = await loadSite({ root });
     assert.equal(published.documents.length, 0);
     assert.equal(published.sections.length, 2);
@@ -101,7 +101,7 @@ test('draft ancestors are private while metadata, explicit HTML aliases and loca
     assert.ok(preview.documents.every(doc => doc.draft));
     assert.ok(preview.documents.find(doc => doc.lang === 'zh-CN')!.aliases.includes('/old.html'));
     assert.equal(preview.documents[0].translations.length, 1);
-    assert.equal(preview.assets.length, 2);
+    assert.deepEqual(preview.assets.map(asset => asset.path).sort(), ['/custom/images/cover.png', '/en/custom/images/cover.png']);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
