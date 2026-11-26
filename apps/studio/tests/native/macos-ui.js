@@ -68,7 +68,7 @@
     await click('＋ 添加语言'); await click('AI 翻译');
     await heading('Native translated article'); results.push('native-ai-translation-draft'); await progress();
     await click('工作区同步'); await wait(() => document.querySelector('.workspace-status-grid'), 'workspace status'); await click('本地保存'); await click('确认执行');
-    await wait(() => text().includes('已提交到工作区，尚未推送到远端。'), 'local commit'); results.push('native-git-commit'); await progress();
+    await wait(() => text().includes('版本已保存到工作区，尚未推送到远程仓库。'), 'local commit'); results.push('native-git-commit'); await progress();
     document.querySelector('[aria-label="退出登录"]').click(); await heading('连接创作工作区');
     await click('打开工作区'); await heading('今天，写点什么？'); await click('客户端 API 设置');
     await wait(() => text().includes('尚未配置密钥'), 'key cleared after reconnect');

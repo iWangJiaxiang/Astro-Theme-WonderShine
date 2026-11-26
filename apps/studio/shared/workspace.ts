@@ -16,6 +16,7 @@ export interface WorkspaceStatus {
   canSync?: boolean;
   canPublish?: boolean;
   canMerge?: boolean;
+  canUncommit?: boolean;
   canDiscard?: boolean;
   canResolveMerge?: boolean;
   mergeFiles?: MergeFile[];
@@ -34,6 +35,8 @@ export interface WorkspaceControl {
   commitTheme?(change: ThemeCommit): Promise<string>;
   reviewMerge?(): Promise<WorkspaceStatus>;
   resolveMerge?(confirmation: string, choices: MergeChoices): Promise<WorkspaceStatus>;
+  reviewUncommit?(): Promise<WorkspaceStatus>;
+  uncommit?(confirmation: string): Promise<WorkspaceStatus>;
   reviewDiscard?(): Promise<WorkspaceStatus>;
   discard?(confirmation: string): Promise<WorkspaceStatus>;
   publish?(message: string, confirmation: string): Promise<void>;

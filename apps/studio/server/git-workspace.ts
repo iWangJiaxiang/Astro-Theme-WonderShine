@@ -1,3 +1,5 @@
+import { uncommitWorkspace } from '../shared/workspace-uncommit.js';
+import { uncommitBranch } from '../platform/uncommit-branch.js';
 import { discardState } from '../shared/workspace-discard.js';
 import { discardFiles, discardRows } from '../platform/discard-files.js';
 import { mergeTarget } from '../platform/merge-target.js';
@@ -70,6 +72,8 @@ export class GitWorkspaceRepository implements Repository {
         await this.commitFiles(message, requireWorkspaceConfirmation(confirmation), undefined, true);
         await this.sync();
       }),
+      reviewUncommit: () => this.run(() => this.uncommit()),
+      uncommit: token => this.run(() => this.uncommit(requireWorkspaceConfirmation(token))),
       reviewDiscard: () => this.run(() => this.discard()),
       discard: token => this.run(() => this.discard(requireWorkspaceConfirmation(token))),
       commitTheme: change => this.run(() => this.commitFiles(change.message, undefined, change)),
@@ -186,9 +190,17 @@ export class GitWorkspaceRepository implements Repository {
     const managedChanges = rows.filter(([path]) => managed(path)).map(([path]) => path);
     const changes = rows.length;
     return {
-      status: { branch: this.options.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, canDiscard: true, canMerge: true, managedChanges },
+      status: { branch: this.options.branch, dirty: changes > 0, changes, head, remoteHead, ahead, behind, diverged: ahead > 0 && behind > 0, lastSync, canUncommit: true, canDiscard: true, canMerge: true, managedChanges },
       review: { scope: 'server:' + this.root, branch: this.options.branch, head, rows: rows.filter(([path]) => managed(path)) },
     };
+  }
+
+  private async uncommit(token?: string) {
+    await this.mutable();
+    await this.assertGitIdle();
+    const status = await this.status();
+    return uncommitWorkspace(status, 'server:' + this.root, { store: nodeWorkspaceReviews(this.root), source: nodeReviewSource(this.root) }, token,
+      (head, remote) => uncommitBranch(this.gitOptions, status.branch, head, remote, status.diverged), () => this.status());
   }
 
   private async discard(token?: string): Promise<WorkspaceStatus> {

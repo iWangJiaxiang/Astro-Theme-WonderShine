@@ -90,6 +90,13 @@ export function createContentTransport(repository: Repository, options: ContentT
         const body = await input<{ confirmation?: string }>();
         return json(await repository.workspace.discard(requireWorkspaceConfirmation(body?.confirmation)));
       }
+      if (path === '/api/workspace/uncommit/review' && method === 'POST' && repository.workspace?.reviewUncommit) {
+        return json(await repository.workspace.reviewUncommit());
+      }
+      if (path === '/api/workspace/uncommit' && method === 'POST' && repository.workspace?.uncommit) {
+        const body = await input<{ confirmation?: string }>();
+        return json(await repository.workspace.uncommit(requireWorkspaceConfirmation(body?.confirmation)));
+      }
       if (path === '/api/workspace/publish' && method === 'POST' && repository.workspace?.publish) {
         const body = await input<{ message: string; confirmation: string }>();
         await repository.workspace.publish(body?.message, requireWorkspaceConfirmation(body?.confirmation));

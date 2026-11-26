@@ -35,7 +35,7 @@ const ThreadComposer: StudioComponent<Props, Events> = component<Props, Events>(
     const languages = ref<ContentLanguages>(),
       document = ref<Draft>(),
       editor = ref<EditorHandle>();
-    const working = ref(false);
+    const working = ref(false), published = ref(false);
     const dirty = ref(false),
       firstLanguage = ref(""),
       error = ref<Message>(""),
@@ -81,6 +81,7 @@ const ThreadComposer: StudioComponent<Props, Events> = component<Props, Events>(
       }
     }
     function changed(value: boolean) {
+      if (value) published.value = false;
       dirty.value = value;
       emit("dirty", value);
     }
@@ -105,6 +106,7 @@ const ThreadComposer: StudioComponent<Props, Events> = component<Props, Events>(
       initialBody?: string,
     ) {
       if (!canLeave()) return;
+      published.value = false;
       keepUnsaved();
       if (languages.value)
         firstLanguage.value = translationLocation(
@@ -305,6 +307,7 @@ const ThreadComposer: StudioComponent<Props, Events> = component<Props, Events>(
               : null,
           ),
         ),
+        published.value ? element("p", { role: "status", className: "notice success" }, t("动态已发送到仓库")) : null,
         drafts.value.some((item) => item.path !== document.value?.path)
           ? element(
               "details",
@@ -376,6 +379,11 @@ const ThreadComposer: StudioComponent<Props, Events> = component<Props, Events>(
                 typeof DocumentEditor,
                 "onDirty"
               >,
+              onPublished: (path: string) => {
+                if (path !== document.value?.path) return;
+                forget(path);
+                published.value = true;
+              },
               onSaved: saved satisfies EventHandler<
                 typeof DocumentEditor,
                 "onSaved"

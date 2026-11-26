@@ -1,3 +1,5 @@
+import { uncommitWorkspace } from '../shared/workspace-uncommit.js';
+import { uncommitBranch } from './uncommit-branch.js';
 import { discardState } from '../shared/workspace-discard.js';
 import { discardFiles, discardRows } from './discard-files.js';
 import { mergeTarget } from './merge-target.js';
@@ -193,7 +195,7 @@ export class NativeGitEngine implements WorkspaceControl {
     const managedChanges = review.rows.map(([path]) => path);
     const changes = rows.length;
     return {
-      status: { branch: this.profile.branch, dirty: changes > 0, changes, ...branch, lastSync, canDiscard: true, canSync: this.canSync, canMerge: true, managedChanges },
+      status: { branch: this.profile.branch, dirty: changes > 0, changes, ...branch, lastSync, canUncommit: true, canDiscard: true, canSync: this.canSync, canMerge: true, managedChanges },
       review,
     };
   }
@@ -218,6 +220,16 @@ export class NativeGitEngine implements WorkspaceControl {
   }
   commitForReview(message: string, confirmation: string): Promise<void> {
     return withWorkspaceLock(this.root, async () => { await this.commitUnlocked(message, confirmation); });
+  }
+  reviewUncommit() { return this.clearPending(); }
+  uncommit(token: string) { return this.clearPending(requireWorkspaceConfirmation(token)); }
+  private clearPending(token?: string) {
+    return withWorkspaceLock(this.root, async () => {
+      await this.openUnlocked(); await this.assertWritable();
+      const status = await this.statusUnlocked();
+      return uncommitWorkspace(status, 'native:' + this.root, this.reviewAdapter(), token,
+        (head, remote) => uncommitBranch(this.options, status.branch, head, remote, status.diverged), () => this.statusUnlocked());
+    });
   }
   reviewDiscard() { return this.discardChanges(); }
   discard(token: string) { return this.discardChanges(requireWorkspaceConfirmation(token)); }
