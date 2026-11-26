@@ -987,6 +987,8 @@ try {
   assert.deepEqual(await mobile.invoke({ profile: mainProfile, job: { action: 'checkRemote' } }), { ahead: 0, behind: 0 });
   assert.equal(execFileSync('git', ['-C', join(appData, 'workspaces', mainProfile.id, 'repo'), 'rev-parse', '--is-shallow-repository']).toString().trim(), 'true');
   const conflictRefs = await mobile.verifySync(mainProfile);
+  const mainKey = 'git-' + createHash('sha256').update(JSON.stringify([mainProfile.id, mainProfile.url, mainProfile.provider, mainProfile.username])).digest('hex');
+  keyring.set(mainKey, JSON.stringify({ token: 'fixture-token' }));
   await page.evaluate(profile => localStorage.setItem('wondershine.native.workspaces.v1', JSON.stringify([profile])), mainProfile);
   await restartNativeFixture();
   await heading('今天，写点什么？');

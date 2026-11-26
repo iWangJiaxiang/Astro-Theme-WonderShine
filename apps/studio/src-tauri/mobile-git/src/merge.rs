@@ -27,13 +27,12 @@ pub(super) fn process(
     let conflicts = index.conflicts().map_err(|_| READ)?.collect::<std::result::Result<Vec<_>, _>>().map_err(|_| READ)?;
     let mut files = Vec::new();
     for conflict in conflicts {
-        let entries = [&conflict.ancestor, &conflict.our, &conflict.their];
-        let mut entries = entries.into_iter().flatten();
-        let first = entries.next().ok_or(UNSUPPORTED)?;
+        let first = conflict.our.as_ref().or(conflict.their.as_ref()).or(conflict.ancestor.as_ref()).ok_or(UNSUPPORTED)?;
         let path = std::str::from_utf8(&first.path).map_err(|_| UNSUPPORTED)?.to_owned();
-        if internal(&path) || entries.any(|entry| entry.path != first.path)
-            || [&conflict.ancestor, &conflict.our, &conflict.their].into_iter().flatten()
-                .any(|entry| !matches!(entry.mode, 0o100644 | 0o100755)) { return Err(UNSUPPORTED); }
+        if internal(&path) || [&conflict.ancestor, &conflict.our, &conflict.their].into_iter().flatten()
+            .any(|entry| entry.path != first.path || !matches!(entry.mode, 0o100644 | 0o100755)) {
+            return Err(UNSUPPORTED);
+        }
         files.push(json!({"path":path,"local":conflict.our.is_some(),"remote":conflict.their.is_some()}));
         if let Some(selected) = choices.as_mut() {
             let side = selected.remove(&path).ok_or(CHANGED)?;
