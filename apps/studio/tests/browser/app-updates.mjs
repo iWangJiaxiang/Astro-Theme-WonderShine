@@ -37,8 +37,10 @@ const fixture = await build({
           if (name.endsWith('unmetered')) return fixture.unmetered;
           if (name.includes('download')) {
             fixture.downloads.push(args); args.progress.onmessage(args.name ? 100 : [100, 100]);
-          } else if (name.includes('install')) fixture.installs++;
-          else throw Error('unexpected command');
+          } else if (name.includes('install')) {
+            fixture.installs++;
+            if (fixture.installError) throw Error(fixture.installError);
+          } else throw Error('unexpected command');
         }` :
       args.path.endsWith('plugin-opener') ? 'export const openUrl = async url => { window.updateFixture.opened.push(url); };' :
       `export async function fetch(url) {
@@ -128,9 +130,26 @@ try {
   assert.equal(await page.evaluate(() => window.updateFixture.downloads.length), 0);
   await page.setViewport({ width: 360, height: 740 });
   await page.screenshot({ path: join(out, 'android-metered.png') });
+  await page.evaluate(() => { window.updateFixture.installError = 'CANCELLED'; });
   await page.click('.native-update-notice .primary');
   await page.waitForFunction(() => window.updateFixture.installs === 1);
   assert.equal(await page.evaluate(() => window.updateFixture.downloads[0].automatic), false);
+  const action = '.native-update-notice .primary:not(:disabled)';
+  await page.waitForSelector(action);
+  assert.match(await page.$eval(action, el => el.textContent), /Install update|安装更新/);
+  await page.click('.native-update-notice button.primary + button');
+  await page.click('.native-update-controls button');
+  await page.waitForSelector(action);
+  await page.evaluate(() => { window.updateFixture.installError = 'INVALID_APK'; });
+  await page.click(action);
+  await page.waitForFunction(() => window.updateFixture.installs === 2);
+  await page.waitForSelector(action);
+  assert.match(await page.$eval(action, el => el.textContent), /Download and install|下载并安装/);
+  assert.equal(await page.evaluate(() => window.updateFixture.downloads.length), 1);
+  await page.evaluate(() => { window.updateFixture.installError = ''; });
+  await page.click(action);
+  await page.waitForFunction(() => window.updateFixture.installs === 3);
+  assert.equal(await page.evaluate(() => window.updateFixture.downloads.length), 2);
   assert.deepEqual(errors, []);
 } finally {
   await browser?.close();

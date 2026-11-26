@@ -88,6 +88,12 @@ try {
     window.studioInstallError = '';
     window.__TAURI_INTERNALS__.invoke('plugin:studio-apk|install', args).catch(e => { window.studioInstallError = String(e?.message || e); });
   }, { version, sha256: asset.sha256 });
+  const cachedApk = 'cache/studio-update/' + asset.sha256 + '.apk';
+  privateShell('rm ' + cachedApk);
+  await install();
+  await page.waitForFunction(() => window.studioInstallError === 'INVALID_APK');
+  privateShell('cp /data/local/tmp/studio-update.apk ' + cachedApk);
+  await prepare(asset);
   await install();
   // Android pauses WebView animation frames while Settings owns the foreground.
   await tapSystemControl('allow');

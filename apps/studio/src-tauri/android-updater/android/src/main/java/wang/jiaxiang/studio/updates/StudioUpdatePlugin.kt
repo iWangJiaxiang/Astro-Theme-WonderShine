@@ -46,6 +46,7 @@ private fun hex(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it) }
 
 @Suppress("DEPRECATION")
 private fun verifyApk(context: Context, file: File, version: String) {
+    check(file.isFile) { "INVALID_APK" }
     val pm = context.packageManager
     val flags = if (Build.VERSION.SDK_INT >= 28) PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
     val installed = pm.getPackageInfo(context.packageName, flags)

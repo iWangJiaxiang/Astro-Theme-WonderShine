@@ -52,6 +52,12 @@ export function NativeUpdates({ children }: { children?: (controls: ReactNode) =
       await installUpdate(offer.version, offer.apk);
     } catch (error) {
       const code = typeof error === 'object' && error && 'message' in error ? error.message : error;
+      if (offer.apk && code === 'INVALID_APK') {
+        downloaded.current = '';
+        setReady('');
+        setMessage('更新包校验失败，请重新下载');
+        return;
+      }
       setMessage(code === 'PERMISSION' ? '请允许此来源安装应用，返回后再次点击安装' :
         code === 'CANCELLED' ? '已取消安装，可以稍后重试' : '安装失败，请重试或从发行页下载安装');
     } finally { dialog.current?.close(); }
