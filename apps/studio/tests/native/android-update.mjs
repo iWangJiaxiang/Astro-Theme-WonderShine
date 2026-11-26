@@ -89,10 +89,11 @@ try {
     window.__TAURI_INTERNALS__.invoke('plugin:studio-apk|install', args).catch(e => { window.studioInstallError = String(e?.message || e); });
   }, { version, sha256: asset.sha256 });
   await install();
-  await page.waitForFunction(() => window.studioInstallError === 'PERMISSION');
+  // Android pauses WebView animation frames while Settings owns the foreground.
   await tapSystemControl('allow');
   adb('shell', 'input', 'keyevent', 'KEYCODE_BACK');
   await until(() => adb('shell', 'dumpsys', 'activity', 'activities').split('\n').some(line => line.includes('topResumedActivity') && line.includes(id)), 'return to Studio');
+  await until(() => page.evaluate(() => window.studioInstallError === 'PERMISSION'), 'permission response');
   await install();
   await tapSystemControl('cancel');
   await page.waitForFunction(() => window.studioInstallError === 'CANCELLED');
@@ -105,7 +106,9 @@ try {
 } catch (error) {
   console.error(adb('shell', 'df', '-h', '/data'));
   console.error(adb('shell', 'dumpsys', 'activity', 'activities').split('\n').filter(line => line.includes('ResumedActivity')).slice(-3));
-  console.error(adb('shell', 'cat', '/sdcard/studio-ui.xml').slice(-6500));
+  console.error('Native install test failed:', error);
+  const hierarchy = spawnSync('adb', ['shell', 'cat', '/sdcard/studio-ui.xml'], { encoding: 'utf8' });
+  if (hierarchy.status === 0) console.error(hierarchy.stdout.slice(-6500));
   console.error(adb('logcat', '-d', '-t', '1500').split('\n').filter(line => /InstallResult|PackageInstaller|Background activity|ActivityTaskManager.*START|AndroidRuntime.*Exception/i.test(line)).slice(-25).join('\n'));
   throw error;
 } finally { await browser.disconnect(); spawnSync('adb', ['forward', '--remove', 'tcp:9222']); }
