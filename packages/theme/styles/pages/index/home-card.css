@@ -224,21 +224,23 @@
 .recent-post-item .post_cover {
     -webkit-mask-image: -webkit-radial-gradient(center,#fff,#000)
 }
-/* 图片在左侧 */
-#recent-posts > .recent-post-item.left, .recent-post-item.alternate.odd {
-    flex-direction: row !important;
-}
+@media (width > 768px) {
+    /* 图片在左侧 */
+    #recent-posts > .recent-post-item.left, .recent-post-item.alternate.odd {
+        flex-direction: row !important;
+    }
 
-#recent-posts > .recent-post-item.left .cover_radius, .recent-post-item.alternate.odd .cover_radius {
-    border-radius: 12px 0px 0px 12px !important;
-}
-/* 图片在右侧 */
-#recent-posts > .recent-post-item.right, .recent-post-item.alternate.even {
-    flex-direction: row-reverse !important;
-}
+    #recent-posts > .recent-post-item.left .cover_radius, .recent-post-item.alternate.odd .cover_radius {
+        border-radius: 12px 0px 0px 12px !important;
+    }
+    /* 图片在右侧 */
+    #recent-posts > .recent-post-item.right, .recent-post-item.alternate.even {
+        flex-direction: row-reverse !important;
+    }
 
-#recent-posts > .recent-post-item.right .cover_radius, .recent-post-item.alternate.even .cover_radius {
-    border-radius: 0px 12px 12px 0px !important;
+    #recent-posts > .recent-post-item.right .cover_radius, .recent-post-item.alternate.even .cover_radius {
+        border-radius: 0px 12px 12px 0px !important;
+    }
 }
 
 
@@ -319,12 +321,8 @@
         clip-path: inset(0 0 0 0 round 12px)
     }
 
-    #recent-posts {
-        padding: 0 1rem
-    }
-
-    #recent-posts, #tag #recent-posts {
-        padding: 0
+    .layout > #recent-posts {
+        padding-inline: 1rem;
     }
 
     #recent-posts .recent-post-item .post_cover {
@@ -390,16 +388,6 @@
         display: none;
     }
 
-    /* 文章标签 */
-    #recent-posts > .recent-post-item > .recent-post-info > .article-meta-wrap {
-        bottom: 0.5rem !important;
-    }
-
-    #recent-posts > .recent-post-item > .recent-post-info > .article-meta-wrap time {
-        display: absolute;
-        right: 0;
-    }
-
     /* 背景 */
     #web_bg {
         background: none !important;
@@ -421,7 +409,6 @@
         transform: scale(1);
     }
 
-    #recent-posts > .recent-post-item > .recent-post-info > .article-meta-wrap,
     #recent-posts > .recent-post-item > .recent-post-info > .article-title,
     #recent-posts > .recent-post-item > .recent-post-info > .content {
         padding: 0 20px !important
@@ -664,8 +651,11 @@
 
 @media screen and (max-width: 768px) {
     .recent-post-item .recent-post-info .recent-post-info-top {
-        padding: 0 20px;
-        top: 20px;
+        padding: 0;
+    }
+
+    .recent-post-info-top-tips {
+        margin-top: 0;
     }
 
     .recent-post-item .recent-post-info .recent-post-info-top .content {
@@ -683,7 +673,6 @@
 @media screen and (max-width: 1300px) {
 
     #recent-posts>.recent-post-item .left_radius,#recent-posts>.recent-post-item .right_radius {
-        width:75%;
         display: flex;
         height: 220px
     }
@@ -714,6 +703,12 @@
 
     #recent-posts > .recent-post-item > .recent-post-info {
         transition: all 0.3s;
+    }
+}
+
+@media (768px < width < 1300px) {
+    #recent-posts > .recent-post-item .post_cover {
+        width: 75%;
     }
 }
 
@@ -766,16 +761,6 @@
     overflow: hidden
 }
 
-@media screen and (max-width: 768px) {
-    #category #recent-posts {
-        padding: 0;
-    }
-
-    #recent-posts .recent-post-item .recent-post-info {
-        height: 150px;
-    }
-}
-
 #recent-posts > .recent-post-item > .recent-post-info > .article-meta-wrap {
     position: absolute;
     bottom: 16px;
@@ -801,6 +786,27 @@
 
     #recent-posts > .recent-post-item.top > .recent-post-info > .article-meta-wrap {
         bottom: 30px;
+    }
+}
+
+@media screen and (max-width: 768px) {
+    #recent-posts > .recent-post-item > .recent-post-info {
+        display: flex;
+        flex-direction: column;
+        gap: .4rem;
+        height: auto;
+        min-height: 150px;
+        padding: 2rem 20px 1.25rem;
+    }
+
+    #recent-posts > .recent-post-item > .recent-post-info > .article-meta-wrap {
+        position: static;
+        margin-top: auto;
+        padding: 0;
+    }
+
+    .article-meta-wrap .post-meta-date {
+        margin-inline-start: auto;
     }
 }
 

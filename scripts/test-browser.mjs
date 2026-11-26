@@ -14,7 +14,7 @@ const demo = {
   pages: [
     ['home', '/'], ['article', '/articles/welcome/'],
     ['threads', '/threads/'], ['thread', '/threads/11111111-2222-4333-8444-555555555555/'],
-    ['series', '/collections/field-notes/'], ['tags', '/tags/design/'], ['timeline', '/timeline/'], ['topics', '/topics/'],
+    ['series', '/collections/field-notes/'], ['category', '/categories/journal/'], ['tags', '/tags/design/'], ['timeline', '/timeline/'], ['topics', '/topics/'],
     ['chinese', '/zh-CN/'],
   ],
   navigation: { path: '/articles/', language: 'zh-CN', translatedPath: '/zh-CN/articles/' },
@@ -112,6 +112,35 @@ export async function checkBrowser(options = demo) {
         if (surface) assert.ok(await page.$(`[data-thread-surface="${surface}"] [data-thread-id]`));
         else assert.equal(await page.$('[data-thread-surface] [data-thread-id]'), null);
         assert.equal(await page.$('[data-kind="article"][data-thread-id], aside [data-thread-surface]'), null);
+      }
+      if (options === demo && ['home', 'chinese', 'category', 'tags'].includes(name)) {
+        for (const width of [375, 390, 768]) {
+          await page.setViewport({width, height:844});
+          await finishLayout();
+          const geometry = await page.$eval('#recent-posts > [data-post-url]', card => {
+            const bounds = selector => card.querySelector(selector).getBoundingClientRect();
+            const bar = document.querySelector('#category-bar').getBoundingClientRect();
+            const box = card.getBoundingClientRect();
+            const cover = bounds('img.post_bg');
+            const title = bounds('.article-title');
+            const meta = bounds('.article-meta-wrap');
+            return {
+              gutter:box.left, rightGutter:innerWidth - box.right,
+              barOffset:Math.abs(bar.left - box.left) + Math.abs(bar.right - box.right),
+              coverInset:Math.abs(cover.left - box.left) + Math.abs(cover.right - box.right),
+              stacked:cover.bottom <= title.top && title.bottom <= meta.top && meta.bottom <= box.bottom,
+            };
+          });
+          assert.ok(geometry.gutter >= 12 && Math.abs(geometry.gutter - geometry.rightGutter) <= 2
+            && geometry.barOffset <= 2 && geometry.coverInset <= 3 && geometry.stacked,
+            JSON.stringify({route, width, ...geometry}));
+          if (width === 390) {
+            await page.$eval('#category-bar', bar => bar.scrollIntoView({behavior:'instant', block:'start'}));
+            await page.screenshot({path:path.join(screenshots, 'blog-' + name + '-post-cards.png')});
+            await page.evaluate(() => window.scrollTo({top:0, behavior:'instant'}));
+          }
+        }
+        await page.setViewport({width:1440, height:900});
       }
       if (options === demo && ['home', 'chinese'].includes(name)) {
         const prefix = name === 'chinese' ? '/zh-CN' : '';
