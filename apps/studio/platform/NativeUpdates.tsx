@@ -152,7 +152,7 @@ export function NativeUpdates({ children }: { children?: (controls: ReactNode) =
     <span role="status">{t(message)}</span> : message ? <ErrorNotice source="NativeUpdates" message={message} /> : null;
   const controls = <div className="native-update-controls">
     <span>Studio{version && ` ${version}`}</span>
-    <button type="button" disabled={busy} onClick={() => void check(true)}>{t(phase === 'checking' ? '正在检查更新' : '检查更新')}</button>
+    <button type="button" disabled={busy} onClick={() => void check(true)}>{t(phase === 'checking' ? '正在检查更新' : '检查 Studio 更新')}</button>
     {platform !== 'ios' && <label><input type="checkbox" checked={automatic} onChange={event => {
       auto.current = event.target.checked; setAutomatic(auto.current); write(modeKey, auto.current ? 'auto' : 'manual');
     }} /> {t('自动下载更新，安装前确认')}</label>}

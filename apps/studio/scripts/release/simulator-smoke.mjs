@@ -84,6 +84,11 @@ try {
         assert.ok(rgb.every(channel => channel < 55), `Dark launch painted a light background: ${rgb}`);
       }
     } while (!painted && Date.now() < deadline);
+    if (!painted) {
+      const diagnostics = run(['simctl', 'spawn', device.udid, 'log', 'show', '--last', '2m', '--style', 'compact',
+        '--predicate', 'process == "' + plist.CFBundleExecutable + '" OR (process == "com.apple.WebKit.WebContent" AND messageType == error)']);
+      await writeFile(join(output, 'launch-diagnostics.log'), diagnostics);
+    }
     assert.ok(painted, `The workspace connection screen must appear after a ${appearance} launch`);
   }
   await writeFile(join(output, 'result.json'), JSON.stringify({ identifier: plist.CFBundleIdentifier, icon: 'AppIcon', device: device.name, launch: launch.trim(), checks: ['compiled icon references', 'install', 'light launch', 'dark launch', 'screenshots'], limitation: 'Pinch, keyboard and assistive interactions still require device acceptance.' }, null, 2));

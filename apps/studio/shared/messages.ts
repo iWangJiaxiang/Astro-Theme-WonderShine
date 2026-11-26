@@ -136,6 +136,7 @@ export const english: Record<string, string> = {
   "更新包校验失败，请重新下载": "Update verification failed. Download the update again.",
   "下载更新失败，请检查网络后重试": "Download failed. Check your connection and try again.",
   "当前网络可能计费，可手动下载": "This network may be metered. You can download the update manually.",
+  "检查 Studio 更新": "Check for Studio updates",
   "检查更新": "Check for updates",
   "正在检查更新": "Checking for updates",
   "未发现可用更新": "No update available",
