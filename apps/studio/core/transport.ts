@@ -1,4 +1,4 @@
-import { workspaceCapabilities } from '../shared/workspace.js';
+import { workspaceCapabilities, type MergeChoices } from '../shared/workspace.js';
 import { requireWorkspaceConfirmation } from '../shared/workspace-confirmation.js';
 import { saveCapabilities } from './save.js';
 import { ContentService } from './content-service.js';
@@ -75,6 +75,13 @@ export function createContentTransport(repository: Repository, options: ContentT
       if (path === '/api/workspace/review' && method === 'POST' && repository.workspace) {
         await readUploadBody(request, 1024 * 1024);
         return json(await repository.workspace.createReview());
+      }
+      if (path === '/api/workspace/merge/review' && method === 'POST' && repository.workspace?.reviewMerge) {
+        return json(await repository.workspace.reviewMerge());
+      }
+      if (path === '/api/workspace/merge' && method === 'POST' && repository.workspace?.resolveMerge) {
+        const body = await input<{ confirmation?: string; choices: MergeChoices }>();
+        return json(await repository.workspace.resolveMerge(requireWorkspaceConfirmation(body?.confirmation), body?.choices));
       }
       if (path === '/api/workspace/discard/review' && method === 'POST' && repository.workspace?.reviewDiscard) {
         return json(await repository.workspace.reviewDiscard());

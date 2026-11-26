@@ -1,5 +1,7 @@
 import type { BranchFile, BranchSave } from './save.js';
 import type { ThemeCommit } from './theme-update.js';
+export type MergeChoices = Record<string, 'local' | 'remote'>;
+export interface MergeFile { path: string; local: boolean; remote: boolean }
 /** Offline status reflects the last fetched remote state; it does not contact the network. */
 export interface WorkspaceStatus {
   branch: string;
@@ -15,6 +17,8 @@ export interface WorkspaceStatus {
   canPublish?: boolean;
   canMerge?: boolean;
   canDiscard?: boolean;
+  canResolveMerge?: boolean;
+  mergeFiles?: MergeFile[];
   discardPaths?: string[];
   managedChanges?: string[];
   /** Present only on explicit createReview(), never status/commit/sync responses. */
@@ -28,6 +32,8 @@ export interface WorkspaceControl {
   readonly canSync?: boolean;
   /** Commit the confirmed theme change on the configured branch, scoped to exact config blobs. */
   commitTheme?(change: ThemeCommit): Promise<string>;
+  reviewMerge?(): Promise<WorkspaceStatus>;
+  resolveMerge?(confirmation: string, choices: MergeChoices): Promise<WorkspaceStatus>;
   reviewDiscard?(): Promise<WorkspaceStatus>;
   discard?(confirmation: string): Promise<WorkspaceStatus>;
   publish?(message: string, confirmation: string): Promise<void>;

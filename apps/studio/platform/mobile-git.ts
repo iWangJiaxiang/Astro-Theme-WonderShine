@@ -7,7 +7,7 @@ import { validateMediaPath } from '../core/media-validation';
 import { validateRepositoryPath } from '../shared/repository';
 import type { BranchFile, BranchSave } from '../shared/save';
 import type { ReviewRow, WorkspaceReviewAdapter } from '../shared/workspace-confirmation';
-import type { WorkspaceStatus } from '../shared/workspace';
+import type { WorkspaceStatus, MergeFile, MergeChoices } from '../shared/workspace';
 import type { ThemeCommit } from '../shared/theme-update';
 import { missingFile, type WorkspaceFiles } from './filesystem';
 import type { WorkspaceProfile } from './hosting';
@@ -48,7 +48,7 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
     let lastSync = null;
     try { lastSync = String(await files.readFile(state + '/last-sync', 'utf8')); }
     catch (error) { if (!missingFile(error)) throw error; }
-    return { ...refs, branch: profile.branch, lastSync, canDiscard: true, canSync: true, canMerge: true, diverged: refs.ahead > 0 && refs.behind > 0,
+    return { ...refs, branch: profile.branch, lastSync, canDiscard: true, canSync: true, canMerge: true, canResolveMerge: true, diverged: refs.ahead > 0 && refs.behind > 0,
       changes: rows.length, dirty: !!rows.length, managedChanges: reviewState(current).rows.map(([path]) => path) };
   }
   // The connection owns a private checkout. Another lock holder, an error, an
@@ -89,7 +89,26 @@ export function mobileGit(files: WorkspaceFiles, root: string, state: string, pr
       return status(await inspect());
     });
   }
+  function mergeChanges(resolution?: { confirmation: string; choices: MergeChoices }) {
+    return run(null, async () => {
+      const current = await inspect(undefined, true);
+      if (current.rows.length || !current.head || !current.remoteHead || !current.ahead || !current.behind)
+        throw new StudioError(409, '工作区已变化，请刷新并重新确认提交范围');
+      const snapshot = { ...reviewState(current), scope: 'merge:' + root + ':' + current.remoteHead };
+      const refs = { head: current.head, remote: current.remoteHead };
+      if (!resolution) {
+        const mergeFiles = await command<MergeFile[]>('reviewMerge', refs);
+        const { confirmation } = await reviews.store.createReview(snapshot, reviews.source);
+        return { ...await status(current), mergeFiles, confirmation };
+      }
+      await reviews.store.validateReview(resolution.confirmation, snapshot, reviews.source);
+      await command('resolveMerge', { ...refs, choices: resolution.choices });
+      return status(await inspect());
+    });
+  }
   return {
+    reviewMerge: () => mergeChanges(),
+    resolveMerge: (confirmation: string, choices: MergeChoices) => mergeChanges({ confirmation: requireWorkspaceConfirmation(confirmation), choices }),
     reviewDiscard: () => discardChanges(),
     discard: (token: string) => discardChanges(requireWorkspaceConfirmation(token)),
     async open(progress?: ProgressCallback, allowClone = true, includeSubmodules = false) {

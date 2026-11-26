@@ -1,6 +1,7 @@
 import { NavigationRefresh } from "../navigation-refresh";
 import type { ReactNode } from 'react';
 import { ErrorNotice } from "./ErrorNotice";
+import { GitFailure } from "../../platform/GitFailure";
 import Modal from "./Modal";
 import type { WorkspaceStatus } from "../../shared/workspace";
 import SaveButton from "./SaveButton";
@@ -567,6 +568,13 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
         }
       }
     }
+    function themeFailure() {
+      return <GitFailure source="SettingsView" message={error.value} disabled={busy.value} onAuthorized={() => {
+        if (!canInteract()) return;
+        error.value = "";
+        themeLog.value = [...themeLog.value, "仓库授权已更新"];
+      }} />;
+    }
     function themeUpdateControls() {
       const check = themeCheck.value;
       const disabled = busy.value || themeDirty.value || branchPending.value || unknownSaveObligation.value;
@@ -596,7 +604,8 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
         </div>
         {showThemeLog.value && <Modal className="quick-sync-progress theme-progress" label={t("主题维护")} onCancel={() => { showThemeLog.value = false; }}>
           <h2>{t("主题维护")}</h2><ol role="status">{themeLog.value.map((step, index) => <li key={index}>{t(step)}</li>)}</ol>
-          {error.value && <ErrorNotice source="SettingsView" message={error.value} />}
+          {error.value && themeFailure()}
+          {pendingThemeCommit.value && !error.value && !busy.value && <button type="button" className="primary" onClick={() => void updateTheme(true, true)}>{t("重试同步")}</button>}
           <button type="button" className="secondary" onClick={() => { showThemeLog.value = false; }}>{t("关闭")}</button>
         </Modal>}
       </div>;
@@ -670,7 +679,7 @@ const SettingsView: StudioComponent<Props, Events> = component<Props, Events>(
               : null,
             !props.singleGroup && exitControl(),
             savedBranch.value ? element("code", { className: "saved-branch" }, savedBranch.value) : null,
-            error.value
+            error.value && pendingThemeCommit.value ? (!showThemeLog.value && themeFailure()) : error.value
               ? element(
                   ErrorNotice,
                   { source: "SettingsView", message: error.value },

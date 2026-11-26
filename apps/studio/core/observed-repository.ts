@@ -1,5 +1,5 @@
 import type { Repository, RepositoryWrite } from '../shared/repository.js';
-import type { WorkspaceControl } from '../shared/workspace.js';
+import type { MergeChoices, WorkspaceControl } from '../shared/workspace.js';
 
 export type RepositoryMutationOperation = 'write' | 'writeBatch' | 'sync';
 interface RepositoryMutation {
@@ -72,6 +72,8 @@ export function observeRepository(repository: Repository, listener: RepositoryMu
       const sync: WorkspaceControl['sync'] = confirmation => mutate('sync', undefined, () => control.sync(confirmation));
       observed = new Proxy(control, { get(target, property) {
         if (property === 'sync') return sync;
+        if (property === 'resolveMerge' && target.resolveMerge) return (confirmation: string, choices: MergeChoices) =>
+          mutate('sync', undefined, () => target.resolveMerge!(confirmation, choices));
         if (property === 'discard' && target.discard) return (confirmation: string) =>
           mutate('sync', undefined, () => target.discard!(confirmation));
         if (property === 'publish' && target.publish) return (message: string, confirmation: string) =>

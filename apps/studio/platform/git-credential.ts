@@ -15,7 +15,9 @@ export const nativeGitCredential: { current?: {
 } } = {};
 
 export function isGitAuthFailure(message: Message) {
-  return typeof message === 'object' && (message.params?.gitAuth === 1
+  if (typeof message === 'string') return message === '授权已过期，请重新登录';
+  return message.params?.gitAuth === 1
     || /\/Auth$/.test(String(message.params?.gitDetail))
-    || /授权|重新登录/.test(message.key));
+    || message.key === '仓库授权失败，请重新登录或更新访问令牌'
+    || message.key === '授权已过期，请重新登录';
 }

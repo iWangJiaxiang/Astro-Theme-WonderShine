@@ -1,4 +1,5 @@
 //! Git for private mobile checkouts. All operations open the repository on the calling worker.
+mod merge;
 mod network;
 mod snapshot;
 use git2::{Oid, Repository, RepositoryState, Signature, Status, StatusOptions};
@@ -60,6 +61,8 @@ pub enum Job {
         message: String,
         theme: Option<Vec<ThemeBlobs>>,
     },
+    ReviewMerge { head: String, remote: String },
+    ResolveMerge { head: String, remote: String, choices: std::collections::BTreeMap<String, merge::Side> },
     ReviewDiscard,
     Discard {
         head: String,
@@ -448,6 +451,8 @@ pub fn execute(
             let oid = commit(&repo, &root, p, &head, &paths, &message, theme.as_deref())?;
             Ok(json!(oid.to_string()))
         }
+        Job::ReviewMerge { head, remote } => Ok(merge::process(&repo, p, &state, &head, &remote, None)?),
+        Job::ResolveMerge { head, remote, choices } => Ok(merge::process(&repo, p, &state, &head, &remote, Some(choices))?),
         Job::ReviewDiscard => Ok(inspect(&repo, branch, None, true)?),
         Job::Discard { head: expected, paths } => {
             let oid = head(&repo)?;

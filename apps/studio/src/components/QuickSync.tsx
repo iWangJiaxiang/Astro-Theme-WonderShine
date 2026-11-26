@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { api, errorMessage, session } from '../api';
+import { api, errorMessage } from '../api';
 import { t, type Message } from '../i18n';
 import { useSignals } from '../reactivity';
 import { notifyWorkspaceChanged } from '../workspace-events';
@@ -7,9 +7,7 @@ import type { WorkspaceStatus } from '../../shared/workspace';
 import type { GitSyncAction } from '../navigation-refresh';
 import type { Ref } from '../reactivity';
 import Modal from './Modal';
-import { ErrorNotice } from './ErrorNotice';
-import AccountLogin from '../../platform/AccountLogin';
-import { isGitAuthFailure, nativeGitCredential } from '../../platform/git-credential';
+import { GitFailure } from '../../platform/GitFailure';
 
 type Counts = Pick<WorkspaceStatus, 'ahead' | 'behind'>;
 const check = () => api<Counts>('/workspace/check', 'POST');
@@ -74,12 +72,9 @@ export default function QuickSync({ action, editing, onManage }: { action: Ref<G
       }
     }
   }
-  const credential = nativeGitCredential.current;
-  const oauth = credential?.id === session.value?.identity.id ? credential?.oauth : undefined;
   return <>
     {visible && (steps.length > 0 || error) && <Modal className="quick-sync-progress" label={t('同步 Git')} onCancel={() => setVisible(false)}><h2>{t('同步 Git')}</h2><ol role="status">{steps.map((step, i) => <li key={i}>{t(step)}</li>)}</ol>
-      {error && <ErrorNotice source="QuickSync" message={error} />}
-      {oauth && isGitAuthFailure(error) && <AccountLogin disabled={busy} reauthorize={oauth} onAuthorized={() => {
+      {error && <GitFailure source="QuickSync" message={error} disabled={busy} onAuthorized={() => {
         setError(''); setSteps(['仓库授权已更新']); setReconnected(true); setHint('同步 Git');
       }} />}
       {error && <div className="error-actions"><button className="secondary" onClick={() => { setSteps([]); setError(''); onManage(); }}>{t('工作区同步')}</button> <button className="secondary" onClick={() => { setSteps([]); setError(''); }}>{t('关闭')}</button></div>}

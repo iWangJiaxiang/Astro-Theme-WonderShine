@@ -138,3 +138,9 @@ section.native-ai-settings { max-width: 960px; }
 .workspace-file-list ul { font-size: .8125rem; line-height: 1.6; }
 .native-ai-settings .native-ai-disclosure, .legacy-recovery { color: var(--studio-muted); font-size: .8125rem; }
 .legacy-recovery summary, .native-ai-disclosure summary { cursor: pointer; }
+.workspace-panel > .notice + .notice,
+.workspace-panel > .notice + .workspace-sync-card,
+.workspace-panel > .secondary + .notice { margin-block-start: 12px; }
+.merge-file { display: grid; gap: 6px; margin-block: 14px; }
+.merge-file code { overflow-wrap: anywhere; }
+.merge-file select { width: 100%; min-height: var(--studio-touch-target, 44px); }
