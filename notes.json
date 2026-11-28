@@ -36,34 +36,34 @@
   ],
   "checks": [
     {
-      "area": "docs",
-      "checked_at": "2026-11-28",
-      "result": "Task 7: compared releasing.md, getting-started.md and Starter 0.3.1 dependency; stale workspace wording already covered by #15.",
-      "follow_up": "Keep existing documentation handoff; no duplicate proposal."
-    },
-    {
-      "area": "code",
-      "checked_at": "2026-11-28",
-      "result": "Tasks 2/10 and fallback 1/5: reviewed eight open issues and all comments; no human updates or open PRs. Reviewed CSS failure path and routes visibility/duplicate handling.",
-      "follow_up": "Existing #42/#15 handoffs await maintainer action; do not retry unchanged PR permissions."
-    },
-    {
       "area": "tests",
       "checked_at": "2026-11-28",
-      "result": "Fallback 9: inspected responsiveness-budgets.test.ts structural scan/read budgets and theme-build-channel.test.ts moved-tag/pin/lock assertions; no independent verified gap.",
-      "follow_up": "No local installation, build or tests; #42 remote validation pending."
+      "result": "Task 9: inspected 1000-document responsiveness budgets and summary-index cooperative timer yields; routing tests cover feed visibility, locale, XML escaping and limits. No independent verified gap selected.",
+      "follow_up": "Static source review only; no local tests or installs."
     },
     {
       "area": "performance",
       "checked_at": "2026-11-28",
-      "result": "Fallback 8: reviewed image-assets.ts stat-versioned cache and responsive selection; no measured optimization selected.",
-      "follow_up": "Require remote measurement before performance change."
+      "result": "Task 8: reviewed stat-versioned image manifest cache and incremental summary parsing with 32-item/8ms yields. No measured opportunity selected.",
+      "follow_up": "Require remote measurements before optimization."
     },
     {
       "area": "ci",
       "checked_at": "2026-11-28",
-      "result": "Fallback 4: reviewed ci.yml build/check/integration/package/browser stages and artifact retention; no independent change selected.",
-      "follow_up": "No CI dispatch or builds performed. Genuine noop; no monthly issue update."
+      "result": "Task 4: reviewed ci.yml image cache, builds, checks, integration, package and browser stages; no independent engineering change selected.",
+      "follow_up": "No workflow dispatched; existing CSS fix remote validation remains pending."
+    },
+    {
+      "area": "docs",
+      "checked_at": "2026-11-28",
+      "result": "Fallback 7: compared releasing.md workspace wording against getting-started.md npm instructions; existing #15 handoff already covers discrepancy.",
+      "follow_up": "Avoid duplicate documentation proposal."
+    },
+    {
+      "area": "code",
+      "checked_at": "2026-11-28",
+      "result": "Fallbacks 10/5: verified eight open issues, no open PRs and no new comments on #13/#15/#42; inspected build-theme failure path and feeds implementation with related tests.",
+      "follow_up": "Existing #42/#15 handoffs await maintainer action. No new code or GitHub changes; genuine noop, no monthly update."
     }
   ],
   "completed_actions": [],
