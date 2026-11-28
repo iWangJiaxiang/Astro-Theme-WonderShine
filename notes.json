@@ -36,40 +36,34 @@
   ],
   "checks": [
     {
-      "area": "performance",
-      "checked_at": "2026-11-27",
-      "result": "Task 8 fallback: reviewed image-assets.ts stat-versioned manifest cache and responsive variant selection; no measured opportunity.",
-      "follow_up": "Require remote measurements before optimization."
-    },
-    {
-      "area": "build",
-      "checked_at": "2026-11-27",
-      "result": "Task 9 fallback: read theme-build-channel.test.ts; covers moved next/canary tags, pinning and lock persistence; no verified additional gap beyond tracked #13.",
-      "follow_up": "No local installation, build or tests executed."
-    },
-    {
       "area": "docs",
-      "checked_at": "2026-11-27",
-      "result": "Task 7 fallback: compared releasing.md and getting-started.md; Starter mismatch already covered by #15; no duplicate proposal.",
-      "follow_up": "No redundant comments or monthly update for this noop."
-    },
-    {
-      "area": "ci",
-      "checked_at": "2026-11-27",
-      "result": "Task 4 fallback: reviewed ci.yml build, type, integration, distribution, package and browser checks; no independent change selected.",
-      "follow_up": "No local build/test or CI dispatch performed."
+      "checked_at": "2026-11-28",
+      "result": "Task 7: compared releasing.md, getting-started.md and Starter 0.3.1 dependency; stale workspace wording already covered by #15.",
+      "follow_up": "Keep existing documentation handoff; no duplicate proposal."
     },
     {
       "area": "code",
-      "checked_at": "2026-11-27",
-      "result": "Tasks 3,2,5,10: eight open issues and zero PRs; all issue comments have no new human activity. Reviewed routes, CSS build and existing #42 helper branch; #13/#15 already handed off.",
-      "follow_up": "Keep #42 and #15 handoffs; do not duplicate PR attempts."
+      "checked_at": "2026-11-28",
+      "result": "Tasks 2/10 and fallback 1/5: reviewed eight open issues and all comments; no human updates or open PRs. Reviewed CSS failure path and routes visibility/duplicate handling.",
+      "follow_up": "Existing #42/#15 handoffs await maintainer action; do not retry unchanged PR permissions."
     },
     {
       "area": "tests",
-      "checked_at": "2026-11-27",
-      "result": "Task 9 fallback: reviewed theme-build-channel.test.ts assertions for moved next/canary tags, pin lookup avoidance and persisted lock versions; no independent verified gap.",
-      "follow_up": "Remote validation of #42 remains pending."
+      "checked_at": "2026-11-28",
+      "result": "Fallback 9: inspected responsiveness-budgets.test.ts structural scan/read budgets and theme-build-channel.test.ts moved-tag/pin/lock assertions; no independent verified gap.",
+      "follow_up": "No local installation, build or tests; #42 remote validation pending."
+    },
+    {
+      "area": "performance",
+      "checked_at": "2026-11-28",
+      "result": "Fallback 8: reviewed image-assets.ts stat-versioned cache and responsive selection; no measured optimization selected.",
+      "follow_up": "Require remote measurement before performance change."
+    },
+    {
+      "area": "ci",
+      "checked_at": "2026-11-28",
+      "result": "Fallback 4: reviewed ci.yml build/check/integration/package/browser stages and artifact retention; no independent change selected.",
+      "follow_up": "No CI dispatch or builds performed. Genuine noop; no monthly issue update."
     }
   ],
   "completed_actions": [],
